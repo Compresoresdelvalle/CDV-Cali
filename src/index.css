@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', 'SF Pro Display', -apple-system, sans-serif;
+  background-color: #F4F1EB;
+  color: #151515;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Inputs numéricos grandes para operarios */
+input[type="number"] {
+  font-size: 1.5rem;
+}
