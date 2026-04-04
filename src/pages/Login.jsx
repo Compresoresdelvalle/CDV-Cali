@@ -299,7 +299,7 @@ function KeyBtn({ k, onClick, disabled }) {
 function BrandPanel() {
   return (
     <div
-      className="relative overflow-hidden flex flex-col"
+      className="relative overflow-hidden flex flex-col h-full"
       style={{ background: 'linear-gradient(158deg, #14352A 0%, #0D2318 55%, #07160D 100%)' }}
     >
       {/* Hex tile pattern */}
@@ -479,7 +479,7 @@ export default function Login() {
      RENDER
   ───────────────────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
+    <div className="min-h-screen flex flex-col md:flex-row md:h-screen md:overflow-hidden">
 
       {/* ── Mobile compact header (< md) ─────────────────────────── */}
       <div
@@ -506,14 +506,13 @@ export default function Login() {
         className="hidden md:block flex-shrink-0"
         style={{ width: 'clamp(290px, 42%, 460px)' }}
       >
-        {/* min-h-screen forces full height on the flex item */}
-        <div className="min-h-screen">
+          <div className="h-full">
           <BrandPanel />
         </div>
       </div>
 
       {/* ── Form panel ───────────────────────────────────────────── */}
-      <div className="flex-1 flex items-center justify-center bg-[#F4F1EB] px-5 py-10 sm:px-10">
+      <div className="flex-1 flex items-center justify-center bg-[#F4F1EB] px-5 py-10 sm:px-10 md:overflow-y-auto">
         <div className="w-full max-w-[400px]">
 
           {/* Card — NO overflow:hidden so dropdown can escape if needed */}
