@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { ADMIN_MODULES } from '../../lib/constants'
 
@@ -67,12 +67,11 @@ function AdminNavItem({ nombre, icon, ruta, iconsOnly }) {
 /* ─── AdminShell ─────────────────────────────────────────────────────────── */
 export default function AdminShell() {
   const { perfil, logout } = useAuthStore()
-  const navigate  = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
 
   const handleLogout = async () => {
     await logout()
-    navigate('/login', { replace: true })
+    window.location.href = '/login'
   }
 
   /* ── Sidebar content ────────────────────────────────────────────────── */

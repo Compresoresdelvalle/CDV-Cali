@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { ROLE_MODULES, MODULE_ICONS, MODULE_ROUTES } from '../../lib/constants'
 
@@ -88,7 +88,6 @@ function SidebarItem({ modulo, iconsOnly }) {
 /* ─── AppShell ───────────────────────────────────────────────────────────── */
 export default function AppShell() {
   const { perfil, logout } = useAuthStore()
-  const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)  // móvil drawer
   const [collapsed,   setCollapsed]   = useState(false)  // tablet collapse
 
@@ -98,7 +97,7 @@ export default function AppShell() {
 
   const handleLogout = async () => {
     await logout()
-    navigate('/login', { replace: true })
+    window.location.href = '/login'
   }
 
   /* ── Sidebar compartida (desktop full / tablet icons-only) ─────────── */

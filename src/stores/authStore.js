@@ -11,6 +11,7 @@ export const useAuthStore = create((set, get) => ({
   error: null,
 
   // Inicializar: recuperar sesión existente al montar la app
+  // Retorna la función de cleanup para cancelar la suscripción
   init: async () => {
     set({ loading: true })
     try {
@@ -26,7 +27,7 @@ export const useAuthStore = create((set, get) => ({
     }
 
     // Escuchar cambios de sesión (token refresh, logout desde otra pestaña)
-    supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session) {
         const perfil = await get()._fetchPerfil(session.user.id)
         set({ session, user: session.user, perfil })
@@ -34,6 +35,8 @@ export const useAuthStore = create((set, get) => ({
         set({ session: null, user: null, perfil: null })
       }
     })
+
+    return () => subscription.unsubscribe()
   },
 
   // Login con nombre de usuario y PIN (4 dígitos)
@@ -57,10 +60,15 @@ export const useAuthStore = create((set, get) => ({
     return true
   },
 
-  // Logout
+  // Logout: limpia el estado Zustand siempre, incluso si signOut falla
   logout: async () => {
-    await supabase.auth.signOut()
-    set({ session: null, user: null, perfil: null, error: null })
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // signOut falló (red, token expirado, etc.) — limpiamos igual
+    } finally {
+      set({ session: null, user: null, perfil: null, error: null })
+    }
   },
 
   // Limpiar error
