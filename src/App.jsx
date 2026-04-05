@@ -1,11 +1,13 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect } from 'react'
 
-import { useAuthStore } from './stores/authStore'
-import Login            from './pages/Login'
-import RoleGuard        from './components/layout/RoleGuard'
-import AppShell         from './components/layout/AppShell'
-import AdminShell       from './components/layout/AdminShell'
+import { useAuthStore }    from './stores/authStore'
+import Login               from './pages/Login'
+import RoleGuard           from './components/layout/RoleGuard'
+import AppShell            from './components/layout/AppShell'
+import AdminShell          from './components/layout/AdminShell'
+import Inventario          from './pages/ops/Inventario'
+import ProductoDetalle     from './pages/ops/ProductoDetalle'
 
 // Placeholder genérico para módulos aún no implementados
 function Placeholder({ name }) {
@@ -42,10 +44,21 @@ export default function App() {
         >
           <Route index element={<Navigate to="inventario" replace />} />
 
-          <Route path="inventario"
+          {/* Inventario — lista */}
+          <Route
+            path="inventario"
             element={
               <RoleGuard roles={['Admin', 'Bodeguero', 'Vendedor']}>
-                <Placeholder name="Inventario" />
+                <Inventario />
+              </RoleGuard>
+            }
+          />
+          {/* Inventario — detalle de producto */}
+          <Route
+            path="inventario/:productoId"
+            element={
+              <RoleGuard roles={['Admin', 'Bodeguero', 'Vendedor']}>
+                <ProductoDetalle />
               </RoleGuard>
             }
           />
