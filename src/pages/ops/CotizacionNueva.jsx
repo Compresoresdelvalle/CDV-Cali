@@ -176,25 +176,41 @@ export default function CotizacionNueva() {
     setGuardando(true);
 
     try {
-      const items = carrito.map((i) => ({
+      // Insertar cabecera de cotización
+      const { data: cot, error: e1 } = await supabase
+        .from("cotizaciones")
+        .insert({
+          vendedor_id: perfil.id,
+          sede_id: perfil.sede_id,
+          cliente_nombre: clienteNombre || null,
+          cliente_nit: clienteNit || null,
+          cliente_email: clienteEmail || null,
+          cliente_telefono: clienteTelefono || null,
+          descuento_pct: descuentoPct,
+          iva_pct: 19,
+          vigencia_dias: vigenciaDias,
+          subtotal,
+          total,
+          estado: "borrador",
+        })
+        .select("id, numero")
+        .single();
+      if (e1) throw new Error(e1.message);
+
+      // Insertar ítems
+      const detalles = carrito.map((i) => ({
+        cotizacion_id: cot.id,
         producto_id: i.producto_id,
         cantidad: i.cantidad,
         precio_unitario: i.precio_unitario,
+        subtotal: i.cantidad * i.precio_unitario,
       }));
 
-      const { error: fnErr } = await supabase.rpc("fn_registrar_cotizacion", {
-        p_sede_id: perfil.sede_id,
-        p_cliente_nombre: clienteNombre || null,
-        p_cliente_nit: clienteNit || null,
-        p_cliente_email: clienteEmail || null,
-        p_cliente_telefono: clienteTelefono || null,
-        p_descuento_pct: descuentoPct,
-        p_vigencia_dias: vigenciaDias,
-        p_observaciones: observaciones || null,
-        p_items: items,
-      });
+      const { error: e2 } = await supabase
+        .from("detalle_cotizacion")
+        .insert(detalles);
+      if (e2) throw new Error(e2.message);
 
-      if (fnErr) throw new Error(fnErr.message);
       navigate("/ops/cotizaciones");
     } catch (e) {
       setError(e.message ?? "Error al guardar la cotización");
