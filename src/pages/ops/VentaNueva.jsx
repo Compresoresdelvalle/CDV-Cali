@@ -21,7 +21,6 @@ function useDebounce(fn, delay) {
 export default function VentaNueva() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
-  const session = useAuthStore((s) => s.session);
 
   // Búsqueda
   const [busqueda, setBusqueda] = useState("");
@@ -54,27 +53,37 @@ export default function VentaNueva() {
       }
       setBuscando(true);
       try {
-        const { data, error: err } = await supabase
-          .from("inventario")
-          .select(
-            `
-          cantidad, estado_stock,
-          productos!inner(
-            id, nombre, referencia, precio_venta, unidad_medida, activo
-          )
-        `,
-          )
-          .eq("sede_id", perfil.sede_id)
-          .eq("productos.activo", true)
-          .or(
-            `productos.nombre.ilike.%${q}%,productos.referencia.ilike.%${q}%`,
-            { foreignTable: "productos" },
-          )
-          .gt("cantidad", 0)
-          .limit(8);
+        // Paso 1: buscar productos por nombre/referencia
+        const { data: prods, error: e1 } = await supabase
+          .from("productos")
+          .select("id, nombre, referencia, precio_venta, unidad_medida")
+          .eq("activo", true)
+          .or(`nombre.ilike.%${q}%,referencia.ilike.%${q}%`)
+          .limit(10);
+        if (e1) throw e1;
+        if (!prods?.length) {
+          setResultados([]);
+          return;
+        }
 
-        if (err) throw err;
-        setResultados(data ?? []);
+        // Paso 2: verificar stock en la sede del usuario
+        const ids = prods.map((p) => p.id);
+        const { data: inv, error: e2 } = await supabase
+          .from("inventario")
+          .select("producto_id, cantidad")
+          .eq("sede_id", perfil.sede_id)
+          .gt("cantidad", 0)
+          .in("producto_id", ids);
+        if (e2) throw e2;
+
+        const stockMap = Object.fromEntries(
+          (inv ?? []).map((i) => [i.producto_id, i.cantidad]),
+        );
+        const merged = prods
+          .filter((p) => stockMap[p.id] !== undefined)
+          .map((p) => ({ ...p, stock_disponible: stockMap[p.id] }));
+
+        setResultados(merged.slice(0, 8));
       } catch {
         setResultados([]);
       } finally {
@@ -97,18 +106,22 @@ export default function VentaNueva() {
     async (productoId) => {
       setScannerOpen(false);
       try {
-        const { data, error: err } = await supabase
-          .from("inventario")
-          .select(
-            `cantidad, estado_stock,
-           productos!inner(id, nombre, referencia, precio_venta, unidad_medida, activo)`,
-          )
-          .eq("sede_id", perfil.sede_id)
-          .eq("producto_id", productoId)
-          .single();
-
-        if (err || !data) return;
-        agregarAlCarrito(data);
+        const [{ data: prod }, { data: inv }] = await Promise.all([
+          supabase
+            .from("productos")
+            .select("id, nombre, referencia, precio_venta, unidad_medida")
+            .eq("id", productoId)
+            .eq("activo", true)
+            .single(),
+          supabase
+            .from("inventario")
+            .select("cantidad")
+            .eq("sede_id", perfil.sede_id)
+            .eq("producto_id", productoId)
+            .single(),
+        ]);
+        if (!prod || !inv || inv.cantidad <= 0) return;
+        agregarAlCarrito({ ...prod, stock_disponible: inv.cantidad });
       } catch {
         // silently ignore
       }
@@ -119,8 +132,7 @@ export default function VentaNueva() {
   // -----------------------------------------------------------
   // Carrito
   // -----------------------------------------------------------
-  const agregarAlCarrito = (invItem) => {
-    const prod = invItem.productos;
+  const agregarAlCarrito = (prod) => {
     setBusqueda("");
     setResultados([]);
 
@@ -129,7 +141,7 @@ export default function VentaNueva() {
       if (idx >= 0) {
         const updated = [...prev];
         const item = { ...updated[idx] };
-        if (item.cantidad < invItem.cantidad) {
+        if (item.cantidad < prod.stock_disponible) {
           item.cantidad += 1;
         }
         updated[idx] = item;
@@ -143,7 +155,7 @@ export default function VentaNueva() {
           referencia: prod.referencia,
           precio_unitario: prod.precio_venta,
           unidad: prod.unidad_medida,
-          stock_disponible: invItem.cantidad,
+          stock_disponible: prod.stock_disponible,
           cantidad: 1,
         },
       ];
@@ -206,31 +218,53 @@ export default function VentaNueva() {
     setConfirmando(true);
 
     try {
-      const items = carrito.map((i) => ({
+      // Pre-validar stock antes de insertar
+      for (const item of carrito) {
+        const { data: inv } = await supabase
+          .from("inventario")
+          .select("cantidad")
+          .eq("producto_id", item.producto_id)
+          .eq("sede_id", perfil.sede_id)
+          .single();
+        if (!inv || inv.cantidad < item.cantidad) {
+          throw new Error(`Stock insuficiente para: ${item.nombre}`);
+        }
+      }
+
+      // Insertar cabecera de venta
+      const { data: venta, error: e1 } = await supabase
+        .from("ventas")
+        .insert({
+          vendedor_id: perfil.id,
+          sede_id: perfil.sede_id,
+          cliente_nombre: clienteNombre || null,
+          cliente_nit: clienteNit || null,
+          metodo_pago: metodoPago,
+          descuento_pct: descuentoPct,
+          iva_pct: 19,
+          observaciones: observaciones || null,
+          subtotal: 0,
+          total: 0,
+        })
+        .select("id, numero")
+        .single();
+      if (e1) throw new Error(e1.message);
+
+      // Insertar ítems — el trigger trg_venta_descontar_stock descuenta stock
+      // y trg_recalcular_venta recalcula los totales automáticamente
+      const detalles = carrito.map((i) => ({
+        venta_id: venta.id,
         producto_id: i.producto_id,
         cantidad: i.cantidad,
         precio_unitario: i.precio_unitario,
+        costo_unitario: 0,
+        subtotal: i.cantidad * i.precio_unitario,
       }));
 
-      const { error: fnErr } = await supabase.functions.invoke(
-        "registrar-venta",
-        {
-          body: {
-            sede_id: perfil.sede_id,
-            cliente_nombre: clienteNombre || null,
-            cliente_nit: clienteNit || null,
-            metodo_pago: metodoPago,
-            descuento_pct: descuentoPct,
-            observaciones: observaciones || null,
-            items,
-          },
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        },
-      );
-
-      if (fnErr) throw new Error(fnErr.message);
+      const { error: e2 } = await supabase
+        .from("detalle_venta")
+        .insert(detalles);
+      if (e2) throw new Error(e2.message);
 
       navigate("/ops/ventas");
     } catch (e) {
@@ -340,40 +374,37 @@ export default function VentaNueva() {
                 className="mt-2 border rounded-xl overflow-hidden"
                 style={{ borderColor: "#E2DED5" }}
               >
-                {resultados.map((inv) => {
-                  const p = inv.productos;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => agregarAlCarrito(inv)}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 text-left border-b last:border-b-0 transition-colors"
-                      style={{ borderColor: "#E2DED5" }}
-                    >
-                      <div>
-                        <p
-                          className="text-sm font-medium"
-                          style={{ color: "#151515" }}
-                        >
-                          {p.nombre}
-                        </p>
-                        <p className="text-xs" style={{ color: "#9CA3AB" }}>
-                          {p.referencia} · Stock: {inv.cantidad}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className="text-sm font-semibold"
-                          style={{ color: "#14352A" }}
-                        >
-                          {formatCOP(p.precio_venta)}
-                        </p>
-                        <p className="text-xs" style={{ color: "#9CA3AB" }}>
-                          {p.unidad_medida}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
+                {resultados.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => agregarAlCarrito(r)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 text-left border-b last:border-b-0 transition-colors"
+                    style={{ borderColor: "#E2DED5" }}
+                  >
+                    <div>
+                      <p
+                        className="text-sm font-medium"
+                        style={{ color: "#151515" }}
+                      >
+                        {r.nombre}
+                      </p>
+                      <p className="text-xs" style={{ color: "#9CA3AB" }}>
+                        {r.referencia} · Stock: {r.stock_disponible}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p
+                        className="text-sm font-semibold"
+                        style={{ color: "#14352A" }}
+                      >
+                        {formatCOP(r.precio_venta)}
+                      </p>
+                      <p className="text-xs" style={{ color: "#9CA3AB" }}>
+                        {r.unidad_medida}
+                      </p>
+                    </div>
+                  </button>
+                ))}
               </div>
             )}
           </div>
