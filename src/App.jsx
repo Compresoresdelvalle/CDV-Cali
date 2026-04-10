@@ -1,13 +1,18 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
 
-import { useAuthStore }    from './stores/authStore'
-import Login               from './pages/Login'
-import RoleGuard           from './components/layout/RoleGuard'
-import AppShell            from './components/layout/AppShell'
-import AdminShell          from './components/layout/AdminShell'
-import Inventario          from './pages/ops/Inventario'
-import ProductoDetalle     from './pages/ops/ProductoDetalle'
+import { useAuthStore } from "./stores/authStore";
+import Login from "./pages/Login";
+import RoleGuard from "./components/layout/RoleGuard";
+import AppShell from "./components/layout/AppShell";
+import AdminShell from "./components/layout/AdminShell";
+import Inventario from "./pages/ops/Inventario";
+import ProductoDetalle from "./pages/ops/ProductoDetalle";
+import VentaHistorial from "./pages/ops/VentaHistorial";
+import VentaNueva from "./pages/ops/VentaNueva";
+import VentaDetalle from "./pages/ops/VentaDetalle";
+import CotizacionHistorial from "./pages/ops/CotizacionHistorial";
+import CotizacionNueva from "./pages/ops/CotizacionNueva";
 
 // Placeholder genérico para módulos aún no implementados
 function Placeholder({ name }) {
@@ -17,19 +22,20 @@ function Placeholder({ name }) {
       <h2 className="text-2xl font-bold text-text mb-2">{name}</h2>
       <p className="text-text-sub">Módulo en desarrollo — próximas fases</p>
     </div>
-  )
+  );
 }
 
 export default function App() {
-  const init = useAuthStore(s => s.init)
+  const init = useAuthStore((s) => s.init);
 
   // Inicializar sesión al montar
-  useEffect(() => { init() }, [init])
+  useEffect(() => {
+    init();
+  }, [init]);
 
   return (
     <BrowserRouter>
       <Routes>
-
         {/* Login público */}
         <Route path="/login" element={<Login />} />
 
@@ -37,7 +43,7 @@ export default function App() {
         <Route
           path="/ops"
           element={
-            <RoleGuard roles={['Admin', 'Bodeguero', 'Vendedor', 'Tecnico']}>
+            <RoleGuard roles={["Admin", "Bodeguero", "Vendedor", "Tecnico"]}>
               <AppShell />
             </RoleGuard>
           }
@@ -48,7 +54,7 @@ export default function App() {
           <Route
             path="inventario"
             element={
-              <RoleGuard roles={['Admin', 'Bodeguero', 'Vendedor']}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <Inventario />
               </RoleGuard>
             }
@@ -57,86 +63,135 @@ export default function App() {
           <Route
             path="inventario/:productoId"
             element={
-              <RoleGuard roles={['Admin', 'Bodeguero', 'Vendedor']}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <ProductoDetalle />
               </RoleGuard>
             }
           />
-          <Route path="ventas/*"
+          <Route
+            path="ventas"
             element={
-              <RoleGuard roles={['Admin', 'Vendedor']}>
-                <Placeholder name="Ventas" />
+              <RoleGuard roles={["Admin", "Vendedor"]}>
+                <VentaHistorial />
               </RoleGuard>
             }
           />
-          <Route path="compras/*"
+          <Route
+            path="ventas/nueva"
             element={
-              <RoleGuard roles={['Admin', 'Bodeguero']}>
+              <RoleGuard roles={["Admin", "Vendedor"]}>
+                <VentaNueva />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="ventas/:id"
+            element={
+              <RoleGuard roles={["Admin", "Vendedor"]}>
+                <VentaDetalle />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="compras/*"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
                 <Placeholder name="Compras" />
               </RoleGuard>
             }
           />
-          <Route path="traspasos/*"
+          <Route
+            path="traspasos/*"
             element={
-              <RoleGuard roles={['Admin', 'Bodeguero', 'Vendedor']}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <Placeholder name="Traspasos" />
               </RoleGuard>
             }
           />
-          <Route path="ordenes/*"
+          <Route
+            path="ordenes/*"
             element={
-              <RoleGuard roles={['Admin', 'Tecnico']}>
+              <RoleGuard roles={["Admin", "Tecnico"]}>
                 <Placeholder name="Órdenes de Servicio" />
               </RoleGuard>
             }
           />
-          <Route path="ensambles/*"
+          <Route
+            path="ensambles/*"
             element={
-              <RoleGuard roles={['Admin', 'Bodeguero', 'Tecnico']}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Tecnico"]}>
                 <Placeholder name="Ensambles" />
               </RoleGuard>
             }
           />
-          <Route path="cotizaciones/*"
+          <Route
+            path="cotizaciones"
             element={
-              <RoleGuard roles={['Admin', 'Vendedor']}>
-                <Placeholder name="Cotizaciones" />
+              <RoleGuard roles={["Admin", "Vendedor"]}>
+                <CotizacionHistorial />
               </RoleGuard>
             }
           />
-          <Route path="herramientas" element={<Placeholder name="Herramientas" />} />
-          <Route path="devoluciones"
+          <Route
+            path="cotizaciones/nueva"
             element={
-              <RoleGuard roles={['Admin', 'Bodeguero']}>
+              <RoleGuard roles={["Admin", "Vendedor"]}>
+                <CotizacionNueva />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="herramientas"
+            element={<Placeholder name="Herramientas" />}
+          />
+          <Route
+            path="devoluciones"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
                 <Placeholder name="Devoluciones" />
               </RoleGuard>
             }
           />
-          <Route path="productos"  element={<Placeholder name="Productos" />} />
+          <Route path="productos" element={<Placeholder name="Productos" />} />
         </Route>
 
         {/* ── Panel Admin ── */}
         <Route
           path="/admin"
           element={
-            <RoleGuard roles={['Admin']}>
+            <RoleGuard roles={["Admin"]}>
               <AdminShell />
             </RoleGuard>
           }
         >
-          <Route index           element={<Placeholder name="Dashboard Admin" />} />
-          <Route path="alertas"  element={<Placeholder name="Alertas de Stock" />} />
-          <Route path="conteo"   element={<Placeholder name="Conteo Cíclico" />} />
-          <Route path="abc"      element={<Placeholder name="Análisis ABC" />} />
-          <Route path="reorden"  element={<Placeholder name="Puntos de Reorden" />} />
+          <Route index element={<Placeholder name="Dashboard Admin" />} />
+          <Route
+            path="alertas"
+            element={<Placeholder name="Alertas de Stock" />}
+          />
+          <Route
+            path="conteo"
+            element={<Placeholder name="Conteo Cíclico" />}
+          />
+          <Route path="abc" element={<Placeholder name="Análisis ABC" />} />
+          <Route
+            path="reorden"
+            element={<Placeholder name="Puntos de Reorden" />}
+          />
           <Route path="auditoria" element={<Placeholder name="Auditoría" />} />
-          <Route path="usuarios" element={<Placeholder name="Gestión de Usuarios" />} />
-          <Route path="top10"    element={<Placeholder name="Top 10 Productos" />} />
+          <Route
+            path="usuarios"
+            element={<Placeholder name="Gestión de Usuarios" />}
+          />
+          <Route
+            path="top10"
+            element={<Placeholder name="Top 10 Productos" />}
+          />
         </Route>
 
         {/* Fallback → login */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }
