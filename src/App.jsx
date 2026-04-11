@@ -14,6 +14,7 @@ import VentaDetalle from "./pages/ops/VentaDetalle";
 import CotizacionHistorial from "./pages/ops/CotizacionHistorial";
 import CotizacionNueva from "./pages/ops/CotizacionNueva";
 import CotizacionDetalle from "./pages/ops/CotizacionDetalle";
+import CotizacionEditar from "./pages/ops/CotizacionEditar";
 
 // Placeholder genérico para módulos aún no implementados
 function Placeholder({ name }) {
@@ -146,6 +147,14 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin", "Vendedor"]}>
                 <CotizacionDetalle />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="cotizaciones/:id/editar"
+            element={
+              <RoleGuard roles={["Admin", "Vendedor"]}>
+                <CotizacionEditar />
               </RoleGuard>
             }
           />

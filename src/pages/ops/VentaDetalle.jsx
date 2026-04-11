@@ -90,9 +90,18 @@ export default function VentaDetalle() {
     );
   }
 
-  const descuento = venta.subtotal * (venta.descuento_pct / 100);
-  const baseIva = venta.subtotal - descuento;
+  // Si el trigger DB no aplicó (subtotal=0 pero hay ítems), calcular desde los ítems
+  const subtotalCalc =
+    venta.subtotal > 0
+      ? venta.subtotal
+      : items.reduce(
+          (s, i) => s + (i.subtotal ?? i.cantidad * i.precio_unitario),
+          0,
+        );
+  const descuento = subtotalCalc * (venta.descuento_pct / 100);
+  const baseIva = subtotalCalc - descuento;
   const iva = baseIva * (venta.iva_pct / 100);
+  const totalCalc = venta.total > 0 ? venta.total : baseIva + iva;
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F4F1EB" }}>
@@ -213,7 +222,7 @@ export default function VentaDetalle() {
             style={{ color: "#636B74" }}
           >
             <span>Subtotal</span>
-            <span>{formatCOP(venta.subtotal)}</span>
+            <span>{formatCOP(subtotalCalc)}</span>
           </div>
           {venta.descuento_pct > 0 && (
             <div
@@ -236,7 +245,7 @@ export default function VentaDetalle() {
             style={{ borderColor: "#E2DED5", color: "#14352A" }}
           >
             <span>Total</span>
-            <span>{formatCOP(venta.total)}</span>
+            <span>{formatCOP(totalCalc)}</span>
           </div>
         </div>
 

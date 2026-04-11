@@ -243,8 +243,8 @@ export default function VentaNueva() {
           descuento_pct: descuentoPct,
           iva_pct: 19,
           observaciones: observaciones || null,
-          subtotal: 0,
-          total: 0,
+          subtotal,
+          total,
         })
         .select("id, numero")
         .single();

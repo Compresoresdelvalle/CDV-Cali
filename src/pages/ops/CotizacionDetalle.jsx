@@ -75,7 +75,7 @@ export default function CotizacionDetalle() {
         }
       }
 
-      // Insertar cabecera de venta
+      // Insertar cabecera de venta con los totales reales de la cotización
       const { data: venta, error: ventaErr } = await supabase
         .from("ventas")
         .insert({
@@ -86,8 +86,8 @@ export default function CotizacionDetalle() {
           metodo_pago: "Efectivo",
           descuento_pct: cotizacion.descuento_pct,
           iva_pct: cotizacion.iva_pct,
-          subtotal: 0,
-          total: 0,
+          subtotal: cotizacion.subtotal,
+          total: cotizacion.total,
         })
         .select("id, numero")
         .single();
@@ -202,6 +202,32 @@ export default function CotizacionDetalle() {
               {formatDate(cotizacion.fecha)}
             </p>
           </div>
+          {/* Botón editar — no disponible para aprobadas */}
+          {cotizacion.estado !== "aprobada" && (
+            <button
+              onClick={() => navigate(`/ops/cotizaciones/${id}/editar`)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.15)",
+                color: "#fff",
+              }}
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+              </svg>
+              Editar
+            </button>
+          )}
         </div>
       </div>
 
