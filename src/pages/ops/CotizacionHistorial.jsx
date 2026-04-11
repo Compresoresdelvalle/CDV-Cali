@@ -121,7 +121,7 @@ export default function CotizacionHistorial() {
         }
       }
 
-      // Insertar cabecera de venta
+      // Insertar cabecera de venta con los totales reales de la cotización
       const { data: venta, error: ventaErr } = await supabase
         .from("ventas")
         .insert({
@@ -132,8 +132,8 @@ export default function CotizacionHistorial() {
           metodo_pago: "Efectivo",
           descuento_pct: cot.descuento_pct,
           iva_pct: cot.iva_pct,
-          subtotal: 0,
-          total: 0,
+          subtotal: cot.subtotal,
+          total: cot.total,
         })
         .select("id, numero")
         .single();

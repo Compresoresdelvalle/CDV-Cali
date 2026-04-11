@@ -1,11 +1,9 @@
-import { useState, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP } from "../../lib/utils";
 import QRScanner from "../../components/forms/QRScanner";
-
-const METODOS_PAGO = ["Efectivo", "Transferencia", "Tarjeta", "Crédito"];
 
 function useDebounce(fn, delay) {
   const timer = useRef(null);
@@ -18,9 +16,15 @@ function useDebounce(fn, delay) {
   );
 }
 
-export default function VentaNueva() {
+export default function CotizacionEditar() {
+  const { id } = useParams();
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
+
+  // Carga inicial
+  const [loading, setLoading] = useState(true);
+  const [numero, setNumero] = useState(null);
+  const [estadoOriginal, setEstadoOriginal] = useState(null);
 
   // Búsqueda
   const [busqueda, setBusqueda] = useState("");
@@ -31,67 +35,94 @@ export default function VentaNueva() {
   // Carrito
   const [carrito, setCarrito] = useState([]);
 
-  // Datos cliente y pago
+  // Datos cliente y condiciones
   const [clienteNombre, setClienteNombre] = useState("");
   const [clienteNit, setClienteNit] = useState("");
-  const [metodoPago, setMetodoPago] = useState("Efectivo");
+  const [clienteEmail, setClienteEmail] = useState("");
+  const [clienteTelefono, setClienteTelefono] = useState("");
   const [descuentoPct, setDescuentoPct] = useState(0);
+  const [vigenciaDias, setVigenciaDias] = useState(30);
   const [observaciones, setObservaciones] = useState("");
 
-  // UI state
-  const [confirmando, setConfirmando] = useState(false);
+  // UI
+  const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
 
   // -----------------------------------------------------------
-  // Búsqueda de productos
+  // Cargar cotización existente
   // -----------------------------------------------------------
-  const buscarProductos = useCallback(
-    async (q) => {
-      if (!q || q.trim().length < 2) {
-        setResultados([]);
-        return;
-      }
-      setBuscando(true);
+  useEffect(() => {
+    const cargar = async () => {
+      setLoading(true);
       try {
-        // Paso 1: buscar productos por nombre/referencia
-        const { data: prods, error: e1 } = await supabase
-          .from("productos")
-          .select("id, nombre, referencia, precio_venta, unidad_medida")
-          .eq("activo", true)
-          .or(`nombre.ilike.%${q}%,referencia.ilike.%${q}%`)
-          .limit(10);
-        if (e1) throw e1;
-        if (!prods?.length) {
-          setResultados([]);
-          return;
-        }
+        const [{ data: cot, error: cotErr }, { data: items, error: itemsErr }] =
+          await Promise.all([
+            supabase.from("cotizaciones").select("*").eq("id", id).single(),
+            supabase
+              .from("detalle_cotizacion")
+              .select(
+                `*, producto:producto_id(id, nombre, referencia, unidad_medida)`,
+              )
+              .eq("cotizacion_id", id),
+          ]);
 
-        // Paso 2: verificar stock en la sede del usuario
-        const ids = prods.map((p) => p.id);
-        const { data: inv, error: e2 } = await supabase
-          .from("inventario")
-          .select("producto_id, cantidad")
-          .eq("sede_id", perfil.sede_id)
-          .gt("cantidad", 0)
-          .in("producto_id", ids);
-        if (e2) throw e2;
+        if (cotErr) throw cotErr;
 
-        const stockMap = Object.fromEntries(
-          (inv ?? []).map((i) => [i.producto_id, i.cantidad]),
+        setNumero(cot.numero);
+        setEstadoOriginal(cot.estado);
+        setClienteNombre(cot.cliente_nombre ?? "");
+        setClienteNit(cot.cliente_nit ?? "");
+        setClienteEmail(cot.cliente_email ?? "");
+        setClienteTelefono(cot.cliente_telefono ?? "");
+        setDescuentoPct(cot.descuento_pct ?? 0);
+        setVigenciaDias(cot.vigencia_dias ?? 30);
+        setObservaciones(cot.observaciones ?? "");
+
+        // Mapear ítems existentes al formato del carrito
+        setCarrito(
+          (items ?? []).map((i) => ({
+            producto_id: i.producto_id,
+            nombre: i.producto?.nombre ?? "—",
+            referencia: i.producto?.referencia ?? "",
+            unidad: i.producto?.unidad_medida ?? "",
+            precio_unitario: i.precio_unitario,
+            cantidad: i.cantidad,
+          })),
         );
-        const merged = prods
-          .filter((p) => stockMap[p.id] !== undefined)
-          .map((p) => ({ ...p, stock_disponible: stockMap[p.id] }));
-
-        setResultados(merged.slice(0, 8));
-      } catch {
-        setResultados([]);
+      } catch (e) {
+        setError(e.message ?? "No se pudo cargar la cotización");
       } finally {
-        setBuscando(false);
+        setLoading(false);
       }
-    },
-    [perfil.sede_id],
-  );
+    };
+    cargar();
+  }, [id]);
+
+  // -----------------------------------------------------------
+  // Búsqueda de productos (sin restricción de stock)
+  // -----------------------------------------------------------
+  const buscarProductos = useCallback(async (q) => {
+    if (!q || q.trim().length < 2) {
+      setResultados([]);
+      return;
+    }
+    setBuscando(true);
+    try {
+      const { data, error: err } = await supabase
+        .from("productos")
+        .select("id, nombre, referencia, precio_venta, unidad_medida")
+        .eq("activo", true)
+        .or(`nombre.ilike.%${q}%,referencia.ilike.%${q}%`)
+        .limit(8);
+
+      if (err) throw err;
+      setResultados(data ?? []);
+    } catch {
+      setResultados([]);
+    } finally {
+      setBuscando(false);
+    }
+  }, []);
 
   const buscarDebounced = useDebounce(buscarProductos, 300);
 
@@ -101,33 +132,21 @@ export default function VentaNueva() {
     buscarDebounced(val);
   };
 
-  // QR scanner: producto_id viene resuelto desde QRScanner
-  const handleQRFound = useCallback(
-    async (productoId) => {
-      setScannerOpen(false);
-      try {
-        const [{ data: prod }, { data: inv }] = await Promise.all([
-          supabase
-            .from("productos")
-            .select("id, nombre, referencia, precio_venta, unidad_medida")
-            .eq("id", productoId)
-            .eq("activo", true)
-            .single(),
-          supabase
-            .from("inventario")
-            .select("cantidad")
-            .eq("sede_id", perfil.sede_id)
-            .eq("producto_id", productoId)
-            .single(),
-        ]);
-        if (!prod || !inv || inv.cantidad <= 0) return;
-        agregarAlCarrito({ ...prod, stock_disponible: inv.cantidad });
-      } catch {
-        // silently ignore
-      }
-    },
-    [perfil.sede_id],
-  );
+  const handleQRFound = useCallback(async (productoId) => {
+    setScannerOpen(false);
+    try {
+      const { data, error: err } = await supabase
+        .from("productos")
+        .select("id, nombre, referencia, precio_venta, unidad_medida")
+        .eq("id", productoId)
+        .eq("activo", true)
+        .single();
+      if (err || !data) return;
+      agregarAlCarrito(data);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // -----------------------------------------------------------
   // Carrito
@@ -135,16 +154,11 @@ export default function VentaNueva() {
   const agregarAlCarrito = (prod) => {
     setBusqueda("");
     setResultados([]);
-
     setCarrito((prev) => {
       const idx = prev.findIndex((i) => i.producto_id === prod.id);
       if (idx >= 0) {
         const updated = [...prev];
-        const item = { ...updated[idx] };
-        if (item.cantidad < prod.stock_disponible) {
-          item.cantidad += 1;
-        }
-        updated[idx] = item;
+        updated[idx] = { ...updated[idx], cantidad: updated[idx].cantidad + 1 };
         return updated;
       }
       return [
@@ -153,9 +167,8 @@ export default function VentaNueva() {
           producto_id: prod.id,
           nombre: prod.nombre,
           referencia: prod.referencia,
-          precio_unitario: prod.precio_venta,
           unidad: prod.unidad_medida,
-          stock_disponible: prod.stock_disponible,
+          precio_unitario: prod.precio_venta,
           cantidad: 1,
         },
       ];
@@ -167,11 +180,7 @@ export default function VentaNueva() {
       prev
         .map((i) => {
           if (i.producto_id !== productoId) return i;
-          const nueva = Math.max(
-            0,
-            Math.min(i.cantidad + delta, i.stock_disponible),
-          );
-          return { ...i, cantidad: nueva };
+          return { ...i, cantidad: Math.max(0, i.cantidad + delta) };
         })
         .filter((i) => i.cantidad > 0),
     );
@@ -179,17 +188,21 @@ export default function VentaNueva() {
 
   const setCantidadDirecta = (productoId, valor) => {
     const n = parseInt(valor, 10);
-    if (isNaN(n)) return;
+    if (isNaN(n) || n < 0) return;
     setCarrito((prev) =>
       prev
-        .map((i) => {
-          if (i.producto_id !== productoId) return i;
-          return {
-            ...i,
-            cantidad: Math.max(0, Math.min(n, i.stock_disponible)),
-          };
-        })
+        .map((i) => (i.producto_id !== productoId ? i : { ...i, cantidad: n }))
         .filter((i) => i.cantidad > 0),
+    );
+  };
+
+  const setPrecioDirecto = (productoId, valor) => {
+    const n = parseFloat(valor);
+    if (isNaN(n) || n < 0) return;
+    setCarrito((prev) =>
+      prev.map((i) =>
+        i.producto_id !== productoId ? i : { ...i, precio_unitario: n },
+      ),
     );
   };
 
@@ -210,69 +223,91 @@ export default function VentaNueva() {
   const total = baseIva + iva;
 
   // -----------------------------------------------------------
-  // Confirmar venta
+  // Guardar cambios
   // -----------------------------------------------------------
-  const confirmarVenta = async () => {
+  const guardarCambios = async () => {
     if (carrito.length === 0) return;
     setError(null);
-    setConfirmando(true);
+    setGuardando(true);
 
     try {
-      // Pre-validar stock antes de insertar
-      for (const item of carrito) {
-        const { data: inv } = await supabase
-          .from("inventario")
-          .select("cantidad")
-          .eq("producto_id", item.producto_id)
-          .eq("sede_id", perfil.sede_id)
-          .single();
-        if (!inv || inv.cantidad < item.cantidad) {
-          throw new Error(`Stock insuficiente para: ${item.nombre}`);
-        }
-      }
-
-      // Insertar cabecera de venta
-      const { data: venta, error: e1 } = await supabase
-        .from("ventas")
-        .insert({
-          vendedor_id: perfil.id,
-          sede_id: perfil.sede_id,
+      // 1. Actualizar cabecera de cotización
+      const { error: updErr } = await supabase
+        .from("cotizaciones")
+        .update({
           cliente_nombre: clienteNombre || null,
           cliente_nit: clienteNit || null,
-          metodo_pago: metodoPago,
+          cliente_email: clienteEmail || null,
+          cliente_telefono: clienteTelefono || null,
           descuento_pct: descuentoPct,
-          iva_pct: 19,
+          vigencia_dias: vigenciaDias,
           observaciones: observaciones || null,
           subtotal,
           total,
+          // Volver a borrador si estaba rechazada o enviada (cambio de contenido)
+          estado:
+            estadoOriginal === "borrador" ||
+            estadoOriginal === "enviada" ||
+            estadoOriginal === "rechazada"
+              ? "borrador"
+              : estadoOriginal,
         })
-        .select("id, numero")
-        .single();
-      if (e1) throw new Error(e1.message);
+        .eq("id", id);
+      if (updErr) throw new Error(updErr.message);
 
-      // Insertar ítems — el trigger trg_venta_descontar_stock descuenta stock
-      // y trg_recalcular_venta recalcula los totales automáticamente
+      // 2. Reemplazar los ítems: eliminar anteriores e insertar nuevos
+      const { error: delErr } = await supabase
+        .from("detalle_cotizacion")
+        .delete()
+        .eq("cotizacion_id", id);
+      if (delErr) throw new Error(delErr.message);
+
       const detalles = carrito.map((i) => ({
-        venta_id: venta.id,
+        cotizacion_id: id,
         producto_id: i.producto_id,
         cantidad: i.cantidad,
         precio_unitario: i.precio_unitario,
-        costo_unitario: 0,
         subtotal: i.cantidad * i.precio_unitario,
       }));
-
-      const { error: e2 } = await supabase
-        .from("detalle_venta")
+      const { error: insErr } = await supabase
+        .from("detalle_cotizacion")
         .insert(detalles);
-      if (e2) throw new Error(e2.message);
+      if (insErr) throw new Error(insErr.message);
 
-      navigate("/ops/ventas");
+      navigate(`/ops/cotizaciones/${id}`);
     } catch (e) {
-      setError(e.message ?? "Error al registrar la venta");
+      setError(e.message ?? "Error al guardar los cambios");
     } finally {
-      setConfirmando(false);
+      setGuardando(false);
     }
   };
+
+  // -----------------------------------------------------------
+  // Render — loading / not found
+  // -----------------------------------------------------------
+  if (loading) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ backgroundColor: "#F4F1EB" }}
+      >
+        <p className="text-sm" style={{ color: "#9CA3AB" }}>
+          Cargando cotización...
+        </p>
+      </div>
+    );
+  }
+
+  if (error && !carrito.length && !numero) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ backgroundColor: "#F4F1EB" }}
+      >
+        <p className="text-sm text-red-600">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F4F1EB" }}>
@@ -283,7 +318,7 @@ export default function VentaNueva() {
       >
         <div className="flex items-center gap-3 max-w-2xl mx-auto">
           <button
-            onClick={() => navigate("/ops/ventas")}
+            onClick={() => navigate(`/ops/cotizaciones/${id}`)}
             className="text-white/70 hover:text-white transition-colors"
           >
             <svg
@@ -300,10 +335,16 @@ export default function VentaNueva() {
               />
             </svg>
           </button>
-          <h1 className="text-white font-semibold text-lg flex-1">
-            Nueva Venta
-          </h1>
-          <span className="text-white/60 text-sm">{perfil.sede_id}</span>
+          <div className="flex-1">
+            <h1 className="text-white font-semibold text-lg">
+              Editar Cotización #{numero}
+            </h1>
+            {estadoOriginal && estadoOriginal !== "borrador" && (
+              <p className="text-white/60 text-xs">
+                Al guardar volverá a estado Borrador
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -315,7 +356,7 @@ export default function VentaNueva() {
               className="text-xs font-semibold uppercase tracking-wide mb-3"
               style={{ color: "#9CA3AB" }}
             >
-              Agregar productos
+              Productos
             </p>
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -337,9 +378,9 @@ export default function VentaNueva() {
                   type="text"
                   value={busqueda}
                   onChange={handleBusquedaChange}
-                  placeholder="Nombre o referencia..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm border focus:outline-none focus:ring-2"
-                  style={{ borderColor: "#E2DED5", focusRingColor: "#14352A" }}
+                  placeholder="Agregar producto por nombre o referencia..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm border focus:outline-none"
+                  style={{ borderColor: "#E2DED5" }}
                 />
               </div>
               <button
@@ -363,7 +404,6 @@ export default function VentaNueva() {
               </button>
             </div>
 
-            {/* Resultados de búsqueda */}
             {buscando && (
               <p className="text-xs mt-2" style={{ color: "#9CA3AB" }}>
                 Buscando...
@@ -374,10 +414,10 @@ export default function VentaNueva() {
                 className="mt-2 border rounded-xl overflow-hidden"
                 style={{ borderColor: "#E2DED5" }}
               >
-                {resultados.map((r) => (
+                {resultados.map((p) => (
                   <button
-                    key={r.id}
-                    onClick={() => agregarAlCarrito(r)}
+                    key={p.id}
+                    onClick={() => agregarAlCarrito(p)}
                     className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 text-left border-b last:border-b-0 transition-colors"
                     style={{ borderColor: "#E2DED5" }}
                   >
@@ -386,10 +426,10 @@ export default function VentaNueva() {
                         className="text-sm font-medium"
                         style={{ color: "#151515" }}
                       >
-                        {r.nombre}
+                        {p.nombre}
                       </p>
                       <p className="text-xs" style={{ color: "#9CA3AB" }}>
-                        {r.referencia} · Stock: {r.stock_disponible}
+                        {p.referencia}
                       </p>
                     </div>
                     <div className="text-right">
@@ -397,10 +437,10 @@ export default function VentaNueva() {
                         className="text-sm font-semibold"
                         style={{ color: "#14352A" }}
                       >
-                        {formatCOP(r.precio_venta)}
+                        {formatCOP(p.precio_venta)}
                       </p>
                       <p className="text-xs" style={{ color: "#9CA3AB" }}>
-                        {r.unidad_medida}
+                        {p.unidad_medida}
                       </p>
                     </div>
                   </button>
@@ -409,25 +449,11 @@ export default function VentaNueva() {
             )}
           </div>
 
-          {/* Ítems del carrito */}
+          {/* Lista de ítems */}
           {carrito.length === 0 ? (
             <div className="px-4 py-8 text-center">
-              <svg
-                className="w-10 h-10 mx-auto mb-2"
-                style={{ color: "#E2DED5" }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-                />
-              </svg>
               <p className="text-sm" style={{ color: "#9CA3AB" }}>
-                Agrega productos al carrito
+                Sin productos — agrega al menos uno
               </p>
             </div>
           ) : (
@@ -435,88 +461,107 @@ export default function VentaNueva() {
               {carrito.map((item) => (
                 <div
                   key={item.producto_id}
-                  className="flex items-center gap-3 px-4 py-3 border-b last:border-b-0"
+                  className="px-4 py-3 border-b last:border-b-0"
                   style={{ borderColor: "#E2DED5" }}
                 >
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className="text-sm font-medium truncate"
-                      style={{ color: "#151515" }}
-                    >
-                      {item.nombre}
-                    </p>
-                    <p className="text-xs" style={{ color: "#9CA3AB" }}>
-                      {formatCOP(item.precio_unitario)} c/u
-                    </p>
-                  </div>
-                  {/* Controles de cantidad */}
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="text-sm font-medium truncate"
+                        style={{ color: "#151515" }}
+                      >
+                        {item.nombre}
+                      </p>
+                      <p className="text-xs" style={{ color: "#9CA3AB" }}>
+                        {item.referencia}
+                      </p>
+                    </div>
                     <button
-                      onClick={() => actualizarCantidad(item.producto_id, -1)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg border transition-colors"
-                      style={{ borderColor: "#E2DED5", color: "#636B74" }}
+                      onClick={() => eliminarItem(item.producto_id)}
+                      className="text-red-400 hover:text-red-600 transition-colors ml-2"
                     >
-                      −
-                    </button>
-                    <input
-                      type="number"
-                      min="1"
-                      max={item.stock_disponible}
-                      value={item.cantidad}
-                      onChange={(e) =>
-                        setCantidadDirecta(item.producto_id, e.target.value)
-                      }
-                      className="w-12 text-center text-sm font-semibold border rounded-lg py-1 focus:outline-none"
-                      style={{ borderColor: "#E2DED5", color: "#151515" }}
-                    />
-                    <button
-                      onClick={() => actualizarCantidad(item.producto_id, 1)}
-                      disabled={item.cantidad >= item.stock_disponible}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg border transition-colors disabled:opacity-40"
-                      style={{ borderColor: "#E2DED5", color: "#636B74" }}
-                    >
-                      +
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
                     </button>
                   </div>
-                  <div className="text-right w-20">
+                  <div className="flex items-center gap-3">
+                    {/* Cantidad */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => actualizarCantidad(item.producto_id, -1)}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center border text-base"
+                        style={{ borderColor: "#E2DED5", color: "#636B74" }}
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.cantidad}
+                        onChange={(e) =>
+                          setCantidadDirecta(item.producto_id, e.target.value)
+                        }
+                        className="w-12 text-center text-sm font-semibold border rounded-lg py-1 focus:outline-none"
+                        style={{ borderColor: "#E2DED5" }}
+                      />
+                      <button
+                        onClick={() => actualizarCantidad(item.producto_id, 1)}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center border text-base"
+                        style={{ borderColor: "#E2DED5", color: "#636B74" }}
+                      >
+                        +
+                      </button>
+                    </div>
+                    {/* Precio editable */}
+                    <div className="flex-1 relative">
+                      <span
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-xs"
+                        style={{ color: "#9CA3AB" }}
+                      >
+                        $
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.precio_unitario}
+                        onChange={(e) =>
+                          setPrecioDirecto(item.producto_id, e.target.value)
+                        }
+                        className="w-full pl-6 pr-3 py-1.5 rounded-lg text-sm border text-right focus:outline-none"
+                        style={{ borderColor: "#E2DED5" }}
+                      />
+                    </div>
                     <p
-                      className="text-sm font-semibold"
+                      className="text-sm font-semibold w-20 text-right"
                       style={{ color: "#14352A" }}
                     >
                       {formatCOP(item.cantidad * item.precio_unitario)}
                     </p>
                   </div>
-                  <button
-                    onClick={() => eliminarItem(item.producto_id)}
-                    className="text-red-400 hover:text-red-600 transition-colors"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Datos del cliente */}
+        {/* Datos cliente */}
         <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
           <p
             className="text-xs font-semibold uppercase tracking-wide"
             style={{ color: "#9CA3AB" }}
           >
-            Cliente (opcional)
+            Cliente
           </p>
           <input
             type="text"
@@ -526,48 +571,42 @@ export default function VentaNueva() {
             className="w-full px-4 py-2.5 rounded-xl text-sm border focus:outline-none"
             style={{ borderColor: "#E2DED5" }}
           />
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="text"
+              value={clienteNit}
+              onChange={(e) => setClienteNit(e.target.value)}
+              placeholder="NIT o Cédula"
+              className="px-4 py-2.5 rounded-xl text-sm border focus:outline-none"
+              style={{ borderColor: "#E2DED5" }}
+            />
+            <input
+              type="tel"
+              value={clienteTelefono}
+              onChange={(e) => setClienteTelefono(e.target.value)}
+              placeholder="Teléfono"
+              className="px-4 py-2.5 rounded-xl text-sm border focus:outline-none"
+              style={{ borderColor: "#E2DED5" }}
+            />
+          </div>
           <input
-            type="text"
-            value={clienteNit}
-            onChange={(e) => setClienteNit(e.target.value)}
-            placeholder="NIT o Cédula"
+            type="email"
+            value={clienteEmail}
+            onChange={(e) => setClienteEmail(e.target.value)}
+            placeholder="Email"
             className="w-full px-4 py-2.5 rounded-xl text-sm border focus:outline-none"
             style={{ borderColor: "#E2DED5" }}
           />
         </div>
 
-        {/* Pago y descuento */}
+        {/* Condiciones */}
         <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
           <p
             className="text-xs font-semibold uppercase tracking-wide"
             style={{ color: "#9CA3AB" }}
           >
-            Pago
+            Condiciones
           </p>
-          <div className="flex gap-2 flex-wrap">
-            {METODOS_PAGO.map((m) => (
-              <button
-                key={m}
-                onClick={() => setMetodoPago(m)}
-                className="px-3 py-2 rounded-xl text-sm border font-medium transition-colors"
-                style={
-                  metodoPago === m
-                    ? {
-                        backgroundColor: "#14352A",
-                        color: "#fff",
-                        borderColor: "#14352A",
-                      }
-                    : {
-                        backgroundColor: "#fff",
-                        color: "#636B74",
-                        borderColor: "#E2DED5",
-                      }
-                }
-              >
-                {m}
-              </button>
-            ))}
-          </div>
           <div className="flex items-center gap-3">
             <label className="text-sm" style={{ color: "#636B74" }}>
               Descuento %
@@ -586,10 +625,26 @@ export default function VentaNueva() {
               style={{ borderColor: "#E2DED5" }}
             />
           </div>
+          <div className="flex items-center gap-3">
+            <label className="text-sm" style={{ color: "#636B74" }}>
+              Vigencia (días)
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="365"
+              value={vigenciaDias}
+              onChange={(e) =>
+                setVigenciaDias(Math.max(1, Number(e.target.value)))
+              }
+              className="w-20 px-3 py-2 rounded-xl text-sm border text-center focus:outline-none"
+              style={{ borderColor: "#E2DED5" }}
+            />
+          </div>
           <textarea
             value={observaciones}
             onChange={(e) => setObservaciones(e.target.value)}
-            placeholder="Observaciones (opcional)"
+            placeholder="Observaciones"
             rows={2}
             className="w-full px-4 py-2.5 rounded-xl text-sm border focus:outline-none resize-none"
             style={{ borderColor: "#E2DED5" }}
@@ -639,22 +694,21 @@ export default function VentaNueva() {
           </div>
         )}
 
-        {/* Botón confirmar */}
+        {/* Guardar */}
         <button
-          onClick={confirmarVenta}
-          disabled={carrito.length === 0 || confirmando}
+          onClick={guardarCambios}
+          disabled={carrito.length === 0 || guardando}
           className="w-full py-4 rounded-2xl font-semibold text-base text-white transition-opacity disabled:opacity-40"
           style={{ backgroundColor: "#14352A" }}
         >
-          {confirmando
-            ? "Registrando..."
-            : `Confirmar venta · ${formatCOP(total)}`}
+          {guardando
+            ? "Guardando cambios..."
+            : `Guardar cambios · ${formatCOP(total)}`}
         </button>
 
         <div className="h-6" />
       </div>
 
-      {/* QR Scanner modal */}
       {scannerOpen && (
         <QRScanner
           onFound={handleQRFound}
