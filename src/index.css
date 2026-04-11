@@ -1,7 +1,63 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
-*, *::before, *::after {
+/* ── CSS Design Tokens (Lovable) ───────────────────────────────────────── */
+:root {
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+
+  --background: 210 20% 98%;
+  --foreground: 215 25% 15%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 215 25% 15%;
+
+  --primary: 213 56% 33%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 210 18% 93%;
+  --secondary-foreground: 215 25% 20%;
+
+  --muted: 210 14% 95%;
+  --muted-foreground: 215 12% 50%;
+
+  --accent: 213 56% 33%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --success: 142 64% 38%;
+  --success-foreground: 0 0% 100%;
+
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 0% 10%;
+
+  --info: 200 80% 44%;
+  --info-foreground: 0 0% 100%;
+
+  --border: 214 20% 88%;
+  --input: 214 20% 88%;
+  --ring: 213 56% 33%;
+
+  --radius: 0.5rem;
+
+  --sidebar-background: 215 28% 17%;
+  --sidebar-foreground: 210 20% 80%;
+  --sidebar-primary: 210 50% 65%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 215 25% 22%;
+  --sidebar-accent-foreground: 210 20% 92%;
+  --sidebar-border: 215 20% 25%;
+  --sidebar-ring: 210 50% 65%;
+  --sidebar-muted: 215 15% 40%;
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -11,39 +67,170 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* ── Base styles ────────────────────────────────────────────────────────── */
 body {
-  font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
-  background-color: #F4F1EB;
-  color: #151515;
+  font-family: var(--font-sans);
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Inputs numéricos grandes para operarios */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* ── Utility classes (Lovable pattern) ─────────────────────────────────── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.status-success {
+  background-color: hsl(var(--success) / 0.12);
+  color: hsl(var(--success));
+}
+
+.status-warning {
+  background-color: hsl(var(--warning) / 0.12);
+  color: hsl(var(--warning));
+}
+
+.status-danger {
+  background-color: hsl(var(--destructive) / 0.12);
+  color: hsl(var(--destructive));
+}
+
+.status-info {
+  background-color: hsl(var(--info) / 0.12);
+  color: hsl(var(--info));
+}
+
+.status-neutral {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+/* Module header — barra con borde inferior */
+.module-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid hsl(var(--border));
+  margin-bottom: 1.5rem;
+}
+
+/* KPI card base */
+.kpi-card {
+  background-color: hsl(var(--card));
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--border));
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* ── Inputs numéricos grandes para operarios ────────────────────────────── */
 input[type="number"] {
-  font-size: 1.5rem;
+  font-size: 1rem;
 }
 
-/* Scrollbar delgado */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #C8993E40; border-radius: 2px; }
-
-/* Patrón de fondo para panel verde del login */
-.bg-noise {
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 128px 128px;
+/* ── Scrollbar delgado ──────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
 }
 
-/* Texto marca */
+/* ── Grid decorativo (login background overlay) ────────────────────────── */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* ── Animaciones ─────────────────────────────────────────────────────────── */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes slide-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-8px);
+  }
+  40% {
+    transform: translateX(8px);
+  }
+  60% {
+    transform: translateX(-5px);
+  }
+  80% {
+    transform: translateX(5px);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+/* ── Texto de marca ─────────────────────────────────────────────────────── */
 .font-brand {
-  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-weight: 700;
 }
 
-/* Reducir motion */
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }

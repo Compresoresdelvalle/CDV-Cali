@@ -1,23 +1,28 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/authStore";
 import { supabase } from "../lib/supabase";
+import loginBg from "../assets/login-bg.jpg";
 
-/* ── Constants ────────────────────────────────────────────────────────── */
-const AVATAR_COLORS = {
-  Admin: "#1d4ed8",
-  Bodeguero: "#b45309",
-  Vendedor: "#16a34a",
-  Tecnico: "#7c3aed",
+/* ── Role config ───────────────────────────────────────────────────────── */
+const ROLE_GRADIENTS = {
+  Admin: "from-blue-500 to-blue-700",
+  Bodeguero: "from-amber-500 to-amber-700",
+  Vendedor: "from-emerald-500 to-emerald-700",
+  Tecnico: "from-violet-500 to-violet-700",
 };
-
-const ROL_LABEL = {
+const ROLE_BADGE = {
+  Admin: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+  Bodeguero: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+  Vendedor: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+  Tecnico: "bg-violet-500/10 text-violet-400 border border-violet-500/20",
+};
+const ROLE_LABEL = {
   Admin: "Administrador",
   Bodeguero: "Bodeguero",
   Vendedor: "Vendedor",
   Tecnico: "Técnico",
 };
-
 const SEDE_LABEL = {
   "BOD-PRINCIPAL": "Bodega Principal",
   "ALM-01": "Almacén Norte",
@@ -25,14 +30,6 @@ const SEDE_LABEL = {
   "ALM-03": "Almacén Centro",
 };
 
-const KEYPAD = [
-  ["1", "2", "3"],
-  ["4", "5", "6"],
-  ["7", "8", "9"],
-  ["back", "0", "enter"],
-];
-
-/* ── Helpers ──────────────────────────────────────────────────────────── */
 const getInitials = (name = "") =>
   name
     .split(" ")
@@ -41,71 +38,24 @@ const getInitials = (name = "") =>
     .join("")
     .toUpperCase();
 
-const getAvatarColor = (rol) => AVATAR_COLORS[rol] || "#475569";
-
-/* ── SVG icons ────────────────────────────────────────────────────────── */
-function BackspaceSVG() {
+/* ── SVG icons (no lucide dependency) ─────────────────────────────────── */
+function ShieldIcon() {
   return (
     <svg
-      width="20"
-      height="16"
-      viewBox="0 0 22 18"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M20.5 1H8.83A2 2 0 0 0 7.41 1.59L1.5 8l5.91 6.41A2 2 0 0 0 8.83 15H20.5a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2Z"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinejoin="round"
-      />
-      <path
-        d="m14.5 5.5-4 4m0-4 4 4"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function ChevronRightSVG() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M9 18l6-6-6-6" />
-    </svg>
-  );
-}
-
-function ShieldSVG() {
-  return (
-    <svg
-      width="32"
-      height="32"
+      width="24"
+      height="24"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden="true"
     >
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   );
 }
-
-function LockSVG() {
+function LockIcon() {
   return (
     <svg
       width="14"
@@ -116,129 +66,137 @@ function LockSVG() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden="true"
     >
       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
       <path d="M7 11V7a5 5 0 0110 0v4" />
     </svg>
   );
 }
-
-function ArrowLeftSVG() {
+function AlertIcon() {
   return (
     <svg
-      width="14"
-      height="14"
+      width="16"
+      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden="true"
     >
-      <path d="M19 12H5M12 19l-7-7 7-7" />
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 8v4M12 16h.01" />
+    </svg>
+  );
+}
+function ChevronRightIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M9 18l6-6-6-6" />
     </svg>
   );
 }
 
-/* ── Keypad button ────────────────────────────────────────────────────── */
-function KeyBtn({ k, onClick, disabled }) {
-  const isBack = k === "back";
-  const isEnter = k === "enter";
-  const isNum = !isBack && !isEnter;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={isBack ? "Borrar" : isEnter ? "Entrar" : `Dígito ${k}`}
-      className={`
-        h-14 rounded-xl flex items-center justify-center select-none
-        cursor-pointer transition-all duration-100 focus:outline-none
-        ${disabled ? "opacity-40 cursor-not-allowed" : "active:scale-95"}
-        ${isNum ? "bg-white/10 hover:bg-white/20 text-white text-xl font-semibold" : ""}
-        ${isBack ? "bg-white/5 hover:bg-white/10 text-slate-400" : ""}
-        ${isEnter ? (disabled ? "bg-slate-700 text-slate-500" : "bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm tracking-widest") : ""}
-      `}
-    >
-      {isBack && <BackspaceSVG />}
-      {isEnter && "ENTRAR"}
-      {isNum && k}
-    </button>
-  );
-}
-
-/* ── PIN box ──────────────────────────────────────────────────────────── */
-function PinBox({ filled, isNew }) {
-  return (
-    <div
-      className={`
-        w-14 h-16 rounded-xl border-2 flex items-center justify-center
-        transition-all duration-150
-        ${filled ? "border-blue-400 bg-white/10" : "border-white/15 bg-white/5"}
-        ${isNew ? "scale-105" : "scale-100"}
-      `}
-    >
-      {filled && (
-        <div className="w-3 h-3 rounded-full bg-blue-400 transition-transform duration-100" />
-      )}
-    </div>
-  );
-}
-
-/* ── User card ────────────────────────────────────────────────────────── */
+/* ── User card (step 1) ────────────────────────────────────────────────── */
 function UserCard({ usuario, onSelect }) {
-  const color = getAvatarColor(usuario.rol);
+  const grad = ROLE_GRADIENTS[usuario.rol] || "from-slate-500 to-slate-700";
+  const badge =
+    ROLE_BADGE[usuario.rol] ||
+    "bg-slate-500/10 text-slate-400 border border-slate-500/20";
   const initials = getInitials(usuario.nombre);
   const sedeDisplay = SEDE_LABEL[usuario.sede_id] || usuario.sede_id || "";
-  const rolDisplay = ROL_LABEL[usuario.rol] || usuario.rol;
 
   return (
     <button
       type="button"
       onClick={() => onSelect(usuario)}
-      className="w-full flex items-center gap-3.5 px-4 py-3.5 border-b border-white/5 last:border-b-0 hover:bg-white/5 transition-colors text-left cursor-pointer"
+      className="w-full flex items-center gap-3 p-3.5 rounded-xl transition-all text-left group cursor-pointer"
+      style={{
+        border: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(255,255,255,0.03)",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+        e.currentTarget.style.borderColor = "rgba(59,130,246,0.3)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+        e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+      }}
     >
-      {/* Avatar */}
       <div
-        className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0"
-        style={{ backgroundColor: color }}
+        className={`w-10 h-10 rounded-full bg-gradient-to-br ${grad} flex items-center justify-center text-xs font-bold text-white shadow-lg flex-shrink-0`}
       >
         {initials}
       </div>
-
-      {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-white font-semibold text-sm leading-tight truncate">
-          {usuario.nombre}
-        </p>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <span
-            className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
-            style={{ backgroundColor: `${color}33`, color }}
-          >
-            {rolDisplay}
+        <p className="text-sm font-medium text-white/90">{usuario.nombre}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${badge}`}>
+            {ROLE_LABEL[usuario.rol] || usuario.rol}
           </span>
           {sedeDisplay && (
-            <span className="text-slate-500 text-[11px]">{sedeDisplay}</span>
+            <span className="text-[10px] text-white/35">{sedeDisplay}</span>
           )}
         </div>
       </div>
-
-      <ChevronRightSVG />
+      <span className="text-white/30 opacity-0 group-hover:opacity-100 transition-opacity">
+        <ChevronRightIcon />
+      </span>
     </button>
   );
 }
 
-/* ── Main Login component ─────────────────────────────────────────────── */
+/* ── PIN input box ─────────────────────────────────────────────────────── */
+function PinInput({ value, inputRef, onChange, onKeyDown, index }) {
+  return (
+    <input
+      ref={inputRef}
+      type="password"
+      inputMode="numeric"
+      maxLength={1}
+      value={value}
+      onChange={(e) => onChange(index, e.target.value)}
+      onKeyDown={(e) => onKeyDown(index, e)}
+      autoComplete="off"
+      className="w-14 h-16 text-center text-2xl font-bold rounded-xl outline-none transition-all duration-200 text-white"
+      style={{
+        background: value ? "rgba(59,130,246,0.15)" : "rgba(255,255,255,0.05)",
+        border: `2px solid ${value ? "rgba(59,130,246,0.4)" : "rgba(255,255,255,0.1)"}`,
+        boxShadow: value ? "0 0 20px rgba(59,130,246,0.1)" : "none",
+      }}
+      onFocus={(e) => {
+        e.target.style.borderColor = "rgba(59,130,246,0.5)";
+        e.target.style.boxShadow = "0 0 20px rgba(59,130,246,0.15)";
+      }}
+      onBlur={(e) => {
+        e.target.style.borderColor = value
+          ? "rgba(59,130,246,0.4)"
+          : "rgba(255,255,255,0.1)";
+        e.target.style.boxShadow = value
+          ? "0 0 20px rgba(59,130,246,0.1)"
+          : "none";
+      }}
+    />
+  );
+}
+
+/* ── Main Login ────────────────────────────────────────────────────────── */
 export default function Login() {
   const navigate = useNavigate();
   const {
     login,
     loading: authLoading,
-    error,
+    error: storeError,
     clearError,
     session,
     perfil,
@@ -247,13 +205,12 @@ export default function Login() {
   const [usuarios, setUsuarios] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [pin, setPin] = useState("");
+  const [pin, setPin] = useState(["", "", "", ""]);
+  const [localError, setLocalError] = useState("");
+  const [shake, setShake] = useState(false);
   const [cargando, setCargando] = useState(false);
-  const [phase, setPhase] = useState("select"); // 'select' | 'pin'
-  const [shaking, setShaking] = useState(false);
-  const [lastDot, setLastDot] = useState(-1);
 
-  const handleLoginRef = useRef(null);
+  const inputRefs = useRef([]);
 
   /* Redirect if already authed */
   useEffect(() => {
@@ -275,326 +232,317 @@ export default function Login() {
       });
   }, []);
 
-  /* Clear error on user change */
+  /* Clear errors when user changes */
   useEffect(() => {
+    setLocalError("");
     clearError();
   }, [selectedUser]); // eslint-disable-line
 
-  /* Login handler */
-  const handleLogin = useCallback(async () => {
-    if (!selectedUser || pin.length < 4 || cargando) return;
-    setCargando(true);
-    clearError();
-    const ok = await login(selectedUser.nombre, pin);
-    setCargando(false);
-    if (!ok) {
-      setPin("");
-      setShaking(true);
-      setTimeout(() => setShaking(false), 450);
-    }
-  }, [selectedUser, pin, cargando, login, clearError]);
-
-  handleLoginRef.current = handleLogin;
-
-  /* Auto-submit at 4 digits */
+  /* Auto-focus first input when user selected */
   useEffect(() => {
-    if (pin.length === 4 && selectedUser && phase === "pin") {
-      handleLoginRef.current();
+    if (selectedUser) {
+      setTimeout(() => inputRefs.current[0]?.focus(), 100);
     }
-  }, [pin]); // eslint-disable-line
+  }, [selectedUser]);
 
-  /* Keypad handler */
-  const handleKey = useCallback(
-    (k) => {
-      if (cargando) return;
-      if (k === "back") {
-        setPin((p) => p.slice(0, -1));
-        return;
-      }
-      if (k === "enter") {
-        handleLoginRef.current();
-        return;
-      }
-      if (pin.length < 4) {
-        setLastDot(pin.length);
-        setTimeout(() => setLastDot(-1), 180);
-        setPin((p) => p + k);
+  const doLogin = useCallback(
+    async (fullPin) => {
+      if (!selectedUser || cargando) return;
+      setCargando(true);
+      setLocalError("");
+      clearError();
+      const ok = await login(selectedUser.nombre, fullPin);
+      setCargando(false);
+      if (!ok) {
+        setLocalError("PIN incorrecto. Intente de nuevo.");
+        setShake(true);
+        setTimeout(() => {
+          setShake(false);
+          setPin(["", "", "", ""]);
+          inputRefs.current[0]?.focus();
+        }, 500);
       }
     },
-    [pin, cargando],
+    [selectedUser, cargando, login, clearError],
   );
+
+  const handlePinChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+    const newPin = [...pin];
+    newPin[index] = value.slice(-1);
+    setPin(newPin);
+    setLocalError("");
+
+    if (value && index < 3) {
+      inputRefs.current[index + 1]?.focus();
+    }
+    if (index === 3 && value) {
+      const full = newPin.join("");
+      if (full.length === 4) doLogin(full);
+    }
+  };
+
+  const handleKeyDown = (index, e) => {
+    if (e.key === "Backspace" && !pin[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
 
   const selectUser = (u) => {
     setSelectedUser(u);
-    setPin("");
+    setPin(["", "", "", ""]);
+    setLocalError("");
     clearError();
-    setPhase("pin");
   };
 
   const backToSelect = () => {
-    setPhase("select");
     setSelectedUser(null);
-    setPin("");
+    setPin(["", "", "", ""]);
+    setLocalError("");
     clearError();
   };
+
+  const displayError = localError || storeError;
 
   /* Loading screen */
   if (authLoading) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: "#0f172a" }}
-      >
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  /* ── Render ─────────────────────────────────────────────────────────── */
-  return (
-    <div
-      className="min-h-screen flex flex-col md:flex-row md:h-screen md:overflow-hidden relative"
-      style={{
-        backgroundImage:
-          "url('https://images.unsplash.com/photo-1565378935735-a9a52ccee3ac?auto=format&fit=crop&w=2070&q=80')",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundColor: "#0a1628",
-      }}
-    >
-      {/* Dark overlay */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: "rgba(0,0,0,0.55)" }}
-      />
+  const selectedGrad = selectedUser
+    ? ROLE_GRADIENTS[selectedUser.rol] || "from-slate-500 to-slate-700"
+    : "";
+  const selectedBadge = selectedUser ? ROLE_BADGE[selectedUser.rol] || "" : "";
 
-      {/* ── Left: branding overlay (desktop) ──────────────────────────── */}
-      <div className="hidden md:flex flex-col justify-between flex-1 relative z-10 px-12 py-12">
-        {/* Logo */}
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold"
-              style={{ backgroundColor: "#2563EB" }}
-            >
+  return (
+    <div className="min-h-screen flex relative overflow-hidden">
+      {/* Background image */}
+      <div className="absolute inset-0">
+        <img src={loginBg} alt="" className="w-full h-full object-cover" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.82) 50%, rgba(30,58,100,0.88) 100%)",
+          }}
+        />
+      </div>
+
+      {/* Decorative grid */}
+      <div className="absolute inset-0 opacity-[0.04] bg-grid pointer-events-none" />
+
+      {/* Left branding (desktop) */}
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 relative z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
+            <span className="text-sm font-black text-white tracking-tight">
               CV
-            </div>
-            <div>
-              <p className="text-white font-bold text-sm leading-tight tracking-wide uppercase">
-                Compresores del Valle
-              </p>
-              <p className="text-white/40 text-[10px] tracking-widest uppercase">
-                S.A.S.
-              </p>
-            </div>
+            </span>
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-white">COMPRESORES</h1>
+            <p className="text-[10px] tracking-[0.35em] uppercase text-white/50">
+              del Valle S.A.S.
+            </p>
           </div>
         </div>
 
-        {/* Headline */}
-        <div>
-          <h1
-            className="text-white font-black leading-none mb-3"
-            style={{ fontSize: "clamp(2.5rem, 4vw, 4rem)" }}
-          >
-            Sistema de Gestión
-            <br />
-            <span style={{ color: "#60a5fa" }}>Operativa</span>
-          </h1>
-          <p className="text-white/50 text-sm leading-relaxed max-w-xs">
-            Plataforma integral para el control de inventario, ventas, compras,
-            logística y servicio técnico.
-          </p>
-
-          {/* Stats */}
-          <div className="flex gap-8 mt-8">
+        <div className="space-y-8">
+          <div>
+            <h2 className="text-4xl font-bold leading-tight text-white">
+              Sistema de Gestión
+              <br />
+              <span className="bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+                Operativa
+              </span>
+            </h2>
+            <p className="mt-4 text-base leading-relaxed max-w-md text-white/60">
+              Plataforma integral para el control de inventario, ventas,
+              compras, logística y servicio técnico.
+            </p>
+          </div>
+          <div className="flex gap-8">
             {[
-              { value: "4", label: "Sedes" },
-              { value: "+2.500", label: "Productos" },
-              { value: "17", label: "Módulos" },
-            ].map(({ value, label }) => (
-              <div key={label}>
-                <p className="text-white text-2xl font-black leading-none">
-                  {value}
-                </p>
-                <p className="text-white/40 text-xs mt-0.5">{label}</p>
+              { label: "Sedes", value: "4" },
+              { label: "Productos", value: "+2,500" },
+              { label: "Módulos", value: "17" },
+            ].map((stat) => (
+              <div key={stat.label}>
+                <p className="text-2xl font-bold text-white">{stat.value}</p>
+                <p className="text-xs text-white/40">{stat.label}</p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Footer */}
-        <p className="text-white/20 text-xs">
+        <p className="text-xs text-white/25">
           © 2025 Compresores del Valle S.A.S. · Cali, Colombia
         </p>
       </div>
 
-      {/* ── Right: dark glass panel ────────────────────────────────────── */}
-      <div
-        className="relative z-10 flex flex-col w-full md:w-[420px] lg:w-[440px] flex-shrink-0"
-        style={{
-          backgroundColor: "rgba(15,23,42,0.96)",
-          backdropFilter: "blur(20px)",
-        }}
-      >
-        <div className="flex-1 flex flex-col justify-center px-8 py-10">
-          {/* ══ PHASE 1 — Select user ══════════════════════════════════ */}
-          {phase === "select" && (
-            <div>
-              {/* Header */}
-              <div className="flex flex-col items-center mb-8">
-                <div className="text-blue-400 mb-3">
-                  <ShieldSVG />
-                </div>
-                <h2 className="text-white text-2xl font-bold">
-                  Iniciar sesión
-                </h2>
-                <p className="text-slate-500 text-sm mt-1">
-                  Seleccione su usuario para continuar
-                </p>
+      {/* Right login panel */}
+      <div className="flex-1 flex items-center justify-center p-6 relative z-10">
+        <div className="w-full max-w-md">
+          {/* Glass card */}
+          <div
+            className="backdrop-blur-xl rounded-2xl border p-8 shadow-2xl"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.05)",
+              borderColor: "rgba(255,255,255,0.1)",
+              boxShadow:
+                "0 25px 50px -12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)",
+            }}
+          >
+            {/* Mobile logo */}
+            <div className="lg:hidden text-center mb-8">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center mx-auto shadow-lg shadow-blue-500/25 mb-3">
+                <span className="text-base font-black text-white">CV</span>
               </div>
-
-              {/* User cards */}
-              <div
-                className="rounded-xl overflow-hidden border border-white/8"
-                style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
-              >
-                {loadingUsers ? (
-                  <div className="flex items-center justify-center py-10">
-                    <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                  </div>
-                ) : usuarios.length === 0 ? (
-                  <p className="text-slate-500 text-sm text-center py-8">
-                    Sin usuarios disponibles
-                  </p>
-                ) : (
-                  usuarios.map((u) => (
-                    <UserCard
-                      key={u.nombre}
-                      usuario={u}
-                      onSelect={selectUser}
-                    />
-                  ))
-                )}
-              </div>
+              <h1 className="text-lg font-bold text-white">
+                COMPRESORES DEL VALLE
+              </h1>
+              <p className="text-[10px] tracking-[0.3em] text-white/40">
+                S.A.S.
+              </p>
             </div>
-          )}
 
-          {/* ══ PHASE 2 — Enter PIN ════════════════════════════════════ */}
-          {phase === "pin" && selectedUser && (
-            <div>
-              {/* Back button */}
-              <button
-                type="button"
-                onClick={backToSelect}
-                className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm mb-6 transition-colors cursor-pointer"
-              >
-                <ArrowLeftSVG />
-                Cambiar usuario
-              </button>
-
-              {/* Selected user display */}
-              <div className="flex flex-col items-center mb-8">
-                <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold mb-3"
-                  style={{ backgroundColor: getAvatarColor(selectedUser.rol) }}
-                >
-                  {getInitials(selectedUser.nombre)}
-                </div>
-                <h3 className="text-white text-lg font-bold">
-                  {selectedUser.nombre}
-                </h3>
-                <div className="flex items-center gap-2 mt-1">
-                  <span
-                    className="text-xs font-semibold px-2 py-0.5 rounded"
+            {/* ── STEP 1: Select user ─────────────────────────────────── */}
+            {!selectedUser && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="text-center space-y-2">
+                  <div
+                    className="w-14 h-14 rounded-full flex items-center justify-center mx-auto text-blue-400"
                     style={{
-                      backgroundColor: `${getAvatarColor(selectedUser.rol)}33`,
-                      color: getAvatarColor(selectedUser.rol),
+                      background:
+                        "linear-gradient(135deg, rgba(59,130,246,0.15), rgba(59,130,246,0.05))",
+                      border: "1px solid rgba(59,130,246,0.2)",
                     }}
                   >
-                    {ROL_LABEL[selectedUser.rol] || selectedUser.rol}
-                  </span>
-                  {selectedUser.sede_id && (
-                    <span className="text-slate-500 text-xs">
-                      {SEDE_LABEL[selectedUser.sede_id] || selectedUser.sede_id}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* PIN label */}
-              <div className="flex items-center justify-center gap-1.5 text-slate-400 text-sm mb-4">
-                <LockSVG />
-                <span>Ingrese su PIN de acceso</span>
-              </div>
-
-              {/* PIN boxes */}
-              <div
-                className={`flex justify-center gap-3 mb-2 ${shaking ? "animate-pulse" : ""}`}
-              >
-                {[0, 1, 2, 3].map((i) => (
-                  <PinBox
-                    key={i}
-                    filled={i < pin.length}
-                    isNew={i === lastDot}
-                  />
-                ))}
-              </div>
-
-              {/* Error */}
-              <div className="min-h-[1.5rem] mb-4 flex items-center justify-center">
-                {error && (
-                  <p className="text-red-400 text-sm font-medium text-center">
-                    {error}
+                    <ShieldIcon />
+                  </div>
+                  <h2 className="text-lg font-semibold text-white">
+                    Iniciar sesión
+                  </h2>
+                  <p className="text-sm text-white/50">
+                    Seleccione su usuario para continuar
                   </p>
-                )}
-              </div>
+                </div>
 
-              {/* Keypad */}
-              <div
-                className="rounded-xl p-3"
-                style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
-              >
-                <div className="grid grid-cols-3 gap-2">
-                  {KEYPAD.map((row, ri) =>
-                    row.map((k) => (
-                      <KeyBtn
-                        key={`${ri}-${k}`}
-                        k={k}
-                        onClick={() => handleKey(k)}
-                        disabled={
-                          cargando ||
-                          (k === "enter" &&
-                            (!selectedUser || pin.length < 4)) ||
-                          (k === "back" && pin.length === 0)
-                        }
+                <div className="space-y-2">
+                  {loadingUsers ? (
+                    <div className="flex items-center justify-center py-10">
+                      <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : (
+                    usuarios.map((u) => (
+                      <UserCard
+                        key={u.nombre}
+                        usuario={u}
+                        onSelect={selectUser}
                       />
-                    )),
+                    ))
                   )}
                 </div>
               </div>
+            )}
 
-              {/* Loading indicator */}
-              {cargando && (
-                <div className="flex items-center justify-center gap-2 mt-4">
-                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                  <span className="text-slate-400 text-sm">Verificando...</span>
+            {/* ── STEP 2: PIN entry ───────────────────────────────────── */}
+            {selectedUser && (
+              <div className="space-y-8 animate-fade-in">
+                <button
+                  type="button"
+                  onClick={backToSelect}
+                  className="text-sm flex items-center gap-1 text-white/40 hover:text-white/80 transition-colors cursor-pointer"
+                >
+                  ← Cambiar usuario
+                </button>
+
+                <div className="text-center space-y-4">
+                  <div
+                    className={`w-16 h-16 rounded-full bg-gradient-to-br ${selectedGrad} flex items-center justify-center mx-auto text-xl font-bold text-white shadow-xl`}
+                  >
+                    {getInitials(selectedUser.nombre)}
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">
+                      {selectedUser.nombre}
+                    </h2>
+                    <div className="flex items-center justify-center gap-2 mt-1">
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full ${selectedBadge}`}
+                      >
+                        {ROLE_LABEL[selectedUser.rol] || selectedUser.rol}
+                      </span>
+                      {selectedUser.sede_id && (
+                        <span className="text-xs text-white/40">
+                          {SEDE_LABEL[selectedUser.sede_id] ||
+                            selectedUser.sede_id}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              )}
 
-              {/* Hint */}
-              {!cargando && !error && (
-                <p className="text-slate-600 text-xs text-center mt-3">
-                  PIN de prueba: 1234
-                </p>
-              )}
-            </div>
-          )}
+                <div className="space-y-5">
+                  <div className="flex items-center justify-center gap-1.5 text-white/50 text-sm">
+                    <LockIcon />
+                    <span>Ingrese su PIN de acceso</span>
+                  </div>
+
+                  <div
+                    className={`flex justify-center gap-3 ${shake ? "animate-shake" : ""}`}
+                  >
+                    {pin.map((digit, i) => (
+                      <PinInput
+                        key={i}
+                        index={i}
+                        value={digit}
+                        inputRef={(el) => {
+                          inputRefs.current[i] = el;
+                        }}
+                        onChange={handlePinChange}
+                        onKeyDown={handleKeyDown}
+                      />
+                    ))}
+                  </div>
+
+                  {displayError && (
+                    <div className="flex items-center justify-center gap-2 text-sm text-red-400 animate-fade-in">
+                      <AlertIcon />
+                      {displayError}
+                    </div>
+                  )}
+
+                  {cargando && (
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm text-white/40">
+                        Verificando...
+                      </span>
+                    </div>
+                  )}
+
+                  {!cargando && !displayError && (
+                    <p className="text-center text-xs text-white/30">
+                      PIN de prueba:{" "}
+                      <span className="font-mono font-medium text-white/50">
+                        1234
+                      </span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <p className="lg:hidden text-center mt-6 text-[10px] text-white/20">
+            © 2025 Compresores del Valle S.A.S.
+          </p>
         </div>
-
-        {/* Panel footer */}
-        <p className="text-slate-700 text-xs text-center pb-5">
-          v2.0 · Uso interno
-        </p>
       </div>
     </div>
   );

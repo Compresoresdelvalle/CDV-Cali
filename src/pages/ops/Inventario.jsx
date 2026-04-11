@@ -69,15 +69,35 @@ export default function Inventario() {
   const esVendedor = perfil?.rol === "Vendedor";
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div
+      className="flex flex-col min-h-full"
+      style={{ backgroundColor: "hsl(var(--background))" }}
+    >
       {/* ── Barra de filtros ─────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-10 bg-white border-b border-border">
+      <div
+        className="sticky top-0 z-10 border-b"
+        style={{
+          backgroundColor: "hsl(var(--card))",
+          borderColor: "hsl(var(--border))",
+        }}
+      >
         <div className="px-4 pt-4 pb-3 space-y-3">
           {/* Título + contador */}
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-bold text-text">Inventario</h1>
+            <h1
+              className="text-lg font-bold"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
+              Inventario
+            </h1>
             {!loading && (
-              <span className="text-xs text-text-muted bg-surface px-2 py-1 rounded-full">
+              <span
+                className="text-xs px-2 py-1 rounded-full"
+                style={{
+                  color: "hsl(var(--muted-foreground))",
+                  backgroundColor: "hsl(var(--muted))",
+                }}
+              >
                 {items.length} {hasMore ? "+" : ""} items
               </span>
             )}
@@ -85,23 +105,28 @@ export default function Inventario() {
 
           {/* Búsqueda */}
           <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <SearchIcon
+              className="absolute left-3 top-1/2 -translate-y-1/2"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            />
             <input
               type="search"
               placeholder="Buscar por nombre o referencia…"
               value={filtroBusqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full pl-10 pr-4 h-11 rounded-xl border border-border
-                         bg-surface text-text text-sm placeholder:text-text-muted
-                         focus:outline-none focus:ring-2 focus:border-primary/40
-                         transition-all"
-              style={{ "--tw-ring-color": "rgba(20,53,42,0.3)" }}
+              className="w-full pl-10 pr-4 h-11 rounded-xl border text-sm
+                         focus:outline-none focus:ring-2 transition-all"
+              style={{
+                backgroundColor: "hsl(var(--muted) / 0.5)",
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--foreground))",
+              }}
             />
             {filtroBusqueda && (
               <button
                 onClick={() => setBusqueda("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted
-                           hover:text-text transition-colors cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer"
+                style={{ color: "hsl(var(--muted-foreground))" }}
                 aria-label="Limpiar búsqueda"
               >
                 <XSmallIcon />
@@ -118,10 +143,13 @@ export default function Inventario() {
                 onChange={(e) =>
                   setFiltros({ filtroSede: e.target.value || null })
                 }
-                className="flex-shrink-0 h-9 text-xs font-medium rounded-lg border border-border
-                           bg-white text-text px-2 pr-6 cursor-pointer
-                           focus:outline-none focus:ring-2 focus:border-primary/40 transition-all"
-                style={{ "--tw-ring-color": "rgba(20,53,42,0.3)" }}
+                className="flex-shrink-0 h-9 text-xs font-medium rounded-lg border px-2 pr-6 cursor-pointer
+                           focus:outline-none focus:ring-2 transition-all"
+                style={{
+                  backgroundColor: "hsl(var(--card))",
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--foreground))",
+                }}
               >
                 <option value="">Todas las sedes</option>
                 {Object.entries(SEDE_LABELS).map(([id, label]) => (
@@ -135,13 +163,20 @@ export default function Inventario() {
             {/* Chips de estado */}
             <button
               onClick={() => setFiltros({ filtroEstado: null })}
-              className={`flex-shrink-0 h-9 px-3 rounded-lg text-xs font-semibold
-                          border transition-all cursor-pointer
-                          ${
-                            !filtroEstado
-                              ? "bg-primary text-white border-primary"
-                              : "bg-white text-text-sub border-border hover:border-primary/40"
-                          }`}
+              className="flex-shrink-0 h-9 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer"
+              style={
+                !filtroEstado
+                  ? {
+                      backgroundColor: "hsl(var(--primary))",
+                      color: "hsl(var(--primary-foreground))",
+                      borderColor: "hsl(var(--primary))",
+                    }
+                  : {
+                      backgroundColor: "hsl(var(--card))",
+                      color: "hsl(var(--muted-foreground))",
+                      borderColor: "hsl(var(--border))",
+                    }
+              }
             >
               Todos
             </button>
@@ -171,14 +206,16 @@ export default function Inventario() {
                   onClick={() =>
                     setFiltros({ filtroEstado: active ? null : estado })
                   }
-                  style={active ? activeColors[estado] : {}}
-                  className={`flex-shrink-0 h-9 px-3 rounded-lg text-xs font-semibold
-                              border transition-all cursor-pointer
-                              ${
-                                active
-                                  ? ""
-                                  : "bg-white text-text-sub border-border hover:border-border-dark"
-                              }`}
+                  className="flex-shrink-0 h-9 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer"
+                  style={
+                    active
+                      ? activeColors[estado]
+                      : {
+                          backgroundColor: "hsl(var(--card))",
+                          color: "hsl(var(--muted-foreground))",
+                          borderColor: "hsl(var(--border))",
+                        }
+                  }
                 >
                   {estado}
                 </button>
@@ -204,14 +241,33 @@ export default function Inventario() {
         {loading && (
           <div className="flex flex-col gap-3 p-4">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-white rounded-xl p-4 animate-pulse">
+              <div
+                key={i}
+                className="rounded-xl p-4 animate-pulse border"
+                style={{
+                  backgroundColor: "hsl(var(--card))",
+                  borderColor: "hsl(var(--border))",
+                }}
+              >
                 <div className="flex justify-between">
                   <div className="space-y-2 flex-1">
-                    <div className="h-4 bg-surface rounded w-3/4" />
-                    <div className="h-3 bg-surface rounded w-1/2" />
-                    <div className="h-3 bg-surface rounded w-1/3" />
+                    <div
+                      className="h-4 rounded w-3/4"
+                      style={{ backgroundColor: "hsl(var(--muted))" }}
+                    />
+                    <div
+                      className="h-3 rounded w-1/2"
+                      style={{ backgroundColor: "hsl(var(--muted))" }}
+                    />
+                    <div
+                      className="h-3 rounded w-1/3"
+                      style={{ backgroundColor: "hsl(var(--muted))" }}
+                    />
                   </div>
-                  <div className="w-12 h-12 bg-surface rounded-lg ml-3" />
+                  <div
+                    className="w-12 h-12 rounded-lg ml-3"
+                    style={{ backgroundColor: "hsl(var(--muted))" }}
+                  />
                 </div>
               </div>
             ))}
@@ -222,8 +278,16 @@ export default function Inventario() {
         {!loading && items.length === 0 && !error && (
           <div className="flex flex-col items-center justify-center py-20 px-8 text-center">
             <div className="text-5xl mb-4">📦</div>
-            <p className="text-text font-semibold">Sin resultados</p>
-            <p className="text-text-muted text-sm mt-1">
+            <p
+              className="font-semibold"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
+              Sin resultados
+            </p>
+            <p
+              className="text-sm mt-1"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
               {filtroBusqueda
                 ? `No se encontraron productos para "${filtroBusqueda}"`
                 : "No hay productos con los filtros seleccionados"}
@@ -239,28 +303,47 @@ export default function Inventario() {
                 <li key={item.id}>
                   <button
                     onClick={() => handleItemClick(item.producto?.id)}
-                    className="w-full text-left bg-white rounded-xl px-4 py-3.5
-                               shadow-sm border border-border/60
-                               active:scale-[0.985] active:shadow-none
+                    className="w-full text-left rounded-xl px-4 py-3.5 border
+                               shadow-sm active:scale-[0.985] active:shadow-none
                                transition-all duration-100 cursor-pointer"
+                    style={{
+                      backgroundColor: "hsl(var(--card))",
+                      borderColor: "hsl(var(--border))",
+                    }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       {/* Info izquierda */}
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-text text-sm leading-tight truncate">
+                        <p
+                          className="font-semibold text-sm leading-tight truncate"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
                           {item.producto?.nombre}
                         </p>
-                        <p className="text-text-muted text-xs mt-0.5 font-mono">
+                        <p
+                          className="text-xs mt-0.5 font-mono"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
                           {item.producto?.referencia}
                         </p>
                         <div className="flex items-center gap-2 mt-1.5">
-                          <span className="text-[11px] text-text-sub">
+                          <span
+                            className="text-[11px]"
+                            style={{ color: "hsl(var(--muted-foreground))" }}
+                          >
                             {item.sede?.nombre}
                           </span>
                           {item.producto?.categoria && (
                             <>
-                              <span className="text-border">·</span>
-                              <span className="text-[11px] text-text-sub">
+                              <span style={{ color: "hsl(var(--border))" }}>
+                                ·
+                              </span>
+                              <span
+                                className="text-[11px]"
+                                style={{
+                                  color: "hsl(var(--muted-foreground))",
+                                }}
+                              >
                                 {item.producto.categoria}
                               </span>
                             </>
@@ -269,7 +352,10 @@ export default function Inventario() {
                       </div>
                       {/* Stock + badge derecha */}
                       <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
-                        <span className="text-2xl font-bold text-text leading-none">
+                        <span
+                          className="text-2xl font-bold leading-none"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
                           {item.cantidad}
                         </span>
                         <StatusBadge status={item.estado_stock} />
@@ -291,7 +377,10 @@ export default function Inventario() {
             <div className="hidden md:block overflow-x-auto px-4 pb-4">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="text-left border-b-2 border-border">
+                  <tr
+                    className="text-left border-b-2"
+                    style={{ borderColor: "hsl(var(--border))" }}
+                  >
                     {[
                       "Referencia",
                       "Nombre",
@@ -303,48 +392,74 @@ export default function Inventario() {
                     ].map((col) => (
                       <th
                         key={col}
-                        className="px-3 py-3 text-xs font-semibold text-text-sub uppercase tracking-wide
-                                   whitespace-nowrap first:pl-0 last:pr-0"
+                        className="px-3 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap first:pl-0 last:pr-0"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
                       >
                         {col}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/50">
+                <tbody>
                   {items.map((item) => (
                     <tr
                       key={item.id}
                       onClick={() => handleItemClick(item.producto?.id)}
-                      className="hover:bg-surface/70 cursor-pointer transition-colors group"
+                      className="cursor-pointer transition-colors border-b"
+                      style={{ borderColor: "hsl(var(--border) / 0.5)" }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor =
+                          "hsl(var(--muted) / 0.5)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "")
+                      }
                     >
                       <td className="px-3 py-3.5 first:pl-0">
-                        <span className="font-mono text-xs text-text-sub group-hover:text-primary transition-colors">
+                        <span
+                          className="font-mono text-xs transition-colors"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
                           {item.producto?.referencia}
                         </span>
                       </td>
                       <td className="px-3 py-3.5">
-                        <span className="text-sm font-medium text-text">
+                        <span
+                          className="text-sm font-medium"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
                           {item.producto?.nombre}
                         </span>
                       </td>
                       <td className="px-3 py-3.5">
-                        <span className="text-xs text-text-sub">
+                        <span
+                          className="text-xs"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
                           {item.producto?.categoria}
                         </span>
                       </td>
                       <td className="px-3 py-3.5">
-                        <span className="text-xs text-text-sub">
+                        <span
+                          className="text-xs"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
                           {item.sede?.nombre}
                         </span>
                       </td>
                       <td className="px-3 py-3.5">
-                        <span className="text-base font-bold text-text tabular-nums">
+                        <span
+                          className="text-base font-bold tabular-nums"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
                           {item.cantidad}
                         </span>
                       </td>
                       <td className="px-3 py-3.5">
-                        <span className="text-xs text-text-muted tabular-nums">
+                        <span
+                          className="text-xs tabular-nums"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
                           {item.producto?.stock_minimo} /{" "}
                           {item.producto?.stock_maximo}
                         </span>
@@ -375,7 +490,10 @@ export default function Inventario() {
 
         {/* Fin de la lista */}
         {!loading && !loadingMore && !hasMore && items.length > 0 && (
-          <p className="text-center text-text-muted text-xs py-4">
+          <p
+            className="text-center text-xs py-4"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
             — {items.length} productos —
           </p>
         )}
@@ -389,7 +507,7 @@ export default function Inventario() {
                    w-14 h-14 rounded-full shadow-lg
                    flex items-center justify-center
                    transition-all duration-200 active:scale-95 cursor-pointer"
-        style={{ backgroundColor: "#14352A" }}
+        style={{ backgroundColor: "hsl(var(--primary))" }}
       >
         <QRFloatIcon />
       </button>
@@ -413,7 +531,10 @@ function StockBar({ cantidad, minimo, maximo, estado }) {
   const color =
     estado === "OK" ? "#0B8A57" : estado === "Bajo" ? "#C47F17" : "#C0392B";
   return (
-    <div className="mt-2 h-1 rounded-full bg-surface overflow-hidden">
+    <div
+      className="mt-2 h-1 rounded-full overflow-hidden"
+      style={{ backgroundColor: "hsl(var(--muted))" }}
+    >
       <div
         className="h-full rounded-full transition-all duration-500"
         style={{ width: `${pct}%`, backgroundColor: color }}
