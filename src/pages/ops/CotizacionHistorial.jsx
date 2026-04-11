@@ -24,7 +24,6 @@ const ESTADO_COLORS = {
 export default function CotizacionHistorial() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
-  const session = useAuthStore((s) => s.session);
   const esAdmin = perfil?.rol === "Admin";
 
   const [cotizaciones, setCotizaciones] = useState([]);
@@ -83,23 +82,84 @@ export default function CotizacionHistorial() {
     cargarCotizaciones(true);
   }, [filtroEstado]);
 
-  const convertirEnVenta = async (cotizacionId) => {
+  const convertirEnVenta = async (e, cotizacionId) => {
+    e.stopPropagation();
     setConvirtiendo(cotizacionId);
     setErrorConversion(null);
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke(
-        "convertir-cotizacion",
-        {
-          body: { cotizacion_id: cotizacionId },
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        },
-      );
+      // Cargar cabecera e ítems de la cotización
+      const [{ data: cot, error: cotErr }, { data: items, error: itemsErr }] =
+        await Promise.all([
+          supabase
+            .from("cotizaciones")
+            .select("*")
+            .eq("id", cotizacionId)
+            .single(),
+          supabase
+            .from("detalle_cotizacion")
+            .select("*")
+            .eq("cotizacion_id", cotizacionId),
+        ]);
 
-      if (fnErr) throw new Error(fnErr.message);
-      if (data?.error) throw new Error(data.error);
+      if (cotErr) throw new Error(cotErr.message);
+      if (itemsErr) throw new Error(itemsErr.message);
+      if (cot.estado === "vencida")
+        throw new Error("La cotización está vencida");
+      if (cot.estado === "rechazada")
+        throw new Error("La cotización fue rechazada");
 
-      // Redirigir a la venta creada
-      navigate(`/ops/ventas/${data.data?.venta_id}`);
+      // Pre-validar stock de cada ítem
+      for (const item of items) {
+        const { data: inv } = await supabase
+          .from("inventario")
+          .select("cantidad")
+          .eq("producto_id", item.producto_id)
+          .eq("sede_id", cot.sede_id)
+          .single();
+        if (!inv || inv.cantidad < item.cantidad) {
+          throw new Error("Stock insuficiente para uno o más productos");
+        }
+      }
+
+      // Insertar cabecera de venta
+      const { data: venta, error: ventaErr } = await supabase
+        .from("ventas")
+        .insert({
+          vendedor_id: cot.vendedor_id,
+          sede_id: cot.sede_id,
+          cliente_nombre: cot.cliente_nombre,
+          cliente_nit: cot.cliente_nit,
+          metodo_pago: "Efectivo",
+          descuento_pct: cot.descuento_pct,
+          iva_pct: cot.iva_pct,
+          subtotal: 0,
+          total: 0,
+        })
+        .select("id, numero")
+        .single();
+      if (ventaErr) throw new Error(ventaErr.message);
+
+      // Insertar ítems — triggers manejan stock y recálculo
+      const detalles = items.map((i) => ({
+        venta_id: venta.id,
+        producto_id: i.producto_id,
+        cantidad: i.cantidad,
+        precio_unitario: i.precio_unitario,
+        costo_unitario: 0,
+        subtotal: i.cantidad * i.precio_unitario,
+      }));
+      const { error: detErr } = await supabase
+        .from("detalle_venta")
+        .insert(detalles);
+      if (detErr) throw new Error(detErr.message);
+
+      // Marcar cotización como aprobada
+      await supabase
+        .from("cotizaciones")
+        .update({ estado: "aprobada" })
+        .eq("id", cotizacionId);
+
+      navigate(`/ops/ventas/${venta.id}`);
     } catch (e) {
       setErrorConversion({ id: cotizacionId, msg: e.message });
     } finally {
@@ -195,7 +255,8 @@ export default function CotizacionHistorial() {
               return (
                 <div
                   key={c.id}
-                  className="bg-white rounded-2xl shadow-sm overflow-hidden"
+                  onClick={() => navigate(`/ops/cotizaciones/${c.id}`)}
+                  className="bg-white rounded-2xl shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
                 >
                   <div className="px-4 py-4">
                     <div className="flex items-start justify-between">
@@ -251,7 +312,7 @@ export default function CotizacionHistorial() {
                     {/* Botón convertir en venta */}
                     {puedeConvertir && (
                       <button
-                        onClick={() => convertirEnVenta(c.id)}
+                        onClick={(e) => convertirEnVenta(e, c.id)}
                         disabled={convirtiendo === c.id}
                         className="mt-3 w-full py-2.5 rounded-xl text-sm font-medium border transition-colors disabled:opacity-50"
                         style={{ borderColor: "#14352A", color: "#14352A" }}
