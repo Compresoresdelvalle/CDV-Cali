@@ -69,19 +69,46 @@ export default function VentaHistorial() {
   }, [filtroMetodo]);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#F4F1EB" }}>
-      {/* Header */}
+    <div
+      className="flex flex-col min-h-full"
+      style={{ backgroundColor: "hsl(var(--background))" }}
+    >
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div
-        className="sticky top-0 z-10 px-4 py-4 shadow-sm"
-        style={{ backgroundColor: "#14352A" }}
+        className="sticky top-0 z-10 border-b"
+        style={{
+          backgroundColor: "hsl(var(--card))",
+          borderColor: "hsl(var(--border))",
+        }}
       >
-        <div className="max-w-2xl mx-auto">
-          <div className="flex items-center justify-between mb-3">
-            <h1 className="text-white font-semibold text-lg">Ventas</h1>
+        <div className="px-4 sm:px-6 pt-4 pb-3 space-y-3 max-w-5xl mx-auto">
+          <div className="module-header !mb-0 !pb-0 !border-b-0">
+            <div>
+              <h1
+                className="text-xl font-bold"
+                style={{ color: "hsl(var(--foreground))" }}
+              >
+                Ventas
+              </h1>
+              {!loading && (
+                <p
+                  className="text-xs mt-0.5"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                >
+                  {ventas.length}
+                  {hasMore ? "+" : ""} registros
+                </p>
+              )}
+            </div>
             <button
               onClick={() => navigate("/ops/ventas/nueva")}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
-              style={{ backgroundColor: "#C8993E", color: "#fff" }}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+              style={{
+                backgroundColor: "hsl(var(--primary))",
+                color: "hsl(var(--primary-foreground))",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
             >
               <svg
                 className="w-4 h-4"
@@ -101,23 +128,23 @@ export default function VentaHistorial() {
           </div>
 
           {/* Filtro método de pago */}
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             {METODOS_PAGO.map((m) => (
               <button
                 key={m}
                 onClick={() => setFiltroMetodo(m)}
-                className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
+                className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer"
                 style={
                   filtroMetodo === m
                     ? {
-                        backgroundColor: "#C8993E",
-                        color: "#fff",
-                        borderColor: "#C8993E",
+                        backgroundColor: "hsl(var(--primary))",
+                        color: "hsl(var(--primary-foreground))",
+                        borderColor: "hsl(var(--primary))",
                       }
                     : {
                         backgroundColor: "transparent",
-                        color: "rgba(255,255,255,0.7)",
-                        borderColor: "rgba(255,255,255,0.3)",
+                        color: "hsl(var(--muted-foreground))",
+                        borderColor: "hsl(var(--border))",
                       }
                 }
               >
@@ -128,77 +155,237 @@ export default function VentaHistorial() {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-4 space-y-3">
+      {/* ── Lista ──────────────────────────────────────────────────────────── */}
+      <div className="flex-1 px-4 sm:px-6 py-4 max-w-5xl mx-auto w-full">
         {loading && ventas.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-sm" style={{ color: "#9CA3AB" }}>
-              Cargando ventas...
-            </p>
+          /* Skeleton */
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className="rounded-xl p-4 animate-pulse border"
+                style={{
+                  backgroundColor: "hsl(var(--card))",
+                  borderColor: "hsl(var(--border))",
+                }}
+              >
+                <div className="flex justify-between items-start gap-4">
+                  <div className="flex-1 space-y-2">
+                    <div
+                      className="h-4 rounded w-1/4"
+                      style={{ backgroundColor: "hsl(var(--muted))" }}
+                    />
+                    <div
+                      className="h-3 rounded w-1/2"
+                      style={{ backgroundColor: "hsl(var(--muted))" }}
+                    />
+                    <div
+                      className="h-3 rounded w-1/3"
+                      style={{ backgroundColor: "hsl(var(--muted))" }}
+                    />
+                  </div>
+                  <div
+                    className="w-24 h-6 rounded"
+                    style={{ backgroundColor: "hsl(var(--muted))" }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         ) : ventas.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-sm" style={{ color: "#9CA3AB" }}>
-              No hay ventas registradas
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="text-5xl mb-4">🧾</div>
+            <p
+              className="font-semibold"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
+              Sin ventas registradas
+            </p>
+            <p
+              className="text-sm mt-1"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              Las ventas aparecerán aquí una vez creadas
             </p>
           </div>
         ) : (
           <>
-            {ventas.map((v) => (
-              <button
-                key={v.id}
-                onClick={() => navigate(`/ops/ventas/${v.id}`)}
-                className="w-full bg-white rounded-2xl shadow-sm px-4 py-4 text-left transition-shadow hover:shadow-md"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span
-                        className="text-xs font-bold"
-                        style={{ color: "#14352A" }}
+            {/* Desktop: tabla */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr
+                    className="border-b-2 text-left"
+                    style={{ borderColor: "hsl(var(--border))" }}
+                  >
+                    {[
+                      "#",
+                      "Fecha",
+                      "Cliente",
+                      "Método",
+                      "Vendedor",
+                      "Total",
+                      "",
+                    ].map((col) => (
+                      <th
+                        key={col}
+                        className="px-3 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap first:pl-0 last:pr-0"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
                       >
-                        #{v.numero}
-                      </span>
-                      {v.anulada && (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                          Anulada
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ventas.map((v) => (
+                    <tr
+                      key={v.id}
+                      onClick={() => navigate(`/ops/ventas/${v.id}`)}
+                      className="border-b cursor-pointer transition-colors group"
+                      style={{ borderColor: "hsl(var(--border) / 0.5)" }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor =
+                          "hsl(var(--muted) / 0.5)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "")
+                      }
+                    >
+                      <td className="px-3 py-3.5 first:pl-0">
+                        <span
+                          className="text-xs font-bold font-mono"
+                          style={{ color: "hsl(var(--primary))" }}
+                        >
+                          #{v.numero}
                         </span>
-                      )}
-                      <span
-                        className="px-2 py-0.5 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: "#EDE9E0", color: "#636B74" }}
-                      >
-                        {v.metodo_pago}
-                      </span>
-                    </div>
-                    <p
-                      className="text-sm font-medium truncate"
-                      style={{ color: "#151515" }}
-                    >
-                      {v.cliente_nombre || "Cliente mostrador"}
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: "#9CA3AB" }}>
-                      {formatDate(v.fecha)}
-                      {esAdmin && v.vendedor && ` · ${v.vendedor.nombre}`}
-                    </p>
-                  </div>
-                  <div className="text-right ml-4">
-                    <p
-                      className="font-bold text-base"
-                      style={{ color: v.anulada ? "#9CA3AB" : "#14352A" }}
-                    >
-                      {formatCOP(v.total)}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            ))}
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span
+                          className="text-xs"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
+                          {formatDate(v.fecha)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span
+                          className="text-sm font-medium"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
+                          {v.cliente_nombre || "Cliente mostrador"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span className="status-badge status-neutral text-[11px]">
+                          {v.metodo_pago}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span
+                          className="text-xs"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
+                          {v.vendedor?.nombre ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span
+                          className="font-bold tabular-nums"
+                          style={{
+                            color: v.anulada
+                              ? "hsl(var(--muted-foreground))"
+                              : "hsl(var(--foreground))",
+                          }}
+                        >
+                          {formatCOP(v.total)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3.5 last:pr-0">
+                        {v.anulada && (
+                          <span className="status-badge status-danger text-[11px]">
+                            Anulada
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
+            {/* Mobile: cards */}
+            <ul className="md:hidden space-y-2.5" role="list">
+              {ventas.map((v) => (
+                <li key={v.id}>
+                  <button
+                    onClick={() => navigate(`/ops/ventas/${v.id}`)}
+                    className="w-full text-left rounded-xl px-4 py-4 border transition-shadow hover:shadow-md active:scale-[0.985] cursor-pointer"
+                    style={{
+                      backgroundColor: "hsl(var(--card))",
+                      borderColor: "hsl(var(--border))",
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span
+                            className="text-xs font-bold font-mono"
+                            style={{ color: "hsl(var(--primary))" }}
+                          >
+                            #{v.numero}
+                          </span>
+                          {v.anulada && (
+                            <span className="status-badge status-danger text-[11px]">
+                              Anulada
+                            </span>
+                          )}
+                          <span className="status-badge status-neutral text-[11px]">
+                            {v.metodo_pago}
+                          </span>
+                        </div>
+                        <p
+                          className="text-sm font-medium truncate"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
+                          {v.cliente_nombre || "Cliente mostrador"}
+                        </p>
+                        <p
+                          className="text-xs mt-0.5"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
+                          {formatDate(v.fecha)}
+                          {esAdmin && v.vendedor && ` · ${v.vendedor.nombre}`}
+                        </p>
+                      </div>
+                      <div className="text-right ml-2 shrink-0">
+                        <p
+                          className="font-bold text-base tabular-nums"
+                          style={{
+                            color: v.anulada
+                              ? "hsl(var(--muted-foreground))"
+                              : "hsl(var(--foreground))",
+                          }}
+                        >
+                          {formatCOP(v.total)}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            {/* Cargar más */}
             {hasMore && (
               <button
                 onClick={() => cargarVentas(false)}
                 disabled={loading}
-                className="w-full py-3 rounded-2xl text-sm font-medium border transition-colors disabled:opacity-50"
-                style={{ borderColor: "#E2DED5", color: "#636B74" }}
+                className="w-full mt-4 py-3 rounded-xl text-sm font-medium border transition-colors disabled:opacity-50 cursor-pointer"
+                style={{
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--muted-foreground))",
+                }}
               >
                 {loading ? "Cargando..." : "Cargar más"}
               </button>
