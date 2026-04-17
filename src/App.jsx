@@ -15,14 +15,26 @@ import CotizacionHistorial from "./pages/ops/CotizacionHistorial";
 import CotizacionNueva from "./pages/ops/CotizacionNueva";
 import CotizacionDetalle from "./pages/ops/CotizacionDetalle";
 import CotizacionEditar from "./pages/ops/CotizacionEditar";
+import Dashboard from "./pages/ops/Dashboard";
+import CompraHistorial from "./pages/ops/CompraHistorial";
+import CompraNueva from "./pages/ops/CompraNueva";
+import DevolucionHistorial from "./pages/ops/DevolucionHistorial";
+import DevolucionNueva from "./pages/ops/DevolucionNueva";
 
 // Placeholder genérico para módulos aún no implementados
 function Placeholder({ name }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center">
       <div className="text-6xl mb-4">🚧</div>
-      <h2 className="text-2xl font-bold text-text mb-2">{name}</h2>
-      <p className="text-text-sub">Módulo en desarrollo — próximas fases</p>
+      <h2
+        className="text-2xl font-bold mb-2"
+        style={{ color: "hsl(var(--foreground))" }}
+      >
+        {name}
+      </h2>
+      <p style={{ color: "hsl(var(--muted-foreground))" }}>
+        Módulo en desarrollo — próximas fases
+      </p>
     </div>
   );
 }
@@ -50,7 +62,7 @@ export default function App() {
             </RoleGuard>
           }
         >
-          <Route index element={<Navigate to="inventario" replace />} />
+          <Route index element={<Dashboard />} />
 
           {/* Inventario — lista */}
           <Route
@@ -95,10 +107,18 @@ export default function App() {
             }
           />
           <Route
-            path="compras/*"
+            path="compras"
             element={
               <RoleGuard roles={["Admin", "Bodeguero"]}>
-                <Placeholder name="Compras" />
+                <CompraHistorial />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="compras/nueva"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <CompraNueva />
               </RoleGuard>
             }
           />
@@ -166,7 +186,15 @@ export default function App() {
             path="devoluciones"
             element={
               <RoleGuard roles={["Admin", "Bodeguero"]}>
-                <Placeholder name="Devoluciones" />
+                <DevolucionHistorial />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="devoluciones/nueva"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <DevolucionNueva />
               </RoleGuard>
             }
           />

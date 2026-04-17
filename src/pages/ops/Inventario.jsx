@@ -4,6 +4,7 @@ import { useInventario } from "../../hooks/useInventario";
 import { useRealtimeInventario } from "../../hooks/useRealtime";
 import { useAuthStore } from "../../stores/authStore";
 import StatusBadge from "../../components/ui/StatusBadge";
+import PageHeader from "../../components/layout/PageHeader";
 import QRScanner from "../../components/forms/QRScanner";
 import { SEDES } from "../../lib/constants";
 import { formatCOP } from "../../lib/utils";
@@ -68,178 +69,214 @@ export default function Inventario() {
 
   const esVendedor = perfil?.rol === "Vendedor";
 
+  const sedeLabel = filtroSede ? SEDE_LABELS[filtroSede] : "Todas las sedes";
+
   return (
     <div
-      className="flex flex-col min-h-full"
+      className="flex flex-col min-h-full p-4 sm:p-6 space-y-4"
       style={{ backgroundColor: "hsl(var(--background))" }}
     >
-      {/* ── Barra de filtros ─────────────────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-10 border-b"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
-      >
-        <div className="px-4 pt-4 pb-3 space-y-3">
-          {/* Título + contador */}
-          <div className="flex items-center justify-between">
-            <h1
-              className="text-lg font-bold"
-              style={{ color: "hsl(var(--foreground))" }}
-            >
-              Inventario
-            </h1>
-            {!loading && (
-              <span
-                className="text-xs px-2 py-1 rounded-full"
-                style={{
-                  color: "hsl(var(--muted-foreground))",
-                  backgroundColor: "hsl(var(--muted))",
-                }}
-              >
-                {items.length} {hasMore ? "+" : ""} items
-              </span>
-            )}
-          </div>
-
-          {/* Búsqueda */}
-          <div className="relative">
-            <SearchIcon
-              className="absolute left-3 top-1/2 -translate-y-1/2"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            />
-            <input
-              type="search"
-              placeholder="Buscar por nombre o referencia…"
-              value={filtroBusqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full pl-10 pr-4 h-11 rounded-xl border text-sm
-                         focus:outline-none focus:ring-2 transition-all"
+      {/* ── PageHeader ───────────────────────────────────────────────────── */}
+      <PageHeader
+        title="Inventario"
+        description={
+          loading
+            ? "Cargando…"
+            : `${items.length}${hasMore ? "+" : ""} productos · ${sedeLabel}`
+        }
+        actions={
+          <>
+            <button
+              onClick={() => setScannerOpen(true)}
+              className="flex items-center gap-2 h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"
               style={{
-                backgroundColor: "hsl(var(--muted) / 0.5)",
                 borderColor: "hsl(var(--border))",
+                backgroundColor: "hsl(var(--card))",
                 color: "hsl(var(--foreground))",
               }}
-            />
-            {filtroBusqueda && (
-              <button
-                onClick={() => setBusqueda("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-                aria-label="Limpiar búsqueda"
-              >
-                <XSmallIcon />
-              </button>
-            )}
-          </div>
-
-          {/* Fila: Sede (dropdown) + Estado (chips) */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 no-scrollbar">
-            {/* Sede selector — oculto para Vendedor (solo ve su sede) */}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "hsl(var(--primary) / 0.4)";
+                e.currentTarget.style.backgroundColor =
+                  "hsl(var(--primary) / 0.05)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "hsl(var(--border))";
+                e.currentTarget.style.backgroundColor = "hsl(var(--card))";
+              }}
+            >
+              <QRSmallIcon />
+              <span className="hidden sm:inline">Escanear QR</span>
+            </button>
             {!esVendedor && (
-              <select
-                value={filtroSede ?? ""}
-                onChange={(e) =>
-                  setFiltros({ filtroSede: e.target.value || null })
-                }
-                className="flex-shrink-0 h-9 text-xs font-medium rounded-lg border px-2 pr-6 cursor-pointer
-                           focus:outline-none focus:ring-2 transition-all"
+              <button
+                className="flex items-center gap-2 h-9 px-3 rounded-lg text-sm font-medium transition-all cursor-pointer"
                 style={{
-                  backgroundColor: "hsl(var(--card))",
-                  borderColor: "hsl(var(--border))",
-                  color: "hsl(var(--foreground))",
+                  backgroundColor: "hsl(var(--primary))",
+                  color: "hsl(var(--primary-foreground))",
                 }}
               >
-                <option value="">Todas las sedes</option>
-                {Object.entries(SEDE_LABELS).map(([id, label]) => (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+                <PlusIcon />
+                <span className="hidden sm:inline">Nuevo producto</span>
+              </button>
             )}
+          </>
+        }
+      />
 
-            {/* Chips de estado */}
+      {/* ── Barra de filtros ─────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Búsqueda */}
+        <div className="relative flex-1 min-w-[180px]">
+          <SearchIcon
+            className="absolute left-3 top-1/2 -translate-y-1/2"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          />
+          <input
+            type="search"
+            placeholder="Buscar por nombre o referencia…"
+            value={filtroBusqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="w-full pl-9 pr-4 h-9 rounded-lg border text-sm
+                       focus:outline-none transition-all"
+            style={{
+              backgroundColor: "hsl(var(--card))",
+              borderColor: "hsl(var(--border))",
+              color: "hsl(var(--foreground))",
+            }}
+          />
+          {filtroBusqueda && (
             <button
-              onClick={() => setFiltros({ filtroEstado: null })}
-              className="flex-shrink-0 h-9 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer"
-              style={
-                !filtroEstado
-                  ? {
-                      backgroundColor: "hsl(var(--primary))",
-                      color: "hsl(var(--primary-foreground))",
-                      borderColor: "hsl(var(--primary))",
-                    }
-                  : {
-                      backgroundColor: "hsl(var(--card))",
-                      color: "hsl(var(--muted-foreground))",
-                      borderColor: "hsl(var(--border))",
-                    }
-              }
+              onClick={() => setBusqueda("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+              aria-label="Limpiar búsqueda"
             >
-              Todos
+              <XSmallIcon />
             </button>
+          )}
+        </div>
 
-            {ESTADOS.map((estado) => {
-              const active = filtroEstado === estado;
-              const activeColors = {
-                OK: {
-                  backgroundColor: "#0B8A57",
-                  color: "#fff",
-                  borderColor: "#0B8A57",
-                },
-                Bajo: {
-                  backgroundColor: "#C47F17",
-                  color: "#fff",
-                  borderColor: "#C47F17",
-                },
-                Agotado: {
-                  backgroundColor: "#C0392B",
-                  color: "#fff",
-                  borderColor: "#C0392B",
-                },
-              };
-              return (
-                <button
-                  key={estado}
-                  onClick={() =>
-                    setFiltros({ filtroEstado: active ? null : estado })
+        {/* Sede selector */}
+        {!esVendedor && (
+          <select
+            value={filtroSede ?? ""}
+            onChange={(e) => setFiltros({ filtroSede: e.target.value || null })}
+            className="h-9 text-sm rounded-lg border px-3 cursor-pointer
+                       focus:outline-none transition-all"
+            style={{
+              backgroundColor: "hsl(var(--card))",
+              borderColor: "hsl(var(--border))",
+              color: "hsl(var(--foreground))",
+            }}
+          >
+            <option value="">Todas las sedes</option>
+            {Object.entries(SEDE_LABELS).map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {/* Chips de estado */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setFiltros({ filtroEstado: null })}
+            className="h-9 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer"
+            style={
+              !filtroEstado
+                ? {
+                    backgroundColor: "hsl(var(--primary))",
+                    color: "hsl(var(--primary-foreground))",
+                    borderColor: "hsl(var(--primary))",
                   }
-                  className="flex-shrink-0 h-9 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer"
-                  style={
-                    active
-                      ? activeColors[estado]
-                      : {
-                          backgroundColor: "hsl(var(--card))",
-                          color: "hsl(var(--muted-foreground))",
-                          borderColor: "hsl(var(--border))",
-                        }
+                : {
+                    backgroundColor: "hsl(var(--card))",
+                    color: "hsl(var(--muted-foreground))",
+                    borderColor: "hsl(var(--border))",
                   }
-                >
-                  {estado}
-                </button>
-              );
-            })}
-          </div>
+            }
+          >
+            Todos
+          </button>
+
+          {ESTADOS.map((estado) => {
+            const active = filtroEstado === estado;
+            const activeColors = {
+              OK: {
+                backgroundColor: "hsl(var(--success))",
+                color: "hsl(var(--success-foreground))",
+                borderColor: "hsl(var(--success))",
+              },
+              Bajo: {
+                backgroundColor: "hsl(var(--warning))",
+                color: "hsl(var(--warning-foreground))",
+                borderColor: "hsl(var(--warning))",
+              },
+              Agotado: {
+                backgroundColor: "hsl(var(--destructive))",
+                color: "hsl(var(--destructive-foreground))",
+                borderColor: "hsl(var(--destructive))",
+              },
+            };
+            const labels = {
+              OK: "Disponible",
+              Bajo: "Stock bajo",
+              Agotado: "Agotado",
+            };
+            return (
+              <button
+                key={estado}
+                onClick={() =>
+                  setFiltros({ filtroEstado: active ? null : estado })
+                }
+                className="h-9 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer"
+                style={
+                  active
+                    ? activeColors[estado]
+                    : {
+                        backgroundColor: "hsl(var(--card))",
+                        color: "hsl(var(--muted-foreground))",
+                        borderColor: "hsl(var(--border))",
+                      }
+                }
+              >
+                {labels[estado]}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* ── Contenido ────────────────────────────────────────────────────── */}
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         {/* Error */}
         {error && (
-          <div className="mx-4 mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
-            <p className="text-sm text-red-700 font-medium">
+          <div
+            className="p-4 rounded-xl border"
+            style={{
+              backgroundColor: "hsl(var(--destructive) / 0.05)",
+              borderColor: "hsl(var(--destructive) / 0.2)",
+            }}
+          >
+            <p
+              className="text-sm font-medium"
+              style={{ color: "hsl(var(--destructive))" }}
+            >
               Error al cargar inventario
             </p>
-            <p className="text-xs text-red-500 mt-1">{error}</p>
+            <p
+              className="text-xs mt-1"
+              style={{ color: "hsl(var(--destructive) / 0.7)" }}
+            >
+              {error}
+            </p>
           </div>
         )}
 
         {/* Loading inicial */}
         {loading && (
-          <div className="flex flex-col gap-3 p-4">
+          <div className="flex flex-col gap-3">
             {[...Array(6)].map((_, i) => (
               <div
                 key={i}
@@ -298,7 +335,7 @@ export default function Inventario() {
         {/* ── Vista MÓVIL: Cards (< md) ─────────────────────────────── */}
         {!loading && items.length > 0 && (
           <>
-            <ul className="md:hidden space-y-2.5 p-4" role="list">
+            <ul className="md:hidden space-y-2.5" role="list">
               {items.map((item) => (
                 <li key={item.id}>
                   <button
@@ -326,13 +363,28 @@ export default function Inventario() {
                         >
                           {item.producto?.referencia}
                         </p>
-                        <div className="flex items-center gap-2 mt-1.5">
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           <span
                             className="text-[11px]"
                             style={{ color: "hsl(var(--muted-foreground))" }}
                           >
                             {item.sede?.nombre}
                           </span>
+                          {item.producto?.marca && (
+                            <>
+                              <span style={{ color: "hsl(var(--border))" }}>
+                                ·
+                              </span>
+                              <span
+                                className="text-[11px]"
+                                style={{
+                                  color: "hsl(var(--muted-foreground))",
+                                }}
+                              >
+                                {item.producto.marca}
+                              </span>
+                            </>
+                          )}
                           {item.producto?.categoria && (
                             <>
                               <span style={{ color: "hsl(var(--border))" }}>
@@ -349,6 +401,14 @@ export default function Inventario() {
                             </>
                           )}
                         </div>
+                        {item.producto?.precio_venta != null && (
+                          <p
+                            className="text-xs font-semibold mt-1"
+                            style={{ color: "hsl(var(--foreground))" }}
+                          >
+                            {formatCOP(item.producto.precio_venta)}
+                          </p>
+                        )}
                       </div>
                       {/* Stock + badge derecha */}
                       <div className="flex-shrink-0 flex flex-col items-end gap-1.5">
@@ -374,25 +434,32 @@ export default function Inventario() {
             </ul>
 
             {/* ── Vista DESKTOP: Tabla (≥ md) ─────────────────────────── */}
-            <div className="hidden md:block overflow-x-auto px-4 pb-4">
+            <div
+              className="hidden md:block overflow-x-auto rounded-xl border"
+              style={{ borderColor: "hsl(var(--border))" }}
+            >
               <table className="w-full border-collapse">
                 <thead>
                   <tr
-                    className="text-left border-b-2"
-                    style={{ borderColor: "hsl(var(--border))" }}
+                    style={{
+                      backgroundColor: "hsl(var(--muted) / 0.4)",
+                      borderBottom: "1px solid hsl(var(--border))",
+                    }}
                   >
                     {[
                       "Referencia",
                       "Nombre",
+                      "Marca",
                       "Categoría",
                       "Sede",
+                      "Precio",
                       "Stock",
                       "Mín / Máx",
                       "Estado",
                     ].map((col) => (
                       <th
                         key={col}
-                        className="px-3 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap first:pl-0 last:pr-0"
+                        className="px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-left"
                         style={{ color: "hsl(var(--muted-foreground))" }}
                       >
                         {col}
@@ -401,29 +468,34 @@ export default function Inventario() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => (
+                  {items.map((item, idx) => (
                     <tr
                       key={item.id}
                       onClick={() => handleItemClick(item.producto?.id)}
-                      className="cursor-pointer transition-colors border-b"
-                      style={{ borderColor: "hsl(var(--border) / 0.5)" }}
+                      className="cursor-pointer transition-colors"
+                      style={{
+                        borderTop:
+                          idx === 0
+                            ? "none"
+                            : "1px solid hsl(var(--border) / 0.5)",
+                      }}
                       onMouseEnter={(e) =>
                         (e.currentTarget.style.backgroundColor =
-                          "hsl(var(--muted) / 0.5)")
+                          "hsl(var(--muted) / 0.4)")
                       }
                       onMouseLeave={(e) =>
                         (e.currentTarget.style.backgroundColor = "")
                       }
                     >
-                      <td className="px-3 py-3.5 first:pl-0">
+                      <td className="px-4 py-3.5">
                         <span
-                          className="font-mono text-xs transition-colors"
+                          className="font-mono text-xs"
                           style={{ color: "hsl(var(--muted-foreground))" }}
                         >
                           {item.producto?.referencia}
                         </span>
                       </td>
-                      <td className="px-3 py-3.5">
+                      <td className="px-4 py-3.5">
                         <span
                           className="text-sm font-medium"
                           style={{ color: "hsl(var(--foreground))" }}
@@ -431,7 +503,15 @@ export default function Inventario() {
                           {item.producto?.nombre}
                         </span>
                       </td>
-                      <td className="px-3 py-3.5">
+                      <td className="px-4 py-3.5">
+                        <span
+                          className="text-xs"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
+                          {item.producto?.marca ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5">
                         <span
                           className="text-xs"
                           style={{ color: "hsl(var(--muted-foreground))" }}
@@ -439,7 +519,7 @@ export default function Inventario() {
                           {item.producto?.categoria}
                         </span>
                       </td>
-                      <td className="px-3 py-3.5">
+                      <td className="px-4 py-3.5">
                         <span
                           className="text-xs"
                           style={{ color: "hsl(var(--muted-foreground))" }}
@@ -447,7 +527,17 @@ export default function Inventario() {
                           {item.sede?.nombre}
                         </span>
                       </td>
-                      <td className="px-3 py-3.5">
+                      <td className="px-4 py-3.5">
+                        <span
+                          className="text-sm font-semibold tabular-nums"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
+                          {item.producto?.precio_venta != null
+                            ? formatCOP(item.producto.precio_venta)
+                            : "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5">
                         <span
                           className="text-base font-bold tabular-nums"
                           style={{ color: "hsl(var(--foreground))" }}
@@ -455,7 +545,7 @@ export default function Inventario() {
                           {item.cantidad}
                         </span>
                       </td>
-                      <td className="px-3 py-3.5">
+                      <td className="px-4 py-3.5">
                         <span
                           className="text-xs tabular-nums"
                           style={{ color: "hsl(var(--muted-foreground))" }}
@@ -464,7 +554,7 @@ export default function Inventario() {
                           {item.producto?.stock_maximo}
                         </span>
                       </td>
-                      <td className="px-3 py-3.5 last:pr-0">
+                      <td className="px-4 py-3.5">
                         <StatusBadge status={item.estado_stock} />
                       </td>
                     </tr>
@@ -482,8 +572,11 @@ export default function Inventario() {
         {loadingMore && (
           <div className="flex justify-center py-4">
             <div
-              className="w-6 h-6 border-2 border-primary/20 border-t-primary
-                            rounded-full animate-spin"
+              className="w-6 h-6 border-2 rounded-full animate-spin"
+              style={{
+                borderColor: "hsl(var(--primary) / 0.2)",
+                borderTopColor: "hsl(var(--primary))",
+              }}
             />
           </div>
         )}
@@ -529,7 +622,11 @@ function StockBar({ cantidad, minimo, maximo, estado }) {
   if (!maximo) return null;
   const pct = Math.min(100, Math.round((cantidad / maximo) * 100));
   const color =
-    estado === "OK" ? "#0B8A57" : estado === "Bajo" ? "#C47F17" : "#C0392B";
+    estado === "OK"
+      ? "hsl(var(--success))"
+      : estado === "Bajo"
+        ? "hsl(var(--warning))"
+        : "hsl(var(--destructive))";
   return (
     <div
       className="mt-2 h-1 rounded-full overflow-hidden"
@@ -600,6 +697,44 @@ function QRFloatIcon() {
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
       <path d="M14 14h.01M18 14h.01M14 18h.01M18 18h.01M14 14v4h4v-4" />
+    </svg>
+  );
+}
+
+function QRSmallIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <path d="M14 14h.01M18 14h.01M14 18h.01M18 18h.01M14 14v4h4v-4" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
     </svg>
   );
 }

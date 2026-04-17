@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate } from "../../lib/utils";
+import PageHeader from "../../components/layout/PageHeader";
+import StatusBadge from "../../components/ui/StatusBadge";
 
 const ESTADOS = [
   "Todos",
@@ -12,14 +14,15 @@ const ESTADOS = [
   "rechazada",
   "vencida",
 ];
-
-const ESTADO_COLORS = {
-  borrador: { bg: "#EDE9E0", text: "#636B74", label: "Borrador" },
-  enviada: { bg: "#DBEAFE", text: "#2563EB", label: "Enviada" },
-  aprobada: { bg: "#D1FAE5", text: "#0B8A57", label: "Aprobada" },
-  rechazada: { bg: "#FEE2E2", text: "#C0392B", label: "Rechazada" },
-  vencida: { bg: "#F3F4F6", text: "#9CA3AB", label: "Vencida" },
+const ESTADO_LABELS = {
+  borrador: "Borrador",
+  enviada: "Enviada",
+  aprobada: "Aprobada",
+  rechazada: "Rechazada",
+  vencida: "Vencida",
 };
+
+const PAGE_SIZE = 20;
 
 export default function CotizacionHistorial() {
   const navigate = useNavigate();
@@ -29,14 +32,12 @@ export default function CotizacionHistorial() {
   const [cotizaciones, setCotizaciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState("Todos");
+  const [busqueda, setBusqueda] = useState("");
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
-  // Modal para convertir
-  const [convirtiendo, setConvirtiendo] = useState(null); // cotizacion_id
+  const [convirtiendo, setConvirtiendo] = useState(null);
   const [errorConversion, setErrorConversion] = useState(null);
-
-  const PAGE_SIZE = 20;
 
   const cargarCotizaciones = async (reset = false) => {
     setLoading(true);
@@ -52,13 +53,8 @@ export default function CotizacionHistorial() {
         .order("fecha", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
-      if (!esAdmin) {
-        query = query.eq("sede_id", perfil.sede_id);
-      }
-
-      if (filtroEstado !== "Todos") {
-        query = query.eq("estado", filtroEstado);
-      }
+      if (!esAdmin) query = query.eq("sede_id", perfil.sede_id);
+      if (filtroEstado !== "Todos") query = query.eq("estado", filtroEstado);
 
       const { data, error } = await query;
       if (error) throw error;
@@ -87,79 +83,12 @@ export default function CotizacionHistorial() {
     setConvirtiendo(cotizacionId);
     setErrorConversion(null);
     try {
-      // Cargar cabecera e ítems de la cotización
-      const [{ data: cot, error: cotErr }, { data: items, error: itemsErr }] =
-        await Promise.all([
-          supabase
-            .from("cotizaciones")
-            .select("*")
-            .eq("id", cotizacionId)
-            .single(),
-          supabase
-            .from("detalle_cotizacion")
-            .select("*")
-            .eq("cotizacion_id", cotizacionId),
-        ]);
-
-      if (cotErr) throw new Error(cotErr.message);
-      if (itemsErr) throw new Error(itemsErr.message);
-      if (cot.estado === "vencida")
-        throw new Error("La cotización está vencida");
-      if (cot.estado === "rechazada")
-        throw new Error("La cotización fue rechazada");
-
-      // Pre-validar stock de cada ítem
-      for (const item of items) {
-        const { data: inv } = await supabase
-          .from("inventario")
-          .select("cantidad")
-          .eq("producto_id", item.producto_id)
-          .eq("sede_id", cot.sede_id)
-          .single();
-        if (!inv || inv.cantidad < item.cantidad) {
-          throw new Error("Stock insuficiente para uno o más productos");
-        }
-      }
-
-      // Insertar cabecera de venta con los totales reales de la cotización
-      const { data: venta, error: ventaErr } = await supabase
-        .from("ventas")
-        .insert({
-          vendedor_id: cot.vendedor_id,
-          sede_id: cot.sede_id,
-          cliente_nombre: cot.cliente_nombre,
-          cliente_nit: cot.cliente_nit,
-          metodo_pago: "Efectivo",
-          descuento_pct: cot.descuento_pct,
-          iva_pct: cot.iva_pct,
-          subtotal: cot.subtotal,
-          total: cot.total,
-        })
-        .select("id, numero")
-        .single();
-      if (ventaErr) throw new Error(ventaErr.message);
-
-      // Insertar ítems — triggers manejan stock y recálculo
-      const detalles = items.map((i) => ({
-        venta_id: venta.id,
-        producto_id: i.producto_id,
-        cantidad: i.cantidad,
-        precio_unitario: i.precio_unitario,
-        costo_unitario: 0,
-        subtotal: i.cantidad * i.precio_unitario,
-      }));
-      const { error: detErr } = await supabase
-        .from("detalle_venta")
-        .insert(detalles);
-      if (detErr) throw new Error(detErr.message);
-
-      // Marcar cotización como aprobada
-      await supabase
-        .from("cotizaciones")
-        .update({ estado: "aprobada" })
-        .eq("id", cotizacionId);
-
-      navigate(`/ops/ventas/${venta.id}`);
+      const { data, error: rpcErr } = await supabase.rpc(
+        "fn_convertir_cotizacion",
+        { p_cotizacion_id: cotizacionId },
+      );
+      if (rpcErr) throw new Error(rpcErr.message);
+      navigate(`/ops/ventas/${data.venta_id}`);
     } catch (e) {
       setErrorConversion({ id: cotizacionId, msg: e.message });
     } finally {
@@ -167,180 +96,459 @@ export default function CotizacionHistorial() {
     }
   };
 
-  return (
-    <div className="min-h-screen" style={{ backgroundColor: "#F4F1EB" }}>
-      {/* Header */}
-      <div
-        className="sticky top-0 z-10 px-4 py-4 shadow-sm"
-        style={{ backgroundColor: "#14352A" }}
-      >
-        <div className="max-w-2xl mx-auto">
-          <div className="flex items-center justify-between mb-3">
-            <h1 className="text-white font-semibold text-lg">Cotizaciones</h1>
-            <button
-              onClick={() => navigate("/ops/cotizaciones/nueva")}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
-              style={{ backgroundColor: "#C8993E", color: "#fff" }}
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              Nueva
-            </button>
-          </div>
+  // Client-side search filter
+  const filtradas = busqueda.trim()
+    ? cotizaciones.filter(
+        (c) =>
+          c.cliente_nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
+          String(c.numero).includes(busqueda),
+      )
+    : cotizaciones;
 
-          {/* Filtros de estado */}
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {ESTADOS.map((e) => (
+  return (
+    <div
+      className="flex flex-col min-h-full p-4 sm:p-6 space-y-4 animate-fade-in"
+      style={{ backgroundColor: "hsl(var(--background))" }}
+    >
+      {/* ── PageHeader ── */}
+      <PageHeader
+        title="Cotizaciones"
+        description={`${cotizaciones.length}${hasMore ? "+" : ""} cotizaciones`}
+        actions={
+          <button
+            onClick={() => navigate("/ops/cotizaciones/nueva")}
+            className="flex items-center gap-2 h-9 px-3 rounded-lg text-sm font-medium transition-all cursor-pointer"
+            style={{
+              backgroundColor: "hsl(var(--primary))",
+              color: "hsl(var(--primary-foreground))",
+            }}
+          >
+            <PlusIcon />
+            <span className="hidden sm:inline">Nueva cotización</span>
+            <span className="sm:hidden">Nueva</span>
+          </button>
+        }
+      />
+
+      {/* ── Filtros ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Búsqueda */}
+        <div className="relative flex-1 min-w-[180px]">
+          <SearchIcon
+            className="absolute left-3 top-1/2 -translate-y-1/2"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          />
+          <input
+            type="search"
+            placeholder="Buscar por cliente o #..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="w-full pl-9 pr-4 h-9 rounded-lg border text-sm focus:outline-none transition-all"
+            style={{
+              backgroundColor: "hsl(var(--card))",
+              borderColor: "hsl(var(--border))",
+              color: "hsl(var(--foreground))",
+            }}
+          />
+        </div>
+
+        {/* Estado chips */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {ESTADOS.map((e) => {
+            const active = filtroEstado === e;
+            return (
               <button
                 key={e}
                 onClick={() => setFiltroEstado(e)}
-                className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors capitalize"
+                className="h-9 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer capitalize"
                 style={
-                  filtroEstado === e
+                  active
                     ? {
-                        backgroundColor: "#C8993E",
-                        color: "#fff",
-                        borderColor: "#C8993E",
+                        backgroundColor: "hsl(var(--primary))",
+                        color: "hsl(var(--primary-foreground))",
+                        borderColor: "hsl(var(--primary))",
                       }
                     : {
-                        backgroundColor: "transparent",
-                        color: "rgba(255,255,255,0.7)",
-                        borderColor: "rgba(255,255,255,0.3)",
+                        backgroundColor: "hsl(var(--card))",
+                        color: "hsl(var(--muted-foreground))",
+                        borderColor: "hsl(var(--border))",
                       }
                 }
               >
-                {e === "Todos" ? "Todos" : (ESTADO_COLORS[e]?.label ?? e)}
+                {e === "Todos" ? "Todos" : (ESTADO_LABELS[e] ?? e)}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-4 space-y-3">
-        {loading && cotizaciones.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-sm" style={{ color: "#9CA3AB" }}>
-              Cargando cotizaciones...
-            </p>
+      {/* ── Contenido ── */}
+      <div className="flex-1 min-w-0">
+        {/* Loading */}
+        {loading && cotizaciones.length === 0 && (
+          <div className="flex flex-col gap-3">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className="rounded-xl p-4 animate-pulse border"
+                style={{
+                  backgroundColor: "hsl(var(--card))",
+                  borderColor: "hsl(var(--border))",
+                }}
+              >
+                <div className="flex justify-between">
+                  <div className="space-y-2 flex-1">
+                    <div
+                      className="h-4 rounded w-1/4"
+                      style={{ backgroundColor: "hsl(var(--muted))" }}
+                    />
+                    <div
+                      className="h-3 rounded w-1/2"
+                      style={{ backgroundColor: "hsl(var(--muted))" }}
+                    />
+                  </div>
+                  <div
+                    className="h-6 w-20 rounded"
+                    style={{ backgroundColor: "hsl(var(--muted))" }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
-        ) : cotizaciones.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-sm" style={{ color: "#9CA3AB" }}>
-              No hay cotizaciones
-            </p>
-          </div>
-        ) : (
-          <>
-            {cotizaciones.map((c) => {
-              const estadoStyle =
-                ESTADO_COLORS[c.estado] ?? ESTADO_COLORS.borrador;
-              const esteError =
-                errorConversion?.id === c.id ? errorConversion.msg : null;
-              const puedeConvertir =
-                c.estado !== "rechazada" &&
-                c.estado !== "vencida" &&
-                c.estado !== "aprobada";
+        )}
 
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => navigate(`/ops/cotizaciones/${c.id}`)}
-                  className="bg-white rounded-2xl shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
-                >
-                  <div className="px-4 py-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span
-                            className="text-xs font-bold"
-                            style={{ color: "#14352A" }}
+        {/* Sin resultados */}
+        {!loading && filtradas.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="text-5xl mb-4">📋</div>
+            <p
+              className="font-semibold"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
+              Sin cotizaciones
+            </p>
+            <p
+              className="text-sm mt-1"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              {busqueda
+                ? `Sin resultados para "${busqueda}"`
+                : filtroEstado !== "Todos"
+                  ? `No hay cotizaciones ${ESTADO_LABELS[filtroEstado]?.toLowerCase()}`
+                  : "Crea la primera cotización"}
+            </p>
+          </div>
+        )}
+
+        {filtradas.length > 0 && (
+          <>
+            {/* ── Vista MÓVIL: Cards ── */}
+            <ul className="md:hidden space-y-2.5" role="list">
+              {filtradas.map((c) => {
+                const esteError =
+                  errorConversion?.id === c.id ? errorConversion.msg : null;
+                const puedeConvertir =
+                  c.estado !== "rechazada" &&
+                  c.estado !== "vencida" &&
+                  c.estado !== "aprobada";
+                return (
+                  <li key={c.id}>
+                    <div
+                      onClick={() => navigate(`/ops/cotizaciones/${c.id}`)}
+                      className="rounded-xl px-4 py-3.5 border shadow-sm cursor-pointer transition-all duration-100"
+                      style={{
+                        backgroundColor: "hsl(var(--card))",
+                        borderColor: "hsl(var(--border))",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.borderColor =
+                          "hsl(var(--primary) / 0.3)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.borderColor =
+                          "hsl(var(--border))")
+                      }
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span
+                              className="text-xs font-bold font-mono"
+                              style={{ color: "hsl(var(--primary))" }}
+                            >
+                              #{c.numero}
+                            </span>
+                            <StatusBadge status={c.estado} />
+                          </div>
+                          <p
+                            className="text-sm font-medium truncate"
+                            style={{ color: "hsl(var(--foreground))" }}
                           >
-                            #{c.numero}
-                          </span>
-                          <span
-                            className="px-2 py-0.5 rounded-full text-xs font-medium"
-                            style={{
-                              backgroundColor: estadoStyle.bg,
-                              color: estadoStyle.text,
-                            }}
+                            {c.cliente_nombre || "Sin nombre"}
+                          </p>
+                          <p
+                            className="text-xs mt-0.5"
+                            style={{ color: "hsl(var(--muted-foreground))" }}
                           >
-                            {estadoStyle.label}
-                          </span>
+                            {formatDate(c.fecha)}
+                            {esAdmin && c.vendedor && ` · ${c.vendedor.nombre}`}
+                            {" · "}
+                            {c.vigencia_dias}d vigencia
+                          </p>
                         </div>
                         <p
-                          className="text-sm font-medium truncate"
-                          style={{ color: "#151515" }}
-                        >
-                          {c.cliente_nombre || "Sin nombre"}
-                        </p>
-                        <p
-                          className="text-xs mt-0.5"
-                          style={{ color: "#9CA3AB" }}
-                        >
-                          {formatDate(c.fecha)}
-                          {esAdmin && c.vendedor && ` · ${c.vendedor.nombre}`}
-                          {" · "}
-                          {c.vigencia_dias}d vigencia
-                        </p>
-                      </div>
-                      <div className="text-right ml-4">
-                        <p
-                          className="font-bold text-base"
-                          style={{ color: "#14352A" }}
+                          className="font-bold text-base tabular-nums"
+                          style={{ color: "hsl(var(--foreground))" }}
                         >
                           {formatCOP(c.total)}
                         </p>
                       </div>
+                      {esteError && (
+                        <p
+                          className="text-xs mt-2"
+                          style={{ color: "hsl(var(--destructive))" }}
+                        >
+                          {esteError}
+                        </p>
+                      )}
+                      {puedeConvertir && (
+                        <button
+                          onClick={(e) => convertirEnVenta(e, c.id)}
+                          disabled={convirtiendo === c.id}
+                          className="mt-3 w-full py-2 rounded-lg text-xs font-medium border transition-all disabled:opacity-50 cursor-pointer"
+                          style={{
+                            borderColor: "hsl(var(--primary))",
+                            color: "hsl(var(--primary))",
+                          }}
+                        >
+                          {convirtiendo === c.id
+                            ? "Convirtiendo..."
+                            : "Convertir en venta"}
+                        </button>
+                      )}
                     </div>
+                  </li>
+                );
+              })}
+            </ul>
 
-                    {/* Error de conversión */}
-                    {esteError && (
-                      <p className="text-xs text-red-600 mt-2">{esteError}</p>
-                    )}
-
-                    {/* Botón convertir en venta */}
-                    {puedeConvertir && (
-                      <button
-                        onClick={(e) => convertirEnVenta(e, c.id)}
-                        disabled={convirtiendo === c.id}
-                        className="mt-3 w-full py-2.5 rounded-xl text-sm font-medium border transition-colors disabled:opacity-50"
-                        style={{ borderColor: "#14352A", color: "#14352A" }}
+            {/* ── Vista DESKTOP: Tabla ── */}
+            <div
+              className="hidden md:block overflow-x-auto rounded-xl border"
+              style={{ borderColor: "hsl(var(--border))" }}
+            >
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr
+                    style={{
+                      backgroundColor: "hsl(var(--muted) / 0.4)",
+                      borderBottom: "1px solid hsl(var(--border))",
+                    }}
+                  >
+                    {[
+                      "#",
+                      "Fecha",
+                      "Cliente",
+                      "Estado",
+                      "Vendedor",
+                      "Vigencia",
+                      "Total",
+                      "",
+                    ].map((col) => (
+                      <th
+                        key={col}
+                        className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-left whitespace-nowrap"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
                       >
-                        {convirtiendo === c.id
-                          ? "Convirtiendo..."
-                          : "Convertir en venta"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            {hasMore && (
-              <button
-                onClick={() => cargarCotizaciones(false)}
-                disabled={loading}
-                className="w-full py-3 rounded-2xl text-sm font-medium border transition-colors disabled:opacity-50"
-                style={{ borderColor: "#E2DED5", color: "#636B74" }}
-              >
-                {loading ? "Cargando..." : "Cargar más"}
-              </button>
-            )}
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtradas.map((c, idx) => {
+                    const puedeConvertir =
+                      c.estado !== "rechazada" &&
+                      c.estado !== "vencida" &&
+                      c.estado !== "aprobada";
+                    const esteError =
+                      errorConversion?.id === c.id ? errorConversion.msg : null;
+                    return (
+                      <tr
+                        key={c.id}
+                        onClick={() => navigate(`/ops/cotizaciones/${c.id}`)}
+                        className="cursor-pointer transition-colors"
+                        style={{
+                          borderTop:
+                            idx === 0
+                              ? "none"
+                              : "1px solid hsl(var(--border) / 0.5)",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.backgroundColor =
+                            "hsl(var(--muted) / 0.4)")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.backgroundColor = "")
+                        }
+                      >
+                        <td className="px-4 py-3.5">
+                          <span
+                            className="font-mono text-xs font-bold"
+                            style={{ color: "hsl(var(--primary))" }}
+                          >
+                            #{c.numero}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className="text-xs"
+                            style={{ color: "hsl(var(--muted-foreground))" }}
+                          >
+                            {formatDate(c.fecha)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className="text-sm font-medium"
+                            style={{ color: "hsl(var(--foreground))" }}
+                          >
+                            {c.cliente_nombre || "Sin nombre"}
+                          </span>
+                          {esteError && (
+                            <p
+                              className="text-xs mt-0.5"
+                              style={{ color: "hsl(var(--destructive))" }}
+                            >
+                              {esteError}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <StatusBadge status={c.estado} />
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className="text-xs"
+                            style={{ color: "hsl(var(--muted-foreground))" }}
+                          >
+                            {c.vendedor?.nombre ?? "—"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className="text-xs"
+                            style={{ color: "hsl(var(--muted-foreground))" }}
+                          >
+                            {c.vigencia_dias}d
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className="text-sm font-semibold tabular-nums"
+                            style={{ color: "hsl(var(--foreground))" }}
+                          >
+                            {formatCOP(c.total)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          {puedeConvertir && (
+                            <button
+                              onClick={(e) => convertirEnVenta(e, c.id)}
+                              disabled={convirtiendo === c.id}
+                              className="h-8 px-3 rounded-lg text-xs font-medium border transition-all disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                              style={{
+                                borderColor: "hsl(var(--primary) / 0.4)",
+                                color: "hsl(var(--primary))",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor =
+                                  "hsl(var(--primary) / 0.08)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = "";
+                              }}
+                            >
+                              {convirtiendo === c.id
+                                ? "Convirtiendo..."
+                                : "→ Venta"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
-        <div className="h-6" />
+
+        {/* Cargar más */}
+        {hasMore && !busqueda && (
+          <button
+            onClick={() => cargarCotizaciones(false)}
+            disabled={loading}
+            className="mt-4 w-full py-3 rounded-xl text-sm font-medium border transition-all disabled:opacity-50 cursor-pointer"
+            style={{
+              borderColor: "hsl(var(--border))",
+              color: "hsl(var(--muted-foreground))",
+              backgroundColor: "hsl(var(--card))",
+            }}
+          >
+            {loading ? "Cargando..." : "Cargar más"}
+          </button>
+        )}
+
+        {!loading && !hasMore && cotizaciones.length > 0 && (
+          <p
+            className="text-center text-xs py-4"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            — {cotizaciones.length} cotizaciones —
+          </p>
+        )}
       </div>
     </div>
+  );
+}
+
+/* ─── Íconos locales ── */
+function PlusIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function SearchIcon({ className = "", style }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      className={className}
+      style={style}
+      aria-hidden="true"
+    >
+      <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="m10.5 10.5 2.5 2.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }

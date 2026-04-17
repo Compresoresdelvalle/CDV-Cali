@@ -1,5 +1,5 @@
-import { Navigate } from 'react-router-dom'
-import { useAuthStore } from '../../stores/authStore'
+import { Navigate } from "react-router-dom";
+import { useAuthStore } from "../../stores/authStore";
 
 /**
  * Guard de roles y autenticación.
@@ -15,7 +15,7 @@ import { useAuthStore } from '../../stores/authStore'
  *   4. Si ok → renderiza children
  */
 export default function RoleGuard({ roles, children }) {
-  const { session, perfil, loading } = useAuthStore()
+  const { session, perfil, loading } = useAuthStore();
 
   // Esperar a que el store inicialice la sesión
   if (loading) {
@@ -26,20 +26,20 @@ export default function RoleGuard({ roles, children }) {
           <p className="text-text-sub text-sm">Cargando...</p>
         </div>
       </div>
-    )
+    );
   }
 
   // Sin sesión → login
   if (!session || !perfil) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/login" replace />;
   }
 
   // Verificar rol si se especificaron restricciones
   if (roles && roles.length > 0 && !roles.includes(perfil.rol)) {
     // Admin siempre puede ir a cualquier parte de ops
-    if (perfil.rol === 'Admin') return <>{children}</>
-    return <Navigate to="/ops" replace />
+    if (perfil.rol === "Admin") return <>{children}</>;
+    return <Navigate to="/ops" replace />;
   }
 
-  return <>{children}</>
+  return <>{children}</>;
 }

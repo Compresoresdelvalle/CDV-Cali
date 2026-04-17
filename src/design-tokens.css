@@ -1,0 +1,106 @@
+/**
+ * design-tokens.css — Compresores del Valle S.A.S.
+ *
+ * Fuente de verdad del sistema de diseño.
+ * Importar SOLO para referencia o herramientas externas.
+ * La app consume estos tokens via index.css (:root).
+ *
+ * ──────────────────────────────────────────────────────────────
+ * REGLA: Nunca usar colores hex hardcoded en componentes.
+ *        Siempre: hsl(var(--token))
+ * ──────────────────────────────────────────────────────────────
+ */
+
+:root {
+  /* ── Tipografía ─────────────────────────────────────────────── */
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+
+  /* ── Superficies ────────────────────────────────────────────── */
+  --background: 210 20% 98%; /* #F6F8FA — fondo general */
+  --foreground: 215 25% 15%; /* #1C2530 — texto principal */
+
+  --card: 0 0% 100%; /* #FFFFFF — cards y paneles */
+  --card-foreground: 215 25% 15%;
+
+  /* ── Brand / Primary ────────────────────────────────────────── */
+  --primary: 213 56% 33%; /* #245A8C — azul Lovable */
+  --primary-foreground: 0 0% 100%;
+
+  /* ── Secundario ─────────────────────────────────────────────── */
+  --secondary: 210 18% 93%;
+  --secondary-foreground: 215 25% 20%;
+
+  /* ── Muted ──────────────────────────────────────────────────── */
+  --muted: 210 14% 95%;
+  --muted-foreground: 215 12% 50%;
+
+  /* ── Accent ─────────────────────────────────────────────────── */
+  --accent: 213 56% 33%;
+  --accent-foreground: 0 0% 100%;
+
+  /* ── Semánticos ─────────────────────────────────────────────── */
+  --destructive: 0 72% 51%; /* rojo — errores, anulaciones */
+  --destructive-foreground: 0 0% 100%;
+
+  --success: 142 64% 38%; /* verde — stock OK, aprobado */
+  --success-foreground: 0 0% 100%;
+
+  --warning: 38 92% 50%; /* naranja — stock bajo, descuento */
+  --warning-foreground: 0 0% 10%;
+
+  --info: 200 80% 44%; /* azul claro — info, enviada */
+  --info-foreground: 0 0% 100%;
+
+  /* ── Bordes e inputs ────────────────────────────────────────── */
+  --border: 214 20% 88%;
+  --input: 214 20% 88%;
+  --ring: 213 56% 33%;
+
+  /* ── Radio ──────────────────────────────────────────────────── */
+  --radius: 0.5rem;
+
+  /* ── Sidebar ────────────────────────────────────────────────── */
+  --sidebar-background: 215 28% 17%;
+  --sidebar-foreground: 210 20% 80%;
+  --sidebar-primary: 210 50% 65%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 215 25% 22%;
+  --sidebar-accent-foreground: 210 20% 92%;
+  --sidebar-border: 215 20% 25%;
+  --sidebar-ring: 210 50% 65%;
+  --sidebar-muted: 215 15% 40%;
+}
+
+/**
+ * ── Mapa de colores de referencia (NO usar en código) ──────────
+ *
+ * background       hsl(210 20% 98%)    ≈ #F6F8FA
+ * foreground       hsl(215 25% 15%)    ≈ #1C2530
+ * card             hsl(0 0% 100%)      = #FFFFFF
+ * primary          hsl(213 56% 33%)    ≈ #245A8C
+ * muted            hsl(210 14% 95%)    ≈ #EFF1F3
+ * muted-foreground hsl(215 12% 50%)    ≈ #757D87
+ * border           hsl(214 20% 88%)    ≈ #D8DDE4
+ * success          hsl(142 64% 38%)    ≈ #259A55
+ * warning          hsl(38 92% 50%)     ≈ #F59E0B
+ * destructive      hsl(0 72% 51%)      ≈ #DC2626
+ * info             hsl(200 80% 44%)    ≈ #0EA5C9
+ * sidebar-bg       hsl(215 28% 17%)    ≈ #1E2D40
+ *
+ * ── Patrones prohibidos ─────────────────────────────────────────
+ * ❌  style={{ color: "#14352A" }}
+ * ❌  style={{ backgroundColor: "#F4F1EB" }}
+ * ❌  className="bg-white"  (usar card o background)
+ * ❌  className="text-gray-500"
+ *
+ * ── Patrones correctos ──────────────────────────────────────────
+ * ✅  style={{ color: "hsl(var(--foreground))" }}
+ * ✅  style={{ backgroundColor: "hsl(var(--card))" }}
+ * ✅  style={{ borderColor: "hsl(var(--border))" }}
+ * ✅  style={{ backgroundColor: "hsl(var(--muted) / 0.3)" }}
+ * ✅  style={{ color: "hsl(var(--muted-foreground))" }}
+ *
+ * ── Hover pattern (no Tailwind hover con CSS vars) ──────────────
+ * ✅  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "hsl(var(--muted) / 0.5)"}
+ * ✅  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ""}
+ */

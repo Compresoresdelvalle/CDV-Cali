@@ -1,4 +1,4 @@
-import { QRCodeSVG } from 'qrcode.react'
+import { QRCodeSVG } from "qrcode.react";
 
 /**
  * Genera un código QR SVG con la referencia del producto.
@@ -7,8 +7,8 @@ import { QRCodeSVG } from 'qrcode.react'
  *   size:   number — tamaño en px (default 128)
  *   level:  'L'|'M'|'Q'|'H' — nivel de corrección (default 'M')
  */
-export default function QRGenerator({ value, size = 128, level = 'M' }) {
-  if (!value) return null
+export default function QRGenerator({ value, size = 128, level = "M" }) {
+  if (!value) return null;
 
   return (
     <QRCodeSVG
@@ -16,7 +16,7 @@ export default function QRGenerator({ value, size = 128, level = 'M' }) {
       size={size}
       level={level}
       marginSize={2}
-      style={{ display: 'block' }}
+      style={{ display: "block" }}
     />
-  )
+  );
 }
