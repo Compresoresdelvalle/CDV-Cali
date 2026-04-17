@@ -109,11 +109,14 @@ export default function Inventario() {
             </button>
             {!esVendedor && (
               <button
+                onClick={() => navigate("/ops/inventario/nuevo")}
                 className="flex items-center gap-2 h-9 px-3 rounded-lg text-sm font-medium transition-all cursor-pointer"
                 style={{
                   backgroundColor: "hsl(var(--primary))",
                   color: "hsl(var(--primary-foreground))",
                 }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
               >
                 <PlusIcon />
                 <span className="hidden sm:inline">Nuevo producto</span>

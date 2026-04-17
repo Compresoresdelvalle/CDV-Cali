@@ -73,6 +73,15 @@ export default function App() {
               </RoleGuard>
             }
           />
+          {/* Inventario — nuevo producto (próxima fase) */}
+          <Route
+            path="inventario/nuevo"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <Placeholder name="Nuevo Producto" />
+              </RoleGuard>
+            }
+          />
           {/* Inventario — detalle de producto */}
           <Route
             path="inventario/:productoId"
