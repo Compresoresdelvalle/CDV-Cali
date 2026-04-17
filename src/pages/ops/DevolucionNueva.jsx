@@ -1,25 +1,15 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import PageHeader from "../../components/layout/PageHeader";
+import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 
 const inputStyle = {
   backgroundColor: "hsl(var(--card))",
   borderColor: "hsl(var(--border))",
   color: "hsl(var(--foreground))",
 };
-
-function useDebounce(fn, delay) {
-  const timer = useRef(null);
-  return useCallback(
-    (...args) => {
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => fn(...args), delay);
-    },
-    [fn, delay],
-  );
-}
 
 export default function DevolucionNueva() {
   const navigate = useNavigate();
@@ -62,7 +52,7 @@ export default function DevolucionNueva() {
     }
   }, []);
 
-  const buscarDebounced = useDebounce(buscarProductos, 300);
+  const buscarDebounced = useDebouncedCallback(buscarProductos, 300);
 
   const handleBusquedaChange = (e) => {
     const val = e.target.value;

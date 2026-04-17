@@ -1,21 +1,11 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import QRScanner from "../../components/forms/QRScanner";
-
-function useDebounce(fn, delay) {
-  const timer = useRef(null);
-  return useCallback(
-    (...args) => {
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => fn(...args), delay);
-    },
-    [fn, delay],
-  );
-}
+import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 
 const inputStyle = {
   backgroundColor: "hsl(var(--card))",
@@ -66,7 +56,7 @@ export default function CotizacionNueva() {
     }
   }, []);
 
-  const buscarDebounced = useDebounce(buscarProductos, 300);
+  const buscarDebounced = useDebouncedCallback(buscarProductos, 300);
 
   const handleBusquedaChange = (e) => {
     const val = e.target.value;
