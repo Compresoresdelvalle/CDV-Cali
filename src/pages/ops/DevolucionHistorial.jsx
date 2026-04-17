@@ -26,7 +26,7 @@ export default function DevolucionHistorial() {
       let query = supabase
         .from("devoluciones")
         .select(
-          `id, numero, fecha, tipo, cantidad, motivo, estado,
+          `id, numero, fecha, reingresa_stock, cantidad, motivo, estado,
            producto:producto_id(nombre, referencia),
            registrador:registrado_por(nombre)`,
         )
@@ -34,8 +34,9 @@ export default function DevolucionHistorial() {
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (perfil?.rol !== "Admin") query = query.eq("sede_id", perfil.sede_id);
-      if (filtro === "Cliente") query = query.eq("tipo", "cliente");
-      if (filtro === "Proveedor") query = query.eq("tipo", "proveedor");
+      // La tabla usa reingresa_stock BOOLEAN (true=cliente, false=proveedor)
+      if (filtro === "Cliente") query = query.eq("reingresa_stock", true);
+      if (filtro === "Proveedor") query = query.eq("reingresa_stock", false);
 
       const { data, error } = await query;
       if (error) throw error;
@@ -59,8 +60,9 @@ export default function DevolucionHistorial() {
     cargarDevoluciones(true);
   }, [filtro]);
 
-  const tipoLabel = (tipo) =>
-    tipo === "cliente" ? "De cliente" : "A proveedor";
+  // reingresa_stock=true → devolución de cliente (suma stock)
+  // reingresa_stock=false → devolución a proveedor (resta stock)
+  const tipoLabel = (reingresa) => (reingresa ? "De cliente" : "A proveedor");
 
   return (
     <div
@@ -187,7 +189,7 @@ export default function DevolucionHistorial() {
                       <span
                         className="text-xs font-medium px-2 py-0.5 rounded-full"
                         style={
-                          d.tipo === "cliente"
+                          d.reingresa_stock === true
                             ? {
                                 backgroundColor: "hsl(var(--info) / 0.1)",
                                 color: "hsl(var(--info))",
@@ -198,7 +200,7 @@ export default function DevolucionHistorial() {
                               }
                         }
                       >
-                        {tipoLabel(d.tipo)}
+                        {tipoLabel(d.reingresa_stock)}
                       </span>
                     </td>
                     <td className="px-3 py-3.5">
@@ -220,7 +222,7 @@ export default function DevolucionHistorial() {
                         className="font-semibold tabular-nums"
                         style={{ color: "hsl(var(--foreground))" }}
                       >
-                        {d.tipo === "cliente" ? "+" : "−"}
+                        {d.reingresa_stock === true ? "+" : "−"}
                         {d.cantidad}
                       </span>
                     </td>
@@ -263,7 +265,7 @@ export default function DevolucionHistorial() {
                       <span
                         className="text-xs font-medium px-2 py-0.5 rounded-full"
                         style={
-                          d.tipo === "cliente"
+                          d.reingresa_stock === true
                             ? {
                                 backgroundColor: "hsl(var(--info) / 0.1)",
                                 color: "hsl(var(--info))",
@@ -274,7 +276,7 @@ export default function DevolucionHistorial() {
                               }
                         }
                       >
-                        {tipoLabel(d.tipo)}
+                        {tipoLabel(d.reingresa_stock)}
                       </span>
                       <StatusBadge status={d.estado} />
                     </div>
@@ -282,7 +284,7 @@ export default function DevolucionHistorial() {
                       className="font-bold text-base tabular-nums shrink-0"
                       style={{ color: "hsl(var(--foreground))" }}
                     >
-                      {d.tipo === "cliente" ? "+" : "−"}
+                      {d.reingresa_stock === true ? "+" : "−"}
                       {d.cantidad}
                     </span>
                   </div>
