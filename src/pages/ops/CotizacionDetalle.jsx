@@ -1,21 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate } from "../../lib/utils";
-
-const ESTADO_COLORS = {
-  borrador: { bg: "#EDE9E0", text: "#636B74", label: "Borrador" },
-  enviada: { bg: "#DBEAFE", text: "#2563EB", label: "Enviada" },
-  aprobada: { bg: "#D1FAE5", text: "#0B8A57", label: "Aprobada" },
-  rechazada: { bg: "#FEE2E2", text: "#C0392B", label: "Rechazada" },
-  vencida: { bg: "#F3F4F6", text: "#9CA3AB", label: "Vencida" },
-};
+import PageHeader from "../../components/layout/PageHeader";
+import StatusBadge from "../../components/ui/StatusBadge";
 
 export default function CotizacionDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const perfil = useAuthStore((s) => s.perfil);
 
   const [cotizacion, setCotizacion] = useState(null);
   const [items, setItems] = useState([]);
@@ -55,65 +47,12 @@ export default function CotizacionDetalle() {
     setConvirtiendo(true);
     setError(null);
     try {
-      if (cotizacion.estado === "vencida")
-        throw new Error("La cotización está vencida");
-      if (cotizacion.estado === "rechazada")
-        throw new Error("La cotización fue rechazada");
-
-      // Pre-validar stock de cada ítem
-      for (const item of items) {
-        const { data: inv } = await supabase
-          .from("inventario")
-          .select("cantidad")
-          .eq("producto_id", item.producto_id)
-          .eq("sede_id", cotizacion.sede_id)
-          .single();
-        if (!inv || inv.cantidad < item.cantidad) {
-          throw new Error(
-            `Stock insuficiente para: ${item.producto?.nombre ?? "producto"}`,
-          );
-        }
-      }
-
-      // Insertar cabecera de venta con los totales reales de la cotización
-      const { data: venta, error: ventaErr } = await supabase
-        .from("ventas")
-        .insert({
-          vendedor_id: cotizacion.vendedor_id,
-          sede_id: cotizacion.sede_id,
-          cliente_nombre: cotizacion.cliente_nombre,
-          cliente_nit: cotizacion.cliente_nit,
-          metodo_pago: "Efectivo",
-          descuento_pct: cotizacion.descuento_pct,
-          iva_pct: cotizacion.iva_pct,
-          subtotal: cotizacion.subtotal,
-          total: cotizacion.total,
-        })
-        .select("id, numero")
-        .single();
-      if (ventaErr) throw new Error(ventaErr.message);
-
-      // Insertar ítems — triggers manejan stock y recálculo
-      const detalles = items.map((i) => ({
-        venta_id: venta.id,
-        producto_id: i.producto_id,
-        cantidad: i.cantidad,
-        precio_unitario: i.precio_unitario,
-        costo_unitario: 0,
-        subtotal: i.cantidad * i.precio_unitario,
-      }));
-      const { error: detErr } = await supabase
-        .from("detalle_venta")
-        .insert(detalles);
-      if (detErr) throw new Error(detErr.message);
-
-      // Marcar cotización como aprobada
-      await supabase
-        .from("cotizaciones")
-        .update({ estado: "aprobada" })
-        .eq("id", id);
-
-      navigate(`/ops/ventas/${venta.id}`);
+      const { data, error: rpcErr } = await supabase.rpc(
+        "fn_convertir_cotizacion",
+        { p_cotizacion_id: id },
+      );
+      if (rpcErr) throw new Error(rpcErr.message);
+      navigate(`/ops/ventas/${data.venta_id}`);
     } catch (e) {
       setError(e.message ?? "Error al convertir la cotización");
     } finally {
@@ -124,12 +63,28 @@ export default function CotizacionDetalle() {
   if (loading) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: "#F4F1EB" }}
+        className="p-4 sm:p-6 space-y-4 animate-pulse"
+        style={{ backgroundColor: "hsl(var(--background))" }}
       >
-        <p className="text-sm" style={{ color: "#9CA3AB" }}>
-          Cargando...
-        </p>
+        <div
+          className="h-8 rounded-lg w-1/3"
+          style={{ backgroundColor: "hsl(var(--muted))" }}
+        />
+        <div
+          className="rounded-xl border p-4 space-y-3"
+          style={{
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+          }}
+        >
+          {[...Array(4)].map((_, i) => (
+            <div
+              key={i}
+              className="h-4 rounded w-3/4"
+              style={{ backgroundColor: "hsl(var(--muted))" }}
+            />
+          ))}
+        </div>
       </div>
     );
   }
@@ -137,18 +92,19 @@ export default function CotizacionDetalle() {
   if (!cotizacion) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: "#F4F1EB" }}
+        className="flex items-center justify-center min-h-[60vh]"
+        style={{ backgroundColor: "hsl(var(--background))" }}
       >
-        <p className="text-sm" style={{ color: "#9CA3AB" }}>
+        <p
+          className="text-sm"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
           Cotización no encontrada
         </p>
       </div>
     );
   }
 
-  const estadoStyle =
-    ESTADO_COLORS[cotizacion.estado] ?? ESTADO_COLORS.borrador;
   const descuento = cotizacion.subtotal * (cotizacion.descuento_pct / 100);
   const baseIva = cotizacion.subtotal - descuento;
   const iva = baseIva * (cotizacion.iva_pct / 100);
@@ -158,231 +114,278 @@ export default function CotizacionDetalle() {
     cotizacion.estado !== "aprobada";
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#F4F1EB" }}>
-      {/* Header */}
-      <div
-        className="sticky top-0 z-10 px-4 py-4 shadow-sm"
-        style={{ backgroundColor: "#14352A" }}
-      >
-        <div className="flex items-center gap-3 max-w-2xl mx-auto">
-          <button
-            onClick={() => navigate("/ops/cotizaciones")}
-            className="text-white/70 hover:text-white transition-colors"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </button>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-white font-semibold text-lg">
-                Cotización #{cotizacion.numero}
-              </h1>
-              <span
-                className="px-2 py-0.5 rounded-full text-xs font-medium"
-                style={{
-                  backgroundColor: estadoStyle.bg,
-                  color: estadoStyle.text,
-                }}
-              >
-                {estadoStyle.label}
-              </span>
-            </div>
-            <p className="text-white/60 text-xs">
-              {formatDate(cotizacion.fecha)}
-            </p>
-          </div>
-          {/* Botón editar — no disponible para aprobadas */}
-          {cotizacion.estado !== "aprobada" && (
+    <div
+      className="p-4 sm:p-6 space-y-4 animate-fade-in"
+      style={{ backgroundColor: "hsl(var(--background))" }}
+    >
+      {/* ── PageHeader ── */}
+      <PageHeader
+        title={`Cotización #${cotizacion.numero}`}
+        description={formatDate(cotizacion.fecha)}
+        actions={
+          <div className="flex items-center gap-2">
+            <StatusBadge status={cotizacion.estado} />
             <button
-              onClick={() => navigate(`/ops/cotizaciones/${id}/editar`)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors"
+              onClick={() => navigate("/ops/cotizaciones")}
+              className="h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"
               style={{
-                backgroundColor: "rgba(255,255,255,0.15)",
-                color: "#fff",
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--muted-foreground))",
+                backgroundColor: "hsl(var(--card))",
               }}
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                />
-              </svg>
-              Editar
+              ← Volver
             </button>
+            {cotizacion.estado !== "aprobada" && (
+              <button
+                onClick={() => navigate(`/ops/cotizaciones/${id}/editar`)}
+                className="flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"
+                style={{
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--foreground))",
+                  backgroundColor: "hsl(var(--card))",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor =
+                    "hsl(var(--primary) / 0.4)";
+                  e.currentTarget.style.backgroundColor =
+                    "hsl(var(--primary) / 0.05)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "hsl(var(--border))";
+                  e.currentTarget.style.backgroundColor = "hsl(var(--card))";
+                }}
+              >
+                <EditIcon />
+                Editar
+              </button>
+            )}
+          </div>
+        }
+      />
+
+      {/* ── Info general ── */}
+      <div
+        className="rounded-xl border overflow-hidden"
+        style={{
+          backgroundColor: "hsl(var(--card))",
+          borderColor: "hsl(var(--border))",
+        }}
+      >
+        <div
+          className="px-4 py-3 border-b"
+          style={{
+            borderColor: "hsl(var(--border))",
+            backgroundColor: "hsl(var(--muted) / 0.3)",
+          }}
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-wide"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Información
+          </p>
+        </div>
+        <div>
+          <InfoRow
+            label="Vendedor"
+            value={cotizacion.vendedor?.nombre ?? "—"}
+          />
+          <InfoRow label="Sede" value={cotizacion.sede_id} />
+          <InfoRow
+            label="Cliente"
+            value={cotizacion.cliente_nombre || "Sin nombre"}
+          />
+          {cotizacion.cliente_nit && (
+            <InfoRow label="NIT / Cédula" value={cotizacion.cliente_nit} />
+          )}
+          {cotizacion.cliente_email && (
+            <InfoRow label="Email" value={cotizacion.cliente_email} />
+          )}
+          {cotizacion.cliente_telefono && (
+            <InfoRow label="Teléfono" value={cotizacion.cliente_telefono} />
+          )}
+          <InfoRow
+            label="Vigencia"
+            value={`${cotizacion.vigencia_dias} días`}
+          />
+          {cotizacion.observaciones && (
+            <InfoRow label="Observaciones" value={cotizacion.observaciones} />
           )}
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
-        {/* Info general */}
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div
-            className="px-4 py-3 border-b"
-            style={{ borderColor: "#E2DED5" }}
+      {/* ── Productos ── */}
+      <div
+        className="rounded-xl border overflow-hidden"
+        style={{
+          backgroundColor: "hsl(var(--card))",
+          borderColor: "hsl(var(--border))",
+        }}
+      >
+        <div
+          className="px-4 py-3 border-b"
+          style={{
+            borderColor: "hsl(var(--border))",
+            backgroundColor: "hsl(var(--muted) / 0.3)",
+          }}
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-wide"
+            style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            <p
-              className="text-xs font-semibold uppercase tracking-wide"
-              style={{ color: "#9CA3AB" }}
-            >
-              Información
-            </p>
-          </div>
-          <div className="divide-y" style={{ borderColor: "#E2DED5" }}>
-            <Row label="Vendedor" value={cotizacion.vendedor?.nombre ?? "—"} />
-            <Row label="Sede" value={cotizacion.sede_id} />
-            <Row
-              label="Cliente"
-              value={cotizacion.cliente_nombre || "Sin nombre"}
-            />
-            {cotizacion.cliente_nit && (
-              <Row label="NIT / Cédula" value={cotizacion.cliente_nit} />
-            )}
-            {cotizacion.cliente_email && (
-              <Row label="Email" value={cotizacion.cliente_email} />
-            )}
-            {cotizacion.cliente_telefono && (
-              <Row label="Teléfono" value={cotizacion.cliente_telefono} />
-            )}
-            <Row label="Vigencia" value={`${cotizacion.vigencia_dias} días`} />
-            {cotizacion.observaciones && (
-              <Row label="Observaciones" value={cotizacion.observaciones} />
-            )}
-          </div>
+            Productos ({items.length})
+          </p>
         </div>
-
-        {/* Productos */}
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        {items.map((item, idx) => (
           <div
-            className="px-4 py-3 border-b"
-            style={{ borderColor: "#E2DED5" }}
+            key={item.id}
+            className="flex items-center justify-between px-4 py-3"
+            style={{
+              borderTop:
+                idx === 0 ? "none" : `1px solid hsl(var(--border) / 0.5)`,
+            }}
           >
-            <p
-              className="text-xs font-semibold uppercase tracking-wide"
-              style={{ color: "#9CA3AB" }}
-            >
-              Productos ({items.length})
-            </p>
-          </div>
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between px-4 py-3 border-b last:border-b-0"
-              style={{ borderColor: "#E2DED5" }}
-            >
-              <div className="flex-1 min-w-0">
-                <p
-                  className="text-sm font-medium truncate"
-                  style={{ color: "#151515" }}
-                >
-                  {item.producto?.nombre}
-                </p>
-                <p className="text-xs" style={{ color: "#9CA3AB" }}>
-                  {item.producto?.referencia} · {item.cantidad}{" "}
-                  {item.producto?.unidad_medida} ×{" "}
-                  {formatCOP(item.precio_unitario)}
-                </p>
-              </div>
+            <div className="flex-1 min-w-0">
               <p
-                className="text-sm font-semibold ml-4"
-                style={{ color: "#14352A" }}
+                className="text-sm font-medium truncate"
+                style={{ color: "hsl(var(--foreground))" }}
               >
-                {formatCOP(item.subtotal)}
+                {item.producto?.nombre}
+              </p>
+              <p
+                className="text-xs"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                {item.producto?.referencia} · {item.cantidad}{" "}
+                {item.producto?.unidad_medida} ×{" "}
+                {formatCOP(item.precio_unitario)}
               </p>
             </div>
-          ))}
-        </div>
-
-        {/* Totales */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
-          <div
-            className="flex justify-between text-sm"
-            style={{ color: "#636B74" }}
-          >
-            <span>Subtotal</span>
-            <span>{formatCOP(cotizacion.subtotal)}</span>
-          </div>
-          {cotizacion.descuento_pct > 0 && (
-            <div
-              className="flex justify-between text-sm"
-              style={{ color: "#C47F17" }}
+            <p
+              className="text-sm font-semibold ml-4 tabular-nums"
+              style={{ color: "hsl(var(--foreground))" }}
             >
-              <span>Descuento ({cotizacion.descuento_pct}%)</span>
-              <span>−{formatCOP(descuento)}</span>
-            </div>
-          )}
+              {formatCOP(item.subtotal)}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Totales ── */}
+      <div
+        className="rounded-xl border p-4 space-y-2"
+        style={{
+          backgroundColor: "hsl(var(--card))",
+          borderColor: "hsl(var(--border))",
+        }}
+      >
+        <div
+          className="flex justify-between text-sm"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          <span>Subtotal</span>
+          <span className="tabular-nums">{formatCOP(cotizacion.subtotal)}</span>
+        </div>
+        {cotizacion.descuento_pct > 0 && (
           <div
             className="flex justify-between text-sm"
-            style={{ color: "#636B74" }}
+            style={{ color: "hsl(var(--warning))" }}
           >
-            <span>IVA {cotizacion.iva_pct}%</span>
-            <span>{formatCOP(iva)}</span>
+            <span>Descuento ({cotizacion.descuento_pct}%)</span>
+            <span className="tabular-nums">−{formatCOP(descuento)}</span>
           </div>
-          <div
-            className="flex justify-between font-bold text-base pt-2 border-t"
-            style={{ borderColor: "#E2DED5", color: "#14352A" }}
-          >
-            <span>Total</span>
-            <span>{formatCOP(cotizacion.total)}</span>
-          </div>
+        )}
+        <div
+          className="flex justify-between text-sm"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          <span>IVA {cotizacion.iva_pct}%</span>
+          <span className="tabular-nums">{formatCOP(iva)}</span>
         </div>
-
-        {/* Error */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
-        )}
-
-        {/* Botón convertir en venta */}
-        {puedeConvertir && (
-          <button
-            onClick={convertirEnVenta}
-            disabled={convirtiendo}
-            className="w-full py-4 rounded-2xl font-semibold text-base text-white transition-opacity disabled:opacity-40"
-            style={{ backgroundColor: "#14352A" }}
-          >
-            {convirtiendo
-              ? "Convirtiendo..."
-              : `Convertir en venta · ${formatCOP(cotizacion.total)}`}
-          </button>
-        )}
-
-        <div className="h-6" />
+        <div
+          className="flex justify-between font-bold text-base pt-2 border-t"
+          style={{
+            borderColor: "hsl(var(--border))",
+            color: "hsl(var(--foreground))",
+          }}
+        >
+          <span>Total</span>
+          <span className="tabular-nums">{formatCOP(cotizacion.total)}</span>
+        </div>
       </div>
+
+      {/* ── Error ── */}
+      {error && (
+        <div
+          className="rounded-xl border px-4 py-3"
+          style={{
+            backgroundColor: "hsl(var(--destructive) / 0.05)",
+            borderColor: "hsl(var(--destructive) / 0.2)",
+          }}
+        >
+          <p className="text-sm" style={{ color: "hsl(var(--destructive))" }}>
+            {error}
+          </p>
+        </div>
+      )}
+
+      {/* ── Botón convertir ── */}
+      {puedeConvertir && (
+        <button
+          onClick={convertirEnVenta}
+          disabled={convirtiendo}
+          className="w-full py-4 rounded-xl font-semibold text-base transition-opacity disabled:opacity-40 cursor-pointer"
+          style={{
+            backgroundColor: "hsl(var(--primary))",
+            color: "hsl(var(--primary-foreground))",
+          }}
+        >
+          {convirtiendo
+            ? "Convirtiendo..."
+            : `Convertir en venta · ${formatCOP(cotizacion.total)}`}
+        </button>
+      )}
     </div>
   );
 }
 
-function Row({ label, value }) {
+function InfoRow({ label, value }) {
   return (
-    <div className="flex justify-between items-start px-4 py-3">
-      <span className="text-sm" style={{ color: "#9CA3AB" }}>
+    <div
+      className="flex justify-between items-start px-4 py-3 border-t first:border-t-0"
+      style={{ borderColor: "hsl(var(--border) / 0.5)" }}
+    >
+      <span
+        className="text-sm"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
         {label}
       </span>
       <span
         className="text-sm font-medium text-right max-w-[60%]"
-        style={{ color: "#151515" }}
+        style={{ color: "hsl(var(--foreground))" }}
       >
         {value}
       </span>
     </div>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+    </svg>
   );
 }

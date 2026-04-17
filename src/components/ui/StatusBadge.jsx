@@ -1,42 +1,70 @@
 /**
- * Badge de estado de stock — usa las clases .status-badge de index.css
+ * StatusBadge — usa clases .status-badge del CSS (estilo Lovable).
+ *
  * Props:
- *   status: 'OK' | 'Bajo' | 'Agotado' | 'Sobrestock'
- *   size: 'sm' | 'md' (default 'md')
+ *   status   : 'success' | 'warning' | 'danger' | 'info' | 'neutral'
+ *              | 'OK' | 'Bajo' | 'Agotado' | 'Sobrestock'  ← compat legacy
+ *   children : texto personalizado (si se omite, usa label por defecto del status)
+ *   className: clases adicionales
  */
 
-const STATUS_MAP = {
-  OK: { label: "OK", modifier: "status-success", dot: "hsl(var(--success))" },
-  Bajo: {
-    label: "Bajo",
-    modifier: "status-warning",
-    dot: "hsl(var(--warning))",
-  },
-  Agotado: {
-    label: "Agotado",
-    modifier: "status-danger",
-    dot: "hsl(var(--destructive))",
-  },
-  Sobrestock: {
-    label: "Sobre",
-    modifier: "status-info",
-    dot: "hsl(var(--info))",
-  },
+const MODIFIER = {
+  // Lovable-style
+  success: "status-success",
+  warning: "status-warning",
+  danger: "status-danger",
+  info: "status-info",
+  neutral: "status-neutral",
+  // Legacy stock compat
+  OK: "status-success",
+  Bajo: "status-warning",
+  Agotado: "status-danger",
+  Sobrestock: "status-info",
+  // Cotización states
+  borrador: "status-neutral",
+  enviada: "status-info",
+  aprobada: "status-success",
+  rechazada: "status-danger",
+  vencida: "status-neutral",
+  // Venta states
+  completada: "status-success",
+  anulada: "status-danger",
+  // Compra states
+  recibida: "status-success",
+  pendiente: "status-warning",
+  // Devolución states
+  procesada: "status-success",
 };
 
-export default function StatusBadge({ status, size = "md" }) {
-  const cfg = STATUS_MAP[status] ?? STATUS_MAP.OK;
-  const isSmall = size === "sm";
+const DEFAULT_LABEL = {
+  success: "Disponible",
+  warning: "Stock bajo",
+  danger: "Agotado",
+  info: "Info",
+  neutral: "—",
+  OK: "Disponible",
+  Bajo: "Stock bajo",
+  Agotado: "Agotado",
+  Sobrestock: "Sobre",
+  borrador: "Borrador",
+  enviada: "Enviada",
+  aprobada: "Aprobada",
+  rechazada: "Rechazada",
+  vencida: "Vencida",
+  completada: "Completada",
+  anulada: "Anulada",
+  // Compra states
+  recibida: "Recibida",
+  pendiente: "Pendiente",
+  // Devolución states
+  procesada: "Procesada",
+};
+
+export default function StatusBadge({ status, children, className = "" }) {
+  const mod = MODIFIER[status] ?? "status-neutral";
+  const label = children ?? DEFAULT_LABEL[status] ?? status;
 
   return (
-    <span
-      className={`status-badge ${cfg.modifier} ${isSmall ? "text-[10px] px-1.5 py-0.5" : ""}`}
-    >
-      <span
-        className={`rounded-full shrink-0 ${isSmall ? "w-1.5 h-1.5" : "w-2 h-2"}`}
-        style={{ backgroundColor: cfg.dot }}
-      />
-      {cfg.label}
-    </span>
+    <span className={`status-badge ${mod} ${className}`.trim()}>{label}</span>
   );
 }

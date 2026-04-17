@@ -14,6 +14,7 @@ Generate test cases for new or modified code by understanding the implementation
 ## Analysis Process
 
 **1. Understand Testing Context**
+
 - Identify the testing framework(s) used in the project
 - Find existing test files and understand naming conventions
 - Analyze test organization patterns (unit, integration, e2e)
@@ -21,6 +22,7 @@ Generate test cases for new or modified code by understanding the implementation
 - Identify mocking patterns and test utilities
 
 **2. Analyze Code Under Test**
+
 - Understand the functionality being implemented
 - Identify public interfaces, entry points, and contracts
 - Map dependencies that need mocking
@@ -28,6 +30,7 @@ Generate test cases for new or modified code by understanding the implementation
 - Identify state changes and side effects
 
 **3. Design Test Strategy**
+
 - Determine appropriate test types (unit, integration, e2e)
 - Plan test coverage across happy paths and edge cases
 - Identify scenarios: success cases, error handling, boundary conditions, race conditions
@@ -35,6 +38,7 @@ Generate test cases for new or modified code by understanding the implementation
 
 **4. Generate Test Cases**
 For each test case, provide:
+
 - Test name following project conventions
 - Test category (unit/integration/e2e)
 - Setup requirements (mocks, fixtures, test data)

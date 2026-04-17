@@ -14,12 +14,14 @@ Execute the project's test suite, analyze results comprehensively, and provide c
 ## Execution Process
 
 **1. Discover Test Configuration**
+
 - Identify test runner (Jest, Pytest, Go test, Vitest, etc.)
 - Find test configuration files (jest.config.js, pytest.ini, etc.)
 - Understand test scripts in package.json or equivalent
 - Check for test-related environment setup requirements
 
 **2. Run Tests**
+
 - Execute tests with verbose output and coverage when available
 - Capture full output including stack traces
 - Run specific test files if scope is limited
@@ -27,6 +29,7 @@ Execute the project's test suite, analyze results comprehensively, and provide c
 
 **3. Analyze Results**
 For each failure, determine:
+
 - Test name and file location
 - Error type (assertion failure, runtime error, timeout, etc.)
 - Stack trace analysis
@@ -38,6 +41,7 @@ For each failure, determine:
   - Missing mock/fixture
 
 **4. Diagnose and Fix**
+
 - Read the failing test code and implementation
 - Understand what the test expects vs what happens
 - Identify the exact cause of failure

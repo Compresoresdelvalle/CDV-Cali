@@ -1,5 +1,5 @@
-import { renderToStaticMarkup } from 'react-dom/server'
-import { QRCodeSVG } from 'qrcode.react'
+import { renderToStaticMarkup } from "react-dom/server";
+import { QRCodeSVG } from "qrcode.react";
 
 /**
  * Abre una ventana de impresión con la etiqueta QR del producto.
@@ -13,8 +13,8 @@ export default function QRPrintLabel({ referencia, nombre }) {
   const handlePrint = () => {
     // Generar SVG del QR como HTML estático
     const svgMarkup = renderToStaticMarkup(
-      <QRCodeSVG value={referencia} size={150} level="M" marginSize={2} />
-    )
+      <QRCodeSVG value={referencia} size={150} level="M" marginSize={2} />,
+    );
 
     const html = `<!DOCTYPE html>
 <html lang="es">
@@ -56,14 +56,14 @@ export default function QRPrintLabel({ referencia, nombre }) {
   </div>
   <script>window.onload = () => { window.print(); window.close(); }<\/script>
 </body>
-</html>`
+</html>`;
 
-    const win = window.open('', '_blank', 'width=400,height=300')
+    const win = window.open("", "_blank", "width=400,height=300");
     if (win) {
-      win.document.write(html)
-      win.document.close()
+      win.document.write(html);
+      win.document.close();
     }
-  }
+  };
 
   return (
     <button
@@ -76,15 +76,43 @@ export default function QRPrintLabel({ referencia, nombre }) {
       <PrinterIcon />
       Imprimir etiqueta
     </button>
-  )
+  );
 }
 
 function PrinterIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M6 9V2h12v7" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-      <rect x="6" y="14" width="12" height="8" rx="1" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M6 9V2h12v7"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect
+        x="6"
+        y="14"
+        width="12"
+        height="8"
+        rx="1"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
-  )
+  );
 }
