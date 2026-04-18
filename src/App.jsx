@@ -20,6 +20,12 @@ import CompraHistorial from "./pages/ops/CompraHistorial";
 import CompraNueva from "./pages/ops/CompraNueva";
 import DevolucionHistorial from "./pages/ops/DevolucionHistorial";
 import DevolucionNueva from "./pages/ops/DevolucionNueva";
+import TraspasoHistorial from "./pages/ops/TraspasoHistorial";
+import TraspasoNuevo from "./pages/ops/TraspasoNuevo";
+import TraspasoDetalle from "./pages/ops/TraspasoDetalle";
+import PickingPage from "./pages/ops/PickingPage";
+import VerificacionTraspaso from "./pages/ops/VerificacionTraspaso";
+import RecepcionTraspaso from "./pages/ops/RecepcionTraspaso";
 
 // Placeholder genérico para módulos aún no implementados
 function Placeholder({ name }) {
@@ -131,11 +137,52 @@ export default function App() {
               </RoleGuard>
             }
           />
+          {/* Traspasos — Fase 6 */}
           <Route
-            path="traspasos/*"
+            path="traspasos"
             element={
               <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
-                <Placeholder name="Traspasos" />
+                <TraspasoHistorial />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="traspasos/nuevo"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <TraspasoNuevo />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="traspasos/:id"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
+                <TraspasoDetalle />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="traspasos/:id/picking"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <PickingPage />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="traspasos/:id/verificar"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <VerificacionTraspaso />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="traspasos/:id/recibir"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
+                <RecepcionTraspaso />
               </RoleGuard>
             }
           />
