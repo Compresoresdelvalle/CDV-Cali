@@ -34,6 +34,11 @@ const MODIFIER = {
   pendiente: "status-warning",
   // Devolución states
   procesada: "status-success",
+  // Traspaso states
+  picking: "status-warning",
+  verificado: "status-info",
+  en_transito: "status-info",
+  con_diferencia: "status-danger",
 };
 
 const DEFAULT_LABEL = {
@@ -58,6 +63,12 @@ const DEFAULT_LABEL = {
   pendiente: "Pendiente",
   // Devolución states
   procesada: "Procesada",
+  // Traspaso states
+  borrador: "Pendiente",
+  picking: "En Picking",
+  verificado: "Verificado",
+  en_transito: "En Tránsito",
+  con_diferencia: "Con Diferencia",
 };
 
 export default function StatusBadge({ status, children, className = "" }) {
