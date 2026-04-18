@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { Outlet, NavLink, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { ROLE_MODULES, MODULE_ROUTES } from "../../lib/constants";
+import { supabase } from "../../lib/supabase";
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 const getInitials = (name = "") =>
@@ -388,10 +389,55 @@ function Sidebar({
   );
 }
 
+/* ── Hook: conteo de alertas de stock ────────────────────────────────── */
+function useAlertasCount(perfil) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!perfil?.id) return;
+
+    const fetchCount = async () => {
+      let q = supabase
+        .from("inventario")
+        .select("id", { count: "exact", head: true })
+        .in("estado_stock", ["Bajo", "Agotado"]);
+
+      // No-Admin: filtrar solo su sede
+      if (perfil.rol !== "Admin" && perfil.sede_id) {
+        q = q.eq("sede_id", perfil.sede_id);
+      }
+
+      const { count: c } = await q;
+      setCount(c ?? 0);
+    };
+
+    fetchCount();
+
+    // Actualizar en tiempo real cuando cambia el inventario
+    const channel = supabase
+      .channel("alertas-stock-count")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inventario" },
+        fetchCount,
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [perfil?.id, perfil?.rol, perfil?.sede_id]);
+
+  return count;
+}
+
 /* ── AppShell ─────────────────────────────────────────────────────────── */
 export default function AppShell() {
   const { perfil, logout } = useAuthStore();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
+
+  const alertCount = useAlertasCount(perfil);
 
   const rol = perfil?.rol ?? "";
   const modulos = ROLE_MODULES[rol] ?? [];
@@ -484,6 +530,7 @@ export default function AppShell() {
           {/* Right actions */}
           <div className="flex items-center gap-2 ml-auto">
             <button
+              onClick={() => navigate("/ops/inventario")}
               className="relative p-2 rounded-lg transition-colors cursor-pointer"
               style={{ color: "hsl(var(--muted-foreground))" }}
               onMouseEnter={(e) => {
@@ -494,18 +541,29 @@ export default function AppShell() {
                 e.currentTarget.style.backgroundColor = "";
                 e.currentTarget.style.color = "hsl(var(--muted-foreground))";
               }}
-              aria-label="Notificaciones"
+              aria-label={
+                alertCount > 0
+                  ? `${alertCount} alertas de stock`
+                  : "Sin alertas de stock"
+              }
+              title={
+                alertCount > 0
+                  ? `${alertCount} producto${alertCount !== 1 ? "s" : ""} con stock bajo o agotado`
+                  : "Sin alertas de stock"
+              }
             >
               <BellIcon />
-              <span
-                className="absolute -top-0.5 -right-0.5 h-4 w-4 text-[10px] font-bold rounded-full flex items-center justify-center"
-                style={{
-                  backgroundColor: "hsl(var(--destructive))",
-                  color: "hsl(var(--destructive-foreground))",
-                }}
-              >
-                3
-              </span>
+              {alertCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-0.5 text-[10px] font-bold rounded-full flex items-center justify-center"
+                  style={{
+                    backgroundColor: "hsl(var(--destructive))",
+                    color: "hsl(var(--destructive-foreground))",
+                  }}
+                >
+                  {alertCount > 99 ? "99+" : alertCount}
+                </span>
+              )}
             </button>
 
             <div
