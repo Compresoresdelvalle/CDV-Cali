@@ -166,3 +166,29 @@ export async function getAdminClient() {
   const { client } = await loginAs("carlos");
   return client;
 }
+
+// Stock inicial del seed — valores de 20260404000003_fase1_03_seed_data.sql
+const STOCK_INICIAL = {
+  "FA-2236": { "BOD-PRINCIPAL": 15, "ALM-01": 1 },
+  "MG-AP-10": { "BOD-PRINCIPAL": 12 },
+  "MN-150": { "BOD-PRINCIPAL": 7 },
+  "CMP-2HP-24": { "BOD-PRINCIPAL": 4 },
+};
+
+/**
+ * Resetea el stock de los productos de prueba a los valores del seed inicial.
+ * Llamar en beforeAll de cada test file para aislar corridas consecutivas.
+ * Carlos (Admin) tiene política inv_modify → puede UPDATE directo en inventario.
+ */
+export async function resetStockPruebas(adminClient) {
+  for (const [referencia, sedes] of Object.entries(STOCK_INICIAL)) {
+    const prod = await getProductoId(adminClient, referencia);
+    for (const [sedeId, cantidad] of Object.entries(sedes)) {
+      await adminClient
+        .from("inventario")
+        .update({ cantidad, updated_at: new Date().toISOString() })
+        .eq("producto_id", prod.id)
+        .eq("sede_id", sedeId);
+    }
+  }
+}
