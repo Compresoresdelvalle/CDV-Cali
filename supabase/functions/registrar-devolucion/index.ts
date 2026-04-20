@@ -28,15 +28,7 @@ serve(async (req: Request) => {
     );
 
     const body = await req.json();
-    const {
-      tipo,
-      producto_id,
-      sede_id,
-      cantidad,
-      motivo,
-      venta_id,
-      compra_id,
-    } = body;
+    const { tipo, producto_id, sede_id, cantidad, motivo, venta_id } = body;
 
     if (!tipo || !producto_id || !sede_id || !cantidad) {
       return new Response(
@@ -58,7 +50,6 @@ serve(async (req: Request) => {
       p_cantidad: cantidad,
       p_motivo: motivo ?? null,
       p_venta_id: venta_id ?? null,
-      p_compra_id: compra_id ?? null,
     });
 
     if (error) {

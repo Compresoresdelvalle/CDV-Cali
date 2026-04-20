@@ -11,9 +11,10 @@ export default defineConfig(({ mode }) => {
       environment: "node",
       setupFiles: ["./tests/setup.js"],
       env,
-      // Run integration tests sequentially in a single fork to avoid
-      // Supabase rate limits and to keep stock assertions deterministic
-      singleThread: true,
+      // Run integration tests sequentially to avoid Supabase rate limits
+      // and keep stock assertions deterministic.
+      // fileParallelism=false is required in Vitest 4.x (singleThread was removed).
+      fileParallelism: false,
       testTimeout: 30_000,
       hookTimeout: 30_000,
       include: ["tests/integration/**/*.test.js"],

@@ -21,6 +21,7 @@ import {
   getProducto,
   cleanupVentas,
   getAdminClient,
+  resetStockPruebas,
   USER_IDS,
 } from "../helpers/seed.js";
 
@@ -33,6 +34,7 @@ describe("convertir-cotizacion", () => {
 
   beforeAll(async () => {
     adminClient = await getAdminClient();
+    await resetStockPruebas(adminClient);
 
     const fa = await getProducto(adminClient, "FA-2236");
     stockAntes = {
@@ -41,15 +43,15 @@ describe("convertir-cotizacion", () => {
       cantidad: fa.cantidad,
     };
 
-    // Crear cotización en estado 'aprobada' (el único estado que fn_convertir_cotizacion
-    // acepta sin error — excluye 'vencida' y 'rechazada')
+    // Crear cotización en estado 'enviada' — fn_convertir_cotizacion acepta
+    // 'borrador' o 'enviada'; usa 'aprobada' como estado POST-conversión (guard)
     const { data: cotiz, error: errC } = await adminClient
       .from("cotizaciones")
       .insert({
         sede_id: "BOD-PRINCIPAL",
         vendedor_id: USER_IDS.maria,
         cliente_nombre: "TEST_Cliente Cotizacion",
-        estado: "aprobada",
+        estado: "enviada",
         subtotal: 10000,
         descuento_pct: 0,
         total: 10000,

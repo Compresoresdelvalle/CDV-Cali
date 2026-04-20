@@ -24,6 +24,7 @@ import {
   cleanupTraspasos,
   getAdminClient,
   getProductoId,
+  resetStockPruebas,
 } from "../helpers/seed.js";
 
 const FN = "procesar-traspaso";
@@ -38,6 +39,7 @@ describe("procesar-traspaso — flujo completo", () => {
 
   beforeAll(async () => {
     adminClient = await getAdminClient();
+    await resetStockPruebas(adminClient);
 
     // Producto: FA-2236 en BOD-PRINCIPAL (origen)
     const invOrigen = await getProducto(
@@ -246,6 +248,7 @@ describe("procesar-traspaso — recibir con diferencia", () => {
 
   beforeAll(async () => {
     adminClient = await getAdminClient();
+    await resetStockPruebas(adminClient);
     productoData = await getProductoId(adminClient, "MG-AP-10");
 
     // Crear y avanzar un traspaso hasta en_transito

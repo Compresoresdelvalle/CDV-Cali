@@ -1,69 +1,18 @@
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { formatCOP } from "../../lib/utils";
-
-/* ── Datos mock (en producción conectar a Supabase) ────────────────────── */
-const ALERTS = [
-  { id: 1, message: "12 productos con stock bajo", severity: "warning" },
-  { id: 2, message: "3 productos agotados", severity: "danger" },
-  {
-    id: 3,
-    message: "2 herramientas pendientes de devolución",
-    severity: "warning",
-  },
-  {
-    id: 4,
-    message: "Traspaso #T-0090 pendiente de recepción",
-    severity: "info",
-  },
-];
-
-const ACTIVITY = [
-  {
-    id: 1,
-    action: "Venta #V-0421 creada",
-    user: "María López",
-    time: "Hace 12 min",
-    type: "venta",
-  },
-  {
-    id: 2,
-    action: "Traspaso #T-0089 recibido en Almacén Norte",
-    user: "Jorge Ramírez",
-    time: "Hace 34 min",
-    type: "traspaso",
-  },
-  {
-    id: 3,
-    action: "Stock bajo: Compresor 5HP (3 uds)",
-    user: "Sistema",
-    time: "Hace 1h",
-    type: "alerta",
-  },
-  {
-    id: 4,
-    action: "Compra #C-0155 registrada",
-    user: "Carlos Méndez",
-    time: "Hace 2h",
-    type: "compra",
-  },
-  {
-    id: 5,
-    action: "Orden de servicio #OS-0033 completada",
-    user: "Luis García",
-    time: "Hace 3h",
-    type: "servicio",
-  },
-];
+import { supabase } from "../../lib/supabase";
 
 const ACTIVITY_DOT = {
   venta: "hsl(var(--success))",
-  traspaso: "hsl(var(--info))",
-  alerta: "hsl(var(--warning))",
+  traspaso_entrada: "hsl(var(--info))",
+  traspaso_salida: "hsl(var(--info))",
+  ajuste: "hsl(var(--warning))",
   compra: "hsl(var(--primary))",
-  servicio: "hsl(var(--muted-foreground))",
+  devolucion: "hsl(var(--muted-foreground))",
 };
 
 const ALERT_LABEL = {
@@ -73,7 +22,7 @@ const ALERT_LABEL = {
 };
 
 /* ── KPI Card ──────────────────────────────────────────────────────────── */
-function KpiCard({ title, value, subtitle, trend, icon }) {
+function KpiCard({ title, value, subtitle, trend, icon, loading }) {
   return (
     <div className="kpi-card animate-fade-in">
       <div className="flex items-center justify-between mb-2">
@@ -89,11 +38,18 @@ function KpiCard({ title, value, subtitle, trend, icon }) {
         className="text-2xl font-bold leading-tight"
         style={{ color: "hsl(var(--foreground))" }}
       >
-        {value}
+        {loading ? (
+          <span
+            className="inline-block w-20 h-7 rounded animate-pulse"
+            style={{ backgroundColor: "hsl(var(--muted))" }}
+          />
+        ) : (
+          value
+        )}
       </p>
       {(subtitle || trend) && (
         <div className="flex items-center gap-2 mt-1">
-          {trend && (
+          {trend && !loading && (
             <span
               className="text-xs font-medium"
               style={{
@@ -181,6 +137,8 @@ const ICONS = {
   wrench:
     "M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z",
   chevron: "M9 18l6-6-6-6",
+  refresh:
+    "M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15",
 };
 
 const ROL_LABEL = {
@@ -190,10 +148,46 @@ const ROL_LABEL = {
   Tecnico: "Técnico",
 };
 
+function formatTimeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Ahora";
+  if (mins < 60) return `Hace ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Hace ${hrs}h`;
+  return `Hace ${Math.floor(hrs / 24)}d`;
+}
+
+function trendPercent(hoy, ayer) {
+  if (!ayer || ayer === 0) return null;
+  const pct = Math.round(((hoy - ayer) / ayer) * 100);
+  return { value: `${Math.abs(pct)}%`, positive: pct >= 0 };
+}
+
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
 export default function Dashboard() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
+
+  const [kpis, setKpis] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const cargarKpis = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const { data, error: err } = await supabase.rpc("fn_dashboard_kpis");
+    if (err) {
+      setError(err.message);
+    } else {
+      setKpis(data);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    cargarKpis();
+  }, [cargarKpis]);
 
   const nombre = perfil?.nombre?.split(" ")[0] ?? "Usuario";
   const rol = ROL_LABEL[perfil?.rol] ?? perfil?.rol ?? "";
@@ -203,6 +197,12 @@ export default function Dashboard() {
     day: "numeric",
     month: "long",
   });
+
+  const ventasHoy = kpis?.ventas_hoy ?? 0;
+  const ventasAyer = kpis?.ventas_ayer ?? 0;
+  const trend = trendPercent(ventasHoy, ventasAyer);
+  const alertas = kpis?.alertas ?? [];
+  const actividad = kpis?.actividad_reciente ?? [];
 
   /* Quick actions filtered by role */
   const QUICK_ACTIONS = [
@@ -247,35 +247,77 @@ export default function Dashboard() {
       <PageHeader
         title={`Bienvenido, ${nombre}`}
         description={`${rol}${sede ? ` · ${sede}` : ""} · ${fecha}`}
+        actions={
+          <button
+            onClick={cargarKpis}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-colors"
+            style={{
+              borderColor: "hsl(var(--border))",
+              backgroundColor: "hsl(var(--card))",
+              color: "hsl(var(--muted-foreground))",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.color = "hsl(var(--foreground))")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.color = "hsl(var(--muted-foreground))")
+            }
+          >
+            <Icon d={ICONS.refresh} size={13} />
+            Actualizar
+          </button>
+        }
       />
+
+      {error && (
+        <div
+          className="px-4 py-3 rounded-lg text-sm"
+          style={{
+            backgroundColor: "hsl(var(--destructive) / 0.1)",
+            color: "hsl(var(--destructive))",
+          }}
+        >
+          Error al cargar datos: {error}
+        </div>
+      )}
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <KpiCard
           title="Ventas hoy"
-          value="$2.4M"
+          value={formatCOP(ventasHoy)}
           icon={<Icon d={ICONS.dollar} size={15} />}
-          trend={{ value: "12%", positive: true }}
+          trend={trend}
           subtitle="vs. ayer"
+          loading={loading}
         />
         <KpiCard
-          title="Productos"
-          value="2,847"
+          title="Productos activos"
+          value={(kpis?.total_productos_activos ?? 0).toLocaleString("es-CO")}
           icon={<Icon d={ICONS.package} size={15} />}
-          subtitle="en 4 sedes"
+          subtitle="en catálogo"
+          loading={loading}
         />
         <KpiCard
-          title="Órdenes pendientes"
-          value="7"
-          icon={<Icon d={ICONS.clock} size={15} />}
-          trend={{ value: "2", positive: false }}
-          subtitle="nuevas hoy"
-        />
-        <KpiCard
-          title="Alertas activas"
-          value="17"
+          title="Alertas de stock"
+          value={kpis?.alertas_count ?? 0}
           icon={<Icon d={ICONS.alert} size={15} />}
-          subtitle="requieren atención"
+          subtitle="bajo o agotado"
+          loading={loading}
+        />
+        <KpiCard
+          title="Actividad hoy"
+          value={
+            actividad.filter(
+              (a) =>
+                a.created_at &&
+                new Date(a.created_at).toDateString() ===
+                  new Date().toDateString(),
+            ).length
+          }
+          icon={<Icon d={ICONS.clock} size={15} />}
+          subtitle="movimientos"
+          loading={loading}
         />
       </div>
 
@@ -308,10 +350,10 @@ export default function Dashboard() {
               className="text-xs font-semibold uppercase tracking-wide"
               style={{ color: "hsl(var(--muted-foreground))" }}
             >
-              Alertas
+              Alertas de stock
             </h3>
             <button
-              onClick={() => navigate("/admin/alertas")}
+              onClick={() => navigate("/ops/inventario")}
               className="flex items-center gap-1 text-xs transition-colors cursor-pointer"
               style={{ color: "hsl(var(--muted-foreground))" }}
               onMouseEnter={(e) =>
@@ -321,43 +363,60 @@ export default function Dashboard() {
                 (e.currentTarget.style.color = "hsl(var(--muted-foreground))")
               }
             >
-              Ver todas
+              Ver inventario
               <Icon d={ICONS.chevron} size={12} />
             </button>
           </div>
           <div className="space-y-2">
-            {ALERTS.map((alert) => (
-              <div
-                key={alert.id}
-                className="flex items-center gap-3 p-3 rounded-lg border"
-                style={{
-                  borderColor: "hsl(var(--border))",
-                  backgroundColor: "hsl(var(--card))",
-                }}
+            {loading ? (
+              [1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-11 rounded-lg animate-pulse"
+                  style={{ backgroundColor: "hsl(var(--muted))" }}
+                />
+              ))
+            ) : alertas.length === 0 ? (
+              <p
+                className="text-sm py-4 text-center"
+                style={{ color: "hsl(var(--muted-foreground))" }}
               >
-                <span
+                Sin alertas activas ✓
+              </p>
+            ) : (
+              alertas.map((alert, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 p-3 rounded-lg border"
                   style={{
-                    color:
-                      alert.severity === "danger"
-                        ? "hsl(var(--destructive))"
-                        : alert.severity === "warning"
-                          ? "hsl(var(--warning))"
-                          : "hsl(var(--info))",
+                    borderColor: "hsl(var(--border))",
+                    backgroundColor: "hsl(var(--card))",
                   }}
                 >
-                  <Icon d={ICONS.alert} size={15} />
-                </span>
-                <span
-                  className="text-sm flex-1 min-w-0 truncate"
-                  style={{ color: "hsl(var(--foreground))" }}
-                >
-                  {alert.message}
-                </span>
-                <StatusBadge status={alert.severity}>
-                  {ALERT_LABEL[alert.severity]}
-                </StatusBadge>
-              </div>
-            ))}
+                  <span
+                    style={{
+                      color:
+                        alert.severity === "danger"
+                          ? "hsl(var(--destructive))"
+                          : alert.severity === "warning"
+                            ? "hsl(var(--warning))"
+                            : "hsl(var(--info))",
+                    }}
+                  >
+                    <Icon d={ICONS.alert} size={15} />
+                  </span>
+                  <span
+                    className="text-sm flex-1 min-w-0 truncate"
+                    style={{ color: "hsl(var(--foreground))" }}
+                  >
+                    {alert.message}
+                  </span>
+                  <StatusBadge status={alert.severity}>
+                    {ALERT_LABEL[alert.severity] ?? alert.severity}
+                  </StatusBadge>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -370,38 +429,59 @@ export default function Dashboard() {
             Actividad reciente
           </h3>
           <div className="space-y-1">
-            {ACTIVITY.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-3 p-2.5 rounded-lg transition-colors"
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.backgroundColor =
-                    "hsl(var(--muted) / 0.5)")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.backgroundColor = "")
-                }
-              >
+            {loading ? (
+              [1, 2, 3, 4, 5].map((i) => (
                 <div
-                  className="w-2 h-2 rounded-full mt-1.5 shrink-0"
-                  style={{ backgroundColor: ACTIVITY_DOT[item.type] }}
+                  key={i}
+                  className="h-10 rounded-lg animate-pulse"
+                  style={{ backgroundColor: "hsl(var(--muted))" }}
                 />
-                <div className="flex-1 min-w-0">
-                  <p
-                    className="text-sm leading-tight"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {item.action}
-                  </p>
-                  <p
-                    className="text-xs mt-0.5"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {item.user} · {item.time}
-                  </p>
+              ))
+            ) : actividad.length === 0 ? (
+              <p
+                className="text-sm py-4 text-center"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                Sin actividad reciente
+              </p>
+            ) : (
+              actividad.map((item, i) => (
+                <div
+                  key={i}
+                  className="flex items-start gap-3 p-2.5 rounded-lg transition-colors"
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.backgroundColor =
+                      "hsl(var(--muted) / 0.5)")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.backgroundColor = "")
+                  }
+                >
+                  <div
+                    className="w-2 h-2 rounded-full mt-1.5 shrink-0"
+                    style={{
+                      backgroundColor:
+                        ACTIVITY_DOT[item.type] ??
+                        "hsl(var(--muted-foreground))",
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className="text-sm leading-tight truncate"
+                      style={{ color: "hsl(var(--foreground))" }}
+                    >
+                      {item.action}
+                    </p>
+                    <p
+                      className="text-xs mt-0.5"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      {item.user} · {formatTimeAgo(item.created_at)}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

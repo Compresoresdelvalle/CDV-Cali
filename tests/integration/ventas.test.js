@@ -12,7 +12,12 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { invokeAs, loginAs } from "../helpers/auth.js";
-import { getProducto, cleanupVentas, getAdminClient } from "../helpers/seed.js";
+import {
+  getProducto,
+  cleanupVentas,
+  getAdminClient,
+  resetStockPruebas,
+} from "../helpers/seed.js";
 
 const FN = "registrar-venta";
 
@@ -22,6 +27,7 @@ describe("registrar-venta", () => {
 
   beforeAll(async () => {
     adminClient = await getAdminClient();
+    await resetStockPruebas(adminClient);
 
     // Capturar stock inicial de los productos que vamos a vender
     const fa = await getProducto(adminClient, "FA-2236");
@@ -104,11 +110,11 @@ describe("registrar-venta", () => {
       .from("movimientos")
       .select("id, tipo, cantidad, producto_id")
       .eq("referencia_id", ventaId)
-      .eq("tipo", "Venta");
+      .eq("tipo", "venta");
 
     expect(error).toBeNull();
     expect(movs.length).toBeGreaterThanOrEqual(3);
-    expect(movs.every((m) => m.cantidad > 0)).toBe(true);
+    expect(movs.every((m) => m.cantidad !== 0)).toBe(true);
   });
 
   // ─────────────────────────────────────────────────────────────

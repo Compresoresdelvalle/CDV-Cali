@@ -16,7 +16,11 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { invokeAs } from "../helpers/auth.js";
-import { getProducto, getAdminClient } from "../helpers/seed.js";
+import {
+  getProducto,
+  getAdminClient,
+  resetStockPruebas,
+} from "../helpers/seed.js";
 
 const FN = "registrar-devolucion";
 
@@ -26,6 +30,7 @@ describe("registrar-devolucion", () => {
 
   beforeAll(async () => {
     adminClient = await getAdminClient();
+    await resetStockPruebas(adminClient);
     const fa = await getProducto(adminClient, "FA-2236");
     productoId = fa.producto_id;
   });

@@ -18,6 +18,7 @@ import {
   cleanupVentas,
   getAdminClient,
   getProductoId,
+  resetStockPruebas,
 } from "../helpers/seed.js";
 
 const FNS = {
@@ -33,6 +34,7 @@ describe("permisos — rol Vendedor", () => {
 
   beforeAll(async () => {
     adminClient = await getAdminClient();
+    await resetStockPruebas(adminClient);
     const prod = await getProductoId(adminClient, "FA-2236");
     productoId = prod.id;
   });
