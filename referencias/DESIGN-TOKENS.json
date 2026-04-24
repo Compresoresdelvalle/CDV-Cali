@@ -1,0 +1,49 @@
+{
+  "colors": {
+    "primary": {
+      "DEFAULT": "#14352A",
+      "light": "#1E5740",
+      "mid": "#2D7A5A"
+    },
+    "accent": {
+      "DEFAULT": "#C8993E",
+      "light": "#DFBA6E"
+    },
+    "admin": {
+      "DEFAULT": "#1A1A2E",
+      "accent": "#E94560",
+      "bg": "#F5F5FA"
+    },
+    "surface": {
+      "DEFAULT": "#F4F1EB",
+      "alt": "#EDE9E0",
+      "card": "#FFFFFF"
+    },
+    "text": {
+      "primary": "#151515",
+      "secondary": "#636B74",
+      "muted": "#9CA3AB"
+    },
+    "border": {
+      "DEFAULT": "#E2DED5",
+      "light": "#F0EDE6"
+    },
+    "stock": {
+      "ok": "#0B8A57",
+      "low": "#C47F17",
+      "out": "#C0392B",
+      "over": "#2563EB"
+    }
+  },
+  "font": "'Segoe UI', 'SF Pro Display', -apple-system, sans-serif",
+  "spacing": {
+    "touch_target_min": "48px",
+    "card_padding": "16px",
+    "section_gap": "24px"
+  },
+  "breakpoints": {
+    "mobile": "640px",
+    "tablet": "768px",
+    "desktop": "1024px"
+  }
+}
