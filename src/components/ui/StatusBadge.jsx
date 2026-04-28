@@ -38,6 +38,7 @@ const MODIFIER = {
   picking: "status-warning",
   verificado: "status-info",
   en_transito: "status-info",
+  recibido: "status-success",
   con_diferencia: "status-danger",
 };
 
@@ -64,10 +65,10 @@ const DEFAULT_LABEL = {
   // Devolución states
   procesada: "Procesada",
   // Traspaso states
-  borrador: "Pendiente",
   picking: "En Picking",
   verificado: "Verificado",
   en_transito: "En Tránsito",
+  recibido: "Recibido",
   con_diferencia: "Con Diferencia",
 };
 

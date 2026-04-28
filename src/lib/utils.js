@@ -13,3 +13,5 @@ export const formatDate = (date) =>
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(date));
+
+export const sanitizeSearch = (q) => q.replace(/[,.*()\\]/g, "");

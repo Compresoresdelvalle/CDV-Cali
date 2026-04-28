@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
+import { sanitizeSearch } from "../lib/utils";
 
 const PAGE_SIZE = 50;
 
@@ -56,8 +57,9 @@ export const useInventarioStore = create((set, get) => ({
 
       // Búsqueda server-side: primero obtenemos IDs de productos que coinciden
       let productoIds = null;
-      const busqueda = s.filtroBusqueda.trim();
-      if (busqueda) {
+      const busquedaRaw = s.filtroBusqueda.trim();
+      if (busquedaRaw) {
+        const busqueda = sanitizeSearch(busquedaRaw);
         const { data: prods } = await supabase
           .from("productos")
           .select("id")
