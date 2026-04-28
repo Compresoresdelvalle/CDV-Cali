@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP } from "../../lib/utils";
+import { formatCOP, sanitizeSearch } from "../../lib/utils";
 import QRScanner from "../../components/forms/QRScanner";
 import PageHeader from "../../components/layout/PageHeader";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
@@ -34,17 +34,18 @@ export default function VentaNueva() {
 
   const buscarProductos = useCallback(
     async (q) => {
-      if (!q || q.trim().length < 2) {
+      if (!q || q.trim().length < 2 || !perfil?.sede_id) {
         setResultados([]);
         return;
       }
       setBuscando(true);
       try {
+        const safe = sanitizeSearch(q.trim());
         const { data: prods, error: e1 } = await supabase
           .from("productos")
           .select("id, nombre, referencia, precio_venta, unidad_medida")
           .eq("activo", true)
-          .or(`nombre.ilike.%${q}%,referencia.ilike.%${q}%`)
+          .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
           .limit(10);
         if (e1) throw e1;
         if (!prods?.length) {

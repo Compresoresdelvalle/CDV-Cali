@@ -220,6 +220,21 @@ input[type="number"] {
   animation: shake 0.4s ease-in-out;
 }
 
+.animate-fade-up {
+  animation: fade-up 0.3s ease-out;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ── Texto de marca ─────────────────────────────────────────────────────── */
 .font-brand {
   font-family: "IBM Plex Sans", system-ui, sans-serif;

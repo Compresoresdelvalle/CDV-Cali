@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
+import { sanitizeSearch } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 
@@ -37,11 +38,12 @@ export default function DevolucionNueva() {
     }
     setBuscando(true);
     try {
+      const safe = sanitizeSearch(q.trim());
       const { data, error: e } = await supabase
         .from("productos")
         .select("id, nombre, referencia, unidad_medida")
         .eq("activo", true)
-        .or(`nombre.ilike.%${q}%,referencia.ilike.%${q}%`)
+        .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
         .limit(8);
       if (e) throw e;
       setResultados(data ?? []);
