@@ -99,11 +99,3 @@ export const ADMIN_MODULES = [
   { nombre: "Usuarios", icon: "👥", ruta: "/admin/usuarios" },
   { nombre: "Top 10", icon: "🏆", ruta: "/admin/top10" },
 ];
-
-// Formato de moneda COP
-export const formatCOP = (value) =>
-  new Intl.NumberFormat("es-CO", {
-    style: "currency",
-    currency: "COP",
-    minimumFractionDigits: 0,
-  }).format(value);

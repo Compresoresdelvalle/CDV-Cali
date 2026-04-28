@@ -4,17 +4,9 @@ import { supabase } from "../../lib/supabase";
 
 const SCANNER_ID = "qr-scanner-viewport";
 
-/**
- * Modal que abre la cámara trasera y escanea un código QR.
- * Al escanear una referencia de producto, llama a onFound(productoId).
- *
- * Props:
- *   onFound:  (productoId: string) => void
- *   onClose:  () => void
- */
 export default function QRScanner({ onFound, onClose }) {
   const scannerRef = useRef(null);
-  const [status, setStatus] = useState("starting"); // 'starting' | 'scanning' | 'found' | 'error'
+  const [status, setStatus] = useState("starting");
   const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
@@ -34,14 +26,12 @@ export default function QRScanner({ onFound, onClose }) {
             stopped = true;
             setStatus("found");
 
-            // Detener la cámara antes de la consulta
             try {
               await scanner.stop();
             } catch {
               /* ignore */
             }
 
-            // Buscar el producto por referencia
             const { data } = await supabase
               .from("productos")
               .select("id")
@@ -56,9 +46,7 @@ export default function QRScanner({ onFound, onClose }) {
               setErrorMsg(`Referencia no encontrada: ${decodedText}`);
             }
           },
-          () => {
-            /* errores de frame — ignorar */
-          },
+          () => {},
         );
         if (!stopped) setStatus("scanning");
       } catch (err) {
@@ -78,34 +66,43 @@ export default function QRScanner({ onFound, onClose }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    /* Backdrop */
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      {/* Panel */}
       <div
-        className="w-full sm:w-auto sm:min-w-[360px] bg-white rounded-t-2xl sm:rounded-2xl
-                      shadow-2xl overflow-hidden animate-fade-up"
+        className="w-full sm:w-auto sm:min-w-[360px] rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden animate-fade-up"
+        style={{ backgroundColor: "hsl(var(--card))" }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div
+          className="flex items-center justify-between px-5 py-4 border-b"
+          style={{ borderColor: "hsl(var(--border))" }}
+        >
           <div className="flex items-center gap-3">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ backgroundColor: "#EBF5F0" }}
+              style={{ backgroundColor: "hsl(var(--primary) / 0.1)" }}
             >
               <QRIcon />
             </div>
             <div>
-              <p className="font-semibold text-text text-sm">Escáner QR</p>
-              <p className="text-text-muted text-xs">
+              <p
+                className="font-semibold text-sm"
+                style={{ color: "hsl(var(--foreground))" }}
+              >
+                Escáner QR
+              </p>
+              <p
+                className="text-xs"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
                 {status === "scanning"
                   ? "Apunta al código QR del producto"
                   : status === "found"
-                    ? "Código encontrado ✓"
+                    ? "Código encontrado"
                     : status === "error"
                       ? "Error al escanear"
                       : "Iniciando cámara..."}
@@ -114,28 +111,29 @@ export default function QRScanner({ onFound, onClose }) {
           </div>
           <button
             onClick={onClose}
-            className="w-9 h-9 flex items-center justify-center rounded-xl
-                       text-text-sub hover:text-text hover:bg-surface
-                       transition-colors cursor-pointer"
+            className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors cursor-pointer"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "hsl(var(--muted))";
+              e.currentTarget.style.color = "hsl(var(--foreground))";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "";
+              e.currentTarget.style.color = "hsl(var(--muted-foreground))";
+            }}
             aria-label="Cerrar escáner"
           >
             <CloseIcon />
           </button>
         </div>
 
-        {/* Viewport */}
         <div className="relative bg-black" style={{ height: 300 }}>
-          {/* El div donde Html5Qrcode inyecta el video */}
           <div id={SCANNER_ID} className="w-full h-full" />
 
-          {/* Overlay de estado */}
           {status === "starting" && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60">
               <div className="flex flex-col items-center gap-3 text-white">
-                <div
-                  className="w-8 h-8 border-2 border-white/30 border-t-white
-                                rounded-full animate-spin"
-                />
+                <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 <p className="text-sm">Iniciando cámara…</p>
               </div>
             </div>
@@ -146,7 +144,7 @@ export default function QRScanner({ onFound, onClose }) {
               <div className="flex flex-col items-center gap-2 text-white">
                 <div
                   className="w-12 h-12 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: "#0B8A57" }}
+                  style={{ backgroundColor: "hsl(var(--success))" }}
                 >
                   <CheckIcon />
                 </div>
@@ -156,23 +154,47 @@ export default function QRScanner({ onFound, onClose }) {
           )}
         </div>
 
-        {/* Error / retry */}
         {status === "error" && (
-          <div className="px-5 py-4 bg-red-50 border-t border-red-100">
-            <p className="text-sm text-red-700 font-medium">⚠ {errorMsg}</p>
-            <p className="text-xs text-red-500 mt-1">
+          <div
+            className="px-5 py-4 border-t"
+            style={{
+              backgroundColor: "hsl(var(--destructive) / 0.05)",
+              borderColor: "hsl(var(--destructive) / 0.2)",
+            }}
+          >
+            <p
+              className="text-sm font-medium"
+              style={{ color: "hsl(var(--destructive))" }}
+            >
+              {errorMsg}
+            </p>
+            <p
+              className="text-xs mt-1"
+              style={{ color: "hsl(var(--destructive) / 0.7)" }}
+            >
               Verifica que el QR corresponda a un producto del sistema.
             </p>
           </div>
         )}
 
-        {/* Footer */}
-        <div className="px-5 py-4 border-t border-border">
+        <div
+          className="px-5 py-4 border-t"
+          style={{ borderColor: "hsl(var(--border))" }}
+        >
           <button
             onClick={onClose}
-            className="w-full py-3 rounded-xl text-sm font-semibold
-                       bg-surface text-text-sub hover:bg-border
-                       transition-colors cursor-pointer min-h-[48px]"
+            className="w-full py-3 rounded-xl text-sm font-semibold transition-colors cursor-pointer min-h-[48px]"
+            style={{
+              backgroundColor: "hsl(var(--muted) / 0.5)",
+              color: "hsl(var(--muted-foreground))",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.backgroundColor = "hsl(var(--muted))")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.backgroundColor =
+                "hsl(var(--muted) / 0.5)")
+            }
           >
             Cancelar
           </button>
@@ -189,11 +211,12 @@ function QRIcon() {
       height="18"
       viewBox="0 0 24 24"
       fill="none"
-      stroke="#14352A"
+      stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
+      style={{ color: "hsl(var(--primary))" }}
     >
       <rect x="3" y="3" width="7" height="7" rx="1" />
       <rect x="14" y="3" width="7" height="7" rx="1" />

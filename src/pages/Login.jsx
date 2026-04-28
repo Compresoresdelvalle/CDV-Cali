@@ -380,7 +380,7 @@ export default function Login() {
         </div>
 
         <p className="text-xs text-white/25">
-          © 2025 Compresores del Valle S.A.S. · Cali, Colombia
+          © 2026 Compresores del Valle S.A.S. · Cali, Colombia
         </p>
       </div>
 
@@ -540,7 +540,7 @@ export default function Login() {
           </div>
 
           <p className="lg:hidden text-center mt-6 text-[10px] text-white/20">
-            © 2025 Compresores del Valle S.A.S.
+            © 2026 Compresores del Valle S.A.S.
           </p>
         </div>
       </div>
