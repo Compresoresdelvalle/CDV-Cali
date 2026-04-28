@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
-import { formatCOP } from "../../lib/utils";
+import { formatCOP, sanitizeSearch } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import QRScanner from "../../components/forms/QRScanner";
 
@@ -101,11 +101,12 @@ export default function CotizacionEditar() {
     }
     setBuscando(true);
     try {
+      const safe = sanitizeSearch(q.trim());
       const { data, error: err } = await supabase
         .from("productos")
         .select("id, nombre, referencia, precio_venta, unidad_medida")
         .eq("activo", true)
-        .or(`nombre.ilike.%${q}%,referencia.ilike.%${q}%`)
+        .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
         .limit(8);
       if (err) throw err;
       setResultados(data ?? []);

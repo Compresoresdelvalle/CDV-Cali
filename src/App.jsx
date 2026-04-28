@@ -48,9 +48,11 @@ function Placeholder({ name }) {
 export default function App() {
   const init = useAuthStore((s) => s.init);
 
-  // Inicializar sesión al montar
   useEffect(() => {
-    init();
+    const cleanupPromise = init();
+    return () => {
+      cleanupPromise.then((unsub) => unsub?.());
+    };
   }, [init]);
 
   return (
