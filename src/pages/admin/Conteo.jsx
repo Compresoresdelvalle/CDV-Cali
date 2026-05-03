@@ -3,6 +3,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate, sanitizeSearch, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 
 export default function Conteo() {
   const perfil = useAuthStore((s) => s.perfil);
@@ -16,6 +17,7 @@ export default function Conteo() {
   const [modalNuevo, setModalNuevo] = useState(false);
   const [aplicandoId, setAplicandoId] = useState(null);
   const mountedRef = useRef(true);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
     mountedRef.current = true;
@@ -59,12 +61,13 @@ export default function Conteo() {
   }, [filtro]);
 
   const aplicarAjuste = async (conteo) => {
-    if (
-      !confirm(
-        `Aplicar ajuste? Stock sistema: ${conteo.stock_sistema} → físico: ${conteo.stock_fisico} (dif: ${conteo.diferencia})`,
-      )
-    )
-      return;
+    const ok = await confirm({
+      titulo: "Aplicar ajuste de inventario",
+      mensaje: `Stock sistema: ${conteo.stock_sistema} → físico: ${conteo.stock_fisico} (diferencia: ${conteo.diferencia > 0 ? "+" : ""}${conteo.diferencia}). Se registrará un movimiento conteo_ajuste.`,
+      confirmLabel: "Aplicar ajuste",
+      danger: conteo.diferencia < 0,
+    });
+    if (!ok) return;
     setAplicandoId(conteo.id);
     setErrorMsg("");
     setOkMsg("");
@@ -300,6 +303,7 @@ export default function Conteo() {
           }}
         />
       )}
+      <ConfirmDialog />
     </div>
   );
 }
@@ -367,28 +371,18 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
       setError("Stock físico inválido");
       return;
     }
-    if (!productoSel.inventario_id) {
-      setError(
-        "Este producto no tiene inventario en tu sede. Agrégalo primero desde Inventario.",
-      );
-      return;
-    }
     setSaving(true);
     setError("");
     try {
-      // diferencia es columna GENERATED ALWAYS — no se incluye en el INSERT.
-      // inventario_id es NOT NULL.
-      const { error } = await supabase.from("conteos").insert({
-        inventario_id: productoSel.inventario_id,
-        producto_id: productoSel.id,
-        sede_id: perfil.sede_id,
-        stock_sistema: stockSistema,
-        stock_fisico: fisico,
-        contado_por: perfil.id,
-        observaciones: observaciones.trim() || null,
-        ajuste_aplicado: false,
+      // RPC server-side: lee stock_sistema con FOR UPDATE en el momento del
+      // insert (anti-race), valida rol Admin/Bodeguero y sede, calcula diferencia.
+      const { data, error } = await supabase.rpc("fn_registrar_conteo", {
+        p_producto_id: productoSel.id,
+        p_stock_fisico: fisico,
+        p_observaciones: observaciones.trim() || null,
       });
       if (error) throw error;
+      if (data?.ok === false) throw new Error("No se pudo registrar el conteo");
       await onSaved();
     } catch (err) {
       setError(safeError(err, "Error al guardar conteo"));

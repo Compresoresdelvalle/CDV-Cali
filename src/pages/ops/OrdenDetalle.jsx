@@ -10,6 +10,7 @@ import {
 } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 
 const ESTADOS = [
   "abierta",
@@ -39,6 +40,7 @@ export default function OrdenDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [orden, setOrden] = useState(null);
   const [detalles, setDetalles] = useState([]);
@@ -193,10 +195,14 @@ export default function OrdenDetalle() {
   };
 
   const quitarRepuesto = async (detalleId) => {
-    if (
-      !confirm("¿Eliminar este repuesto? El stock será restaurado por la BD.")
-    )
-      return;
+    const ok = await confirm({
+      titulo: "Eliminar repuesto",
+      mensaje:
+        "El stock del componente será restaurado automáticamente. Esta acción registra un movimiento de devolución en BD.",
+      confirmLabel: "Eliminar",
+      danger: true,
+    });
+    if (!ok) return;
     setErrorMsg("");
     try {
       const { error } = await supabase
@@ -597,6 +603,8 @@ export default function OrdenDetalle() {
       >
         ← Volver al historial
       </button>
+
+      <ConfirmDialog />
     </div>
   );
 }

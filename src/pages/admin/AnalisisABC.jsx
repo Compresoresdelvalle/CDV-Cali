@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 
 export default function AnalisisABC() {
   const [productos, setProductos] = useState([]);
@@ -11,6 +12,7 @@ export default function AnalisisABC() {
   const [okMsg, setOkMsg] = useState("");
   const [filtro, setFiltro] = useState("Todos");
   const mountedRef = useRef(true);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
     mountedRef.current = true;
@@ -43,12 +45,13 @@ export default function AnalisisABC() {
   };
 
   const recalcular = async () => {
-    if (
-      !confirm(
-        "¿Recalcular clasificación ABC de TODOS los productos? Esto puede tardar.",
-      )
-    )
-      return;
+    const ok = await confirm({
+      titulo: "Recalcular clasificación ABC",
+      mensaje:
+        "Reclasifica TODOS los productos según ventas de los últimos 90 días. Puede tardar varios segundos.",
+      confirmLabel: "Recalcular",
+    });
+    if (!ok) return;
     setRecalculando(true);
     setErrorMsg("");
     setOkMsg("");
@@ -295,6 +298,7 @@ export default function AnalisisABC() {
           ))}
         </ul>
       )}
+      <ConfirmDialog />
     </div>
   );
 }
