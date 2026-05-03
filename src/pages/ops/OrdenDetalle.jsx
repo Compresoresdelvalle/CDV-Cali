@@ -173,7 +173,11 @@ export default function OrdenDetalle() {
         setAgregando(false);
         return;
       }
-      const costo = producto.precio_venta || producto.costo_promedio || 0;
+      // Para reportes de margen: el COSTO de un repuesto consumido es
+      // costo_promedio (lo que costó adquirirlo), no precio_venta.
+      // Si el cliente paga por la mano de obra + repuestos, el cargo se
+      // hace aparte en costo_mano_obra.
+      const costo = producto.costo_promedio || producto.precio_venta || 0;
       const { error } = await supabase.from("detalle_orden").insert({
         orden_id: id,
         producto_id: producto.id,

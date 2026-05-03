@@ -80,6 +80,11 @@ export default function Usuarios() {
   };
 
   const toggleActivo = async (u) => {
+    // Anti-lockout: el Admin no puede desactivarse a sí mismo
+    if (u.id === perfil?.id && u.activo) {
+      setErrorMsg("No puedes desactivarte a ti mismo (lockout)");
+      return;
+    }
     const ok = await confirm({
       titulo: `${u.activo ? "Desactivar" : "Activar"} usuario`,
       mensaje: `${u.activo ? "Desactivar" : "Activar"} a ${u.nombre}?${u.activo ? " Si tiene sesión activa será cerrada en su próxima request." : ""}`,
@@ -284,6 +289,12 @@ export default function Usuarios() {
               </Field>
               <Field label="Rol">
                 <select
+                  disabled={editando.id === perfil?.id}
+                  title={
+                    editando.id === perfil?.id
+                      ? "No puedes cambiar tu propio rol"
+                      : undefined
+                  }
                   value={editando.rol}
                   onChange={(e) =>
                     setEditando({ ...editando, rol: e.target.value })
@@ -300,6 +311,12 @@ export default function Usuarios() {
               </Field>
               <Field label="Sede">
                 <select
+                  disabled={editando.id === perfil?.id}
+                  title={
+                    editando.id === perfil?.id
+                      ? "No puedes cambiar tu propia sede"
+                      : undefined
+                  }
                   value={editando.sede_id ?? ""}
                   onChange={(e) =>
                     setEditando({ ...editando, sede_id: e.target.value })
