@@ -65,7 +65,9 @@ export default function App() {
   useEffect(() => {
     const cleanupPromise = init();
     return () => {
-      cleanupPromise.then((unsub) => unsub?.());
+      cleanupPromise.then((unsub) => {
+        if (typeof unsub === "function") unsub();
+      });
     };
   }, [init]);
 

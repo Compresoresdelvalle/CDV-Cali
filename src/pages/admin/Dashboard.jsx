@@ -40,10 +40,37 @@ export default function Dashboard() {
     }
   };
 
+  // Refs para evitar closures stale en setInterval
+  const cargarRef = useRef(cargar);
+  cargarRef.current = cargar;
+
   useEffect(() => {
-    cargar();
-    const interval = setInterval(cargar, 60_000); // refresh cada 60s
-    return () => clearInterval(interval);
+    cargarRef.current();
+    let interval = null;
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(() => cargarRef.current(), 60_000);
+    };
+    const stop = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+    // Solo refrescar si la pestaña está visible (ahorra recursos)
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else {
+        cargarRef.current();
+        start();
+      }
+    };
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   if (loading && !kpis) {
@@ -240,9 +267,9 @@ export default function Dashboard() {
               className="space-y-1.5 max-h-[400px] overflow-y-auto"
               role="list"
             >
-              {k.actividad_reciente.map((a, i) => (
+              {k.actividad_reciente.map((a) => (
                 <li
-                  key={i}
+                  key={a.id ?? `${a.created_at}-${a.type}`}
                   className="flex items-start justify-between gap-2 px-2 py-1.5 rounded text-xs border-b"
                   style={{ borderColor: "hsl(var(--border) / 0.5)" }}
                 >
@@ -398,7 +425,12 @@ function LineChart({ data }) {
     .join(" ");
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img">
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full h-auto"
+      role="img"
+      aria-label="Tendencia de ventas últimos 7 días"
+    >
       {/* grid */}
       <line
         x1={PAD}
