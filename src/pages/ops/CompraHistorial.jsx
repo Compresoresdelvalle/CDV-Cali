@@ -60,6 +60,7 @@ export default function CompraHistorial() {
 
   useEffect(() => {
     cargarCompras(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro]);
 
   const marcarRecibida = async (compraId) => {

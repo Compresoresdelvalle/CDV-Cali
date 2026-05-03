@@ -90,6 +90,7 @@ export default function TraspasoHistorial() {
 
   useEffect(() => {
     cargar(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroEstado]);
 
   const sedeLabel = (id) => SEDE_LABELS[id] ?? id;

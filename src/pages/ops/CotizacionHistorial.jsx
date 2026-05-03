@@ -76,6 +76,7 @@ export default function CotizacionHistorial() {
 
   useEffect(() => {
     cargarCotizaciones(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroEstado]);
 
   const convertirEnVenta = async (e, cotizacionId) => {

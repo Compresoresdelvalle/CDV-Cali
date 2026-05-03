@@ -45,6 +45,7 @@ export default function Top10() {
 
   useEffect(() => {
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo]);
 
   const maxUnidades = Math.max(

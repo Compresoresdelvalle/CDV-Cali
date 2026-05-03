@@ -102,6 +102,7 @@ export default function TraspasoDetalle() {
 
   useEffect(() => {
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // ── Acción: iniciar picking ───────────────────────────────
