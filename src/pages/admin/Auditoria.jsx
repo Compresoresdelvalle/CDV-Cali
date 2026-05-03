@@ -125,6 +125,7 @@ export default function Auditoria() {
     setHasMore(true);
     const t = setTimeout(() => cargar(true), 250);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo, sedeId, usuarioId, fechaDesde, fechaHasta, search]);
 
   return (

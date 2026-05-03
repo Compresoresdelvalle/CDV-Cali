@@ -87,6 +87,7 @@ export default function EnsambleHistorial() {
     setHasMore(true);
     cargar(true, ac.signal);
     return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro, perfil?.sede_id]);
 
   return (

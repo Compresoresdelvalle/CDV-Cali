@@ -64,6 +64,7 @@ export default function VentaHistorial() {
 
   useEffect(() => {
     cargarVentas(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroMetodo]);
 
   return (

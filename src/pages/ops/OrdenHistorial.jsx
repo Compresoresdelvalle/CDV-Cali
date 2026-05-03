@@ -95,6 +95,7 @@ export default function OrdenHistorial() {
     setPage(0);
     setHasMore(true);
     cargar(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro, perfil?.sede_id]);
 
   return (

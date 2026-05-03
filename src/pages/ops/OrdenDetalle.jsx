@@ -94,6 +94,7 @@ export default function OrdenDetalle() {
 
   useEffect(() => {
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Buscar productos para agregar repuesto

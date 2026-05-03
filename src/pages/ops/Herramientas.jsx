@@ -105,6 +105,7 @@ export default function Herramientas() {
 
   useEffect(() => {
     cargarUsuarios();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perfil?.sede_id, perfil?.rol]);
 
   useEffect(() => {
@@ -114,6 +115,7 @@ export default function Herramientas() {
       ac.abort();
       clearTimeout(t);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro, search, perfil?.sede_id]);
 
   const devolver = async (h) => {

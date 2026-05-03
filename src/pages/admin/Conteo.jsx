@@ -58,6 +58,7 @@ export default function Conteo() {
 
   useEffect(() => {
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro]);
 
   const aplicarAjuste = async (conteo) => {

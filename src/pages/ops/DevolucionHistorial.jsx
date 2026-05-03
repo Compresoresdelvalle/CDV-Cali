@@ -58,6 +58,7 @@ export default function DevolucionHistorial() {
 
   useEffect(() => {
     cargarDevoluciones(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro]);
 
   // reingresa_stock=true → devolución de cliente (suma stock)
