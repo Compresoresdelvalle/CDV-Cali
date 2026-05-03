@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -91,6 +91,14 @@ export default function TraspasoDetalle() {
       setLoading(false);
     }
   };
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     cargar();
@@ -556,19 +564,19 @@ function ActionPanel({
       bg: "hsl(var(--warning) / 0.06)",
       border: "hsl(var(--warning) / 0.2)",
       btn: "hsl(var(--warning))",
-      btnText: "#fff",
+      btnText: "hsl(var(--primary-foreground))",
     },
     info: {
       bg: "hsl(var(--info) / 0.06)",
       border: "hsl(var(--info) / 0.2)",
       btn: "hsl(var(--info))",
-      btnText: "#fff",
+      btnText: "hsl(var(--primary-foreground))",
     },
     success: {
       bg: "hsl(var(--success) / 0.06)",
       border: "hsl(var(--success) / 0.2)",
       btn: "hsl(var(--success))",
-      btnText: "#fff",
+      btnText: "hsl(var(--primary-foreground))",
     },
   };
 
