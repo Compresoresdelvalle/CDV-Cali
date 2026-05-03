@@ -68,10 +68,13 @@ export default function QRPrintLabel({ referencia, nombre }) {
   return (
     <button
       onClick={handlePrint}
-      className="flex items-center gap-2 px-4 py-2.5 rounded-xl
-                 bg-primary text-white text-sm font-semibold
-                 hover:bg-primary-light active:scale-[0.97]
-                 transition-all duration-150 cursor-pointer min-h-[44px]"
+      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold active:scale-[0.97] transition-all duration-150 cursor-pointer min-h-[44px]"
+      style={{
+        backgroundColor: "hsl(var(--primary))",
+        color: "hsl(var(--primary-foreground))",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
+      onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
     >
       <PrinterIcon />
       Imprimir etiqueta

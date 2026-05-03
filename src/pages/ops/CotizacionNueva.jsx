@@ -140,18 +140,31 @@ export default function CotizacionNueva() {
     setCarrito((prev) => prev.filter((i) => i.producto_id !== productoId));
   };
 
+  // Fórmula consistente con el servidor (evita drifts de redondeo)
+  const IVA_PCT = 19;
   const subtotal = carrito.reduce(
     (s, i) => s + i.cantidad * i.precio_unitario,
     0,
   );
   const descuento = subtotal * (descuentoPct / 100);
   const baseIva = subtotal - descuento;
-  const iva = baseIva * 0.19;
-  const total = baseIva + iva;
+  const iva = baseIva * (IVA_PCT / 100);
+  const total = subtotal * (1 - descuentoPct / 100) * (1 + IVA_PCT / 100);
+
+  // Validación de email igual al CHECK del servidor (RFC simplificado)
+  const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
   const guardarCotizacion = async () => {
     if (carrito.length === 0) return;
     setError(null);
+    if (clienteEmail && !EMAIL_REGEX.test(clienteEmail)) {
+      setError("Email inválido");
+      return;
+    }
+    if (clienteEmail && clienteEmail.length > 254) {
+      setError("Email demasiado largo (máx 254 caracteres)");
+      return;
+    }
     setGuardando(true);
     try {
       const { error: rpcErr } = await supabase.rpc("fn_registrar_cotizacion", {

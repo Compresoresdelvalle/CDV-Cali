@@ -27,17 +27,19 @@ export function useInventario() {
     initiated.current = true;
 
     if (perfil.rol === "Vendedor" && perfil.sede_id) {
-      // Vendedor solo ve su sede → setFiltros actualiza filtroSede y resetea items
-      // El effect de filtroSede abajo disparará el fetch
+      // Vendedor solo ve su sede → setear filtroSede dispara el effect
+      // de re-fetch automáticamente. NO llamar fetchInventario aquí
+      // (causaría doble fetch).
       useInventarioStore.setState({
         filtroSede: perfil.sede_id,
         items: [],
         page: 0,
         hasMore: true,
       });
+    } else {
+      // Admin/Bodeguero: filtroSede ya tiene su valor por defecto, fetch directo
+      store.fetchInventario(false);
     }
-    // Fetch inicial (para Vendedor, filtroSede ya está seteado antes de este call)
-    store.fetchInventario(false);
   }, [perfil]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Re-fetch cuando cambian sede o estado ────────────────────────────

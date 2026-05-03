@@ -51,17 +51,38 @@ export default function QRScanner({ onFound, onClose }) {
         if (!stopped) setStatus("scanning");
       } catch (err) {
         setStatus("error");
-        setErrorMsg(err?.message ?? "No se pudo acceder a la cámara");
+        // Mensaje específico según el error de permisos
+        if (err?.name === "NotAllowedError") {
+          setErrorMsg(
+            "Permiso de cámara denegado. Habilítalo en la configuración del navegador.",
+          );
+        } else if (err?.name === "NotFoundError") {
+          setErrorMsg("No se detectó cámara en este dispositivo.");
+        } else if (
+          location.protocol !== "https:" &&
+          location.hostname !== "localhost"
+        ) {
+          setErrorMsg("La cámara solo funciona en HTTPS o localhost.");
+        } else {
+          setErrorMsg(err?.message ?? "No se pudo acceder a la cámara");
+        }
       }
     };
 
     startScanner();
 
+    // Cleanup robusto: stop() + clear() siempre que exista la instancia,
+    // independiente de isScanning (puede estar en estado "starting" si el
+    // componente se desmonta antes de que start() resuelva).
     return () => {
       stopped = true;
-      if (scannerRef.current?.isScanning) {
-        scannerRef.current.stop().catch(() => {});
-      }
+      const sc = scannerRef.current;
+      if (!sc) return;
+      sc.stop()
+        .catch(() => {}) // no estaba scanning
+        .finally(() => {
+          sc.clear().catch(() => {}); // libera el video element y los tracks
+        });
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

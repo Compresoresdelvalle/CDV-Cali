@@ -176,14 +176,18 @@ export default function VentaNueva() {
     setCarrito((prev) => prev.filter((i) => i.producto_id !== productoId));
   };
 
+  // Misma fórmula que el trigger trg_recalcular_total_venta del servidor:
+  // total = subtotal * (1 - desc/100) * (1 + iva/100)
+  // Esto evita drifts de 1-2 COP por orden de operaciones distinto.
+  const IVA_PCT = 19;
   const subtotal = carrito.reduce(
     (s, i) => s + i.cantidad * i.precio_unitario,
     0,
   );
   const descuento = subtotal * (descuentoPct / 100);
   const baseIva = subtotal - descuento;
-  const iva = baseIva * 0.19;
-  const total = baseIva + iva;
+  const iva = baseIva * (IVA_PCT / 100);
+  const total = subtotal * (1 - descuentoPct / 100) * (1 + IVA_PCT / 100);
 
   const confirmarVenta = async () => {
     if (carrito.length === 0) return;
