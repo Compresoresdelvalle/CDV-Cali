@@ -22,3 +22,4 @@ yarn-debug.log*
 
 # Claude local settings (tokens, personal config)
 .claude/settings.local.json
+.mcp.json

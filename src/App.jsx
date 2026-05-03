@@ -26,6 +26,12 @@ import TraspasoDetalle from "./pages/ops/TraspasoDetalle";
 import PickingPage from "./pages/ops/PickingPage";
 import VerificacionTraspaso from "./pages/ops/VerificacionTraspaso";
 import RecepcionTraspaso from "./pages/ops/RecepcionTraspaso";
+import Herramientas from "./pages/ops/Herramientas";
+import OrdenHistorial from "./pages/ops/OrdenHistorial";
+import OrdenNueva from "./pages/ops/OrdenNueva";
+import OrdenDetalle from "./pages/ops/OrdenDetalle";
+import EnsambleHistorial from "./pages/ops/EnsambleHistorial";
+import EnsambleNuevo from "./pages/ops/EnsambleNuevo";
 
 // Placeholder genérico para módulos aún no implementados
 function Placeholder({ name }) {
@@ -189,18 +195,42 @@ export default function App() {
             }
           />
           <Route
-            path="ordenes/*"
+            path="ordenes"
             element={
-              <RoleGuard roles={["Admin", "Tecnico"]}>
-                <Placeholder name="Órdenes de Servicio" />
+              <RoleGuard roles={["Admin", "Tecnico", "Bodeguero"]}>
+                <OrdenHistorial />
               </RoleGuard>
             }
           />
           <Route
-            path="ensambles/*"
+            path="ordenes/nueva"
+            element={
+              <RoleGuard roles={["Admin", "Tecnico"]}>
+                <OrdenNueva />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="ordenes/:id"
+            element={
+              <RoleGuard roles={["Admin", "Tecnico", "Bodeguero"]}>
+                <OrdenDetalle />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="ensambles"
             element={
               <RoleGuard roles={["Admin", "Bodeguero", "Tecnico"]}>
-                <Placeholder name="Ensambles" />
+                <EnsambleHistorial />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="ensambles/nuevo"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero", "Tecnico"]}>
+                <EnsambleNuevo />
               </RoleGuard>
             }
           />
@@ -238,7 +268,11 @@ export default function App() {
           />
           <Route
             path="herramientas"
-            element={<Placeholder name="Herramientas" />}
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor", "Tecnico"]}>
+                <Herramientas />
+              </RoleGuard>
+            }
           />
           <Route
             path="devoluciones"

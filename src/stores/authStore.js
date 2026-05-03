@@ -78,7 +78,10 @@ export const useAuthStore = create((set, get) => ({
   // Limpiar error
   clearError: () => set({ error: null }),
 
-  // Helper privado: obtener perfil de tabla usuarios
+  // Helper privado: obtener perfil de tabla usuarios.
+  // Devuelve null si el usuario está desactivado (activo=false) — esto
+  // fuerza redirect a /login via RoleGuard cuando un Admin desactiva
+  // a un usuario que ya estaba con sesión iniciada.
   _fetchPerfil: async (userId) => {
     const { data, error } = await supabase
       .from("usuarios")
@@ -86,6 +89,11 @@ export const useAuthStore = create((set, get) => ({
       .eq("id", userId)
       .single();
     if (error || !data) return null;
+    if (data.activo === false) {
+      // Cerrar sesión si el usuario fue desactivado
+      await supabase.auth.signOut();
+      return null;
+    }
     return data;
   },
 

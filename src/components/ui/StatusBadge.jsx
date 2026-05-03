@@ -40,6 +40,19 @@ const MODIFIER = {
   en_transito: "status-info",
   recibido: "status-success",
   con_diferencia: "status-danger",
+  // Herramienta states
+  disponible: "status-success",
+  prestada: "status-warning",
+  en_mantenimiento: "status-info",
+  extraviada: "status-danger",
+  // Préstamo states
+  activo: "status-warning",
+  devuelto: "status-success",
+  // Orden de servicio states
+  abierta: "status-info",
+  en_proceso: "status-warning",
+  esperando_repuesto: "status-warning",
+  entregada: "status-neutral",
 };
 
 const DEFAULT_LABEL = {
@@ -62,6 +75,19 @@ const DEFAULT_LABEL = {
   // Compra states
   recibida: "Recibida",
   pendiente: "Pendiente",
+  // Orden de servicio
+  abierta: "Abierta",
+  en_proceso: "En proceso",
+  esperando_repuesto: "Esperando repuesto",
+  entregada: "Entregada",
+  // Herramienta
+  disponible: "Disponible",
+  prestada: "Prestada",
+  en_mantenimiento: "Mantenimiento",
+  extraviada: "Extraviada",
+  // Préstamo
+  activo: "Activo",
+  devuelto: "Devuelto",
   // Devolución states
   procesada: "Procesada",
   // Traspaso states
