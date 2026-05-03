@@ -54,7 +54,7 @@ export default function QRPrintLabel({ referencia, nombre }) {
     <p class="nom">${nombre}</p>
     <p class="brand">Compresores del Valle</p>
   </div>
-  <script>window.onload = () => { window.print(); window.close(); }<\/script>
+  <script>window.onload = () => { window.print(); window.close(); }</${"script"}>
 </body>
 </html>`;
 

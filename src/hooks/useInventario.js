@@ -62,11 +62,17 @@ export function useInventario() {
     store.fetchInventario(false);
   }, [debouncedBusqueda]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Refactor manual: extraemos primitivos para que React Compiler pueda
+  // preservar la memoización (evita "Compilation Skipped").
+  const hasMore = store.hasMore;
+  const loadingMore = store.loadingMore;
+  const loading = store.loading;
+  const fetchInventario = store.fetchInventario;
   const loadMore = useCallback(() => {
-    if (store.hasMore && !store.loadingMore && !store.loading) {
-      store.fetchInventario(true);
+    if (hasMore && !loadingMore && !loading) {
+      fetchInventario(true);
     }
-  }, [store.hasMore, store.loadingMore, store.loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasMore, loadingMore, loading, fetchInventario]);
 
   return {
     items: store.items,

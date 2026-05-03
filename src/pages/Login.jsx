@@ -234,6 +234,7 @@ export default function Login() {
 
   /* Clear errors when user changes */
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocalError("");
     clearError();
   }, [selectedUser]); // eslint-disable-line
