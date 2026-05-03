@@ -14,22 +14,6 @@ export const useAuthStore = create((set, get) => ({
   // Retorna la función de cleanup para cancelar la suscripción
   init: async () => {
     set({ loading: true });
-
-    // 1) Suscribir PRIMERO (sincrónico) para no perder eventos durante getSession.
-    //    Si TOKEN_REFRESHED o SIGNED_IN se disparan mientras esperamos,
-    //    el handler los captura y actualiza el state correctamente.
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        const perfil = await get()._fetchPerfil(session.user.id);
-        set({ session, user: session.user, perfil, loading: false });
-      } else {
-        set({ session: null, user: null, perfil: null, loading: false });
-      }
-    });
-
-    // 2) Recuperar sesión existente
     try {
       const {
         data: { session },
@@ -43,6 +27,20 @@ export const useAuthStore = create((set, get) => ({
     } catch {
       set({ loading: false });
     }
+
+    // Escuchar cambios de sesión (token refresh, logout desde otra pestaña).
+    // Se subscribe DESPUÉS de getSession para evitar el doble dispatch
+    // INITIAL_SESSION + getSession-resolve que puede confundir el state.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session) {
+        const perfil = await get()._fetchPerfil(session.user.id);
+        set({ session, user: session.user, perfil });
+      } else {
+        set({ session: null, user: null, perfil: null });
+      }
+    });
 
     return () => subscription.unsubscribe();
   },
