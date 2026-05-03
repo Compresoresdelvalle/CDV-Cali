@@ -58,6 +58,13 @@ export default function OrdenNueva() {
       // La sede de la orden es la del técnico asignado (no la del Admin que crea)
       const tecnicoSeleccionado = tecnicos.find((t) => t.id === tecnicoId);
       const sedeOrden = tecnicoSeleccionado?.sede_id ?? perfil.sede_id;
+      if (!sedeOrden) {
+        setError(
+          "No se pudo determinar la sede. Revisa que tu usuario o el técnico tenga sede asignada.",
+        );
+        setSaving(false);
+        return;
+      }
       const { data, error: e2 } = await supabase
         .from("ordenes_servicio")
         .insert({

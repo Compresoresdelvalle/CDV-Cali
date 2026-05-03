@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
+import PlusIcon from "../../components/ui/PlusIcon";
 
 const FILTROS = [
   "Todas",
@@ -33,8 +34,23 @@ export default function OrdenHistorial() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const abortRef = useRef(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const cargar = async (reset = false) => {
+    // Abortar cualquier carga previa en vuelo (evita race en clicks rápidos)
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    if (!mountedRef.current) return;
     setLoading(true);
     setErrorMsg("");
     const currentPage = reset ? 0 : page;
@@ -55,6 +71,7 @@ export default function OrdenHistorial() {
       if (estado) query = query.eq("estado", estado);
 
       const { data, error } = await query;
+      if (ac.signal.aborted || !mountedRef.current) return;
       if (error) throw error;
 
       if (reset) {
@@ -66,10 +83,11 @@ export default function OrdenHistorial() {
       }
       setHasMore((data ?? []).length === PAGE_SIZE);
     } catch (err) {
+      if (ac.signal.aborted || !mountedRef.current) return;
       console.error("[OrdenHistorial]", err);
       setErrorMsg(safeError(err, "Error al cargar órdenes"));
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
@@ -250,24 +268,5 @@ function Empty() {
         Crea la primera con "Nueva orden"
       </p>
     </div>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 4v16m8-8H4"
-      />
-    </svg>
   );
 }
