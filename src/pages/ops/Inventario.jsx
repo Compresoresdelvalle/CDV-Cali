@@ -52,7 +52,12 @@ export default function Inventario() {
       { rootMargin: "200px" },
     );
     observer.observe(el);
-    return () => observer.disconnect();
+    // Cleanup explícito: unobserve el sentinel ANTES de disconnect.
+    // Si el sentinel se desmontó antes (ref es null), disconnect basta.
+    return () => {
+      observer.unobserve(el);
+      observer.disconnect();
+    };
   }, [loadMore]);
 
   const handleScanFound = useCallback(

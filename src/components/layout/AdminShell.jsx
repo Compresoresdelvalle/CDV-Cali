@@ -153,7 +153,7 @@ export default function AdminShell() {
     <aside
       className="flex flex-col h-full"
       style={{
-        backgroundColor: "#1A1A2E",
+        backgroundColor: "hsl(var(--card))",
         borderRight: "1px solid rgba(255,255,255,0.06)",
       }}
     >
@@ -164,7 +164,7 @@ export default function AdminShell() {
         {iconsOnly ? (
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center text-white"
-            style={{ backgroundColor: "#E94560" }}
+            style={{ backgroundColor: "hsl(var(--primary))" }}
           >
             <AdminLogoIcon />
           </div>
@@ -172,7 +172,7 @@ export default function AdminShell() {
           <div className="flex items-center gap-3">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white"
-              style={{ backgroundColor: "#E94560" }}
+              style={{ backgroundColor: "hsl(var(--primary))" }}
             >
               <AdminLogoIcon />
             </div>
@@ -272,7 +272,7 @@ export default function AdminShell() {
   return (
     <div
       className="admin-shell flex h-screen overflow-hidden"
-      style={{ backgroundColor: "#0A0A1A" }}
+      style={{ backgroundColor: "hsl(var(--background))" }}
     >
       {/* Desktop sidebar (≥ 1024px) */}
       <div className="hidden lg:flex flex-col w-60 xl:w-64 h-full flex-shrink-0">
@@ -292,7 +292,7 @@ export default function AdminShell() {
         <header
           className="hidden sm:flex items-center justify-between px-5 h-14 flex-shrink-0"
           style={{
-            backgroundColor: "#1A1A2E",
+            backgroundColor: "hsl(var(--card))",
             borderBottom: "1px solid rgba(255,255,255,0.06)",
           }}
         >
@@ -335,14 +335,14 @@ export default function AdminShell() {
         <header
           className="sm:hidden flex items-center justify-between px-4 h-14 flex-shrink-0"
           style={{
-            backgroundColor: "#1A1A2E",
+            backgroundColor: "hsl(var(--card))",
             borderBottom: "1px solid rgba(255,255,255,0.06)",
           }}
         >
           <div className="flex items-center gap-2.5">
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center text-white"
-              style={{ backgroundColor: "#E94560" }}
+              style={{ backgroundColor: "hsl(var(--primary))" }}
             >
               <AdminLogoIcon />
             </div>
@@ -377,7 +377,7 @@ export default function AdminShell() {
         {/* Página */}
         <main
           className="flex-1 overflow-y-auto pb-20 sm:pb-0"
-          style={{ backgroundColor: "#0A0A1A" }}
+          style={{ backgroundColor: "hsl(var(--background))" }}
         >
           <Outlet />
         </main>
@@ -386,7 +386,7 @@ export default function AdminShell() {
       {/* Bottom Nav móvil */}
       <nav
         className="sm:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-white/8 flex-shrink-0"
-        style={{ backgroundColor: "#1A1A2E" }}
+        style={{ backgroundColor: "hsl(var(--card))" }}
       >
         <div className="flex overflow-x-auto">
           {ADMIN_MODULES.slice(0, 5).map(({ nombre, icon, ruta }) => (
