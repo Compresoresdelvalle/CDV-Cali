@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -29,6 +29,14 @@ export default function VerificacionTraspaso() {
 
   const esAdmin = perfil?.rol === "Admin";
   const esBodeguero = perfil?.rol === "Bodeguero";
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   /* ── Cargar datos ─────────────────────────────────────────── */
   useEffect(() => {
@@ -456,7 +464,16 @@ export default function VerificacionTraspaso() {
           )}
           <button
             onClick={verificar}
-            disabled={!pickingOk || verificando}
+            disabled={
+              !pickingOk ||
+              verificando ||
+              (traspaso?.picker_id && traspaso.picker_id === perfil?.id)
+            }
+            title={
+              traspaso?.picker_id === perfil?.id
+                ? "No puedes verificar tu propio picking"
+                : undefined
+            }
             className="w-full h-12 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-40 cursor-pointer"
             style={{
               backgroundColor: "hsl(var(--primary))",

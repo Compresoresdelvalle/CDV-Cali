@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -30,6 +30,14 @@ export default function RecepcionTraspaso() {
   const [confirmarDiff, setConfirmarDiff] = useState(false);
 
   const esAdmin = perfil?.rol === "Admin";
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   /* ── Cargar datos ─────────────────────────────────────────── */
   useEffect(() => {
@@ -131,7 +139,10 @@ export default function RecepcionTraspaso() {
   };
 
   const setCantidad = (itemId, value) => {
-    const num = Math.max(0, parseInt(value) || 0);
+    // Cap entre 0 y cantidad_enviada (no se puede recibir más de lo enviado)
+    const item = items?.find((it) => it.id === itemId);
+    const max = item?.cantidad_enviada ?? item?.cantidad_solicitada ?? Infinity;
+    const num = Math.min(max, Math.max(0, parseInt(value) || 0));
     setRecibidas((prev) => ({ ...prev, [itemId]: num }));
   };
 
