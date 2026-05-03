@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, formatDate } from "../../lib/utils";
+import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 
@@ -54,7 +54,7 @@ export default function CotizacionDetalle() {
       if (rpcErr) throw new Error(rpcErr.message);
       navigate(`/ops/ventas/${data.venta_id}`);
     } catch (e) {
-      setError(e.message ?? "Error al convertir la cotización");
+      setError(safeError(e, "Error al convertir la cotización"));
     } finally {
       setConvirtiendo(false);
     }

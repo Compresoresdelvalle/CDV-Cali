@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
-import { formatCOP } from "../../lib/utils";
+import { formatCOP, safeError } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
 
 const ACTIVITY_DOT = {
@@ -178,7 +178,7 @@ export default function Dashboard() {
     setError(null);
     const { data, error: err } = await supabase.rpc("fn_dashboard_kpis");
     if (err) {
-      setError(err.message);
+      setError(safeError(err, "Error al cargar el dashboard"));
     } else {
       setKpis(data);
     }

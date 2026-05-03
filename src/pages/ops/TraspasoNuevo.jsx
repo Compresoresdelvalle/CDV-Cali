@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, sanitizeSearch } from "../../lib/utils";
+import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 
@@ -200,7 +200,7 @@ export default function TraspasoNuevo() {
 
       navigate(`/ops/traspasos/${traspaso.id}`);
     } catch (e) {
-      setError(e.message ?? "Error al crear el traspaso");
+      setError(safeError(e, "Error al crear el traspaso"));
     } finally {
       setGuardando(false);
     }

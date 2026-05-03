@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, sanitizeSearch } from "../../lib/utils";
+import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import QRScanner from "../../components/forms/QRScanner";
 
@@ -86,7 +86,7 @@ export default function CotizacionEditar() {
           })),
         );
       } catch (e) {
-        setError(e.message ?? "No se pudo cargar la cotización");
+        setError(safeError(e, "No se pudo cargar la cotización"));
       } finally {
         setLoading(false);
       }
@@ -257,7 +257,7 @@ export default function CotizacionEditar() {
 
       navigate(`/ops/cotizaciones/${id}`);
     } catch (e) {
-      setError(e.message ?? "Error al guardar los cambios");
+      setError(safeError(e, "Error al guardar los cambios"));
     } finally {
       setGuardando(false);
     }

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
+import { safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 
 const SEDE_LABELS = {
@@ -75,7 +76,7 @@ export default function RecepcionTraspaso() {
         }
         setRecibidas(init);
       } catch (e) {
-        setError(e.message);
+        setError(safeError(e, "Error en recepción de traspaso"));
       } finally {
         setLoading(false);
       }
@@ -114,7 +115,7 @@ export default function RecepcionTraspaso() {
       if (rpcErr) throw new Error(rpcErr.message);
       navigate(`/ops/traspasos/${id}`);
     } catch (e) {
-      setError(e.message);
+      setError(safeError(e, "Error en recepción de traspaso"));
       setConfirmarDiff(false);
     } finally {
       setRecibiendo(false);

@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, sanitizeSearch } from "../../lib/utils";
+import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import QRScanner from "../../components/forms/QRScanner";
 import PageHeader from "../../components/layout/PageHeader";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
@@ -206,7 +206,7 @@ export default function VentaNueva() {
       if (rpcErr) throw new Error(rpcErr.message);
       navigate("/ops/ventas");
     } catch (e) {
-      setError(e.message ?? "Error al registrar la venta");
+      setError(safeError(e, "Error al registrar la venta"));
     } finally {
       setConfirmando(false);
     }
