@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
+import { safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 
 export default function PickingPage() {
@@ -70,7 +71,7 @@ export default function PickingPage() {
         }
         setLocal(init);
       } catch (e) {
-        setError(e.message);
+        setError(safeError(e, "Error en picking"));
       } finally {
         setLoading(false);
       }
@@ -104,7 +105,7 @@ export default function PickingPage() {
         if (rpcErr) throw new Error(rpcErr.message);
         setUltimoGuardado(new Date());
       } catch (e) {
-        setError(e.message);
+        setError(safeError(e, "Error en picking"));
       } finally {
         setGuardando(false);
       }

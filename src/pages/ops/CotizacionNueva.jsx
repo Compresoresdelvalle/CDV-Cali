@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, sanitizeSearch } from "../../lib/utils";
+import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import QRScanner from "../../components/forms/QRScanner";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
@@ -172,7 +172,7 @@ export default function CotizacionNueva() {
       if (rpcErr) throw new Error(rpcErr.message);
       navigate("/ops/cotizaciones");
     } catch (e) {
-      setError(e.message ?? "Error al guardar la cotización");
+      setError(safeError(e, "Error al guardar la cotización"));
     } finally {
       setGuardando(false);
     }

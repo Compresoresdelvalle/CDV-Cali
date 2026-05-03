@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatDate } from "../../lib/utils";
+import { formatDate, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 
@@ -109,7 +109,7 @@ export default function TraspasoDetalle() {
       if (rpcErr) throw new Error(rpcErr.message);
       navigate(`/ops/traspasos/${id}/picking`);
     } catch (e) {
-      setError(e.message);
+      setError(safeError(e, "Error en operación de traspaso"));
     } finally {
       setAccionando(false);
     }
@@ -128,7 +128,7 @@ export default function TraspasoDetalle() {
       if (rpcErr) throw new Error(rpcErr.message);
       await cargar();
     } catch (e) {
-      setError(e.message);
+      setError(safeError(e, "Error en operación de traspaso"));
     } finally {
       setAccionando(false);
     }

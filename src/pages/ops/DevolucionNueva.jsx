@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { sanitizeSearch } from "../../lib/utils";
+import { sanitizeSearch, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 
@@ -105,7 +105,7 @@ export default function DevolucionNueva() {
       setMotivo("");
       setVentaId("");
     } catch (e) {
-      setError(e.message ?? "Error al registrar la devolución");
+      setError(safeError(e, "Error al registrar la devolución"));
     } finally {
       setGuardando(false);
     }

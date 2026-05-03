@@ -6,7 +6,7 @@ import StatusBadge from "../../components/ui/StatusBadge";
 import PageHeader from "../../components/layout/PageHeader";
 import QRGenerator from "../../components/qr/QRGenerator";
 import QRPrintLabel from "../../components/qr/QRPrintLabel";
-import { formatCOP, formatDate } from "../../lib/utils";
+import { formatCOP, formatDate, safeError } from "../../lib/utils";
 
 export default function ProductoDetalle() {
   const { productoId } = useParams();
@@ -64,7 +64,7 @@ export default function ProductoDetalle() {
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e.message);
+          setError(safeError(e, "Error al cargar el producto"));
           setLoading(false);
         }
       }

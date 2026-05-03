@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
+import { safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 
 const SEDE_LABELS = {
@@ -71,7 +72,7 @@ export default function VerificacionTraspaso() {
         setTraspaso(t);
         setItems(d ?? []);
       } catch (e) {
-        setError(e.message);
+        setError(safeError(e, "Error en verificación de traspaso"));
       } finally {
         setLoading(false);
       }
@@ -93,7 +94,7 @@ export default function VerificacionTraspaso() {
       if (rpcErr) throw new Error(rpcErr.message);
       navigate(`/ops/traspasos/${id}`);
     } catch (e) {
-      setError(e.message);
+      setError(safeError(e, "Error en verificación de traspaso"));
     } finally {
       setVerificando(false);
     }

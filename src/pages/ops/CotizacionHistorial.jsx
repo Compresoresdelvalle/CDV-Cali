@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, formatDate } from "../../lib/utils";
+import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 
@@ -90,7 +90,10 @@ export default function CotizacionHistorial() {
       if (rpcErr) throw new Error(rpcErr.message);
       navigate(`/ops/ventas/${data.venta_id}`);
     } catch (e) {
-      setErrorConversion({ id: cotizacionId, msg: e.message });
+      setErrorConversion({
+        id: cotizacionId,
+        msg: safeError(e, "Error al convertir"),
+      });
     } finally {
       setConvirtiendo(null);
     }
