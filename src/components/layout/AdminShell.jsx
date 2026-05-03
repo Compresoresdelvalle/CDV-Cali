@@ -145,11 +145,13 @@ export default function AdminShell() {
 
   const handleLogout = async () => {
     await logout();
-    window.location.href = "/login";
+    window.location.assign("/login");
   };
 
   /* ── Sidebar content ────────────────────────────────────────────────── */
-  const SidebarContent = ({ iconsOnly = false }) => (
+  // Función render (no componente) para evitar redefinir un componente
+  // en cada render — React Compiler advierte en ese caso.
+  const renderSidebarContent = ({ iconsOnly = false }) => (
     <aside
       className="flex flex-col h-full"
       style={{
@@ -276,14 +278,14 @@ export default function AdminShell() {
     >
       {/* Desktop sidebar (≥ 1024px) */}
       <div className="hidden lg:flex flex-col w-60 xl:w-64 h-full flex-shrink-0">
-        <SidebarContent iconsOnly={false} />
+        {renderSidebarContent({ iconsOnly: false })}
       </div>
 
       {/* Tablet sidebar icons-only colapsable (640–1023px) */}
       <div
         className={`hidden sm:flex lg:hidden flex-col flex-shrink-0 h-full transition-all duration-200 ${collapsed ? "w-16" : "w-52"}`}
       >
-        <SidebarContent iconsOnly={collapsed} />
+        {renderSidebarContent({ iconsOnly: collapsed })}
       </div>
 
       {/* Contenido */}

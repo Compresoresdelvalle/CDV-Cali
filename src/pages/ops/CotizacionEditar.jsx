@@ -64,6 +64,7 @@ export default function CotizacionEditar() {
           ]);
 
         if (cotErr) throw cotErr;
+        if (itemsErr) throw itemsErr;
 
         setNumero(cot.numero);
         setEstadoOriginal(cot.estado);

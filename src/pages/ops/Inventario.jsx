@@ -432,7 +432,6 @@ export default function Inventario() {
                     {/* Barra de progreso de stock */}
                     <StockBar
                       cantidad={item.cantidad}
-                      minimo={item.producto?.stock_minimo ?? 0}
                       maximo={item.producto?.stock_maximo ?? 0}
                       estado={item.estado_stock}
                     />
@@ -626,7 +625,7 @@ export default function Inventario() {
 
 /* ─── Componentes locales ────────────────────────────────────────────── */
 
-function StockBar({ cantidad, minimo, maximo, estado }) {
+function StockBar({ cantidad, maximo, estado }) {
   if (!maximo) return null;
   const pct = Math.min(100, Math.round((cantidad / maximo) * 100));
   const color =

@@ -246,15 +246,7 @@ function SidebarNavItem({ name, label, to, iconsOnly, end: endProp = false }) {
 }
 
 /* ── Sidebar component ────────────────────────────────────────────────── */
-function Sidebar({
-  collapsed,
-  onToggle,
-  modulos,
-  perfil,
-  rol,
-  initials,
-  onLogout,
-}) {
+function Sidebar({ collapsed, modulos, perfil, rol, initials, onLogout }) {
   const grouped = buildGroupedNav(modulos);
 
   return (
@@ -446,7 +438,7 @@ export default function AppShell() {
 
   const handleLogout = async () => {
     await logout();
-    window.location.href = "/login";
+    window.location.assign("/login");
   };
 
   const sidebarProps = {
@@ -683,7 +675,7 @@ export default function AppShell() {
           {modulos.includes("→ Panel Admin") && (
             <NavLink
               to="/admin"
-              className={({ isActive }) =>
+              className={() =>
                 `flex-1 flex flex-col items-center justify-center py-2.5 gap-1 min-h-[56px]
                 text-[10px] font-medium transition-colors cursor-pointer`
               }
