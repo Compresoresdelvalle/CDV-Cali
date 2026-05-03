@@ -329,7 +329,7 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
         const { data, error } = await supabase
           .from("productos")
           .select(
-            `id, referencia, nombre, inventario:inventario(cantidad, sede_id)`,
+            `id, referencia, nombre, inventario:inventario(id, cantidad, sede_id)`,
           )
           .eq("activo", true)
           .or(`referencia.ilike.%${q}%,nombre.ilike.%${q}%`)
@@ -351,7 +351,7 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
 
   const seleccionar = (p) => {
     const inv = (p.inventario ?? []).find((i) => i.sede_id === perfil?.sede_id);
-    setProductoSel(p);
+    setProductoSel({ ...p, inventario_id: inv?.id });
     setStockSistema(inv?.cantidad ?? 0);
     setSearch("");
     setResultados([]);
@@ -367,15 +367,23 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
       setError("Stock físico inválido");
       return;
     }
+    if (!productoSel.inventario_id) {
+      setError(
+        "Este producto no tiene inventario en tu sede. Agrégalo primero desde Inventario.",
+      );
+      return;
+    }
     setSaving(true);
     setError("");
     try {
+      // diferencia es columna GENERATED ALWAYS — no se incluye en el INSERT.
+      // inventario_id es NOT NULL.
       const { error } = await supabase.from("conteos").insert({
+        inventario_id: productoSel.inventario_id,
         producto_id: productoSel.id,
         sede_id: perfil.sede_id,
         stock_sistema: stockSistema,
         stock_fisico: fisico,
-        diferencia: fisico - stockSistema,
         contado_por: perfil.id,
         observaciones: observaciones.trim() || null,
         ajuste_aplicado: false,

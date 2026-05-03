@@ -54,6 +54,47 @@
   --sidebar-muted: 215 15% 40%;
 }
 
+/* ── Admin Shell — tema oscuro scoped ────────────────────────────────────
+   Cuando una página admin se renderiza dentro de .admin-shell, los tokens
+   se sobrescriben para que `hsl(var(--background))`, `hsl(var(--card))`,
+   etc. den colores del tema oscuro. Esto evita tener que duplicar páginas
+   o hardcodear colores. */
+.admin-shell {
+  --background: 233 38% 6%; /* #0A0A1A — fondo content */
+  --foreground: 210 20% 95%; /* texto principal claro */
+
+  --card: 235 28% 14%; /* #1A1A2E — cards */
+  --card-foreground: 210 20% 95%;
+
+  --primary: 351 78% 60%; /* #E94560 — acento dark */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 235 28% 18%;
+  --secondary-foreground: 210 20% 92%;
+
+  --muted: 235 25% 20%;
+  --muted-foreground: 215 15% 65%;
+
+  --accent: 351 78% 60%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 78% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --success: 142 60% 50%;
+  --success-foreground: 0 0% 100%;
+
+  --warning: 38 92% 60%;
+  --warning-foreground: 0 0% 10%;
+
+  --info: 200 80% 60%;
+  --info-foreground: 0 0% 100%;
+
+  --border: 235 20% 22%;
+  --input: 235 20% 22%;
+  --ring: 351 78% 60%;
+}
+
 /* ── Reset ─────────────────────────────────────────────────────────────── */
 *,
 *::before,
