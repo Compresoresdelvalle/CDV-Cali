@@ -32,7 +32,7 @@ import OrdenNueva from "./pages/ops/OrdenNueva";
 import OrdenDetalle from "./pages/ops/OrdenDetalle";
 import EnsambleHistorial from "./pages/ops/EnsambleHistorial";
 import EnsambleNuevo from "./pages/ops/EnsambleNuevo";
-import Dashboard from "./pages/admin/Dashboard";
+import AdminDashboard from "./pages/admin/Dashboard";
 import Alertas from "./pages/admin/Alertas";
 import Reorden from "./pages/admin/Reorden";
 import Top10 from "./pages/admin/Top10";
@@ -310,7 +310,7 @@ export default function App() {
             </RoleGuard>
           }
         >
-          <Route index element={<Dashboard />} />
+          <Route index element={<AdminDashboard />} />
           <Route path="alertas" element={<Alertas />} />
           <Route path="conteo" element={<Conteo />} />
           <Route path="abc" element={<AnalisisABC />} />
