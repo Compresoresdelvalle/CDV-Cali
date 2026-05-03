@@ -271,7 +271,7 @@ export default function AdminShell() {
   /* ── Render ─────────────────────────────────────────────────────────── */
   return (
     <div
-      className="flex h-screen overflow-hidden"
+      className="admin-shell flex h-screen overflow-hidden"
       style={{ backgroundColor: "#0A0A1A" }}
     >
       {/* Desktop sidebar (≥ 1024px) */}
