@@ -14,15 +14,30 @@ export const formatDate = (date) =>
     timeStyle: "short",
   }).format(new Date(date));
 
-// Escapa caracteres con significado especial en PostgREST .or() y .ilike():
-//   ,  separador de filtros
-//   .  separador operador/columna
+// Sanitiza input para `.or()` + `.ilike()` de PostgREST.
+// Estrategia híbrida: ELIMINA metacaracteres del parser de PostgREST y
+// ESCAPA wildcards SQL para preservar intención del usuario (p.ej. "100%").
+//
+// Caracteres eliminados (rompen el parser de .or()):
+//   ,  separador de filtros entre subexpresiones
+//   .  separador columna.operador.valor
 //   *  wildcard alternativo
-//   (  )  agrupación
-//   %  wildcard ILIKE inyectado
-//   \  escape SQL
-export const sanitizeSearch = (q) =>
-  (q ?? "").replace(/[,.*()\\%]/g, "").trim();
+//   (  )  agrupación de subexpresiones
+//   :  prefijo de operadores compuestos
+//
+// Caracteres escapados con \ (significan algo en SQL pero usuario los puede querer):
+//   %  wildcard ILIKE
+//   _  wildcard ILIKE single-char
+//   \  escape SQL — escapado primero para no romper el resto
+//
+// También limita longitud a 100 chars para prevenir DOS por strings largos.
+export const sanitizeSearch = (q) => {
+  const s = (q ?? "").toString().trim().slice(0, 100);
+  return s
+    .replace(/\\/g, "\\\\") // primero: escapar backslash existente
+    .replace(/[%_]/g, "\\$&") // luego: escapar wildcards SQL
+    .replace(/[,.*():]/g, ""); // finalmente: eliminar metacaracteres PostgREST
+};
 
 // Mensaje seguro para mostrar al usuario sin filtrar schema/columnas.
 // En desarrollo logueamos el err crudo a la consola.

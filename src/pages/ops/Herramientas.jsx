@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { formatDate, sanitizeSearch, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
+import PlusIcon from "../../components/ui/PlusIcon";
 
 const FILTROS = [
   "Todas",
@@ -764,24 +765,5 @@ function EmptyState() {
         Crea la primera con el botón "Nueva herramienta"
       </p>
     </div>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 4v16m8-8H4"
-      />
-    </svg>
   );
 }

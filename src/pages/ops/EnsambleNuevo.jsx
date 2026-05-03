@@ -38,29 +38,27 @@ export default function EnsambleNuevo() {
     const t = setTimeout(async () => {
       setBuscando(true);
       try {
-        // Solo productos que tienen al menos una receta BOM
-        const { data: ids, error: e1 } = await supabase
-          .from("recetas_bom")
-          .select("producto_resultado_id");
-        if (ac.signal.aborted) return;
-        if (e1) throw e1;
-        const idsConBom = [
-          ...new Set((ids ?? []).map((r) => r.producto_resultado_id)),
-        ];
-        if (idsConBom.length === 0) {
-          setResultados([]);
-          return;
-        }
+        // Una sola query con inner join contra recetas_bom usando la FK
+        // producto_resultado_id. Esto evita N+1 y descargar toda la tabla.
         const { data, error } = await supabase
           .from("productos")
-          .select("id, referencia, nombre, precio_venta")
+          .select(
+            `id, referencia, nombre, precio_venta,
+             recetas_bom!recetas_bom_producto_resultado_id_fkey!inner(id)`,
+          )
           .eq("activo", true)
-          .in("id", idsConBom)
           .or(`referencia.ilike.%${q}%,nombre.ilike.%${q}%`)
           .limit(10);
         if (ac.signal.aborted) return;
         if (error) throw error;
-        setResultados(data ?? []);
+        // Dedupe: el inner join puede traer duplicados si hay N filas BOM
+        const seen = new Set();
+        const unique = (data ?? []).filter((p) => {
+          if (seen.has(p.id)) return false;
+          seen.add(p.id);
+          return true;
+        });
+        setResultados(unique);
       } catch (err) {
         if (!ac.signal.aborted) {
           setErrorMsg(safeError(err, "Error al buscar productos"));
@@ -187,7 +185,20 @@ export default function EnsambleNuevo() {
         .insert(detalles);
       if (e2) {
         // Cleanup: si falla detalle, borrar la cabecera para no dejar huérfanos
-        await supabase.from("ensambles").delete().eq("id", ens.id);
+        const { error: cleanupErr } = await supabase
+          .from("ensambles")
+          .delete()
+          .eq("id", ens.id);
+        if (cleanupErr) {
+          // Si el cleanup también falla, queda una fila huérfana en `ensambles`
+          // con completado=false. No produce pérdida de stock (los triggers solo
+          // disparan en completado=true) pero sí ensucia el historial.
+          console.error(
+            "[EnsambleNuevo] CRITICAL: cleanup falló, ensamble huérfano id=" +
+              ens.id,
+            cleanupErr,
+          );
+        }
         throw e2;
       }
 
