@@ -61,12 +61,33 @@ export default function Auditoria() {
     setErrorMsg("");
     const currentPage = reset ? 0 : page;
     try {
+      // Si hay búsqueda, filtramos productos primero y obtenemos sus IDs
+      // (búsqueda server-side, no client-side sobre la página actual)
+      let productoIds = null;
+      const sq = sanitizeSearch(search.trim());
+      if (sq) {
+        const { data: prods } = await supabase
+          .from("productos")
+          .select("id")
+          .or(`referencia.ilike.%${sq}%,nombre.ilike.%${sq}%`)
+          .limit(500);
+        productoIds = (prods ?? []).map((p) => p.id);
+        if (productoIds.length === 0) {
+          if (!mountedRef.current) return;
+          setMovimientos(reset ? [] : (p) => p);
+          setHasMore(false);
+          if (reset) setPage(1);
+          return;
+        }
+      }
+
       let q = supabase
         .from("movimientos")
         .select(
-          `id, tipo, cantidad, stock_anterior, stock_posterior, fecha, observaciones, sede_id,
+          `id, tipo, cantidad, stock_anterior, stock_posterior, fecha, observaciones, sede_id, producto_id,
            producto:producto_id(referencia, nombre),
-           usuario:usuario_id(nombre)`,
+           usuario:usuario_id(nombre),
+           sede:sede_id(nombre)`,
         )
         .order("fecha", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
@@ -76,29 +97,21 @@ export default function Auditoria() {
       if (usuarioId) q = q.eq("usuario_id", usuarioId);
       if (fechaDesde) q = q.gte("fecha", `${fechaDesde}T00:00:00-05:00`);
       if (fechaHasta) q = q.lte("fecha", `${fechaHasta}T23:59:59-05:00`);
+      if (productoIds) q = q.in("producto_id", productoIds);
 
       const { data, error } = await q;
       if (!mountedRef.current) return;
       if (error) throw error;
 
-      let filtered = data ?? [];
-      const sq = sanitizeSearch(search.trim()).toLowerCase();
-      if (sq) {
-        filtered = filtered.filter(
-          (m) =>
-            m.producto?.nombre?.toLowerCase().includes(sq) ||
-            m.producto?.referencia?.toLowerCase().includes(sq),
-        );
-      }
-
+      const items = data ?? [];
       if (reset) {
-        setMovimientos(filtered);
+        setMovimientos(items);
         setPage(1);
       } else {
-        setMovimientos((p) => [...p, ...filtered]);
+        setMovimientos((p) => [...p, ...items]);
         setPage((p) => p + 1);
       }
-      setHasMore((data ?? []).length === PAGE_SIZE);
+      setHasMore(items.length === PAGE_SIZE);
     } catch (err) {
       if (!mountedRef.current) return;
       setErrorMsg(safeError(err, "Error al cargar movimientos"));
@@ -304,7 +317,7 @@ export default function Auditoria() {
                   className="px-3 py-2 text-xs"
                   style={{ color: "hsl(var(--muted-foreground))" }}
                 >
-                  {m.sede_id}
+                  {m.sede?.nombre ?? m.sede_id}
                 </td>
                 <td
                   className="px-3 py-2 text-xs"
@@ -362,7 +375,8 @@ export default function Auditoria() {
               className="text-xs"
               style={{ color: "hsl(var(--muted-foreground))" }}
             >
-              {formatDate(m.fecha)} · {m.usuario?.nombre} · {m.sede_id}
+              {formatDate(m.fecha)} · {m.usuario?.nombre} ·{" "}
+              {m.sede?.nombre ?? m.sede_id}
             </p>
             <p
               className="text-xs mt-0.5"

@@ -172,9 +172,9 @@ export default function Alertas() {
           <Empty icon="✅">No hay stock bajo ni agotado</Empty>
         ) : (
           <ul className="space-y-2" role="list">
-            {datos.stock.map((s, i) => (
+            {datos.stock.map((s) => (
               <li
-                key={i}
+                key={`${s.producto?.referencia}-${s.sede?.nombre}`}
                 className="rounded-lg border px-4 py-3 flex items-center justify-between gap-3"
                 style={{
                   backgroundColor: "hsl(var(--card))",

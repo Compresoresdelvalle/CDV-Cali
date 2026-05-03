@@ -54,13 +54,15 @@ export default function AnalisisABC() {
     setOkMsg("");
     try {
       const { error } = await supabase.rpc("fn_recalcular_abc");
+      if (!mountedRef.current) return;
       if (error) throw error;
       setOkMsg("Clasificación ABC recalculada correctamente");
       await cargar();
     } catch (err) {
+      if (!mountedRef.current) return;
       setErrorMsg(safeError(err, "Error al recalcular"));
     } finally {
-      setRecalculando(false);
+      if (mountedRef.current) setRecalculando(false);
     }
   };
 

@@ -26,7 +26,10 @@ export default function Usuarios() {
     setErrorMsg("");
     try {
       const [u, s] = await Promise.all([
-        supabase.from("usuarios").select("*").order("nombre"),
+        supabase
+          .from("usuarios")
+          .select("id, nombre, rol, sede_id, activo")
+          .order("nombre"),
         supabase
           .from("sedes")
           .select("id, nombre")

@@ -33,6 +33,7 @@ export default function Conteo() {
         .select(
           `id, fecha, stock_sistema, stock_fisico, diferencia, ajuste_aplicado, observaciones, sede_id,
            producto:producto_id(referencia, nombre),
+           sede:sede_id(nombre),
            contador:contado_por(nombre),
            aprobador:aprobado_por(nombre)`,
         )
@@ -203,8 +204,8 @@ export default function Conteo() {
                     className="text-xs"
                     style={{ color: "hsl(var(--muted-foreground))" }}
                   >
-                    {c.sede_id} · {formatDate(c.fecha)} · Contó:{" "}
-                    {c.contador?.nombre}
+                    {c.sede?.nombre ?? c.sede_id} · {formatDate(c.fecha)} ·
+                    Contó: {c.contador?.nombre}
                     {c.aprobador && ` · Aprobó: ${c.aprobador.nombre}`}
                   </p>
                   {c.observaciones && (
