@@ -54,3 +54,12 @@ export async function ensureSession() {
     }
   }
 }
+
+// Activar ensureSession cuando la pestaña vuelve a foco — protege contra
+// el caso "operario deja la app abierta horas, vuelve y el token expiró".
+if (typeof window !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) ensureSession();
+  });
+  window.addEventListener("focus", () => ensureSession());
+}
