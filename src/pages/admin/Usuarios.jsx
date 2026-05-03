@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
+import { useAuthStore } from "../../stores/authStore";
 import PageHeader from "../../components/layout/PageHeader";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 
 const ROLES = ["Admin", "Bodeguero", "Vendedor", "Tecnico"];
 
 export default function Usuarios() {
+  const perfil = useAuthStore((s) => s.perfil);
   const [usuarios, setUsuarios] = useState([]);
   const [sedes, setSedes] = useState([]);
   const [loading, setLoading] = useState(true);
