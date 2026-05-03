@@ -92,9 +92,12 @@ export default function Dashboard() {
   }
 
   const k = kpis ?? {};
+  // Solo calcular delta si ayer hubo ventas (evita Infinity / NaN)
   const ventasDelta =
-    k.ventas_hoy && k.ventas_ayer
-      ? ((k.ventas_hoy - k.ventas_ayer) / k.ventas_ayer) * 100
+    Number(k.ventas_ayer) > 0
+      ? ((Number(k.ventas_hoy) - Number(k.ventas_ayer)) /
+          Number(k.ventas_ayer)) *
+        100
       : null;
 
   return (

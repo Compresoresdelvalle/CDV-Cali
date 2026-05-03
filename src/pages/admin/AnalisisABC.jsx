@@ -56,7 +56,21 @@ export default function AnalisisABC() {
     setErrorMsg("");
     setOkMsg("");
     try {
-      const { error } = await supabase.rpc("fn_recalcular_abc");
+      // Timeout duro 30s — recalcular ABC sobre 3000 productos puede tardar
+      const { error } = await Promise.race([
+        supabase.rpc("fn_recalcular_abc"),
+        new Promise((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "Timeout: el recálculo tarda más de 30s, contacta soporte",
+                ),
+              ),
+            30000,
+          ),
+        ),
+      ]);
       if (!mountedRef.current) return;
       if (error) throw error;
       setOkMsg("Clasificación ABC recalculada correctamente");

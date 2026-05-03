@@ -131,11 +131,19 @@ export default function Herramientas() {
           fecha_devolucion_real: new Date().toISOString(),
           prestada_a: null,
         })
-        .eq("id", h.id);
+        .eq("id", h.id)
+        // Guard de estado: solo si está prestada (anti race con doble click)
+        .eq("estado", "prestada");
       if (perfil?.rol !== "Admin" && perfil?.sede_id)
         q = q.eq("sede_id", perfil.sede_id);
-      const { error } = await q;
+      // .select() para confirmar count y detectar si la herramienta ya estaba devuelta
+      const { data, error } = await q.select("id");
       if (error) throw error;
+      if (!data || data.length === 0) {
+        setErrorMsg("Esta herramienta ya estaba devuelta o no tienes permiso");
+        await cargarHerramientas();
+        return;
+      }
       await cargarHerramientas();
     } catch (err) {
       setErrorMsg(safeError(err, "Error al devolver herramienta"));

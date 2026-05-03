@@ -355,8 +355,17 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
 
   const seleccionar = (p) => {
     const inv = (p.inventario ?? []).find((i) => i.sede_id === perfil?.sede_id);
-    setProductoSel({ ...p, inventario_id: inv?.id });
-    setStockSistema(inv?.cantidad ?? 0);
+    if (!inv) {
+      // Producto no tiene fila inventario en la sede del usuario.
+      // Avisamos al operario en vez de continuar con stock=0 silencioso.
+      setError(
+        `"${p.nombre}" no tiene inventario en tu sede. Pídele a un Admin que lo agregue antes de contar.`,
+      );
+      return;
+    }
+    setError("");
+    setProductoSel({ ...p, inventario_id: inv.id });
+    setStockSistema(inv.cantidad ?? 0);
     setSearch("");
     setResultados([]);
   };
