@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 
 const ROLES = ["Admin", "Bodeguero", "Vendedor", "Tecnico"];
 
@@ -13,6 +14,7 @@ export default function Usuarios() {
   const [okMsg, setOkMsg] = useState("");
   const [editando, setEditando] = useState(null); // user object or null
   const mountedRef = useRef(true);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
     mountedRef.current = true;
@@ -78,8 +80,13 @@ export default function Usuarios() {
   };
 
   const toggleActivo = async (u) => {
-    if (!confirm(`${u.activo ? "Desactivar" : "Activar"} a ${u.nombre}?`))
-      return;
+    const ok = await confirm({
+      titulo: `${u.activo ? "Desactivar" : "Activar"} usuario`,
+      mensaje: `${u.activo ? "Desactivar" : "Activar"} a ${u.nombre}?${u.activo ? " Si tiene sesión activa será cerrada en su próxima request." : ""}`,
+      confirmLabel: u.activo ? "Desactivar" : "Activar",
+      danger: u.activo,
+    });
+    if (!ok) return;
     setErrorMsg("");
     try {
       const { error } = await supabase
@@ -350,6 +357,7 @@ export default function Usuarios() {
           </div>
         </div>
       )}
+      <ConfirmDialog />
     </div>
   );
 }
