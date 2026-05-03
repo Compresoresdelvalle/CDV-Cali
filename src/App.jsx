@@ -32,6 +32,14 @@ import OrdenNueva from "./pages/ops/OrdenNueva";
 import OrdenDetalle from "./pages/ops/OrdenDetalle";
 import EnsambleHistorial from "./pages/ops/EnsambleHistorial";
 import EnsambleNuevo from "./pages/ops/EnsambleNuevo";
+import Dashboard from "./pages/admin/Dashboard";
+import Alertas from "./pages/admin/Alertas";
+import Reorden from "./pages/admin/Reorden";
+import Top10 from "./pages/admin/Top10";
+import AnalisisABC from "./pages/admin/AnalisisABC";
+import Auditoria from "./pages/admin/Auditoria";
+import Usuarios from "./pages/admin/Usuarios";
+import Conteo from "./pages/admin/Conteo";
 
 // Placeholder genérico para módulos aún no implementados
 function Placeholder({ name }) {
@@ -302,29 +310,14 @@ export default function App() {
             </RoleGuard>
           }
         >
-          <Route index element={<Placeholder name="Dashboard Admin" />} />
-          <Route
-            path="alertas"
-            element={<Placeholder name="Alertas de Stock" />}
-          />
-          <Route
-            path="conteo"
-            element={<Placeholder name="Conteo Cíclico" />}
-          />
-          <Route path="abc" element={<Placeholder name="Análisis ABC" />} />
-          <Route
-            path="reorden"
-            element={<Placeholder name="Puntos de Reorden" />}
-          />
-          <Route path="auditoria" element={<Placeholder name="Auditoría" />} />
-          <Route
-            path="usuarios"
-            element={<Placeholder name="Gestión de Usuarios" />}
-          />
-          <Route
-            path="top10"
-            element={<Placeholder name="Top 10 Productos" />}
-          />
+          <Route index element={<Dashboard />} />
+          <Route path="alertas" element={<Alertas />} />
+          <Route path="conteo" element={<Conteo />} />
+          <Route path="abc" element={<AnalisisABC />} />
+          <Route path="reorden" element={<Reorden />} />
+          <Route path="auditoria" element={<Auditoria />} />
+          <Route path="usuarios" element={<Usuarios />} />
+          <Route path="top10" element={<Top10 />} />
         </Route>
 
         {/* Fallback → login */}
