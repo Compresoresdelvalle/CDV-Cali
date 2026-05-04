@@ -4,9 +4,9 @@ import { formatCOP, safeError } from "../../lib/utils";
 import FeedbackBanners from "../ui/FeedbackBanners";
 
 const ESTADOS = [
-  { id: "pendiente", label: "Pendiente", color: "muted" },
-  { id: "autorizado", label: "Autorizado", color: "success" },
-  { id: "no_autorizado", label: "No autorizado", color: "destructive" },
+  { id: "pendiente", label: "⏳ Pendiente", color: "warning" },
+  { id: "autorizado", label: "✅ Autorizado", color: "success" },
+  { id: "no_autorizado", label: "❌ No autorizado", color: "destructive" },
 ];
 
 /**

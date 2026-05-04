@@ -91,6 +91,16 @@ export default function AbonosPanel({
       setErrorMsg("Método de pago inválido");
       return;
     }
+    // Confirm dialog si excede saldo pendiente
+    if (totalOT > 0 && monto > saldoPendiente) {
+      const ok = await confirm({
+        titulo: "Abono mayor al saldo pendiente",
+        mensaje: `El abono de ${formatCOP(monto)} excede el saldo pendiente de ${formatCOP(saldoPendiente)}. ¿Estás seguro? (Esto solo aplica si es un pago adelantado por buena fe.)`,
+        confirmLabel: "Sí, registrar igual",
+        danger: true,
+      });
+      if (!ok) return;
+    }
     setSaving(true);
     setErrorMsg("");
     setOkMsg("");

@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { safeError } from "../../lib/utils";
+import { formatCOP, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
+import SelectorCotizacionExistente from "../../components/ot/SelectorCotizacionExistente";
 
 export default function OrdenNueva() {
   const navigate = useNavigate();
@@ -18,6 +19,11 @@ export default function OrdenNueva() {
   const [tecnicoId, setTecnicoId] = useState("");
   const [tecnicos, setTecnicos] = useState([]);
   const [observaciones, setObservaciones] = useState("");
+
+  // Fase 10 §10.6: asociar cotización existente al crear la OT
+  const [cotizacionVinculada, setCotizacionVinculada] = useState(null); // {id, numero, total, items: []}
+  const [showSelector, setShowSelector] = useState(false);
+  const [cargandoCotizacion, setCargandoCotizacion] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -44,6 +50,56 @@ export default function OrdenNueva() {
     };
     cargarTecnicos();
   }, [perfil?.id, perfil?.rol, perfil?.sede_id]);
+
+  // Asociar cotización existente: cargar datos y reciclar campos vacíos
+  const onSeleccionarCotizacion = async (cotId) => {
+    setShowSelector(false);
+    setCargandoCotizacion(true);
+    setError("");
+    try {
+      const [{ data: cot, error: e1 }, { data: items, error: e2 }] =
+        await Promise.all([
+          supabase
+            .from("cotizaciones")
+            .select(
+              "id, numero, total, cliente_nombre, cliente_telefono, observaciones",
+            )
+            .eq("id", cotId)
+            .single(),
+          supabase
+            .from("detalle_cotizacion")
+            .select(
+              "cantidad, precio_unitario, subtotal, producto:producto_id(id, nombre, referencia)",
+            )
+            .eq("cotizacion_id", cotId),
+        ]);
+      if (e1) throw e1;
+      if (e2) throw e2;
+      // Reciclar SOLO los campos vacíos (no sobrescribir lo que ya escribió el usuario)
+      if (!clienteNombre.trim() && cot.cliente_nombre)
+        setClienteNombre(cot.cliente_nombre);
+      if (!clienteTelefono.trim() && cot.cliente_telefono)
+        setClienteTelefono(cot.cliente_telefono);
+      if (!observaciones.trim()) {
+        const ref = `Asociada a cotización #${cot.numero} (total: ${formatCOP(cot.total)})`;
+        setObservaciones(
+          cot.observaciones ? `${cot.observaciones}\n${ref}` : ref,
+        );
+      }
+      setCotizacionVinculada({
+        id: cot.id,
+        numero: cot.numero,
+        total: cot.total,
+        items: items ?? [],
+      });
+    } catch (err) {
+      setError(safeError(err, "Error al cargar la cotización"));
+    } finally {
+      setCargandoCotizacion(false);
+    }
+  };
+
+  const desvincularCotizacion = () => setCotizacionVinculada(null);
 
   const guardar = async (e) => {
     e.preventDefault();
@@ -84,6 +140,17 @@ export default function OrdenNueva() {
         .select("id")
         .single();
       if (e2) throw e2;
+      // Vincular cotización si existe
+      if (cotizacionVinculada?.id) {
+        const { error: linkErr } = await supabase
+          .from("cotizaciones")
+          .update({ ot_id: data.id })
+          .eq("id", cotizacionVinculada.id);
+        if (linkErr) {
+          console.warn("[OrdenNueva] No se pudo vincular cotización", linkErr);
+          // OT ya creada — continuar al detalle aunque falle el vínculo
+        }
+      }
       navigate(`/ops/ordenes/${data.id}`);
     } catch (err) {
       console.error("[OrdenNueva] guardar:", err);
@@ -117,6 +184,84 @@ export default function OrdenNueva() {
       )}
 
       <form onSubmit={guardar} className="space-y-5 max-w-2xl">
+        {/* Fase 10 §10.6: asociar cotización existente con reciclado de datos */}
+        <Section titulo="Cotización vinculada (opcional)">
+          {cotizacionVinculada ? (
+            <div
+              className="rounded-lg border p-3 space-y-2"
+              style={{
+                backgroundColor: "hsl(var(--info) / 0.05)",
+                borderColor: "hsl(var(--info))",
+              }}
+            >
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="text-sm font-bold"
+                    style={{ color: "hsl(var(--info))" }}
+                  >
+                    🔗 Cotización #{cotizacionVinculada.numero} ·{" "}
+                    {formatCOP(cotizacionVinculada.total)}
+                  </p>
+                  <p
+                    className="text-xs mt-1"
+                    style={{ color: "hsl(var(--muted-foreground))" }}
+                  >
+                    {cotizacionVinculada.items.length} ítem(s) cotizado(s).
+                    Quedará vinculada al guardar la OT. Los repuestos se agregan
+                    después en el detalle (no se descuentan automáticamente del
+                    inventario hasta que el técnico los use).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={desvincularCotizacion}
+                  className="text-xs px-3 py-2 rounded-lg border cursor-pointer min-h-[44px]"
+                  style={{
+                    borderColor: "hsl(var(--destructive))",
+                    color: "hsl(var(--destructive))",
+                  }}
+                >
+                  Desvincular
+                </button>
+              </div>
+              {cotizacionVinculada.items.length > 0 && (
+                <ul
+                  className="text-xs space-y-0.5 mt-2 pt-2 border-t"
+                  style={{ borderColor: "hsl(var(--border))" }}
+                >
+                  {cotizacionVinculada.items.map((it, i) => (
+                    <li
+                      key={i}
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      • {it.producto?.nombre ?? "—"} (
+                      {it.producto?.referencia ?? "?"}) × {it.cantidad} ={" "}
+                      {formatCOP(it.subtotal)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowSelector(true)}
+              disabled={cargandoCotizacion}
+              className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[48px] disabled:opacity-50"
+              style={{
+                borderColor: "hsl(var(--primary))",
+                color: "hsl(var(--primary))",
+                backgroundColor: "hsl(var(--card))",
+              }}
+            >
+              {cargandoCotizacion
+                ? "Cargando cotización…"
+                : "🔗 Asociar cotización existente (opcional)"}
+            </button>
+          )}
+        </Section>
+
         <Section titulo="Cliente">
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Nombre *">
@@ -233,6 +378,14 @@ export default function OrdenNueva() {
           </button>
         </div>
       </form>
+
+      {showSelector && (
+        <SelectorCotizacionExistente
+          sedeId={perfil?.sede_id}
+          onClose={() => setShowSelector(false)}
+          onSelect={onSeleccionarCotizacion}
+        />
+      )}
     </div>
   );
 }
