@@ -9,6 +9,7 @@ const TABS = [
   { key: "stock", label: "Stock bajo / agotado" },
   { key: "herramientas", label: "Herramientas vencidas" },
   { key: "ordenes", label: "Órdenes esperando repuesto" },
+  { key: "ot30dias", label: "OT > 30 días sin recoger" },
 ];
 
 export default function Alertas() {
@@ -18,6 +19,7 @@ export default function Alertas() {
     stock: [],
     herramientas: [],
     ordenes: [],
+    ot30dias: [],
   });
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -34,7 +36,7 @@ export default function Alertas() {
     setLoading(true);
     setErrorMsg("");
     try {
-      const [s, h, o] = await Promise.all([
+      const [s, h, o, ot30] = await Promise.all([
         supabase
           .from("inventario")
           .select(
@@ -58,15 +60,24 @@ export default function Alertas() {
           )
           .eq("estado", "esperando_repuesto")
           .order("fecha", { ascending: true }),
+        // Fase 10 §10.4: OTs completadas hace > 30 días sin recoger
+        supabase
+          .from("v_ot_alertas_30_dias")
+          .select(
+            `id, numero, cliente_nombre, cliente_telefono, equipo_descripcion, fecha, sede_id, total_abonado`,
+          )
+          .order("fecha", { ascending: true }),
       ]);
       if (!mountedRef.current) return;
       if (s.error) throw s.error;
       if (h.error) throw h.error;
       if (o.error) throw o.error;
+      if (ot30.error) throw ot30.error;
       setDatos({
         stock: s.data ?? [],
         herramientas: h.data ?? [],
         ordenes: o.data ?? [],
+        ot30dias: ot30.data ?? [],
       });
     } catch (err) {
       if (!mountedRef.current) return;
@@ -84,6 +95,7 @@ export default function Alertas() {
     stock: datos.stock.length,
     herramientas: datos.herramientas.length,
     ordenes: datos.ordenes.length,
+    ot30dias: datos.ot30dias.length,
   };
 
   return (
@@ -96,7 +108,7 @@ export default function Alertas() {
         description={
           loading
             ? "Cargando…"
-            : `${counts.stock + counts.herramientas + counts.ordenes} alertas activas`
+            : `${counts.stock + counts.herramientas + counts.ordenes + counts.ot30dias} alertas activas`
         }
         actions={
           <button
@@ -324,6 +336,80 @@ export default function Alertas() {
                 </div>
               </li>
             ))}
+          </ul>
+        ))}
+
+      {/* Fase 10 §10.4: OT > 30 días sin recoger */}
+      {tab === "ot30dias" &&
+        (datos.ot30dias.length === 0 ? (
+          <Empty icon="📦">Sin OT pendientes de recogida</Empty>
+        ) : (
+          <ul className="space-y-2" role="list">
+            {datos.ot30dias.map((o) => {
+              const dias = Math.floor(
+                (Date.now() - new Date(o.fecha).getTime()) /
+                  (1000 * 60 * 60 * 24),
+              );
+              return (
+                <li
+                  key={o.id}
+                  className="rounded-lg border px-4 py-3"
+                  style={{
+                    backgroundColor: "hsl(var(--card))",
+                    borderColor: "hsl(var(--warning))",
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <p
+                          className="text-xs font-bold font-mono"
+                          style={{ color: "hsl(var(--primary))" }}
+                        >
+                          #{o.numero}
+                        </p>
+                        <span
+                          className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                          style={{
+                            backgroundColor: "hsl(var(--warning) / 0.15)",
+                            color: "hsl(var(--warning))",
+                          }}
+                        >
+                          {dias} días
+                        </span>
+                      </div>
+                      <p
+                        className="text-sm font-medium"
+                        style={{ color: "hsl(var(--foreground))" }}
+                      >
+                        {o.cliente_nombre}
+                        {o.cliente_telefono ? ` · ${o.cliente_telefono}` : ""}
+                      </p>
+                      <p
+                        className="text-xs"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        {o.equipo_descripcion} · Completada{" "}
+                        {formatDate(o.fecha)}
+                        {Number(o.total_abonado) > 0
+                          ? ` · Abonado: ${Number(o.total_abonado).toLocaleString("es-CO")}`
+                          : ""}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/ops/ordenes/${o.id}`)}
+                      className="text-xs px-3 py-2 rounded-lg border cursor-pointer shrink-0 min-h-[44px]"
+                      style={{
+                        borderColor: "hsl(var(--warning))",
+                        color: "hsl(var(--warning))",
+                      }}
+                    >
+                      Abrir OT
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         ))}
     </div>

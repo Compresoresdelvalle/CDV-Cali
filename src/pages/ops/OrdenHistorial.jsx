@@ -13,6 +13,7 @@ const FILTROS = [
   "En proceso",
   "Esperando repuesto",
   "Completadas",
+  "Pend. recogida",
   "Entregadas",
 ];
 const FILTRO_TO_ESTADO = {
@@ -20,6 +21,7 @@ const FILTRO_TO_ESTADO = {
   "En proceso": "en_proceso",
   "Esperando repuesto": "esperando_repuesto",
   Completadas: "completada",
+  "Pend. recogida": "pendiente_recogida",
   Entregadas: "entregada",
 };
 const PAGE_SIZE = 20;

@@ -11,12 +11,16 @@ import {
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
+import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
+import AbonosPanel from "../../components/ot/AbonosPanel";
+import AutorizacionPanel from "../../components/ot/AutorizacionPanel";
 
 const ESTADOS = [
   "abierta",
   "en_proceso",
   "esperando_repuesto",
   "completada",
+  "pendiente_recogida",
   "entregada",
 ];
 const ESTADO_LABEL = {
@@ -24,6 +28,7 @@ const ESTADO_LABEL = {
   en_proceso: "En proceso",
   esperando_repuesto: "Esperando repuesto",
   completada: "Completada",
+  pendiente_recogida: "Pendiente de recogida",
   entregada: "Entregada",
 };
 
@@ -32,7 +37,8 @@ const TRANSICIONES_VALIDAS = {
   abierta: ["en_proceso", "esperando_repuesto"],
   en_proceso: ["esperando_repuesto", "completada"],
   esperando_repuesto: ["en_proceso", "completada"],
-  completada: ["entregada"],
+  completada: ["pendiente_recogida", "entregada"],
+  pendiente_recogida: ["entregada"],
   entregada: [],
 };
 
@@ -574,6 +580,67 @@ export default function OrdenDetalle() {
             {savingTrabajo ? "Guardando…" : "Guardar trabajo"}
           </button>
         </div>
+      )}
+
+      {/* Fase 10 — Autorización del cliente */}
+      <div className="space-y-2">
+        <h3
+          className="text-sm font-semibold"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
+          Autorización del cliente
+        </h3>
+        <AutorizacionPanel
+          ordenId={orden.id}
+          estadoAutorizacion={orden.estado_autorizacion}
+          valorRevision={orden.valor_revision}
+          readOnly={!editable || !puedeEditar}
+          onChange={cargar}
+        />
+      </div>
+
+      {/* Fase 10 — Abonos */}
+      <div className="space-y-2">
+        <h3
+          className="text-sm font-semibold"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
+          Abonos / Anticipos
+        </h3>
+        <AbonosPanel
+          ordenId={orden.id}
+          readOnly={!editable}
+          onChange={cargar}
+        />
+      </div>
+
+      {/* Fase 10 — Checklist de recepción */}
+      <div className="space-y-2">
+        <h3
+          className="text-sm font-semibold"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
+          Checklist de recepción
+        </h3>
+        <ChecklistRecepcion
+          ordenId={orden.id}
+          readOnly={!editable || !puedeEditar}
+        />
+      </div>
+
+      {/* Fase 10 — Generar cotización desde OT */}
+      {puedeEditar && (
+        <button
+          onClick={() => navigate(`/ops/cotizaciones/nueva?ot_id=${orden.id}`)}
+          className="px-4 py-2 rounded-lg text-sm font-medium border cursor-pointer min-h-[48px]"
+          style={{
+            borderColor: "hsl(var(--primary))",
+            color: "hsl(var(--primary))",
+            backgroundColor: "hsl(var(--card))",
+          }}
+        >
+          📄 Generar cotización desde esta OT
+        </button>
       )}
 
       {/* Total */}
