@@ -34,7 +34,7 @@ Convertir el flujo de recibos en un módulo formal con PDF (igual que cotizació
 
 ### 14.5 Vinculación con anticipos/abonos de OT (§6.5)
 
-- Si la OT asociada tiene anticipos o abonos previos (Fase 9 §9.3), deben reflejarse y descontarse en el recibo final.
+- Si la OT asociada tiene anticipos o abonos previos (Fase 10 §10.3), deben reflejarse y descontarse en el recibo final.
 
 ### 14.6 Campos del recibo (§6.6)
 
@@ -54,7 +54,7 @@ Convertir el flujo de recibos en un módulo formal con PDF (igual que cotizació
 | Abonos previos           | Calculado/listado      | Sumatoria de abonos de la OT vinculada.               |
 | Saldo pendiente / pagado | Calculado              | Total – Abonos.                                       |
 | Forma de pago            | Selector               | Efectivo, transferencia, tarjeta, otro.               |
-| Cuenta bancaria usada    | Selector opcional      | Si fue transferencia, qué cuenta recibió (Fase 10).   |
+| Cuenta bancaria usada    | Selector opcional      | Si fue transferencia, qué cuenta recibió (Fase 9).    |
 | Recibido por             | Auto                   | Usuario logueado que emite el recibo.                 |
 | Observaciones            | Texto libre            | Notas adicionales.                                    |
 
