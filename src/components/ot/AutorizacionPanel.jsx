@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
+import FeedbackBanners from "../ui/FeedbackBanners";
 
 const ESTADOS = [
   { id: "pendiente", label: "Pendiente", color: "muted" },
@@ -78,30 +79,7 @@ export default function AutorizacionPanel({
 
   return (
     <div className="space-y-3">
-      {errorMsg && (
-        <div
-          className="rounded-lg border px-3 py-2 text-xs"
-          style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.4)",
-            color: "hsl(var(--destructive))",
-          }}
-        >
-          {errorMsg}
-        </div>
-      )}
-      {okMsg && (
-        <div
-          className="rounded-lg border px-3 py-2 text-xs"
-          style={{
-            backgroundColor: "hsl(var(--success) / 0.08)",
-            borderColor: "hsl(var(--success) / 0.4)",
-            color: "hsl(var(--success))",
-          }}
-        >
-          {okMsg}
-        </div>
-      )}
+      <FeedbackBanners errorMsg={errorMsg} okMsg={okMsg} />
 
       <div className="grid grid-cols-3 gap-2">
         {ESTADOS.map((e) => {

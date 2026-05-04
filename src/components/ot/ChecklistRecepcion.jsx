@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
+import FeedbackBanners from "../ui/FeedbackBanners";
 
 /**
  * Checklist de recepción de OT (Fase 10 §10.1).
@@ -53,19 +54,19 @@ export default function ChecklistRecepcion({
           ignoreDuplicates: true,
         });
       }
-      // Cargar checklist con join a componente
+      // Cargar checklist con inner-join filtrado por activo (server-side)
       const { data, error } = await supabase
         .from("ot_checklist")
         .select(
-          "id, marcado, observacion, componente:componente_id(id, nombre, orden, activo)",
+          "id, marcado, observacion, componente:componente_id!inner(id, nombre, orden, activo)",
         )
         .eq("orden_id", ordenId)
-        .order("componente_id");
+        .eq("componente.activo", true);
       if (!mountedRef.current) return;
       if (error) throw error;
-      // Filtrar solo componentes activos + ordenar por componente.orden
-      const activos = (data ?? [])
-        .filter((row) => row.componente?.activo)
+      // Sort en cliente (multi-criterio: orden numérico, luego nombre)
+      const sorted = (data ?? [])
+        .slice()
         .sort(
           (a, b) =>
             (a.componente?.orden ?? 0) - (b.componente?.orden ?? 0) ||
@@ -73,7 +74,7 @@ export default function ChecklistRecepcion({
               b.componente?.nombre ?? "",
             ),
         );
-      setItems(activos);
+      setItems(sorted);
     } catch (err) {
       if (!mountedRef.current) return;
       setErrorMsg(safeError(err, "Error al cargar checklist"));
@@ -132,18 +133,7 @@ export default function ChecklistRecepcion({
 
   return (
     <div className="space-y-2">
-      {errorMsg && (
-        <div
-          className="rounded-lg border px-3 py-2 text-xs"
-          style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.4)",
-            color: "hsl(var(--destructive))",
-          }}
-        >
-          {errorMsg}
-        </div>
-      )}
+      <FeedbackBanners errorMsg={errorMsg} />
 
       <div
         className="rounded-lg border px-3 py-2 text-xs flex items-center justify-between gap-3"

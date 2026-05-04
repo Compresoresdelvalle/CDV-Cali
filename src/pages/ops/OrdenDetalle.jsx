@@ -629,7 +629,7 @@ export default function OrdenDetalle() {
       </div>
 
       {/* Fase 10 — Generar cotización desde OT */}
-      {puedeEditar && (
+      {puedeEditar && editable && (
         <button
           onClick={() => navigate(`/ops/cotizaciones/nueva?ot_id=${orden.id}`)}
           className="px-4 py-2 rounded-lg text-sm font-medium border cursor-pointer min-h-[48px]"
