@@ -46,7 +46,14 @@ export default function CotizacionNueva() {
         .select("cliente_nombre, cliente_telefono")
         .eq("id", otIdParam)
         .maybeSingle();
-      if (!mounted || e || !data) return;
+      if (!mounted) return;
+      if (e || !data) {
+        // OT no accesible (RLS bloquea o no existe)
+        setError(
+          "No se pudo cargar la OT vinculada — verifica que tienes acceso. Puedes continuar manualmente.",
+        );
+        return;
+      }
       setClienteNombre(data.cliente_nombre ?? "");
       setClienteTelefono(data.cliente_telefono ?? "");
     })();
@@ -210,10 +217,22 @@ export default function CotizacionNueva() {
       // Fase 10 §10.6: si veníamos de una OT, vincular la nueva cotización
       const newCotId = rpcData?.cotizacion_id;
       if (otIdParam && newCotId) {
-        await supabase
+        const { error: linkErr } = await supabase
           .from("cotizaciones")
           .update({ ot_id: otIdParam })
           .eq("id", newCotId);
+        if (linkErr) {
+          // La cotización se creó OK; solo falló el vínculo. Avisar pero no
+          // bloquear — el admin puede editar el ot_id manualmente.
+          console.warn(
+            "[CotizacionNueva] Cotización creada pero no se pudo vincular OT",
+            linkErr,
+          );
+          setError(
+            `Cotización creada (#${rpcData?.numero ?? "?"}), pero no se pudo vincular a la OT. Edítala desde el detalle si es necesario.`,
+          );
+          // Continuamos a la lista — la cotización existe.
+        }
       }
       navigate("/ops/cotizaciones");
     } catch (e) {
