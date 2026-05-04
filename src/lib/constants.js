@@ -98,4 +98,5 @@ export const ADMIN_MODULES = [
   { nombre: "Auditoría", icon: "🔍", ruta: "/admin/auditoria" },
   { nombre: "Usuarios", icon: "👥", ruta: "/admin/usuarios" },
   { nombre: "Top 10", icon: "🏆", ruta: "/admin/top10" },
+  { nombre: "Configuración", icon: "⚙️", ruta: "/admin/configuracion" },
 ];
