@@ -144,13 +144,32 @@ export default function ChecklistRecepcion({
         }}
       >
         <span>
-          Marca lo que SÍ trae el equipo. Lo no marcado = no llegó (soporte
-          legal).
+          <strong>¿Cómo se usa?</strong> Marca cada componente que el cliente
+          entregó FÍSICAMENTE con el equipo. Lo que NO marques queda como prueba
+          de que NO llegó — esto te protege legalmente si después reclama.
         </span>
-        <span className="font-mono font-semibold whitespace-nowrap">
-          {totalMarcados}/{items.length}
+        <span
+          className="font-mono font-bold whitespace-nowrap text-base"
+          style={{
+            color:
+              totalMarcados === 0
+                ? "hsl(var(--muted-foreground))"
+                : "hsl(var(--info))",
+          }}
+        >
+          {totalMarcados} / {items.length}
         </span>
       </div>
+
+      {totalMarcados === 0 && (
+        <p
+          className="text-xs italic"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Empieza marcando los componentes que ves en el equipo. Click en cada
+          tarjeta para marcar/desmarcar.
+        </p>
+      )}
 
       <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5" role="list">
         {items.map((it) => {

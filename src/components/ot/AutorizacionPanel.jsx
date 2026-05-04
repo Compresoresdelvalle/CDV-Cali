@@ -50,9 +50,16 @@ export default function AutorizacionPanel({
     setOkMsg("");
     let payload = { estado_autorizacion: estado };
     if (estado === "no_autorizado") {
-      const v = Number(valor);
+      const raw = String(valor).trim();
+      if (raw === "") {
+        setErrorMsg(
+          "Debes ingresar el valor por revisión que se le cobrará al cliente",
+        );
+        return;
+      }
+      const v = Number(raw);
       if (!Number.isFinite(v) || v < 0) {
-        setErrorMsg("Valor por revisión debe ser ≥ 0");
+        setErrorMsg("Valor por revisión debe ser un número ≥ 0");
         return;
       }
       payload.valor_revision = v;
@@ -89,17 +96,17 @@ export default function AutorizacionPanel({
               key={e.id}
               onClick={() => !readOnly && setEstado(e.id)}
               disabled={readOnly}
-              className="rounded-lg border px-3 py-3 text-xs font-medium cursor-pointer min-h-[48px] disabled:opacity-50"
+              className="rounded-lg border-2 px-3 py-3 text-sm font-semibold cursor-pointer min-h-[48px] disabled:opacity-50 transition-all"
               style={{
                 backgroundColor: active
-                  ? `hsl(var(--${e.color}) / 0.15)`
+                  ? `hsl(var(--${e.color}) / 0.18)`
                   : "hsl(var(--card))",
                 borderColor: active
                   ? `hsl(var(--${e.color}))`
-                  : "hsl(var(--border))",
+                  : "hsl(var(--muted-foreground) / 0.3)",
                 color: active
                   ? `hsl(var(--${e.color}))`
-                  : "hsl(var(--foreground))",
+                  : "hsl(var(--muted-foreground))",
               }}
             >
               {e.label}

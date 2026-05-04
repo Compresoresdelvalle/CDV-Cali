@@ -47,8 +47,8 @@ export default function CotizacionHistorial() {
       let query = supabase
         .from("cotizaciones")
         .select(
-          `id, numero, fecha, cliente_nombre, estado, total, vigencia_dias,
-           vendedor:vendedor_id(nombre)`,
+          `id, numero, fecha, cliente_nombre, estado, total, vigencia_dias, ot_id,
+           vendedor:vendedor_id(nombre), ot:ot_id(numero)`,
         )
         .order("fecha", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
@@ -283,6 +283,18 @@ export default function CotizacionHistorial() {
                               #{c.numero}
                             </span>
                             <StatusBadge status={c.estado} />
+                            {c.ot && (
+                              <span
+                                className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                                style={{
+                                  backgroundColor: "hsl(var(--info) / 0.15)",
+                                  color: "hsl(var(--info))",
+                                }}
+                                title="Vinculada a OT"
+                              >
+                                🔗 OT #{c.ot.numero}
+                              </span>
+                            )}
                           </div>
                           <p
                             className="text-sm font-medium truncate"
