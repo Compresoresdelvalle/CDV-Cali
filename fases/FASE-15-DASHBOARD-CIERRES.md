@@ -32,7 +32,7 @@ Indicadores numéricos:
 Implica:
 
 - RPC `fn_dashboard_kpis()` (ya existe — Fase 8) debe retornar dos buckets: `ingresos_productos` y `ingresos_servicios`.
-- Sumar abonos de OT (Fase 9 §9.3) y valores por revisión (Fase 9 §9.2) al bucket de servicios.
+- Sumar abonos de OT (Fase 10 §10.3) y valores por revisión (Fase 10 §10.2) al bucket de servicios.
 - UI Dashboard separa visualmente ambos buckets.
 
 ### 15.3 Cierres (§8.3)

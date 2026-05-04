@@ -45,12 +45,17 @@ Ajustar Inventario, Compras y Traspasos según las reglas operativas finales del
 
 - Venta → resta automática **(ya existe)**.
 - Traslado → resta de origen + suma en destino **(ya existe)**.
-- Piezas usadas en OT → resta automática **(ya existe — Fase 9 §2.7)**.
+- Piezas usadas en OT → resta automática **(ya existe — validar en Fase 10 §10.5)**.
 - **Ensamble de compresor** → resta componentes individuales y crea el compresor armado como nuevo ítem → **POSTERGADO a Fase 18 (post-v1.0).** _"Vamos por partes, luego vemos ensambles."_
 
-### 12.6 Inventario — Conteo cíclico (§3.6) **(ya existe — validar)**
+### 12.6 Inventario — Conteo cíclico (§3.6)
 
-- Conteo cada 15 días, mensual o trimestral.
+> _"Al final del mes o al final de cada tres meses ya saben si está bien el inventario o no."_
+
+- Módulo Conteo (`admin/Conteo.jsx`) ya existe — validar que está funcional.
+- Cadencia configurable vía `fn_get_parametro('dias_conteo_ciclico')` (Fase 9, default 15 días).
+- Alerta admin: "Próximo conteo cíclico en X días" cuando se acerque la fecha.
+- Reporte de discrepancias mensual / trimestral.
 
 ### 12.7 Inventario — Códigos QR (§3.7) **(ya existe estructura)**
 
@@ -72,19 +77,25 @@ Ajustar Inventario, Compras y Traspasos según las reglas operativas finales del
 - **Mercancía abandonada en almacenes** → retroceso a bodega.
 - **Devoluciones internas por garantía** → coordina con Fase 13.
 
-> **Nota:** El movimiento físico del equipo de OT a bodega tras 30 días NO es un traslado de inventario, porque el equipo nunca estuvo en inventario. Es un cambio de estado interno de la OT (Fase 9 §9.4).
+> **Nota:** El movimiento físico del equipo de OT a bodega tras 30 días NO es un traslado de inventario, porque el equipo nunca estuvo en inventario. Es un cambio de estado interno de la OT (Fase 10 §10.4).
 
 ### 12.11 Traspasos — picking (§4.3) **(ya existe — validar)**
 
 ### 12.12 Traspasos — organización física (§4.4)
 
 - Estructura por **stand** y **espacio**. Cada stand tiene **3 a 4 pisos**.
-- (Validar si ya existe en `ubicaciones`.)
+- Validar tabla `ubicaciones` existente; si no tiene esos campos, agregar:
+  - `ubicaciones.stand` (text)
+  - `ubicaciones.piso` (smallint, 1–4)
+  - `ubicaciones.espacio` (text, opcional)
+- UI Traspasos / Inventario debe permitir filtrar por stand y piso al hacer picking.
+- Etiqueta QR del producto incluye stand/piso para localización rápida.
 
 ## Tablas / migrations
 
 - **Columnas nuevas en `productos`:** `codigo_proveedor`, `tipo` (enum `nuevo` | `segunda_mano`).
-- **Columnas nuevas en `compras`:** `estado` (enum).
+- **Columnas nuevas en `compras`:** `estado` (enum `completada` | `devolucion_garantia` | ...).
+- **Columnas nuevas en `ubicaciones` (§4.4):** `stand`, `piso` (1–4), `espacio` opcional.
 - **Tablas nuevas:** `productos_proveedores` (M2M, si no existe).
 - **Vista o RPC:** `fn_ultimo_proveedor(producto_id)`.
 

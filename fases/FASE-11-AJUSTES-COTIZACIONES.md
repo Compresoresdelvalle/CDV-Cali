@@ -34,11 +34,11 @@ Dejar el módulo Cotizaciones alineado con lo que el cliente entrega al cliente 
 - Mostrar las cuentas bancarias disponibles en el pie del PDF.
 - Usuario elige **cuáles cuentas mostrar** en cada cotización (multiselección).
 - La cuenta a usar depende de si el cliente paga con IVA o sin IVA.
-- Implica: leer `cuentas_bancarias` (Fase 10), filtrar por marca con/sin IVA según el % IVA aplicado.
+- Implica: leer `cuentas_bancarias` (Fase 9), filtrar por marca con/sin IVA según el % IVA aplicado.
 
 ### 11.6 IVA configurable por cotización (§1.6)
 
-- Casilla con porcentaje editable. Default = `parametros_sistema.iva` (Fase 10), normalmente 19%.
+- Casilla con porcentaje editable. Default = `fn_get_parametro('iva_pct')` (Fase 9), normalmente 19%.
 - Permite 0%.
 - _"Le hacemos una casilla IVA y si la pones en cero pues que no la tenga... que el IVA sea cambiable, porque el IVA puede subir o puede bajar."_
 - En el PDF: reflejar explícitamente el % aplicado (ej: "IVA 0%" o "IVA 19%").

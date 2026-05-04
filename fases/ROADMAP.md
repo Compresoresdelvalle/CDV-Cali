@@ -19,17 +19,17 @@
 
 Cada fase tiene su propio `/plan mode` cuando llegue su turno. **Deploy v1.0 (Fase 17) es la última.**
 
-| Fase | Tema                                                   | Archivo                                           |
-| ---- | ------------------------------------------------------ | ------------------------------------------------- |
-| 9    | Ajustes Órdenes de Trabajo                             | `FASE-09-AJUSTES-OT.md`                           |
-| 10   | Configuración General (cuentas, parámetros, checklist) | `FASE-10-CONFIGURACION-GENERAL.md`                |
-| 11   | Ajustes Cotizaciones (PDF, IVA, validez, cuentas)      | `FASE-11-AJUSTES-COTIZACIONES.md`                 |
-| 12   | Ajustes Inventario + Compras + Traspasos               | `FASE-12-AJUSTES-INVENTARIO-COMPRAS-TRASPASOS.md` |
-| 13   | Garantías (compras + ventas) — módulo nuevo            | `FASE-13-GARANTIAS.md`                            |
-| 14   | Recibos manuales completos — módulo nuevo              | `FASE-14-RECIBOS.md`                              |
-| 15   | Dashboard expandido + Cierres                          | `FASE-15-DASHBOARD-CIERRES.md`                    |
-| 16   | Frontend Redesign + Reestructura `src/` feature-based  | `FASE-16-FRONTEND-REDESIGN.md`                    |
-| 17   | **Deploy v1.0** — PWA, QR lote, CSV, UptimeRobot, tag  | `FASE-17-DEPLOY-V1.md`                            |
+| Fase | Tema                                                                      | Archivo                                           |
+| ---- | ------------------------------------------------------------------------- | ------------------------------------------------- |
+| 9    | **Configuración General** (cuentas, parámetros, checklist) — prerequisito | `FASE-09-CONFIGURACION-GENERAL.md`                |
+| 10   | Ajustes Órdenes de Trabajo (consume catálogos de F9)                      | `FASE-10-AJUSTES-OT.md`                           |
+| 11   | Ajustes Cotizaciones (PDF, IVA, validez, cuentas)                         | `FASE-11-AJUSTES-COTIZACIONES.md`                 |
+| 12   | Ajustes Inventario + Compras + Traspasos                                  | `FASE-12-AJUSTES-INVENTARIO-COMPRAS-TRASPASOS.md` |
+| 13   | Garantías (compras + ventas) — módulo nuevo                               | `FASE-13-GARANTIAS.md`                            |
+| 14   | Recibos manuales completos — módulo nuevo                                 | `FASE-14-RECIBOS.md`                              |
+| 15   | Dashboard expandido + Cierres                                             | `FASE-15-DASHBOARD-CIERRES.md`                    |
+| 16   | Frontend Redesign + Reestructura `src/` feature-based                     | `FASE-16-FRONTEND-REDESIGN.md`                    |
+| 17   | **Deploy v1.0** — PWA, QR lote, CSV, UptimeRobot, tag                     | `FASE-17-DEPLOY-V1.md`                            |
 
 ## Post-v1.0
 

@@ -53,7 +53,7 @@ Producto comprado al proveedor llegó defectuoso. **Dos resoluciones posibles:**
 - Si la solución es arreglar → entregar arreglado.
 
 - Asociar a `ventas` o a `ordenes_servicio` original (FK).
-- Fecha vencimiento auto-calculada = `fecha_venta + parametros_sistema.dias_garantia` (Fase 10 §10.3).
+- Fecha vencimiento auto-calculada = `fecha_venta + fn_get_parametro('dias_garantia_venta')` (Fase 9 §9.3).
 
 ## Tablas / migrations
 
