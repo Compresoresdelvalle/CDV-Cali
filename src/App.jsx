@@ -36,6 +36,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import Alertas from "./pages/admin/Alertas";
 import Reorden from "./pages/admin/Reorden";
 import Top10 from "./pages/admin/Top10";
+import Configuracion from "./pages/admin/Configuracion";
 import AnalisisABC from "./pages/admin/AnalisisABC";
 import Auditoria from "./pages/admin/Auditoria";
 import Usuarios from "./pages/admin/Usuarios";
@@ -320,6 +321,7 @@ export default function App() {
           <Route path="auditoria" element={<Auditoria />} />
           <Route path="usuarios" element={<Usuarios />} />
           <Route path="top10" element={<Top10 />} />
+          <Route path="configuracion" element={<Configuracion />} />
         </Route>
 
         {/* Fallback → login */}
