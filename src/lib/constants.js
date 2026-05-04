@@ -100,3 +100,13 @@ export const ADMIN_MODULES = [
   { nombre: "Top 10", icon: "🏆", ruta: "/admin/top10" },
   { nombre: "Configuración", icon: "⚙️", ruta: "/admin/configuracion" },
 ];
+
+// Fase 10: etiquetas de estados de OT (incluye pendiente_recogida)
+export const ESTADOS_OT_LABELS = {
+  abierta: "Abierta",
+  en_proceso: "En proceso",
+  esperando_repuesto: "Esperando repuesto",
+  completada: "Completada",
+  pendiente_recogida: "Pendiente de recogida",
+  entregada: "Entregada",
+};

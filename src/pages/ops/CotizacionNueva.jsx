@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useCallback, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
@@ -15,6 +15,8 @@ const inputStyle = {
 
 export default function CotizacionNueva() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const otIdParam = searchParams.get("ot_id");
   const perfil = useAuthStore((s) => s.perfil);
 
   const [busqueda, setBusqueda] = useState("");
@@ -33,6 +35,25 @@ export default function CotizacionNueva() {
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
+
+  // Fase 10 §10.6: si llegamos con ?ot_id=xxx, pre-llenar datos del cliente
+  useEffect(() => {
+    if (!otIdParam) return;
+    let mounted = true;
+    (async () => {
+      const { data, error: e } = await supabase
+        .from("ordenes_servicio")
+        .select("cliente_nombre, cliente_telefono")
+        .eq("id", otIdParam)
+        .maybeSingle();
+      if (!mounted || e || !data) return;
+      setClienteNombre(data.cliente_nombre ?? "");
+      setClienteTelefono(data.cliente_telefono ?? "");
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [otIdParam]);
 
   const buscarProductos = useCallback(async (q) => {
     if (!q || q.trim().length < 2) {
@@ -167,22 +188,33 @@ export default function CotizacionNueva() {
     }
     setGuardando(true);
     try {
-      const { error: rpcErr } = await supabase.rpc("fn_registrar_cotizacion", {
-        p_sede_id: perfil.sede_id,
-        p_cliente_nombre: clienteNombre || null,
-        p_cliente_nit: clienteNit || null,
-        p_cliente_email: clienteEmail || null,
-        p_cliente_telefono: clienteTelefono || null,
-        p_descuento_pct: descuentoPct,
-        p_vigencia_dias: vigenciaDias,
-        p_observaciones: observaciones || null,
-        p_items: carrito.map((i) => ({
-          producto_id: i.producto_id,
-          cantidad: i.cantidad,
-          precio_unitario: i.precio_unitario,
-        })),
-      });
+      const { data: rpcData, error: rpcErr } = await supabase.rpc(
+        "fn_registrar_cotizacion",
+        {
+          p_sede_id: perfil.sede_id,
+          p_cliente_nombre: clienteNombre || null,
+          p_cliente_nit: clienteNit || null,
+          p_cliente_email: clienteEmail || null,
+          p_cliente_telefono: clienteTelefono || null,
+          p_descuento_pct: descuentoPct,
+          p_vigencia_dias: vigenciaDias,
+          p_observaciones: observaciones || null,
+          p_items: carrito.map((i) => ({
+            producto_id: i.producto_id,
+            cantidad: i.cantidad,
+            precio_unitario: i.precio_unitario,
+          })),
+        },
+      );
       if (rpcErr) throw new Error(rpcErr.message);
+      // Fase 10 §10.6: si veníamos de una OT, vincular la nueva cotización
+      const newCotId = rpcData?.cotizacion_id;
+      if (otIdParam && newCotId) {
+        await supabase
+          .from("cotizaciones")
+          .update({ ot_id: otIdParam })
+          .eq("id", newCotId);
+      }
       navigate("/ops/cotizaciones");
     } catch (e) {
       setError(safeError(e, "Error al guardar la cotización"));
