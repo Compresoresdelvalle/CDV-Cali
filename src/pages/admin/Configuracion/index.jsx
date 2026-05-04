@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import PageHeader from "../../../components/layout/PageHeader";
 import CuentasBancarias from "./CuentasBancarias";
 import ChecklistOT from "./ChecklistOT";
@@ -9,9 +10,24 @@ const TABS = [
   { id: "checklist", label: "Checklist OT", icon: "📋" },
   { id: "parametros", label: "Parámetros", icon: "⚙️" },
 ];
+const TAB_IDS = TABS.map((t) => t.id);
 
 export default function Configuracion() {
-  const [tab, setTab] = useState("cuentas");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initial = searchParams.get("tab");
+  const [tab, setTab] = useState(
+    TAB_IDS.includes(initial) ? initial : "cuentas",
+  );
+
+  // Sincroniza tab activo con la URL (deep-link compartible)
+  useEffect(() => {
+    if (searchParams.get("tab") !== tab) {
+      const next = new URLSearchParams(searchParams);
+      next.set("tab", tab);
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   return (
     <div
@@ -32,7 +48,7 @@ export default function Configuracion() {
               role="tab"
               aria-selected={active}
               onClick={() => setTab(t.id)}
-              className="px-4 py-2.5 rounded-lg text-sm font-medium border cursor-pointer whitespace-nowrap min-h-[44px]"
+              className="px-4 py-2.5 rounded-lg text-sm font-medium border cursor-pointer whitespace-nowrap min-h-[48px]"
               style={{
                 backgroundColor: active
                   ? "hsl(var(--primary))"

@@ -20,6 +20,16 @@ export default function ChecklistOT() {
     };
   }, []);
 
+  // ESC cierra el modal (si no estamos guardando)
+  useEffect(() => {
+    if (!editando) return;
+    const onKey = (e) => {
+      if (e.key === "Escape" && !saving) setEditando(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editando, saving]);
+
   const cargar = async () => {
     setLoading(true);
     setErrorMsg("");
@@ -154,7 +164,7 @@ export default function ChecklistOT() {
           onClick={() =>
             setEditando({ nuevo: true, orden: 0, activo: true, nombre: "" })
           }
-          className="text-xs px-3 py-2 rounded-lg cursor-pointer min-h-[40px]"
+          className="text-xs px-3 py-2 rounded-lg cursor-pointer min-h-[48px]"
           style={{
             backgroundColor: "hsl(var(--primary))",
             color: "hsl(var(--primary-foreground))",
@@ -206,7 +216,7 @@ export default function ChecklistOT() {
               <div className="flex gap-1.5 shrink-0">
                 <button
                   onClick={() => setEditando({ ...it })}
-                  className="text-xs px-2 py-1.5 rounded-lg border cursor-pointer min-h-[36px]"
+                  className="text-xs px-2 py-1.5 rounded-lg border cursor-pointer min-h-[44px]"
                   style={{
                     borderColor: "hsl(var(--primary))",
                     color: "hsl(var(--primary))",
@@ -216,7 +226,7 @@ export default function ChecklistOT() {
                 </button>
                 <button
                   onClick={() => toggleActivo(it)}
-                  className="text-xs px-2 py-1.5 rounded-lg border cursor-pointer min-h-[36px]"
+                  className="text-xs px-2 py-1.5 rounded-lg border cursor-pointer min-h-[44px]"
                   style={{
                     borderColor: it.activo
                       ? "hsl(var(--destructive))"
@@ -268,7 +278,7 @@ export default function ChecklistOT() {
                 onChange={(e) =>
                   setEditando({ ...editando, nombre: e.target.value })
                 }
-                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[40px]"
+                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[48px]"
                 style={{
                   backgroundColor: "hsl(var(--background))",
                   borderColor: "hsl(var(--border))",
@@ -292,7 +302,7 @@ export default function ChecklistOT() {
                 onChange={(e) =>
                   setEditando({ ...editando, orden: e.target.value })
                 }
-                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[40px]"
+                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[48px]"
                 style={{
                   backgroundColor: "hsl(var(--background))",
                   borderColor: "hsl(var(--border))",
@@ -305,7 +315,7 @@ export default function ChecklistOT() {
               <button
                 onClick={() => setEditando(null)}
                 disabled={saving}
-                className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[40px] disabled:opacity-50"
+                className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[48px] disabled:opacity-50"
                 style={{
                   borderColor: "hsl(var(--border))",
                   color: "hsl(var(--muted-foreground))",
@@ -316,7 +326,7 @@ export default function ChecklistOT() {
               <button
                 onClick={guardar}
                 disabled={saving}
-                className="text-sm px-4 py-2 rounded-lg cursor-pointer min-h-[40px] disabled:opacity-50"
+                className="text-sm px-4 py-2 rounded-lg cursor-pointer min-h-[48px] disabled:opacity-50"
                 style={{
                   backgroundColor: "hsl(var(--primary))",
                   color: "hsl(var(--primary-foreground))",

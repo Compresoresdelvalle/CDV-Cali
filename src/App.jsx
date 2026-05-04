@@ -2,6 +2,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 
 import { useAuthStore } from "./stores/authStore";
+import {
+  subscribeParametros,
+  unsubscribeParametros,
+} from "./hooks/useParametro";
 import Login from "./pages/Login";
 import RoleGuard from "./components/layout/RoleGuard";
 import AppShell from "./components/layout/AppShell";
@@ -71,6 +75,13 @@ export default function App() {
       });
     };
   }, [init]);
+
+  // Suscripción Realtime a parametros_sistema (Fase 9): cuando un Admin cambia
+  // un parámetro en otra tab/dispositivo, invalida la caché local.
+  useEffect(() => {
+    subscribeParametros();
+    return () => unsubscribeParametros();
+  }, []);
 
   return (
     <BrowserRouter>

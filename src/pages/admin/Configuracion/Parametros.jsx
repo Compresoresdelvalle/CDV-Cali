@@ -1,11 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../../lib/supabase";
 import { safeError } from "../../../lib/utils";
-import { useAuthStore } from "../../../stores/authStore";
 import { invalidateParametro } from "../../../hooks/useParametro";
 
+// Bounds por key — sincronizado con fn_validate_parametro_value() en BD
+const BOUNDS = {
+  iva_pct: { min: 0, max: 100 },
+  validez_cotizacion_dias: { min: 1, max: 365 },
+  dias_alerta_ot_abandonada: { min: 1, max: 3650 },
+  dias_garantia_venta: { min: 1, max: 3650 },
+  dias_conteo_ciclico: { min: 1, max: 3650 },
+};
+
 export default function Parametros() {
-  const perfil = useAuthStore((s) => s.perfil);
   const [params, setParams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -51,8 +58,13 @@ export default function Parametros() {
     if (p.tipo === "int") {
       if (!/^-?\d+$/.test(v)) return "Debe ser entero";
       const n = parseInt(v, 10);
-      if (n <= 0 && p.key !== "iva_pct") return "Debe ser > 0";
-      if (n < 0) return "No puede ser negativo";
+      const b = BOUNDS[p.key];
+      if (b) {
+        if (n < b.min) return `Debe ser ≥ ${b.min}`;
+        if (n > b.max) return `Debe ser ≤ ${b.max}`;
+      } else {
+        if (n < 0) return "No puede ser negativo";
+      }
     } else if (p.tipo === "decimal") {
       if (!/^-?\d+(\.\d+)?$/.test(v)) return "Debe ser numérico";
     } else if (p.tipo === "bool") {
@@ -72,12 +84,10 @@ export default function Parametros() {
     setErrorMsg("");
     setOkMsg("");
     try {
+      // updated_by y updated_at los setea el trigger fn_set_updated_by_auth (anti-spoof)
       const { error } = await supabase
         .from("parametros_sistema")
-        .update({
-          value: String(raw).trim(),
-          updated_by: perfil?.id ?? null,
-        })
+        .update({ value: String(raw).trim() })
         .eq("key", p.key);
       if (error) throw error;
       invalidateParametro(p.key);
@@ -211,7 +221,7 @@ export default function Parametros() {
                         setEdits({ ...edits, [p.key]: e.target.value })
                       }
                       disabled={saving}
-                      className="w-28 px-3 py-2 rounded-lg border text-sm font-mono min-h-[40px] disabled:opacity-50"
+                      className="w-28 px-3 py-2 rounded-lg border text-sm font-mono min-h-[48px] disabled:opacity-50"
                       style={{
                         backgroundColor: "hsl(var(--background))",
                         borderColor: dirty
@@ -223,7 +233,7 @@ export default function Parametros() {
                     <button
                       onClick={() => guardar(p)}
                       disabled={!dirty || saving}
-                      className="text-xs px-3 py-2 rounded-lg cursor-pointer min-h-[40px] disabled:opacity-50"
+                      className="text-xs px-3 py-2 rounded-lg cursor-pointer min-h-[48px] disabled:opacity-50"
                       style={{
                         backgroundColor: "hsl(var(--primary))",
                         color: "hsl(var(--primary-foreground))",

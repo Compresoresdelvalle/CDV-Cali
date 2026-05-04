@@ -14,16 +14,54 @@ import { supabase } from "../lib/supabase";
  */
 const useCache = create(() => ({ params: {} }));
 
+// Dedupe de requests en vuelo: si dos componentes piden la misma key
+// simultáneamente en frío, comparten una sola promesa.
+const inflight = new Map();
+
 /** Lee un parámetro de la BD (o caché). Retorna `null` si no existe. */
 export async function getParametro(key) {
   const { params } = useCache.getState();
   if (params[key] !== undefined) return params[key];
-  const { data, error } = await supabase.rpc("fn_get_parametro", {
-    p_key: key,
-  });
-  if (error) throw error;
-  useCache.setState((s) => ({ params: { ...s.params, [key]: data } }));
-  return data;
+  if (inflight.has(key)) return inflight.get(key);
+  const promise = (async () => {
+    try {
+      const { data, error } = await supabase.rpc("fn_get_parametro", {
+        p_key: key,
+      });
+      if (error) throw error;
+      useCache.setState((s) => ({ params: { ...s.params, [key]: data } }));
+      return data;
+    } finally {
+      inflight.delete(key);
+    }
+  })();
+  inflight.set(key, promise);
+  return promise;
+}
+
+// Suscripción Realtime opcional — invalida caché cuando cambia un parámetro
+// en otra tab. Llamar `subscribeParametros()` una vez al iniciar la app.
+let realtimeChannel = null;
+export function subscribeParametros() {
+  if (realtimeChannel) return realtimeChannel;
+  realtimeChannel = supabase
+    .channel("parametros_sistema_changes")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "parametros_sistema" },
+      (payload) => {
+        const key = payload.new?.key ?? payload.old?.key;
+        if (key) invalidateParametro(key);
+      },
+    )
+    .subscribe();
+  return realtimeChannel;
+}
+export function unsubscribeParametros() {
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
 }
 
 /** Lee un parámetro como entero. Retorna `fallback` si no existe o no parseable. */
