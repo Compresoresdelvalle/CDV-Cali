@@ -22,6 +22,16 @@ export default function CuentasBancarias() {
     };
   }, []);
 
+  // ESC cierra el modal (si no estamos guardando)
+  useEffect(() => {
+    if (!editando) return;
+    const onKey = (e) => {
+      if (e.key === "Escape" && !saving) setEditando(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editando, saving]);
+
   const cargar = async () => {
     setLoading(true);
     setErrorMsg("");
@@ -56,6 +66,17 @@ export default function CuentasBancarias() {
     }
     if (!TIPOS.includes(editando.tipo)) {
       setErrorMsg("Tipo inválido");
+      return;
+    }
+    // Validación de unicidad cliente (banco, numero) — el UNIQUE BD también lo bloquea
+    const duplicada = cuentas.find(
+      (c) =>
+        c.banco.toLowerCase() === banco.toLowerCase() &&
+        c.numero === numero &&
+        c.id !== editando.id,
+    );
+    if (duplicada) {
+      setErrorMsg(`Ya existe la cuenta ${banco} (${numero})`);
       return;
     }
     setSaving(true);
@@ -152,7 +173,7 @@ export default function CuentasBancarias() {
           onClick={() =>
             setEditando({ nuevo: true, tipo: "Ahorros", activo: true })
           }
-          className="text-xs px-3 py-2 rounded-lg cursor-pointer min-h-[40px]"
+          className="text-xs px-3 py-2 rounded-lg cursor-pointer min-h-[48px]"
           style={{
             backgroundColor: "hsl(var(--primary))",
             color: "hsl(var(--primary-foreground))",
@@ -245,7 +266,7 @@ export default function CuentasBancarias() {
                 <div className="flex gap-2 shrink-0">
                   <button
                     onClick={() => setEditando({ ...c })}
-                    className="text-xs px-3 py-2 rounded-lg border cursor-pointer min-h-[40px]"
+                    className="text-xs px-3 py-2 rounded-lg border cursor-pointer min-h-[48px]"
                     style={{
                       borderColor: "hsl(var(--primary))",
                       color: "hsl(var(--primary))",
@@ -255,7 +276,7 @@ export default function CuentasBancarias() {
                   </button>
                   <button
                     onClick={() => toggleActivo(c)}
-                    className="text-xs px-3 py-2 rounded-lg border cursor-pointer min-h-[40px]"
+                    className="text-xs px-3 py-2 rounded-lg border cursor-pointer min-h-[48px]"
                     style={{
                       borderColor: c.activo
                         ? "hsl(var(--destructive))"
@@ -302,7 +323,7 @@ export default function CuentasBancarias() {
                 onChange={(e) =>
                   setEditando({ ...editando, banco: e.target.value })
                 }
-                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[40px]"
+                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[48px]"
                 style={{
                   backgroundColor: "hsl(var(--background))",
                   borderColor: "hsl(var(--border))",
@@ -318,7 +339,7 @@ export default function CuentasBancarias() {
                 onChange={(e) =>
                   setEditando({ ...editando, tipo: e.target.value })
                 }
-                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[40px]"
+                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[48px]"
                 style={{
                   backgroundColor: "hsl(var(--background))",
                   borderColor: "hsl(var(--border))",
@@ -340,7 +361,7 @@ export default function CuentasBancarias() {
                 onChange={(e) =>
                   setEditando({ ...editando, numero: e.target.value })
                 }
-                className="w-full px-3 py-2 rounded-lg border text-sm font-mono min-h-[40px]"
+                className="w-full px-3 py-2 rounded-lg border text-sm font-mono min-h-[48px]"
                 style={{
                   backgroundColor: "hsl(var(--background))",
                   borderColor: "hsl(var(--border))",
@@ -357,7 +378,7 @@ export default function CuentasBancarias() {
                 onChange={(e) =>
                   setEditando({ ...editando, titular: e.target.value })
                 }
-                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[40px]"
+                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[48px]"
                 style={{
                   backgroundColor: "hsl(var(--background))",
                   borderColor: "hsl(var(--border))",
@@ -376,7 +397,7 @@ export default function CuentasBancarias() {
                     marca_iva: e.target.value || null,
                   })
                 }
-                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[40px]"
+                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[48px]"
                 style={{
                   backgroundColor: "hsl(var(--background))",
                   borderColor: "hsl(var(--border))",
@@ -393,7 +414,7 @@ export default function CuentasBancarias() {
               <button
                 onClick={() => setEditando(null)}
                 disabled={saving}
-                className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[40px] disabled:opacity-50"
+                className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[48px] disabled:opacity-50"
                 style={{
                   borderColor: "hsl(var(--border))",
                   color: "hsl(var(--muted-foreground))",
@@ -404,7 +425,7 @@ export default function CuentasBancarias() {
               <button
                 onClick={guardar}
                 disabled={saving}
-                className="text-sm px-4 py-2 rounded-lg cursor-pointer min-h-[40px] disabled:opacity-50"
+                className="text-sm px-4 py-2 rounded-lg cursor-pointer min-h-[48px] disabled:opacity-50"
                 style={{
                   backgroundColor: "hsl(var(--primary))",
                   color: "hsl(var(--primary-foreground))",
