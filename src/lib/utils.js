@@ -53,10 +53,13 @@ export const safeError = (err, fallback = "Ocurrió un error inesperado") => {
     return "No tienes permisos para esta acción";
   if (m.includes("stock insuficiente"))
     return "Stock insuficiente para este producto";
-  if (m.includes("transición") || m.includes("transicion"))
-    return "Cambio de estado no permitido";
+  if (m.includes("transición") || m.includes("transicion")) return err.message; // Mostrar mensaje exacto del trigger ("Transición ilegal de X a Y")
   if (m.includes("entregada"))
     return "No se puede modificar una orden entregada";
+  if (m.includes("anticipo")) return err.message; // "OT autorizada requiere..."
+  if (m.includes("stock_fisico"))
+    return "Conteo corrupto: stock físico es NULL";
+  if (m.includes("stock insuficiente del componente")) return err.message; // Mensaje detallado de ensamble
   if (m.includes("duplicate key") || code === "23505")
     return "Ya existe un registro con esos datos";
   if (m.includes("foreign key") || code === "23503")

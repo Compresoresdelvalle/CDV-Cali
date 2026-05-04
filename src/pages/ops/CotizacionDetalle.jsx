@@ -22,7 +22,9 @@ export default function CotizacionDetalle() {
         const [{ data: cot }, { data: det }] = await Promise.all([
           supabase
             .from("cotizaciones")
-            .select(`*, vendedor:vendedor_id(nombre)`)
+            .select(
+              `*, vendedor:vendedor_id(nombre), ot:ot_id(id, numero, estado)`,
+            )
             .eq("id", id)
             .single(),
           supabase
@@ -123,8 +125,22 @@ export default function CotizacionDetalle() {
         title={`Cotización #${cotizacion.numero}`}
         description={formatDate(cotizacion.fecha)}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={cotizacion.estado} />
+            {cotizacion.ot && (
+              <button
+                onClick={() => navigate(`/ops/ordenes/${cotizacion.ot.id}`)}
+                title="Ver OT vinculada"
+                className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer flex items-center gap-1"
+                style={{
+                  borderColor: "hsl(var(--info))",
+                  color: "hsl(var(--info))",
+                  backgroundColor: "hsl(var(--info) / 0.08)",
+                }}
+              >
+                🔗 OT #{cotizacion.ot.numero}
+              </button>
+            )}
             <button
               onClick={() => navigate("/ops/cotizaciones")}
               className="h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"

@@ -21,7 +21,12 @@ const METODOS = [
  *   - readOnly: boolean (default false) — OT entregada/inmutable
  *   - onChange: callback opcional (se llama tras agregar/borrar abono)
  */
-export default function AbonosPanel({ ordenId, readOnly = false, onChange }) {
+export default function AbonosPanel({
+  ordenId,
+  readOnly = false,
+  onChange,
+  totalOT = 0,
+}) {
   const perfil = useAuthStore((s) => s.perfil);
   const [abonos, setAbonos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -131,6 +136,10 @@ export default function AbonosPanel({ ordenId, readOnly = false, onChange }) {
   };
 
   const total = abonos.reduce((s, a) => s + Number(a.monto), 0);
+  const saldoPendiente = Math.max(0, Number(totalOT) - total);
+  const montoActual = Number(form.monto) || 0;
+  const excedeAbono =
+    totalOT > 0 && montoActual > saldoPendiente && montoActual > 0;
 
   return (
     <div className="space-y-3">
@@ -142,13 +151,28 @@ export default function AbonosPanel({ ordenId, readOnly = false, onChange }) {
             className="text-xs"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            {loading ? "Cargando…" : `${abonos.length} abono(s) — Total:`}
+            {loading
+              ? "Cargando…"
+              : `${abonos.length} abono(s) — Abonado / Saldo:`}
           </p>
           <p
             className="text-lg font-bold tabular-nums"
             style={{ color: "hsl(var(--foreground))" }}
           >
             {formatCOP(total)}
+            {totalOT > 0 && (
+              <span
+                className="text-sm font-normal ml-2"
+                style={{
+                  color:
+                    saldoPendiente === 0
+                      ? "hsl(var(--success))"
+                      : "hsl(var(--muted-foreground))",
+                }}
+              >
+                / Saldo: {formatCOP(saldoPendiente)}
+              </span>
+            )}
           </p>
         </div>
         {!readOnly && !agregando && (
@@ -249,6 +273,20 @@ export default function AbonosPanel({ ordenId, readOnly = false, onChange }) {
               placeholder="Ref: transferencia 1234"
             />
           </label>
+          {excedeAbono && (
+            <div
+              className="rounded-lg border px-3 py-2 text-xs"
+              style={{
+                backgroundColor: "hsl(var(--warning) / 0.10)",
+                borderColor: "hsl(var(--warning) / 0.5)",
+                color: "hsl(var(--warning))",
+              }}
+            >
+              ⚠️ El abono ({formatCOP(montoActual)}) excede el saldo pendiente (
+              {formatCOP(saldoPendiente)}). Puedes continuar si es un pago
+              adelantado, pero verifica.
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-1">
             <button
               onClick={() => {

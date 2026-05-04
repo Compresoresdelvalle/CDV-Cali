@@ -14,6 +14,7 @@ import { useConfirm } from "../../components/ui/ConfirmDialog";
 import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
 import AbonosPanel from "../../components/ot/AbonosPanel";
 import AutorizacionPanel from "../../components/ot/AutorizacionPanel";
+import CotizacionesAsociadasOT from "../../components/ot/CotizacionesAsociadasOT";
 
 const ESTADOS = [
   "abierta",
@@ -611,6 +612,7 @@ export default function OrdenDetalle() {
           ordenId={orden.id}
           readOnly={!editable}
           onChange={cargar}
+          totalOT={Number(orden.total ?? 0) + Number(orden.valor_revision ?? 0)}
         />
       </div>
 
@@ -628,20 +630,20 @@ export default function OrdenDetalle() {
         />
       </div>
 
-      {/* Fase 10 — Generar cotización desde OT */}
-      {puedeEditar && editable && (
-        <button
-          onClick={() => navigate(`/ops/cotizaciones/nueva?ot_id=${orden.id}`)}
-          className="px-4 py-2 rounded-lg text-sm font-medium border cursor-pointer min-h-[48px]"
-          style={{
-            borderColor: "hsl(var(--primary))",
-            color: "hsl(var(--primary))",
-            backgroundColor: "hsl(var(--card))",
-          }}
+      {/* Fase 10 §10.6 — Cotizaciones asociadas a esta OT */}
+      <div className="space-y-2">
+        <h3
+          className="text-sm font-semibold"
+          style={{ color: "hsl(var(--foreground))" }}
         >
-          📄 Generar cotización desde esta OT
-        </button>
-      )}
+          Cotizaciones asociadas
+        </h3>
+        <CotizacionesAsociadasOT
+          ordenId={orden.id}
+          readOnly={!editable || !puedeEditar}
+          sedeId={orden.sede_id}
+        />
+      </div>
 
       {/* Total */}
       <div
