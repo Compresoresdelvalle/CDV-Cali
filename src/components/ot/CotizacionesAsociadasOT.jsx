@@ -108,13 +108,19 @@ export default function CotizacionesAsociadasOT({
 
   const desasociar = async (cotId) => {
     try {
-      const { error } = await supabase
-        .from("cotizaciones")
-        .update({ ot_id: null })
-        .eq("id", cotId);
+      // RPC: borra los repuestos copiados de ESTA cotización (los manuales
+      // se preservan via cotizacion_id NULL) y quita el vínculo ot_id.
+      // Atómico server-side, el trigger reintegra stock al inventario.
+      const { data, error } = await supabase.rpc(
+        "fn_desasociar_cotizacion_de_ot",
+        { p_cotizacion_id: cotId },
+      );
       if (error) throw error;
+      const borrados = data?.items_borrados ?? 0;
       setOkMsg(
-        "Cotización desvinculada. Los repuestos copiados permanecen en la OT — bórralos manualmente desde el panel de repuestos si no aplican.",
+        borrados > 0
+          ? `Cotización desvinculada. ${borrados} repuesto(s) copiado(s) eliminado(s) de la OT y reintegrado(s) al inventario.`
+          : "Cotización desvinculada (no había repuestos copiados que eliminar)",
       );
       await cargar();
       onChange?.();
