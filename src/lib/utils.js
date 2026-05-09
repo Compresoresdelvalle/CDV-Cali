@@ -57,6 +57,14 @@ export const safeError = (err, fallback = "Ocurrió un error inesperado") => {
   if (m.includes("entregada"))
     return "No se puede modificar una orden entregada";
   if (m.includes("anticipo")) return err.message; // "OT autorizada requiere..."
+  if (
+    m.includes("convertir") ||
+    m.includes("aprobada") ||
+    m.includes("rechazada") ||
+    m.includes("vencida") ||
+    m.includes("autorizada con trabajo")
+  )
+    return err.message; // mensaje exacto del trigger BD
   if (m.includes("stock_fisico"))
     return "Conteo corrupto: stock físico es NULL";
   if (m.includes("stock insuficiente del componente")) return err.message; // Mensaje detallado de ensamble
