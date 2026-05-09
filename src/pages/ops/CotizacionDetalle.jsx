@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
+import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
 
 export default function CotizacionDetalle() {
   const { id } = useParams();
@@ -11,6 +12,7 @@ export default function CotizacionDetalle() {
 
   const [cotizacion, setCotizacion] = useState(null);
   const [items, setItems] = useState([]);
+  const [cuentasPDF, setCuentasPDF] = useState([]);
   const [loading, setLoading] = useState(true);
   const [convirtiendo, setConvirtiendo] = useState(false);
   const [error, setError] = useState(null);
@@ -19,23 +21,31 @@ export default function CotizacionDetalle() {
     const cargar = async () => {
       setLoading(true);
       try {
-        const [{ data: cot }, { data: det }] = await Promise.all([
-          supabase
-            .from("cotizaciones")
-            .select(
-              `*, vendedor:vendedor_id(nombre), ot:ot_id(id, numero, estado)`,
-            )
-            .eq("id", id)
-            .single(),
-          supabase
-            .from("detalle_cotizacion")
-            .select(
-              `*, producto:producto_id(nombre, referencia, unidad_medida)`,
-            )
-            .eq("cotizacion_id", id),
-        ]);
+        const [{ data: cot }, { data: det }, { data: cuentas }] =
+          await Promise.all([
+            supabase
+              .from("cotizaciones")
+              .select(
+                `*, vendedor:vendedor_id(nombre), ot:ot_id(id, numero, estado)`,
+              )
+              .eq("id", id)
+              .single(),
+            supabase
+              .from("detalle_cotizacion")
+              .select(
+                `*, producto:producto_id(nombre, referencia, unidad_medida)`,
+              )
+              .eq("cotizacion_id", id),
+            supabase
+              .from("cotizacion_cuentas_bancarias")
+              .select(
+                "cuenta:cuenta_id(id, banco, tipo, numero, titular, marca_iva)",
+              )
+              .eq("cotizacion_id", id),
+          ]);
         setCotizacion(cot);
         setItems(det ?? []);
+        setCuentasPDF((cuentas ?? []).map((r) => r.cuenta).filter(Boolean));
       } catch {
         // ignore
       } finally {
@@ -44,6 +54,22 @@ export default function CotizacionDetalle() {
     };
     cargar();
   }, [id]);
+
+  const generarPDF = (action = "download") => {
+    if (!cotizacion) return;
+    try {
+      const pdf = generarCotizacionPDF({
+        cotizacion,
+        items,
+        cuentas: cuentasPDF,
+        vendedor: cotizacion.vendedor?.nombre ?? "—",
+      });
+      if (action === "print") pdf.print();
+      else pdf.download();
+    } catch (err) {
+      setError(safeError(err, "Error al generar PDF"));
+    }
+  };
 
   const convertirEnVenta = async () => {
     setConvirtiendo(true);
@@ -142,6 +168,30 @@ export default function CotizacionDetalle() {
               </button>
             )}
             <button
+              onClick={() => generarPDF("download")}
+              title="Descargar PDF"
+              className="h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer flex items-center gap-1"
+              style={{
+                borderColor: "hsl(var(--primary))",
+                color: "hsl(var(--primary))",
+                backgroundColor: "hsl(var(--card))",
+              }}
+            >
+              📄 PDF
+            </button>
+            <button
+              onClick={() => generarPDF("print")}
+              title="Imprimir PDF"
+              className="h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer flex items-center gap-1"
+              style={{
+                borderColor: "hsl(var(--primary))",
+                color: "hsl(var(--primary))",
+                backgroundColor: "hsl(var(--card))",
+              }}
+            >
+              🖨️ Imprimir
+            </button>
+            <button
               onClick={() => navigate("/ops/cotizaciones")}
               className="h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"
               style={{
@@ -225,8 +275,31 @@ export default function CotizacionDetalle() {
             label="Vigencia"
             value={`${cotizacion.vigencia_dias} días`}
           />
+          {cotizacion.condiciones_pago && (
+            <InfoRow
+              label="Condiciones de pago"
+              value={cotizacion.condiciones_pago}
+            />
+          )}
+          {cotizacion.tiempo_entrega_nota && (
+            <InfoRow
+              label="Tiempo de entrega"
+              value={cotizacion.tiempo_entrega_nota}
+            />
+          )}
           {cotizacion.observaciones && (
-            <InfoRow label="Observaciones" value={cotizacion.observaciones} />
+            <InfoRow
+              label="Notas adicionales"
+              value={cotizacion.observaciones}
+            />
+          )}
+          {cuentasPDF.length > 0 && (
+            <InfoRow
+              label={`Cuentas en PDF (${cuentasPDF.length})`}
+              value={cuentasPDF
+                .map((c) => `${c.banco} ${c.tipo} ${c.numero}`)
+                .join(" · ")}
+            />
           )}
         </div>
       </div>

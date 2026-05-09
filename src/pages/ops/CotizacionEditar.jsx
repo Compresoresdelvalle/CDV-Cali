@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import QRScanner from "../../components/forms/QRScanner";
+import SelectorCuentasBancarias from "../../components/cotizaciones/SelectorCuentasBancarias";
 
 function useDebounce(fn, delay) {
   const timer = useRef(null);
@@ -41,8 +42,12 @@ export default function CotizacionEditar() {
   const [clienteEmail, setClienteEmail] = useState("");
   const [clienteTelefono, setClienteTelefono] = useState("");
   const [descuentoPct, setDescuentoPct] = useState(0);
-  const [vigenciaDias, setVigenciaDias] = useState(30);
+  const [vigenciaDias, setVigenciaDias] = useState(15);
+  const [ivaPct, setIvaPct] = useState(19);
   const [observaciones, setObservaciones] = useState("");
+  const [condicionesPago, setCondicionesPago] = useState("");
+  const [tiempoEntregaNota, setTiempoEntregaNota] = useState("");
+  const [cuentasIds, setCuentasIds] = useState([]);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
@@ -73,8 +78,17 @@ export default function CotizacionEditar() {
         setClienteEmail(cot.cliente_email ?? "");
         setClienteTelefono(cot.cliente_telefono ?? "");
         setDescuentoPct(cot.descuento_pct ?? 0);
-        setVigenciaDias(cot.vigencia_dias ?? 30);
+        setVigenciaDias(cot.vigencia_dias ?? 15);
+        setIvaPct(cot.iva_pct ?? 19);
         setObservaciones(cot.observaciones ?? "");
+        setCondicionesPago(cot.condiciones_pago ?? "");
+        setTiempoEntregaNota(cot.tiempo_entrega_nota ?? "");
+        // Cargar cuentas asociadas
+        const { data: cuentas } = await supabase
+          .from("cotizacion_cuentas_bancarias")
+          .select("cuenta_id")
+          .eq("cotizacion_id", id);
+        setCuentasIds((cuentas ?? []).map((r) => r.cuenta_id));
 
         setCarrito(
           (items ?? []).map((i) => ({
@@ -208,7 +222,7 @@ export default function CotizacionEditar() {
   );
   const descuento = subtotal * (descuentoPct / 100);
   const baseIva = subtotal - descuento;
-  const iva = baseIva * 0.19;
+  const iva = baseIva * (ivaPct / 100);
   const total = baseIva + iva;
 
   const guardarCambios = async () => {
@@ -225,7 +239,10 @@ export default function CotizacionEditar() {
           cliente_telefono: clienteTelefono || null,
           descuento_pct: descuentoPct,
           vigencia_dias: vigenciaDias,
+          iva_pct: ivaPct,
           observaciones: observaciones || null,
+          condiciones_pago: condicionesPago || null,
+          tiempo_entrega_nota: tiempoEntregaNota || null,
           subtotal,
           total,
           estado:
@@ -237,6 +254,22 @@ export default function CotizacionEditar() {
         })
         .eq("id", id);
       if (updErr) throw new Error(updErr.message);
+
+      // Sincronizar cuentas bancarias asociadas (Fase 11)
+      await supabase
+        .from("cotizacion_cuentas_bancarias")
+        .delete()
+        .eq("cotizacion_id", id);
+      if (cuentasIds.length > 0) {
+        const rows = cuentasIds.map((cid) => ({
+          cotizacion_id: id,
+          cuenta_id: cid,
+        }));
+        const { error: cuErr } = await supabase
+          .from("cotizacion_cuentas_bancarias")
+          .insert(rows);
+        if (cuErr) throw new Error(cuErr.message);
+      }
 
       const { error: delErr } = await supabase
         .from("detalle_cotizacion")
@@ -646,13 +679,82 @@ export default function CotizacionEditar() {
             style={inputStyle}
           />
         </div>
-        <textarea
-          value={observaciones}
-          onChange={(e) => setObservaciones(e.target.value)}
-          placeholder="Observaciones"
-          rows={2}
-          className="w-full px-4 py-2.5 rounded-lg text-sm border focus:outline-none resize-none"
-          style={inputStyle}
+        <div className="flex items-center gap-3">
+          <label
+            className="text-sm"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            IVA %
+          </label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            value={ivaPct}
+            onChange={(e) =>
+              setIvaPct(Math.min(100, Math.max(0, Number(e.target.value))))
+            }
+            className="w-20 px-3 py-2 rounded-lg text-sm border text-center focus:outline-none"
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label
+            className="block text-xs font-medium mb-1"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Condiciones de pago
+          </label>
+          <textarea
+            value={condicionesPago}
+            onChange={(e) => setCondicionesPago(e.target.value)}
+            placeholder="Ej: 70% al inicio, 30% contra entrega"
+            rows={2}
+            className="w-full px-4 py-2.5 rounded-lg text-sm border focus:outline-none resize-none"
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label
+            className="block text-xs font-medium mb-1"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Tiempo de entrega (nota)
+          </label>
+          <textarea
+            value={tiempoEntregaNota}
+            onChange={(e) => setTiempoEntregaNota(e.target.value)}
+            placeholder="Ej: 5-7 días hábiles tras autorización"
+            rows={2}
+            className="w-full px-4 py-2.5 rounded-lg text-sm border focus:outline-none resize-none"
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label
+            className="block text-xs font-medium mb-1"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Notas adicionales
+          </label>
+          <textarea
+            value={observaciones}
+            onChange={(e) => setObservaciones(e.target.value)}
+            placeholder="Otras observaciones"
+            rows={2}
+            className="w-full px-4 py-2.5 rounded-lg text-sm border focus:outline-none resize-none"
+            style={inputStyle}
+          />
+        </div>
+      </SectionCard>
+
+      {/* ── Cuentas bancarias para PDF (Fase 11 §1.5) ── */}
+      <SectionCard label="Cuentas bancarias en el PDF">
+        <SelectorCuentasBancarias
+          selectedIds={cuentasIds}
+          onChange={setCuentasIds}
+          ivaPct={ivaPct}
         />
       </SectionCard>
 
@@ -685,7 +787,7 @@ export default function CotizacionEditar() {
             className="flex justify-between text-sm"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            <span>IVA 19%</span>
+            <span>IVA {ivaPct}%</span>
             <span className="tabular-nums">{formatCOP(iva)}</span>
           </div>
           <div
