@@ -28,7 +28,7 @@ export default function CotizacionDetalle() {
             supabase
               .from("cotizaciones")
               .select(
-                `*, vendedor:vendedor_id(nombre), ot:ot_id(id, numero, estado)`,
+                `*, vendedor:vendedor_id(nombre), ot:ot_id(id, numero, estado), venta:venta_id(id, numero)`,
               )
               .eq("id", id)
               .single(),
@@ -149,7 +149,7 @@ export default function CotizacionDetalle() {
   const puedeConvertir =
     cotizacion.estado !== "rechazada" &&
     cotizacion.estado !== "vencida" &&
-    cotizacion.estado !== "aprobada";
+    !cotizacion.venta_id; // bloqueado si ya hay venta convertida
 
   return (
     <div
@@ -175,6 +175,20 @@ export default function CotizacionDetalle() {
                 }}
               >
                 🔗 OT #{cotizacion.ot.numero}
+              </button>
+            )}
+            {cotizacion.venta && (
+              <button
+                onClick={() => navigate(`/ops/ventas/${cotizacion.venta.id}`)}
+                title="Ver venta convertida"
+                className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer flex items-center gap-1"
+                style={{
+                  borderColor: "hsl(var(--success))",
+                  color: "hsl(var(--success))",
+                  backgroundColor: "hsl(var(--success) / 0.08)",
+                }}
+              >
+                🛒 Venta #{cotizacion.venta.numero}
               </button>
             )}
             <button
@@ -212,7 +226,7 @@ export default function CotizacionDetalle() {
             >
               ← Volver
             </button>
-            {cotizacion.estado !== "aprobada" && (
+            {!cotizacion.venta_id && (
               <button
                 onClick={() => navigate(`/ops/cotizaciones/${id}/editar`)}
                 className="flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"

@@ -76,7 +76,7 @@ export default function CotizacionHistorial() {
       let query = supabase
         .from("cotizaciones")
         .select(
-          `id, numero, fecha, cliente_nombre, estado, total, vigencia_dias, ot_id,
+          `id, numero, fecha, cliente_nombre, estado, total, vigencia_dias, ot_id, venta_id,
            vendedor:vendedor_id(nombre), ot:ot_id(numero)`,
         )
         .order("fecha", { ascending: false })
@@ -283,7 +283,7 @@ export default function CotizacionHistorial() {
                 const puedeConvertir =
                   c.estado !== "rechazada" &&
                   c.estado !== "vencida" &&
-                  c.estado !== "aprobada";
+                  !c.venta_id; // bloqueado si ya hay venta vinculada
                 return (
                   <li key={c.id}>
                     <div
@@ -431,7 +431,7 @@ export default function CotizacionHistorial() {
                     const puedeConvertir =
                       c.estado !== "rechazada" &&
                       c.estado !== "vencida" &&
-                      c.estado !== "aprobada";
+                      !c.venta_id;
                     const esteError =
                       errorConversion?.id === c.id ? errorConversion.msg : null;
                     return (
