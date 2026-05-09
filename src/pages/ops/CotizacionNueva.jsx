@@ -233,28 +233,56 @@ export default function CotizacionNueva() {
     );
     setGuardando(true); // ANTES del await — cierra ventana de doble click
     try {
-      const { error: rpcErr } = await supabase.rpc("fn_registrar_cotizacion", {
-        p_sede_id: perfil.sede_id,
-        p_cliente_nombre: clienteNombre || null,
-        p_cliente_nit: clienteNit || null,
-        p_cliente_email: clienteEmail || null,
-        p_cliente_telefono: clienteTelefono || null,
-        p_descuento_pct: descuentoPct,
-        p_vigencia_dias: vigenciaDias,
-        p_iva_pct: ivaPct,
-        p_observaciones: observaciones || null,
-        p_condiciones_pago: condicionesPago || null,
-        p_tiempo_entrega_nota: tiempoEntregaNota || null,
-        p_items: carrito.map((i) => ({
-          producto_id: i.producto_id,
-          cantidad: i.cantidad,
-          precio_unitario: i.precio_unitario,
-        })),
-        p_cuentas_ids: cuentasLimpias,
-        // Solo pasar ot_id si la pre-carga validó (anti privilege escalation cross-sede)
-        p_ot_id: otIdValido || null,
-      });
+      const { data: rpcData, error: rpcErr } = await supabase.rpc(
+        "fn_registrar_cotizacion",
+        {
+          p_sede_id: perfil.sede_id,
+          p_cliente_nombre: clienteNombre || null,
+          p_cliente_nit: clienteNit || null,
+          p_cliente_email: clienteEmail || null,
+          p_cliente_telefono: clienteTelefono || null,
+          p_descuento_pct: descuentoPct,
+          p_vigencia_dias: vigenciaDias,
+          p_iva_pct: ivaPct,
+          p_observaciones: observaciones || null,
+          p_condiciones_pago: condicionesPago || null,
+          p_tiempo_entrega_nota: tiempoEntregaNota || null,
+          p_items: carrito.map((i) => ({
+            producto_id: i.producto_id,
+            cantidad: i.cantidad,
+            precio_unitario: i.precio_unitario,
+          })),
+          p_cuentas_ids: cuentasLimpias,
+          // Solo pasar ot_id si la pre-carga validó (anti privilege escalation cross-sede)
+          p_ot_id: otIdValido || null,
+        },
+      );
       if (rpcErr) throw new Error(rpcErr.message);
+
+      // Si está vinculada a una OT, COPIAR los ítems cotizados al detalle de
+      // la OT (los triggers descuentan stock y suman al total OT). Esto
+      // hace que la asociación sea funcional, no solo informativa.
+      if (otIdValido && rpcData?.cotizacion_id) {
+        const { error: copyErr } = await supabase.rpc(
+          "fn_asociar_cotizacion_a_ot",
+          {
+            p_cotizacion_id: rpcData.cotizacion_id,
+            p_ot_id: otIdValido,
+          },
+        );
+        if (copyErr) {
+          // Cotización creada pero copia falló — avisar pero no bloquear
+          console.warn("[CotizacionNueva] No se copiaron items a OT:", copyErr);
+          setError(
+            `Cotización creada (#${rpcData.numero}), pero no se pudieron copiar los repuestos a la OT: ${copyErr.message}`,
+          );
+          // No navegamos para que el usuario vea el warning
+          return;
+        }
+        // Si vinimos desde la OT, regresar a la OT — total ya actualizado
+        navigate(`/ops/ordenes/${otIdValido}`);
+        return;
+      }
       navigate("/ops/cotizaciones");
     } catch (e) {
       setError(safeError(e, "Error al guardar la cotización"));
