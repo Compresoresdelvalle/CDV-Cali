@@ -61,25 +61,32 @@ export default function CotizacionNueva() {
   }, []);
 
   // Fase 10 §10.6: si llegamos con ?ot_id=xxx, pre-llenar datos del cliente
+  // Si la pre-carga falla (RLS u OT inexistente), se invalida otIdParam para
+  // que NO se pase al RPC y no haya privilege escalation cross-sede.
+  const [otIdValido, setOtIdValido] = useState(null);
   useEffect(() => {
-    if (!otIdParam) return;
+    if (!otIdParam) {
+      setOtIdValido(null);
+      return;
+    }
     let mounted = true;
     (async () => {
       const { data, error: e } = await supabase
         .from("ordenes_servicio")
-        .select("cliente_nombre, cliente_telefono")
+        .select("cliente_nombre, cliente_telefono, sede_id")
         .eq("id", otIdParam)
         .maybeSingle();
       if (!mounted) return;
       if (e || !data) {
-        // OT no accesible (RLS bloquea o no existe)
         setError(
           "No se pudo cargar la OT vinculada — verifica que tienes acceso. Puedes continuar manualmente.",
         );
+        setOtIdValido(null);
         return;
       }
       setClienteNombre(data.cliente_nombre ?? "");
       setClienteTelefono(data.cliente_telefono ?? "");
+      setOtIdValido(otIdParam);
     })();
     return () => {
       mounted = false;
@@ -206,8 +213,13 @@ export default function CotizacionNueva() {
   const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
   const guardarCotizacion = async () => {
+    if (guardando) return; // anti double-click
     if (carrito.length === 0) return;
     setError(null);
+    if (!perfil?.sede_id) {
+      setError("Tu usuario no tiene sede asignada. Contacta al Admin.");
+      return;
+    }
     if (clienteEmail && !EMAIL_REGEX.test(clienteEmail)) {
       setError("Email inválido");
       return;
@@ -216,7 +228,10 @@ export default function CotizacionNueva() {
       setError("Email demasiado largo (máx 254 caracteres)");
       return;
     }
-    setGuardando(true);
+    const cuentasLimpias = cuentasIds.filter(
+      (id) => Number.isInteger(id) && id > 0,
+    );
+    setGuardando(true); // ANTES del await — cierra ventana de doble click
     try {
       const { error: rpcErr } = await supabase.rpc("fn_registrar_cotizacion", {
         p_sede_id: perfil.sede_id,
@@ -235,8 +250,9 @@ export default function CotizacionNueva() {
           cantidad: i.cantidad,
           precio_unitario: i.precio_unitario,
         })),
-        p_cuentas_ids: cuentasIds,
-        p_ot_id: otIdParam || null,
+        p_cuentas_ids: cuentasLimpias,
+        // Solo pasar ot_id si la pre-carga validó (anti privilege escalation cross-sede)
+        p_ot_id: otIdValido || null,
       });
       if (rpcErr) throw new Error(rpcErr.message);
       navigate("/ops/cotizaciones");

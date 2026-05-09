@@ -5,11 +5,13 @@ import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 
 export default function CotizacionDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  const { confirm, ConfirmDialog } = useConfirm();
   const [cotizacion, setCotizacion] = useState(null);
   const [items, setItems] = useState([]);
   const [cuentasPDF, setCuentasPDF] = useState([]);
@@ -72,6 +74,14 @@ export default function CotizacionDetalle() {
   };
 
   const convertirEnVenta = async () => {
+    if (convirtiendo) return; // anti double-click
+    const ok = await confirm({
+      titulo: "Convertir cotización en venta",
+      mensaje: `Se generará una venta a partir de la cotización #${cotizacion?.numero ?? "?"} por ${formatCOP(cotizacion?.total ?? 0)}. Esta acción descuenta stock del inventario y NO se puede deshacer fácilmente.`,
+      confirmLabel: "Sí, convertir",
+      danger: true,
+    });
+    if (!ok) return;
     setConvirtiendo(true);
     setError(null);
     try {
@@ -435,6 +445,7 @@ export default function CotizacionDetalle() {
             : `Convertir en venta · ${formatCOP(cotizacion.total)}`}
         </button>
       )}
+      <ConfirmDialog />
     </div>
   );
 }
