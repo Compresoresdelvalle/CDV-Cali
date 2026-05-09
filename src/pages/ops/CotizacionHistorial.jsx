@@ -5,6 +5,35 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
+import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
+
+/** Carga datos completos de una cotización y dispara descarga PDF */
+async function generarPDFDirecto(cotizacionId) {
+  const [{ data: cot }, { data: items }, { data: cuentasRaw }] =
+    await Promise.all([
+      supabase
+        .from("cotizaciones")
+        .select(`*, vendedor:vendedor_id(nombre)`)
+        .eq("id", cotizacionId)
+        .single(),
+      supabase
+        .from("detalle_cotizacion")
+        .select(`*, producto:producto_id(nombre, referencia, unidad_medida)`)
+        .eq("cotizacion_id", cotizacionId),
+      supabase
+        .from("cotizacion_cuentas_bancarias")
+        .select("cuenta:cuenta_id(banco, tipo, numero, titular, marca_iva)")
+        .eq("cotizacion_id", cotizacionId),
+    ]);
+  const cuentas = (cuentasRaw ?? []).map((r) => r.cuenta).filter(Boolean);
+  const pdf = generarCotizacionPDF({
+    cotizacion: cot,
+    items: items ?? [],
+    cuentas,
+    vendedor: cot?.vendedor?.nombre ?? "—",
+  });
+  pdf.download();
+}
 
 const ESTADOS = [
   "Todos",
@@ -312,12 +341,28 @@ export default function CotizacionHistorial() {
                             {c.vigencia_dias}d vigencia
                           </p>
                         </div>
-                        <p
-                          className="font-bold text-base tabular-nums"
-                          style={{ color: "hsl(var(--foreground))" }}
-                        >
-                          {formatCOP(c.total)}
-                        </p>
+                        <div className="flex flex-col items-end gap-1">
+                          <p
+                            className="font-bold text-base tabular-nums"
+                            style={{ color: "hsl(var(--foreground))" }}
+                          >
+                            {formatCOP(c.total)}
+                          </p>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              generarPDFDirecto(c.id).catch(() => {});
+                            }}
+                            title="Descargar PDF"
+                            className="text-[10px] px-2 py-1 rounded-md border cursor-pointer"
+                            style={{
+                              borderColor: "hsl(var(--primary))",
+                              color: "hsl(var(--primary))",
+                            }}
+                          >
+                            📄 PDF
+                          </button>
+                        </div>
                       </div>
                       {esteError && (
                         <p

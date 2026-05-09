@@ -6,6 +6,8 @@ import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import QRScanner from "../../components/forms/QRScanner";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
+import { getParametroInt } from "../../hooks/useParametro";
+import SelectorCuentasBancarias from "../../components/cotizaciones/SelectorCuentasBancarias";
 
 const inputStyle = {
   backgroundColor: "hsl(var(--card))",
@@ -30,11 +32,33 @@ export default function CotizacionNueva() {
   const [clienteEmail, setClienteEmail] = useState("");
   const [clienteTelefono, setClienteTelefono] = useState("");
   const [descuentoPct, setDescuentoPct] = useState(0);
-  const [vigenciaDias, setVigenciaDias] = useState(30);
+  const [vigenciaDias, setVigenciaDias] = useState(15);
+  const [ivaPct, setIvaPct] = useState(19);
   const [observaciones, setObservaciones] = useState("");
+  const [condicionesPago, setCondicionesPago] = useState("");
+  const [tiempoEntregaNota, setTiempoEntregaNota] = useState("");
+  const [cuentasIds, setCuentasIds] = useState([]);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
+
+  // Defaults desde parámetros del sistema (Fase 9)
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([
+      getParametroInt("iva_pct", 19),
+      getParametroInt("validez_cotizacion_dias", 15),
+    ])
+      .then(([iva, validez]) => {
+        if (!mounted) return;
+        setIvaPct(iva);
+        setVigenciaDias(validez);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Fase 10 §10.6: si llegamos con ?ot_id=xxx, pre-llenar datos del cliente
   useEffect(() => {
@@ -168,16 +192,15 @@ export default function CotizacionNueva() {
     setCarrito((prev) => prev.filter((i) => i.producto_id !== productoId));
   };
 
-  // Fórmula consistente con el servidor (evita drifts de redondeo)
-  const IVA_PCT = 19;
+  // Fórmula consistente con el servidor (Fase 11: IVA dinámico)
   const subtotal = carrito.reduce(
     (s, i) => s + i.cantidad * i.precio_unitario,
     0,
   );
   const descuento = subtotal * (descuentoPct / 100);
   const baseIva = subtotal - descuento;
-  const iva = baseIva * (IVA_PCT / 100);
-  const total = subtotal * (1 - descuentoPct / 100) * (1 + IVA_PCT / 100);
+  const iva = baseIva * (ivaPct / 100);
+  const total = subtotal * (1 - descuentoPct / 100) * (1 + ivaPct / 100);
 
   // Validación de email igual al CHECK del servidor (RFC simplificado)
   const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -195,45 +218,27 @@ export default function CotizacionNueva() {
     }
     setGuardando(true);
     try {
-      const { data: rpcData, error: rpcErr } = await supabase.rpc(
-        "fn_registrar_cotizacion",
-        {
-          p_sede_id: perfil.sede_id,
-          p_cliente_nombre: clienteNombre || null,
-          p_cliente_nit: clienteNit || null,
-          p_cliente_email: clienteEmail || null,
-          p_cliente_telefono: clienteTelefono || null,
-          p_descuento_pct: descuentoPct,
-          p_vigencia_dias: vigenciaDias,
-          p_observaciones: observaciones || null,
-          p_items: carrito.map((i) => ({
-            producto_id: i.producto_id,
-            cantidad: i.cantidad,
-            precio_unitario: i.precio_unitario,
-          })),
-        },
-      );
+      const { error: rpcErr } = await supabase.rpc("fn_registrar_cotizacion", {
+        p_sede_id: perfil.sede_id,
+        p_cliente_nombre: clienteNombre || null,
+        p_cliente_nit: clienteNit || null,
+        p_cliente_email: clienteEmail || null,
+        p_cliente_telefono: clienteTelefono || null,
+        p_descuento_pct: descuentoPct,
+        p_vigencia_dias: vigenciaDias,
+        p_iva_pct: ivaPct,
+        p_observaciones: observaciones || null,
+        p_condiciones_pago: condicionesPago || null,
+        p_tiempo_entrega_nota: tiempoEntregaNota || null,
+        p_items: carrito.map((i) => ({
+          producto_id: i.producto_id,
+          cantidad: i.cantidad,
+          precio_unitario: i.precio_unitario,
+        })),
+        p_cuentas_ids: cuentasIds,
+        p_ot_id: otIdParam || null,
+      });
       if (rpcErr) throw new Error(rpcErr.message);
-      // Fase 10 §10.6: si veníamos de una OT, vincular la nueva cotización
-      const newCotId = rpcData?.cotizacion_id;
-      if (otIdParam && newCotId) {
-        const { error: linkErr } = await supabase
-          .from("cotizaciones")
-          .update({ ot_id: otIdParam })
-          .eq("id", newCotId);
-        if (linkErr) {
-          // La cotización se creó OK; solo falló el vínculo. Avisar pero no
-          // bloquear — el admin puede editar el ot_id manualmente.
-          console.warn(
-            "[CotizacionNueva] Cotización creada pero no se pudo vincular OT",
-            linkErr,
-          );
-          setError(
-            `Cotización creada (#${rpcData?.numero ?? "?"}), pero no se pudo vincular a la OT. Edítala desde el detalle si es necesario.`,
-          );
-          // Continuamos a la lista — la cotización existe.
-        }
-      }
       navigate("/ops/cotizaciones");
     } catch (e) {
       setError(safeError(e, "Error al guardar la cotización"));
@@ -568,7 +573,7 @@ export default function CotizacionNueva() {
             className="text-sm"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            Vigencia (días)
+            Vigencia (días hábiles)
           </label>
           <input
             type="number"
@@ -582,13 +587,88 @@ export default function CotizacionNueva() {
             style={inputStyle}
           />
         </div>
-        <textarea
-          value={observaciones}
-          onChange={(e) => setObservaciones(e.target.value)}
-          placeholder="Observaciones"
-          rows={2}
-          className="w-full px-4 py-2.5 rounded-lg text-sm border focus:outline-none resize-none"
-          style={inputStyle}
+        <div className="flex items-center gap-3">
+          <label
+            className="text-sm"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            IVA %
+          </label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            value={ivaPct}
+            onChange={(e) =>
+              setIvaPct(Math.min(100, Math.max(0, Number(e.target.value))))
+            }
+            className="w-20 px-3 py-2 rounded-lg text-sm border text-center focus:outline-none"
+            style={inputStyle}
+          />
+          <span
+            className="text-xs"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            (0% si la venta no lleva IVA)
+          </span>
+        </div>
+        <div>
+          <label
+            className="block text-xs font-medium mb-1"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Condiciones de pago (texto libre)
+          </label>
+          <textarea
+            value={condicionesPago}
+            onChange={(e) => setCondicionesPago(e.target.value)}
+            placeholder="Ej: 70% al inicio, 30% contra entrega — o 'Contado'"
+            rows={2}
+            className="w-full px-4 py-2.5 rounded-lg text-sm border focus:outline-none resize-none"
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label
+            className="block text-xs font-medium mb-1"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Tiempo de entrega (nota)
+          </label>
+          <textarea
+            value={tiempoEntregaNota}
+            onChange={(e) => setTiempoEntregaNota(e.target.value)}
+            placeholder="Ej: 5-7 días hábiles tras autorización; equipo X disponible inmediato"
+            rows={2}
+            className="w-full px-4 py-2.5 rounded-lg text-sm border focus:outline-none resize-none"
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <label
+            className="block text-xs font-medium mb-1"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Notas adicionales
+          </label>
+          <textarea
+            value={observaciones}
+            onChange={(e) => setObservaciones(e.target.value)}
+            placeholder="Cualquier otra observación libre"
+            rows={2}
+            className="w-full px-4 py-2.5 rounded-lg text-sm border focus:outline-none resize-none"
+            style={inputStyle}
+          />
+        </div>
+      </SectionCard>
+
+      {/* ── Cuentas bancarias para PDF (Fase 11 §1.5) ── */}
+      <SectionCard label="Cuentas bancarias en el PDF">
+        <SelectorCuentasBancarias
+          selectedIds={cuentasIds}
+          onChange={setCuentasIds}
+          ivaPct={ivaPct}
         />
       </SectionCard>
 
@@ -621,7 +701,7 @@ export default function CotizacionNueva() {
             className="flex justify-between text-sm"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            <span>IVA 19%</span>
+            <span>IVA {ivaPct}%</span>
             <span className="tabular-nums">{formatCOP(iva)}</span>
           </div>
           <div
