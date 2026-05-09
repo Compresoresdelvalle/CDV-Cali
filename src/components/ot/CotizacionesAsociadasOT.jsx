@@ -6,21 +6,27 @@ import FeedbackBanners from "../ui/FeedbackBanners";
 import SelectorCotizacionExistente from "./SelectorCotizacionExistente";
 
 /**
- * Cotizaciones asociadas a una OT (Fase 10 §10.6).
+ * Cotizaciones asociadas a una OT (Fase 10 §10.6 + Fase 11 fix).
  *
  * Muestra lista de cotizaciones con ot_id = ordenId. Permite:
  * - Generar nueva cotización vinculada (warning si ya existe alguna).
- * - Asociar una cotización existente (selector modal).
+ * - Asociar una cotización existente (selector modal) — COPIA sus items
+ *   como repuestos a la OT (descuenta stock y suma al total OT).
+ * - Desvincular cotización (los repuestos copiados PERMANECEN en la OT;
+ *   borrarlos manualmente desde el panel de repuestos si no aplican).
  *
  * Props:
  *   - ordenId: UUID
  *   - readOnly: boolean
- *   - sedeId: TEXT — sede de la OT (para filtrar cotizaciones disponibles)
+ *   - sedeId: TEXT — sede de la OT
+ *   - onChange: () => void — callback para que el padre (OrdenDetalle)
+ *     refresque sus datos (total, repuestos) tras asociar/desvincular
  */
 export default function CotizacionesAsociadasOT({
   ordenId,
   readOnly = false,
   sedeId,
+  onChange,
 }) {
   const navigate = useNavigate();
   const [cotizaciones, setCotizaciones] = useState([]);
@@ -79,14 +85,22 @@ export default function CotizacionesAsociadasOT({
 
   const asociarExistente = async (cotId) => {
     try {
-      const { error } = await supabase
-        .from("cotizaciones")
-        .update({ ot_id: ordenId })
-        .eq("id", cotId);
+      // RPC: setea ot_id + COPIA items a detalle_orden (descuenta stock,
+      // recalcula total OT vía triggers). Atómico server-side.
+      const { data, error } = await supabase.rpc("fn_asociar_cotizacion_a_ot", {
+        p_cotizacion_id: cotId,
+        p_ot_id: ordenId,
+      });
       if (error) throw error;
-      setOkMsg("Cotización asociada correctamente");
+      const copiados = data?.items_copiados ?? 0;
+      setOkMsg(
+        copiados > 0
+          ? `Cotización asociada. ${copiados} repuesto(s) copiado(s) a la OT y descontados del inventario.`
+          : "Cotización asociada (los repuestos ya estaban en la OT)",
+      );
       setShowSelector(false);
       await cargar();
+      onChange?.(); // refresca OrdenDetalle (total, repuestos)
     } catch (err) {
       setErrorMsg(safeError(err, "Error al asociar cotización"));
     }
@@ -99,8 +113,11 @@ export default function CotizacionesAsociadasOT({
         .update({ ot_id: null })
         .eq("id", cotId);
       if (error) throw error;
-      setOkMsg("Cotización desvinculada");
+      setOkMsg(
+        "Cotización desvinculada. Los repuestos copiados permanecen en la OT — bórralos manualmente desde el panel de repuestos si no aplican.",
+      );
       await cargar();
+      onChange?.();
     } catch (err) {
       setErrorMsg(safeError(err, "Error al desvincular"));
     }

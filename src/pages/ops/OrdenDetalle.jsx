@@ -650,6 +650,7 @@ export default function OrdenDetalle() {
           ordenId={orden.id}
           readOnly={!editable || !puedeEditar}
           sedeId={orden.sede_id}
+          onChange={cargar}
         />
       </div>
 
