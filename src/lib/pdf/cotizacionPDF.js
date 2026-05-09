@@ -264,60 +264,87 @@ export function generarCotizacionPDF({
     y += 3;
   }
 
-  // ── Pie: Cotizado por §1.8 ─────────────────────────────────────────────
-  if (y > LAYOUT.pageHeight - 25) {
-    doc.addPage();
-    y = LAYOUT.margenSup;
+  // ── Pie en TODAS las páginas: Cotizado por + Página X de N §1.8 ────────
+  // Se debe iterar al final cuando ya conocemos getNumberOfPages()
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setDrawColor(...COLORES.borde);
+    doc.line(
+      LAYOUT.margenIzq,
+      LAYOUT.pageHeight - 18,
+      LAYOUT.pageWidth - LAYOUT.margenDer,
+      LAYOUT.pageHeight - 18,
+    );
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...COLORES.textoMedio);
+    doc.text(
+      `Cotizado por: ${vendedor}`,
+      LAYOUT.margenIzq,
+      LAYOUT.pageHeight - 13,
+    );
+    doc.text(
+      `Página ${p} de ${totalPages}`,
+      LAYOUT.pageWidth - LAYOUT.margenDer,
+      LAYOUT.pageHeight - 13,
+      { align: "right" },
+    );
   }
-  doc.setDrawColor(...COLORES.borde);
-  doc.line(
-    LAYOUT.margenIzq,
-    LAYOUT.pageHeight - 18,
-    LAYOUT.pageWidth - LAYOUT.margenDer,
-    LAYOUT.pageHeight - 18,
-  );
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(...COLORES.textoMedio);
-  doc.text(
-    `Cotizado por: ${vendedor}`,
-    LAYOUT.margenIzq,
-    LAYOUT.pageHeight - 13,
-  );
-  doc.text(
-    `Página 1 de ${doc.getNumberOfPages()}`,
-    LAYOUT.pageWidth - LAYOUT.margenDer,
-    LAYOUT.pageHeight - 13,
-    { align: "right" },
-  );
 
   // ── Retornar API ───────────────────────────────────────────────────────
   const blob = doc.output("blob");
-  const dataUri = doc.output("datauristring");
   const filename = `Cotizacion_${String(cotizacion.numero ?? "draft").padStart(5, "0")}.pdf`;
 
   return {
     blob,
-    dataUri,
     filename,
+    /** Solo expone dataUri lazy — base64 es costoso para PDFs grandes */
+    get dataUri() {
+      return doc.output("datauristring");
+    },
     /** Descarga el PDF al dispositivo */
     download() {
       doc.save(filename);
     },
-    /** Abre nueva pestaña con preview imprimible */
+    /**
+     * Abre nueva pestaña con preview imprimible.
+     * Maneja: race con readyState, popup blockers, cleanup de blob URL.
+     */
     print() {
       const url = URL.createObjectURL(blob);
       const win = window.open(url);
-      if (win) {
-        win.onload = () => {
-          win.print();
-        };
+      if (!win) {
+        // popup bloqueado: liberar URL y degradar a download
+        URL.revokeObjectURL(url);
+        doc.save(filename);
+        return;
       }
+      const triggerPrint = () => {
+        try {
+          win.print();
+        } catch {
+          // ignore — algunos visores PDF no permiten print() programático
+        }
+      };
+      if (win.document?.readyState === "complete") {
+        triggerPrint();
+      } else {
+        win.addEventListener("load", triggerPrint, { once: true });
+      }
+      // Liberar blob URL tras un tiempo prudente (la pestaña ya tiene la copia)
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     },
     /** Solo abrir preview sin imprimir */
     open() {
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
+      const win = window.open(url, "_blank");
+      if (!win) {
+        URL.revokeObjectURL(url);
+        doc.save(filename);
+        return;
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     },
   };
 }

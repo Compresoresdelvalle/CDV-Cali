@@ -225,9 +225,24 @@ export default function CotizacionEditar() {
   const iva = baseIva * (ivaPct / 100);
   const total = baseIva + iva;
 
+  // Misma regex que CotizacionNueva (sincronizar)
+  const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
   const guardarCambios = async () => {
+    if (guardando) return; // anti double-click
     if (carrito.length === 0) return;
     setError(null);
+    if (clienteEmail && !EMAIL_REGEX.test(clienteEmail)) {
+      setError("Email inválido");
+      return;
+    }
+    if (clienteEmail && clienteEmail.length > 254) {
+      setError("Email demasiado largo (máx 254 caracteres)");
+      return;
+    }
+    const cuentasLimpias = cuentasIds.filter(
+      (cid) => Number.isInteger(cid) && cid > 0,
+    );
     setGuardando(true);
     try {
       const { error: updErr } = await supabase
@@ -255,21 +270,15 @@ export default function CotizacionEditar() {
         .eq("id", id);
       if (updErr) throw new Error(updErr.message);
 
-      // Sincronizar cuentas bancarias asociadas (Fase 11)
-      await supabase
-        .from("cotizacion_cuentas_bancarias")
-        .delete()
-        .eq("cotizacion_id", id);
-      if (cuentasIds.length > 0) {
-        const rows = cuentasIds.map((cid) => ({
-          cotizacion_id: id,
-          cuenta_id: cid,
-        }));
-        const { error: cuErr } = await supabase
-          .from("cotizacion_cuentas_bancarias")
-          .insert(rows);
-        if (cuErr) throw new Error(cuErr.message);
-      }
+      // Sincronizar cuentas bancarias asociadas vía RPC atómica (audit fix)
+      const { error: syncErr } = await supabase.rpc(
+        "fn_sync_cotizacion_cuentas",
+        {
+          p_cotizacion_id: id,
+          p_cuentas_ids: cuentasLimpias,
+        },
+      );
+      if (syncErr) throw new Error(syncErr.message);
 
       const { error: delErr } = await supabase
         .from("detalle_cotizacion")
