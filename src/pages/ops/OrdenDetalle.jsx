@@ -362,8 +362,16 @@ export default function OrdenDetalle() {
           <div className="flex gap-2 flex-wrap">
             {ESTADOS.map((e) => {
               const esActual = orden.estado === e;
+              // Excepción: no_autorizado puede saltar abierta → completada
+              // (debe coincidir con trg_orden_validar_transicion en BD)
+              const excepcionNoAutorizado =
+                orden.estado === "abierta" &&
+                e === "completada" &&
+                orden.estado_autorizacion === "no_autorizado";
               const permitido =
-                esActual || TRANSICIONES_VALIDAS[orden.estado]?.includes(e);
+                esActual ||
+                TRANSICIONES_VALIDAS[orden.estado]?.includes(e) ||
+                excepcionNoAutorizado;
               return (
                 <button
                   key={e}
