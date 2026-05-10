@@ -265,8 +265,8 @@ export default function TraspasoDetalle() {
         />
       )}
 
-      {/* picking: el picker continúa su trabajo */}
-      {traspaso.estado === "picking" && yoSoyPicker && (
+      {/* picking: el picker continúa su trabajo (si aún falta) */}
+      {traspaso.estado === "picking" && yoSoyPicker && !pickingCompleto && (
         <ActionPanel
           icon="🏷️"
           title="Continuar picking"
@@ -275,6 +275,18 @@ export default function TraspasoDetalle() {
           onAction={() => navigate(`/ops/traspasos/${id}/picking`)}
           color="warning"
           progress={totalItems > 0 ? (itemsCompletos / totalItems) * 100 : 0}
+        />
+      )}
+
+      {/* F12 fix UX: picking completo pero soy el picker → esperar verificador */}
+      {traspaso.estado === "picking" && yoSoyPicker && pickingCompleto && (
+        <ActionPanel
+          icon="⏳"
+          title="Picking completo — esperando verificación"
+          description="Terminaste de pickear todos los items. Por segregación de funciones, otra persona (Admin u otro Bodeguero) debe entrar a este traspaso y verificarlo. El estado cambiará cuando lo haga."
+          buttonLabel="Revisar mi picking"
+          onAction={() => navigate(`/ops/traspasos/${id}/picking`)}
+          color="info"
         />
       )}
 

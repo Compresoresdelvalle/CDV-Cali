@@ -25,6 +25,7 @@ export default function ProductoForm({
     referencia: initial.referencia ?? "",
     codigo_interno: initial.codigo_interno ?? "",
     codigo_proveedor: initial.codigo_proveedor ?? "",
+    proveedor_inicial: initial.proveedor_inicial ?? "", // F12 fix: proveedor habitual
     categoria: initial.categoria ?? "",
     subcategoria: initial.subcategoria ?? "",
     marca: initial.marca ?? "",
@@ -120,6 +121,17 @@ export default function ProductoForm({
             />
           </Field>
         </Row>
+        <Field label="Proveedor habitual (opcional)">
+          <input
+            type="text"
+            value={form.proveedor_inicial}
+            onChange={set("proveedor_inicial")}
+            className={inputCls}
+            style={inputStyle}
+            placeholder="Ej. ACME Repuestos — se llenará al recibir compras"
+            maxLength={120}
+          />
+        </Field>
         <Row>
           <Field label="Referencia (SKU fabricante)">
             <input
