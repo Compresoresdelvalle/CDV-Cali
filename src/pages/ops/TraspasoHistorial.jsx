@@ -43,7 +43,7 @@ export default function TraspasoHistorial() {
       let query = supabase
         .from("traspasos")
         .select(
-          `id, numero, fecha, estado, sede_origen_id, sede_destino_id, bultos, observaciones,
+          `id, numero, fecha, estado, tipo, sede_origen_id, sede_destino_id, bultos, observaciones,
            solicitante:solicitado_por(nombre),
            picker:picker_id(nombre),
            verificador:verificado_por(nombre)`,
@@ -254,7 +254,33 @@ export default function TraspasoHistorial() {
                       </span>
                     </td>
                     <td className="px-3 py-3.5">
-                      <StatusBadge status={t.estado} />
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <StatusBadge status={t.estado} />
+                        {t.tipo === "mercancia_abandonada" && (
+                          <span
+                            className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                            style={{
+                              backgroundColor: "hsl(var(--warning) / 0.15)",
+                              color: "hsl(var(--warning))",
+                            }}
+                            title="Mercancía abandonada"
+                          >
+                            📦 Abandonada
+                          </span>
+                        )}
+                        {t.tipo === "devolucion_garantia" && (
+                          <span
+                            className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                            style={{
+                              backgroundColor: "hsl(var(--info) / 0.15)",
+                              color: "hsl(var(--info))",
+                            }}
+                            title="Devolución por garantía"
+                          >
+                            🛡️ Garantía
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-3.5">
                       <span
@@ -299,7 +325,33 @@ export default function TraspasoHistorial() {
                     >
                       #{t.numero}
                     </span>
-                    <StatusBadge status={t.estado} />
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <StatusBadge status={t.estado} />
+                      {t.tipo === "mercancia_abandonada" && (
+                        <span
+                          className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                          style={{
+                            backgroundColor: "hsl(var(--warning) / 0.15)",
+                            color: "hsl(var(--warning))",
+                          }}
+                          title="Mercancía abandonada"
+                        >
+                          📦 Abandonada
+                        </span>
+                      )}
+                      {t.tipo === "devolucion_garantia" && (
+                        <span
+                          className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                          style={{
+                            backgroundColor: "hsl(var(--info) / 0.15)",
+                            color: "hsl(var(--info))",
+                          }}
+                          title="Devolución por garantía"
+                        >
+                          🛡️ Garantía
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 mb-1">
                     <span

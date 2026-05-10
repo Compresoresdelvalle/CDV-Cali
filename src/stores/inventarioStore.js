@@ -16,8 +16,9 @@ export const useInventarioStore = create((set, get) => ({
   filtroSede: null,
   filtroBusqueda: "",
   filtroEstado: null,
+  filtroTipo: null, // F12: 'nuevo' | 'segunda_mano' | null (todos)
 
-  // Actualiza filtros de sede/estado y resetea paginación
+  // Actualiza filtros de sede/estado/tipo y resetea paginación
   setFiltros: (partial) =>
     set((s) => ({
       filtroSede:
@@ -26,6 +27,8 @@ export const useInventarioStore = create((set, get) => ({
         partial.filtroEstado !== undefined
           ? partial.filtroEstado
           : s.filtroEstado,
+      filtroTipo:
+        partial.filtroTipo !== undefined ? partial.filtroTipo : s.filtroTipo,
       filtroBusqueda:
         partial.filtroBusqueda !== undefined
           ? partial.filtroBusqueda
@@ -56,16 +59,21 @@ export const useInventarioStore = create((set, get) => ({
       const offset = append ? s.page * PAGE_SIZE : 0;
 
       // Búsqueda server-side: primero obtenemos IDs de productos que coinciden
+      // F12: extiende búsqueda a codigo_interno y codigo_proveedor.
+      // F12: aplica filtro tipo (nuevo/segunda_mano) en la pre-query.
       let productoIds = null;
       const busquedaRaw = s.filtroBusqueda.trim();
-      if (busquedaRaw) {
-        const busqueda = sanitizeSearch(busquedaRaw);
-        const { data: prods } = await supabase
-          .from("productos")
-          .select("id")
-          .or(`nombre.ilike.%${busqueda}%,referencia.ilike.%${busqueda}%`)
-          .eq("activo", true);
-
+      const necesitaPreFiltro = !!busquedaRaw || !!s.filtroTipo;
+      if (necesitaPreFiltro) {
+        let pq = supabase.from("productos").select("id").eq("activo", true);
+        if (busquedaRaw) {
+          const busqueda = sanitizeSearch(busquedaRaw);
+          pq = pq.or(
+            `nombre.ilike.%${busqueda}%,referencia.ilike.%${busqueda}%,codigo_interno.ilike.%${busqueda}%,codigo_proveedor.ilike.%${busqueda}%`,
+          );
+        }
+        if (s.filtroTipo) pq = pq.eq("tipo", s.filtroTipo);
+        const { data: prods } = await pq;
         productoIds = prods?.map((p) => p.id) ?? [];
         if (productoIds.length === 0) {
           set({
@@ -84,7 +92,8 @@ export const useInventarioStore = create((set, get) => ({
         .select(
           `
           id, cantidad, estado_stock, ubicacion_id, sede_id,
-          producto:productos(id, referencia, nombre, categoria, marca,
+          producto:productos(id, referencia, codigo_interno, codigo_proveedor,
+                             tipo, nombre, categoria, marca,
                              precio_venta, stock_minimo, stock_maximo, activo),
           sede:sedes(id, nombre)
         `,

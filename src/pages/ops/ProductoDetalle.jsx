@@ -6,6 +6,7 @@ import StatusBadge from "../../components/ui/StatusBadge";
 import PageHeader from "../../components/layout/PageHeader";
 import QRGenerator from "../../components/qr/QRGenerator";
 import QRPrintLabel from "../../components/qr/QRPrintLabel";
+import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 
 export default function ProductoDetalle() {
@@ -18,6 +19,7 @@ export default function ProductoDetalle() {
   const [producto, setProducto] = useState(null);
   const [inventario, setInventario] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
+  const [proveedores, setProveedores] = useState([]); // F12: historial proveedores
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -32,7 +34,7 @@ export default function ProductoDetalle() {
         const { data: prod, error: prodErr } = await supabase
           .from("productos")
           .select(
-            "id, referencia, nombre, categoria, subcategoria, marca, modelo, descripcion, precio_venta, costo_promedio, stock_minimo, stock_maximo, unidad_medida, activo",
+            "id, referencia, codigo_interno, codigo_proveedor, tipo, nombre, categoria, subcategoria, marca, modelo, descripcion, precio_venta, costo_promedio, stock_minimo, stock_maximo, unidad_medida, activo",
           )
           .eq("id", productoId)
           .single();
@@ -56,10 +58,18 @@ export default function ProductoDetalle() {
           .order("fecha", { ascending: false })
           .limit(10);
 
+        // F12: historial de proveedores (último primero)
+        const { data: provs } = await supabase
+          .from("productos_proveedores")
+          .select("proveedor, ultima_compra_at, ultimo_costo")
+          .eq("producto_id", productoId)
+          .order("ultima_compra_at", { ascending: false, nullsFirst: false });
+
         if (!cancelled) {
           setProducto(prod);
           setInventario(inv ?? []);
           setMovimientos(movs ?? []);
+          setProveedores(provs ?? []);
           setLoading(false);
         }
       } catch (e) {
@@ -90,9 +100,14 @@ export default function ProductoDetalle() {
       {/* ── PageHeader ── */}
       <PageHeader
         title={producto.nombre}
-        description={producto.referencia}
+        description={
+          [producto.codigo_interno, producto.codigo_proveedor]
+            .filter(Boolean)
+            .join(" · ") || producto.referencia
+        }
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <TipoProductoBadge tipo={producto.tipo} />
             {!producto.activo && (
               <span
                 className="text-xs font-semibold px-2 py-1 rounded-full"
@@ -363,6 +378,68 @@ export default function ProductoDetalle() {
             />
           </div>
         </div>
+      </Section>
+
+      {/* ── F12: Proveedores (último primero) ── */}
+      <Section title="Proveedores" icon="🏷️">
+        {proveedores.length === 0 ? (
+          <p
+            className="text-sm px-4 py-3"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Aún no hay compras registradas. Al recibir la primera compra quedará
+            aquí el proveedor.
+          </p>
+        ) : (
+          <ul>
+            {proveedores.map((p, idx) => (
+              <li
+                key={p.proveedor}
+                className="px-4 py-3 flex items-center justify-between gap-3"
+                style={{
+                  borderTop:
+                    idx === 0 ? "none" : `1px solid hsl(var(--border) / 0.5)`,
+                }}
+              >
+                <div className="min-w-0">
+                  <p
+                    className="text-sm font-semibold"
+                    style={{ color: "hsl(var(--foreground))" }}
+                  >
+                    {idx === 0 && (
+                      <span
+                        className="mr-2 px-2 py-0.5 rounded text-[10px] font-bold"
+                        style={{
+                          backgroundColor: "hsl(var(--success) / 0.15)",
+                          color: "hsl(var(--success))",
+                        }}
+                      >
+                        ÚLTIMO
+                      </span>
+                    )}
+                    {p.proveedor}
+                  </p>
+                  {p.ultima_compra_at && (
+                    <p
+                      className="text-xs"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      Última compra: {formatDate(p.ultima_compra_at)}
+                    </p>
+                  )}
+                </div>
+                {p.ultimo_costo != null && (
+                  <span
+                    className="text-sm font-mono tabular-nums"
+                    style={{ color: "hsl(var(--muted-foreground))" }}
+                  >
+                    {formatCOP(p.ultimo_costo)}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </Section>
 
       {/* ── Últimos movimientos ── */}

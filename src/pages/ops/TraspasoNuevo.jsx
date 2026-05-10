@@ -56,6 +56,7 @@ export default function TraspasoNuevo() {
   const [sedeOrigen, setSedeOrigen] = useState(esAdmin ? "" : perfil.sede_id);
   const [sedeDestino, setSedeDestino] = useState("");
   const [observaciones, setObservaciones] = useState("");
+  const [tipoTraspaso, setTipoTraspaso] = useState("normal"); // F12
 
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState([]);
@@ -180,6 +181,7 @@ export default function TraspasoNuevo() {
           solicitado_por: perfil.id,
           observaciones: observaciones.trim() || null,
           estado: "borrador",
+          tipo: tipoTraspaso, // F12: normal | mercancia_abandonada | devolucion_garantia
         })
         .select("id, numero")
         .single();
@@ -499,6 +501,25 @@ export default function TraspasoNuevo() {
           </div>
         </SectionCard>
       )}
+
+      {/* F12: Tipo de traspaso */}
+      <SectionCard title="Tipo de traspaso">
+        <select
+          value={tipoTraspaso}
+          onChange={(e) => setTipoTraspaso(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border text-sm cursor-pointer focus:outline-none"
+          style={inputStyle}
+          aria-label="Tipo de traspaso"
+        >
+          <option value="normal">Normal</option>
+          <option value="mercancia_abandonada">
+            Mercancía abandonada (retroceso a bodega)
+          </option>
+          <option value="devolucion_garantia">
+            Devolución interna por garantía
+          </option>
+        </select>
+      </SectionCard>
 
       {/* Observaciones */}
       <SectionCard title="Observaciones (opcional)">
