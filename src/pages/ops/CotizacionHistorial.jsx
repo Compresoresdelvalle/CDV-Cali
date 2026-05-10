@@ -280,10 +280,8 @@ export default function CotizacionHistorial() {
               {filtradas.map((c) => {
                 const esteError =
                   errorConversion?.id === c.id ? errorConversion.msg : null;
-                const puedeConvertir =
-                  c.estado !== "rechazada" &&
-                  c.estado !== "vencida" &&
-                  !c.venta_id; // bloqueado si ya hay venta vinculada
+                const puedeConvertir = c.estado === "aprobada" && !c.venta_id;
+                // F11.5: solo aprobadas pueden convertirse a venta
                 return (
                   <li key={c.id}>
                     <div
@@ -311,7 +309,19 @@ export default function CotizacionHistorial() {
                             >
                               #{c.numero}
                             </span>
-                            <StatusBadge status={c.estado} />
+                            {!c.venta_id && <StatusBadge status={c.estado} />}
+                            {c.venta_id && (
+                              <span
+                                className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                                style={{
+                                  backgroundColor: "hsl(var(--success) / 0.15)",
+                                  color: "hsl(var(--success))",
+                                }}
+                                title="Esta cotización ya fue convertida en venta"
+                              >
+                                🛒 Convertida
+                              </span>
+                            )}
                             {c.ot && (
                               <span
                                 className="px-2 py-0.5 rounded text-[10px] font-semibold"
@@ -429,9 +439,8 @@ export default function CotizacionHistorial() {
                 <tbody>
                   {filtradas.map((c, idx) => {
                     const puedeConvertir =
-                      c.estado !== "rechazada" &&
-                      c.estado !== "vencida" &&
-                      !c.venta_id;
+                      c.estado === "aprobada" && !c.venta_id;
+                    // F11.5: solo aprobadas pueden convertirse
                     const esteError =
                       errorConversion?.id === c.id ? errorConversion.msg : null;
                     return (
@@ -486,7 +495,21 @@ export default function CotizacionHistorial() {
                           )}
                         </td>
                         <td className="px-4 py-3.5">
-                          <StatusBadge status={c.estado} />
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {!c.venta_id && <StatusBadge status={c.estado} />}
+                            {c.venta_id && (
+                              <span
+                                className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                                style={{
+                                  backgroundColor: "hsl(var(--success) / 0.15)",
+                                  color: "hsl(var(--success))",
+                                }}
+                                title="Convertida en venta"
+                              >
+                                🛒 Convertida
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3.5">
                           <span
