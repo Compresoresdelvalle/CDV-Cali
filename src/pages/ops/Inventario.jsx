@@ -6,10 +6,16 @@ import { useAuthStore } from "../../stores/authStore";
 import StatusBadge from "../../components/ui/StatusBadge";
 import PageHeader from "../../components/layout/PageHeader";
 import QRScanner from "../../components/forms/QRScanner";
+import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
 import { SEDES } from "../../lib/constants";
 import { formatCOP } from "../../lib/utils";
 
 const ESTADOS = ["OK", "Bajo", "Agotado"];
+const TIPOS = [
+  { v: null, label: "Todos" },
+  { v: "nuevo", label: "Nuevo" },
+  { v: "segunda_mano", label: "Segunda mano" },
+];
 
 const SEDE_LABELS = {
   [SEDES.BOD_PRINCIPAL]: "Bodega Principal",
@@ -31,6 +37,7 @@ export default function Inventario() {
     error,
     filtroSede,
     filtroEstado,
+    filtroTipo,
     filtroBusqueda,
     setFiltros,
     setBusqueda,
@@ -185,6 +192,25 @@ export default function Inventario() {
             ))}
           </select>
         )}
+
+        {/* Tipo de producto (F12: nuevo / segunda mano) */}
+        <select
+          value={filtroTipo ?? ""}
+          onChange={(e) => setFiltros({ filtroTipo: e.target.value || null })}
+          className="h-9 text-sm rounded-lg border px-3 cursor-pointer focus:outline-none transition-all"
+          style={{
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+            color: "hsl(var(--foreground))",
+          }}
+          aria-label="Filtrar por tipo"
+        >
+          {TIPOS.map((t) => (
+            <option key={t.label} value={t.v ?? ""}>
+              {t.label}
+            </option>
+          ))}
+        </select>
 
         {/* Chips de estado */}
         <div className="flex items-center gap-1.5">
@@ -427,6 +453,7 @@ export default function Inventario() {
                           {item.cantidad}
                         </span>
                         <StatusBadge status={item.estado_stock} />
+                        <TipoProductoBadge tipo={item.producto?.tipo} />
                       </div>
                     </div>
                     {/* Barra de progreso de stock */}
@@ -562,7 +589,10 @@ export default function Inventario() {
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <StatusBadge status={item.estado_stock} />
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <StatusBadge status={item.estado_stock} />
+                          <TipoProductoBadge tipo={item.producto?.tipo} />
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -42,11 +42,11 @@ export function useInventario() {
     }
   }, [perfil]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Re-fetch cuando cambian sede o estado ────────────────────────────
+  // ── Re-fetch cuando cambian sede, estado o tipo (F12) ────────────────
   useEffect(() => {
     if (!initiated.current) return;
     store.fetchInventario(false);
-  }, [store.filtroSede, store.filtroEstado]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [store.filtroSede, store.filtroEstado, store.filtroTipo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Re-fetch cuando el texto de búsqueda deja de cambiar (debounce) ──
   useEffect(() => {
@@ -82,6 +82,7 @@ export function useInventario() {
     error: store.error,
     filtroSede: store.filtroSede,
     filtroEstado: store.filtroEstado,
+    filtroTipo: store.filtroTipo,
     filtroBusqueda: store.filtroBusqueda,
     setFiltros: store.setFiltros,
     setBusqueda: store.setBusqueda,

@@ -6,7 +6,7 @@ import { formatCOP, formatDate } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 
-const FILTROS = ["Todas", "Registrada", "Recibida"];
+const FILTROS = ["Todas", "Registrada", "Recibida", "Garantía"];
 const PAGE_SIZE = 20;
 
 export default function CompraHistorial() {
@@ -29,7 +29,7 @@ export default function CompraHistorial() {
       let query = supabase
         .from("compras")
         .select(
-          `id, numero, fecha, proveedor, factura_proveedor, total, recibida,
+          `id, numero, fecha, proveedor, factura_proveedor, total, recibida, estado,
            registrador:registrado_por(nombre)`,
         )
         .order("fecha", { ascending: false })
@@ -39,6 +39,8 @@ export default function CompraHistorial() {
         query = query.eq("sede_destino_id", perfil.sede_id);
       if (filtro === "Registrada") query = query.eq("recibida", false);
       if (filtro === "Recibida") query = query.eq("recibida", true);
+      if (filtro === "Garantía")
+        query = query.eq("estado", "devolucion_garantia");
 
       const { data, error } = await query;
       if (error) throw error;
@@ -227,9 +229,23 @@ export default function CompraHistorial() {
                       </span>
                     </td>
                     <td className="px-3 py-3.5">
-                      <StatusBadge
-                        status={c.recibida ? "recibida" : "pendiente"}
-                      />
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <StatusBadge
+                          status={c.recibida ? "recibida" : "pendiente"}
+                        />
+                        {c.estado === "devolucion_garantia" && (
+                          <span
+                            className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                            style={{
+                              backgroundColor: "hsl(var(--warning) / 0.15)",
+                              color: "hsl(var(--warning))",
+                            }}
+                            title="Devolución por garantía"
+                          >
+                            🛡️ Garantía
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-3.5">
                       {!c.recibida && puedeRecibirCompra && (
@@ -284,6 +300,17 @@ export default function CompraHistorial() {
                         <StatusBadge
                           status={c.recibida ? "recibida" : "pendiente"}
                         />
+                        {c.estado === "devolucion_garantia" && (
+                          <span
+                            className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                            style={{
+                              backgroundColor: "hsl(var(--warning) / 0.15)",
+                              color: "hsl(var(--warning))",
+                            }}
+                          >
+                            🛡️ Garantía
+                          </span>
+                        )}
                       </div>
                       <p
                         className="text-sm font-medium truncate"

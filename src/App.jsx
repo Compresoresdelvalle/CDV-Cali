@@ -12,6 +12,7 @@ import AppShell from "./components/layout/AppShell";
 import AdminShell from "./components/layout/AdminShell";
 import Inventario from "./pages/ops/Inventario";
 import ProductoDetalle from "./pages/ops/ProductoDetalle";
+import ProductoNuevo from "./pages/ops/ProductoNuevo";
 import VentaHistorial from "./pages/ops/VentaHistorial";
 import VentaNueva from "./pages/ops/VentaNueva";
 import VentaDetalle from "./pages/ops/VentaDetalle";
@@ -109,12 +110,12 @@ export default function App() {
               </RoleGuard>
             }
           />
-          {/* Inventario — nuevo producto (próxima fase) */}
+          {/* Inventario — nuevo producto (Fase 12) */}
           <Route
             path="inventario/nuevo"
             element={
               <RoleGuard roles={["Admin", "Bodeguero"]}>
-                <Placeholder name="Nuevo Producto" />
+                <ProductoNuevo />
               </RoleGuard>
             }
           />

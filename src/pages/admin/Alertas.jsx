@@ -10,6 +10,10 @@ const TABS = [
   { key: "herramientas", label: "Herramientas vencidas" },
   { key: "ordenes", label: "Órdenes esperando repuesto" },
   { key: "ot30dias", label: "OT > 30 días sin recoger" },
+  // F12: Alertas de rotación (RPC fn_alertas_rotacion, periodo 30 días)
+  { key: "sobre_stock", label: "Sobre-stock (sin movimiento)" },
+  { key: "mayor_rotacion", label: "Mayor rotación" },
+  { key: "menor_rotacion", label: "Menor rotación" },
 ];
 
 export default function Alertas() {
@@ -20,6 +24,9 @@ export default function Alertas() {
     herramientas: [],
     ordenes: [],
     ot30dias: [],
+    sobre_stock: [],
+    mayor_rotacion: [],
+    menor_rotacion: [],
   });
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -36,7 +43,7 @@ export default function Alertas() {
     setLoading(true);
     setErrorMsg("");
     try {
-      const [s, h, o, ot30] = await Promise.all([
+      const [s, h, o, ot30, rot] = await Promise.all([
         supabase
           .from("inventario")
           .select(
@@ -67,17 +74,24 @@ export default function Alertas() {
             `id, numero, cliente_nombre, cliente_telefono, equipo_descripcion, fecha, sede_id, total_abonado`,
           )
           .order("fecha", { ascending: true }),
+        // F12: alertas de rotación (RPC retorna las 3 categorías)
+        supabase.rpc("fn_alertas_rotacion", { p_dias: 30, p_sede: null }),
       ]);
       if (!mountedRef.current) return;
       if (s.error) throw s.error;
       if (h.error) throw h.error;
       if (o.error) throw o.error;
       if (ot30.error) throw ot30.error;
+      if (rot.error) throw rot.error;
+      const rotData = rot.data ?? [];
       setDatos({
         stock: s.data ?? [],
         herramientas: h.data ?? [],
         ordenes: o.data ?? [],
         ot30dias: ot30.data ?? [],
+        sobre_stock: rotData.filter((r) => r.categoria === "sobre_stock"),
+        mayor_rotacion: rotData.filter((r) => r.categoria === "mayor_rotacion"),
+        menor_rotacion: rotData.filter((r) => r.categoria === "menor_rotacion"),
       });
     } catch (err) {
       if (!mountedRef.current) return;
@@ -96,6 +110,9 @@ export default function Alertas() {
     herramientas: datos.herramientas.length,
     ordenes: datos.ordenes.length,
     ot30dias: datos.ot30dias.length,
+    sobre_stock: datos.sobre_stock.length,
+    mayor_rotacion: datos.mayor_rotacion.length,
+    menor_rotacion: datos.menor_rotacion.length,
   };
 
   return (
@@ -412,7 +429,92 @@ export default function Alertas() {
             })}
           </ul>
         ))}
+
+      {/* F12: Sobre-stock (productos sin movimiento) */}
+      {tab === "sobre_stock" &&
+        (datos.sobre_stock.length === 0 ? (
+          <Empty icon="📦">
+            Sin productos con sobre-stock en los últimos 30 días.
+          </Empty>
+        ) : (
+          <RotacionList
+            items={datos.sobre_stock}
+            navigate={navigate}
+            modo="sobre_stock"
+          />
+        ))}
+
+      {/* F12: Mayor rotación */}
+      {tab === "mayor_rotacion" &&
+        (datos.mayor_rotacion.length === 0 ? (
+          <Empty icon="🔥">Sin movimientos en los últimos 30 días.</Empty>
+        ) : (
+          <RotacionList
+            items={datos.mayor_rotacion}
+            navigate={navigate}
+            modo="mayor"
+          />
+        ))}
+
+      {/* F12: Menor rotación */}
+      {tab === "menor_rotacion" &&
+        (datos.menor_rotacion.length === 0 ? (
+          <Empty icon="🐢">Sin productos de menor rotación.</Empty>
+        ) : (
+          <RotacionList
+            items={datos.menor_rotacion}
+            navigate={navigate}
+            modo="menor"
+          />
+        ))}
     </div>
+  );
+}
+
+function RotacionList({ items, navigate, modo }) {
+  return (
+    <ul className="space-y-2">
+      {items.map((r) => (
+        <li
+          key={`${modo}-${r.producto_id}-${r.sede_id}`}
+          onClick={() => navigate(`/ops/inventario/${r.producto_id}`)}
+          className="rounded-xl border px-4 py-3 cursor-pointer flex items-center justify-between gap-3"
+          style={{
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+          }}
+        >
+          <div className="min-w-0 flex-1">
+            <p
+              className="text-sm font-semibold truncate"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
+              {r.nombre}
+            </p>
+            <p
+              className="text-xs font-mono"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              {r.codigo_interno} · {r.sede_id}
+            </p>
+          </div>
+          <div className="text-right shrink-0">
+            <p
+              className="text-sm font-bold tabular-nums"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
+              {r.ventas_periodo} vendidos
+            </p>
+            <p
+              className="text-xs tabular-nums"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              Stock: {r.stock_actual}
+            </p>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
