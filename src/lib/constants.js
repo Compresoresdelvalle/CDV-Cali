@@ -34,6 +34,7 @@ export const ROLE_MODULES = {
     "Órdenes",
     "Ensambles",
     "Cotizaciones",
+    "Garantías",
     "Herramientas",
     "Devoluciones",
     "Productos",
@@ -44,6 +45,7 @@ export const ROLE_MODULES = {
     "Compras",
     "Traspasos",
     "Ensambles",
+    "Garantías",
     "Devoluciones",
     "Herramientas",
     "Productos",
@@ -52,6 +54,7 @@ export const ROLE_MODULES = {
     "Inventario",
     "Ventas",
     "Cotizaciones",
+    "Garantías",
     "Herramientas",
     "Productos",
   ],
@@ -70,6 +73,7 @@ export const MODULE_ICONS = {
   Herramientas: "🛠️",
   Devoluciones: "↩️",
   Productos: "🏷️",
+  Garantías: "🛡️",
   "→ Panel Admin": "📊",
 };
 
@@ -85,6 +89,7 @@ export const MODULE_ROUTES = {
   Herramientas: "/ops/herramientas",
   Devoluciones: "/ops/devoluciones",
   Productos: "/ops/productos",
+  Garantías: "/ops/garantias",
   "→ Panel Admin": "/admin",
 };
 
@@ -99,6 +104,7 @@ export const ADMIN_MODULES = [
   { nombre: "Usuarios", icon: "👥", ruta: "/admin/usuarios" },
   { nombre: "Top 10", icon: "🏆", ruta: "/admin/top10" },
   { nombre: "Configuración", icon: "⚙️", ruta: "/admin/configuracion" },
+  { nombre: "Notas crédito", icon: "💳", ruta: "/admin/notas-credito" },
 ];
 
 // Fase 10: etiquetas de estados de OT (incluye pendiente_recogida)

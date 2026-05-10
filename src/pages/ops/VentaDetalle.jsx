@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
+import ModalAbrirGarantiaVenta from "../../components/garantias/ModalAbrirGarantiaVenta";
 
 export default function VentaDetalle() {
   const { id } = useParams();
@@ -18,6 +19,7 @@ export default function VentaDetalle() {
   const [anulando, setAnulando] = useState(false);
   const [confirmAnular, setConfirmAnular] = useState(false);
   const [error, setError] = useState(null);
+  const [modalGarantia, setModalGarantia] = useState(false);
 
   useEffect(() => {
     const cargar = async () => {
@@ -131,8 +133,22 @@ export default function VentaDetalle() {
         title={`Venta #${venta.numero}`}
         description={formatDate(venta.fecha)}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={venta.anulada ? "anulada" : "completada"} />
+            {!venta.anulada && (
+              <button
+                onClick={() => setModalGarantia(true)}
+                className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer"
+                style={{
+                  borderColor: "hsl(var(--warning))",
+                  color: "hsl(var(--warning))",
+                  backgroundColor: "hsl(var(--warning) / 0.08)",
+                }}
+                title="Abrir reclamo de garantía"
+              >
+                🛡️ Cliente reclama garantía
+              </button>
+            )}
             <button
               onClick={() => navigate("/ops/ventas")}
               className="h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"
@@ -147,6 +163,22 @@ export default function VentaDetalle() {
           </div>
         }
       />
+
+      {modalGarantia && (
+        <ModalAbrirGarantiaVenta
+          origen={{
+            tipo: "venta",
+            id: venta.id,
+            cliente_nombre: venta.cliente_nombre,
+            sede_id: venta.sede_id,
+          }}
+          onClose={() => setModalGarantia(false)}
+          onCreated={(gid) => {
+            setModalGarantia(false);
+            navigate(`/ops/garantias/venta/${gid}`);
+          }}
+        />
+      )}
 
       {/* ── Info general ── */}
       <div

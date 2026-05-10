@@ -181,6 +181,8 @@ export default function CompraHistorial() {
                 {compras.map((c, idx) => (
                   <tr
                     key={c.id}
+                    onClick={() => navigate(`/ops/compras/${c.id}`)}
+                    className="cursor-pointer"
                     style={{
                       borderTop:
                         idx === 0
@@ -250,7 +252,10 @@ export default function CompraHistorial() {
                     <td className="px-3 py-3.5">
                       {!c.recibida && puedeRecibirCompra && (
                         <button
-                          onClick={() => marcarRecibida(c.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            marcarRecibida(c.id);
+                          }}
                           disabled={recibiendoId === c.id}
                           className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all disabled:opacity-50 cursor-pointer whitespace-nowrap"
                           style={{
@@ -282,7 +287,8 @@ export default function CompraHistorial() {
             {compras.map((c) => (
               <li key={c.id}>
                 <div
-                  className="rounded-xl px-4 py-4 border"
+                  onClick={() => navigate(`/ops/compras/${c.id}`)}
+                  className="rounded-xl px-4 py-4 border cursor-pointer"
                   style={{
                     backgroundColor: "hsl(var(--card))",
                     borderColor: "hsl(var(--border))",
@@ -338,7 +344,10 @@ export default function CompraHistorial() {
                   </div>
                   {!c.recibida && puedeRecibirCompra && (
                     <button
-                      onClick={() => marcarRecibida(c.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        marcarRecibida(c.id);
+                      }}
                       disabled={recibiendoId === c.id}
                       className="w-full mt-1 py-2.5 rounded-lg text-sm font-medium border transition-all disabled:opacity-50 cursor-pointer"
                       style={{
