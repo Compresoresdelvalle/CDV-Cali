@@ -15,6 +15,7 @@ import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
 import AbonosPanel from "../../components/ot/AbonosPanel";
 import AutorizacionPanel from "../../components/ot/AutorizacionPanel";
 import CotizacionesAsociadasOT from "../../components/ot/CotizacionesAsociadasOT";
+import ModalAbrirGarantiaVenta from "../../components/garantias/ModalAbrirGarantiaVenta";
 
 const ESTADOS = [
   "abierta",
@@ -56,6 +57,7 @@ export default function OrdenDetalle() {
   const [trabajoRealizado, setTrabajoRealizado] = useState("");
   const [savingTrabajo, setSavingTrabajo] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
+  const [modalGarantia, setModalGarantia] = useState(false);
 
   // Repuesto picker state
   const [search, setSearch] = useState("");
@@ -328,14 +330,58 @@ export default function OrdenDetalle() {
         }}
       >
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <StatusBadge status={orden.estado} />
-          <p
-            className="text-xs"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Técnico: {orden.tecnico?.nombre ?? "—"}
-          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <StatusBadge status={orden.estado} />
+            {orden.tipo === "garantia" && (
+              <span
+                className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                style={{
+                  backgroundColor: "hsl(var(--warning) / 0.15)",
+                  color: "hsl(var(--warning))",
+                }}
+              >
+                🛡️ Garantía
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {orden.estado === "entregada" && orden.tipo !== "garantia" && (
+              <button
+                onClick={() => setModalGarantia(true)}
+                className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer"
+                style={{
+                  borderColor: "hsl(var(--warning))",
+                  color: "hsl(var(--warning))",
+                  backgroundColor: "hsl(var(--warning) / 0.08)",
+                }}
+              >
+                🛡️ Cliente reclama garantía
+              </button>
+            )}
+            <p
+              className="text-xs"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              Técnico: {orden.tecnico?.nombre ?? "—"}
+            </p>
+          </div>
         </div>
+
+        {modalGarantia && (
+          <ModalAbrirGarantiaVenta
+            origen={{
+              tipo: "ot",
+              id: orden.id,
+              cliente_nombre: orden.cliente_nombre,
+              sede_id: orden.sede_id,
+            }}
+            onClose={() => setModalGarantia(false)}
+            onCreated={(gid) => {
+              setModalGarantia(false);
+              navigate(`/ops/garantias/venta/${gid}`);
+            }}
+          />
+        )}
         <div className="grid sm:grid-cols-2 gap-3 text-sm">
           <Info label="Equipo" value={orden.equipo_descripcion} />
           <Info label="Serie" value={orden.equipo_serie || "—"} />

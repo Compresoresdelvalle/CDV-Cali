@@ -23,6 +23,11 @@ import CotizacionEditar from "./pages/ops/CotizacionEditar";
 import Dashboard from "./pages/ops/Dashboard";
 import CompraHistorial from "./pages/ops/CompraHistorial";
 import CompraNueva from "./pages/ops/CompraNueva";
+import CompraDetalle from "./pages/ops/CompraDetalle";
+import GarantiasIndex from "./pages/ops/Garantias";
+import GarantiaCompraDetalle from "./pages/ops/Garantias/GarantiaCompraDetalle";
+import GarantiaVentaDetalle from "./pages/ops/Garantias/GarantiaVentaDetalle";
+import NotasCredito from "./pages/admin/NotasCredito";
 import DevolucionHistorial from "./pages/ops/DevolucionHistorial";
 import DevolucionNueva from "./pages/ops/DevolucionNueva";
 import TraspasoHistorial from "./pages/ops/TraspasoHistorial";
@@ -165,6 +170,40 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin", "Bodeguero"]}>
                 <CompraNueva />
+              </RoleGuard>
+            }
+          />
+          {/* Compras — detalle (Fase 13) */}
+          <Route
+            path="compras/:id"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <CompraDetalle />
+              </RoleGuard>
+            }
+          />
+          {/* Garantías — Fase 13 */}
+          <Route
+            path="garantias"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
+                <GarantiasIndex />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="garantias/compra/:id"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <GarantiaCompraDetalle />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="garantias/venta/:id"
+            element={
+              <RoleGuard roles={["Admin", "Vendedor"]}>
+                <GarantiaVentaDetalle />
               </RoleGuard>
             }
           />
@@ -334,6 +373,7 @@ export default function App() {
           <Route path="usuarios" element={<Usuarios />} />
           <Route path="top10" element={<Top10 />} />
           <Route path="configuracion" element={<Configuracion />} />
+          <Route path="notas-credito" element={<NotasCredito />} />
         </Route>
 
         {/* Fallback → login */}
