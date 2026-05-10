@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
@@ -6,8 +6,11 @@ import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
+import EstadoCotizacionPanel from "../../components/cotizaciones/EstadoCotizacionPanel";
+import { useAuthStore } from "../../stores/authStore";
 
 export default function CotizacionDetalle() {
+  const rolUsuario = useAuthStore((s) => s.perfil?.rol ?? null);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -19,43 +22,44 @@ export default function CotizacionDetalle() {
   const [convirtiendo, setConvirtiendo] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const cargar = async () => {
-      setLoading(true);
-      try {
-        const [{ data: cot }, { data: det }, { data: cuentas }] =
-          await Promise.all([
-            supabase
-              .from("cotizaciones")
-              .select(
-                `*, vendedor:vendedor_id(nombre), ot:ot_id(id, numero, estado), venta:venta_id(id, numero)`,
-              )
-              .eq("id", id)
-              .single(),
-            supabase
-              .from("detalle_cotizacion")
-              .select(
-                `*, producto:producto_id(nombre, referencia, unidad_medida)`,
-              )
-              .eq("cotizacion_id", id),
-            supabase
-              .from("cotizacion_cuentas_bancarias")
-              .select(
-                "cuenta:cuenta_id(id, banco, tipo, numero, titular, marca_iva)",
-              )
-              .eq("cotizacion_id", id),
-          ]);
-        setCotizacion(cot);
-        setItems(det ?? []);
-        setCuentasPDF((cuentas ?? []).map((r) => r.cuenta).filter(Boolean));
-      } catch {
-        // ignore
-      } finally {
-        setLoading(false);
-      }
-    };
-    cargar();
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [{ data: cot }, { data: det }, { data: cuentas }] =
+        await Promise.all([
+          supabase
+            .from("cotizaciones")
+            .select(
+              `*, vendedor:vendedor_id(nombre), ot:ot_id(id, numero, estado), venta:venta_id(id, numero)`,
+            )
+            .eq("id", id)
+            .single(),
+          supabase
+            .from("detalle_cotizacion")
+            .select(
+              `*, producto:producto_id(nombre, referencia, unidad_medida)`,
+            )
+            .eq("cotizacion_id", id),
+          supabase
+            .from("cotizacion_cuentas_bancarias")
+            .select(
+              "cuenta:cuenta_id(id, banco, tipo, numero, titular, marca_iva)",
+            )
+            .eq("cotizacion_id", id),
+        ]);
+      setCotizacion(cot);
+      setItems(det ?? []);
+      setCuentasPDF((cuentas ?? []).map((r) => r.cuenta).filter(Boolean));
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
 
   const generarPDF = (action = "download") => {
     if (!cotizacion) return;
@@ -146,10 +150,11 @@ export default function CotizacionDetalle() {
   const descuento = cotizacion.subtotal * (cotizacion.descuento_pct / 100);
   const baseIva = cotizacion.subtotal - descuento;
   const iva = baseIva * (cotizacion.iva_pct / 100);
+  // F11.5: solo se puede convertir a venta desde estado APROBADA
   const puedeConvertir =
-    cotizacion.estado !== "rechazada" &&
-    cotizacion.estado !== "vencida" &&
-    !cotizacion.venta_id; // bloqueado si ya hay venta convertida
+    cotizacion.estado === "aprobada" && !cotizacion.venta_id;
+  // Editar solo en borrador (una vez enviada la cotizacion debe ser inmutable)
+  const puedeEditar = cotizacion.estado === "borrador" && !cotizacion.venta_id;
 
   return (
     <div
@@ -226,7 +231,7 @@ export default function CotizacionDetalle() {
             >
               ← Volver
             </button>
-            {!cotizacion.venta_id && (
+            {puedeEditar && (
               <button
                 onClick={() => navigate(`/ops/cotizaciones/${id}/editar`)}
                 className="flex items-center gap-1.5 h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"
@@ -252,6 +257,13 @@ export default function CotizacionDetalle() {
             )}
           </div>
         }
+      />
+
+      {/* ── F11.5: Banner de estado y workflow ── */}
+      <EstadoCotizacionPanel
+        cotizacion={cotizacion}
+        rolUsuario={rolUsuario}
+        onChange={cargar}
       />
 
       {/* ── Info general ── */}
