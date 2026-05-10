@@ -395,7 +395,14 @@ export default function Inventario() {
                           className="text-xs mt-0.5 font-mono"
                           style={{ color: "hsl(var(--muted-foreground))" }}
                         >
-                          {item.producto?.referencia}
+                          {item.producto?.codigo_interno ??
+                            item.producto?.referencia}
+                          {item.producto?.codigo_proveedor && (
+                            <span style={{ opacity: 0.7 }}>
+                              {" · "}
+                              {item.producto.codigo_proveedor}
+                            </span>
+                          )}
                         </p>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           <span
@@ -525,8 +532,20 @@ export default function Inventario() {
                         <span
                           className="font-mono text-xs"
                           style={{ color: "hsl(var(--muted-foreground))" }}
+                          title={
+                            item.producto?.codigo_proveedor
+                              ? `Proveedor: ${item.producto.codigo_proveedor}`
+                              : undefined
+                          }
                         >
-                          {item.producto?.referencia}
+                          {item.producto?.codigo_interno ??
+                            item.producto?.referencia}
+                          {item.producto?.codigo_proveedor && (
+                            <span style={{ opacity: 0.6 }}>
+                              {" / "}
+                              {item.producto.codigo_proveedor}
+                            </span>
+                          )}
                         </span>
                       </td>
                       <td className="px-4 py-3.5">

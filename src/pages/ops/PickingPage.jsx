@@ -151,6 +151,15 @@ export default function PickingPage() {
   const handleFinalizar = async () => {
     clearTimeout(autoSaveRef.current);
     await guardarProgreso(local);
+    // F12 fix UX: el picking no cambia estado por sí solo. La transición
+    // picking→verificado la hace OTRA persona (Admin u otro Bodeguero) por
+    // segregación de funciones (regla en fn_procesar_traspaso).
+    // Avisamos al picker para que no piense que el flujo está roto.
+    alert(
+      "Picking guardado. Lo siguiente:\n\n" +
+        'Una persona DISTINTA al picker (Admin u otro Bodeguero) entra a este traspaso y le da "Verificar".\n\n' +
+        "Luego: Verificado → Enviar → En tránsito → Recibir en sede destino.",
+    );
     navigate(`/ops/traspasos/${id}`);
   };
 

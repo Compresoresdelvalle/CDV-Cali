@@ -20,7 +20,8 @@ export default function CompraNueva() {
   const [facturaProveedor, setFacturaProveedor] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [recibirAhora, setRecibirAhora] = useState(false);
-  const [estadoCompra, setEstadoCompra] = useState("completada"); // F12
+  // estado_compra removido del form: se asigna 'completada' en BD por default.
+  // Las garantías se gestionarán desde la compra ya recibida (Fase 13).
 
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState([]);
@@ -153,7 +154,8 @@ export default function CompraNueva() {
           factura_proveedor: facturaProveedor.trim() || null,
           observaciones: observaciones.trim() || null,
           recibida: false,
-          estado: estadoCompra, // F12: completada | devolucion_garantia
+          // estado: 'completada' por default en BD. Las devoluciones por
+          // garantía son acción posterior sobre compras ya recibidas (F13).
         })
         .select("id, numero")
         .single();
@@ -230,17 +232,6 @@ export default function CompraNueva() {
             className="w-full px-4 py-3 rounded-xl text-sm border focus:outline-none transition-all"
             style={inputStyle}
           />
-          {/* F12: estado de compra (completada | devolucion_garantia) */}
-          <select
-            value={estadoCompra}
-            onChange={(e) => setEstadoCompra(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl text-sm border focus:outline-none transition-all cursor-pointer"
-            style={inputStyle}
-            aria-label="Tipo de compra"
-          >
-            <option value="completada">Compra completada</option>
-            <option value="devolucion_garantia">Devolución por garantía</option>
-          </select>
         </div>
       </SectionCard>
 
