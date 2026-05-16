@@ -59,6 +59,22 @@ export default function OrdenDetalle() {
   const [savingTrabajo, setSavingTrabajo] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [modalGarantia, setModalGarantia] = useState(false);
+  const [imprimiendo, setImprimiendo] = useState(false);
+
+  // Guard anti doble-click: imprime la OT una sola vez por tap
+  const imprimirOT = () => {
+    if (imprimiendo) return;
+    setImprimiendo(true);
+    try {
+      generarOrdenPDF({
+        orden,
+        repuestos: detalles,
+        tecnico: orden.tecnico?.nombre ?? "—",
+      }).print();
+    } finally {
+      setTimeout(() => setImprimiendo(false), 1500);
+    }
+  };
 
   // Repuesto picker state
   const [search, setSearch] = useState("");
@@ -309,14 +325,9 @@ export default function OrdenDetalle() {
         description={`${orden.cliente_nombre} · ${formatDate(orden.fecha)}`}
         actions={
           <button
-            onClick={() =>
-              generarOrdenPDF({
-                orden,
-                repuestos: detalles,
-                tecnico: orden.tecnico?.nombre ?? "—",
-              }).print()
-            }
-            className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer"
+            onClick={imprimirOT}
+            disabled={imprimiendo}
+            className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer disabled:opacity-50"
             style={{
               borderColor: "hsl(var(--primary))",
               color: "hsl(var(--primary))",

@@ -21,6 +21,22 @@ export default function VentaDetalle() {
   const [confirmAnular, setConfirmAnular] = useState(false);
   const [error, setError] = useState(null);
   const [modalGarantia, setModalGarantia] = useState(false);
+  const [imprimiendo, setImprimiendo] = useState(false);
+
+  // Guard anti doble-click: genera el recibo POS una sola vez por tap
+  const imprimirRecibo = () => {
+    if (imprimiendo) return;
+    setImprimiendo(true);
+    try {
+      generarVentaPOS({
+        venta,
+        items,
+        vendedor: venta.vendedor?.nombre ?? "—",
+      }).print();
+    } finally {
+      setTimeout(() => setImprimiendo(false), 1500);
+    }
+  };
 
   useEffect(() => {
     const cargar = async () => {
@@ -137,14 +153,9 @@ export default function VentaDetalle() {
           <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={venta.anulada ? "anulada" : "completada"} />
             <button
-              onClick={() =>
-                generarVentaPOS({
-                  venta,
-                  items,
-                  vendedor: venta.vendedor?.nombre ?? "—",
-                }).print()
-              }
-              className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer"
+              onClick={imprimirRecibo}
+              disabled={imprimiendo}
+              className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer disabled:opacity-50"
               style={{
                 borderColor: "hsl(var(--primary))",
                 color: "hsl(var(--primary))",
