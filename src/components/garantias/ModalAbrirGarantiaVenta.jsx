@@ -81,9 +81,13 @@ export default function ModalAbrirGarantiaVenta({
       setErrorMsg("Selecciona al menos un repuesto para cambiar");
       return;
     }
-    if (resolucion === "devolver_dinero" && Number(montoDevuelto) <= 0) {
-      setErrorMsg("Indica el monto a devolver");
-      return;
+    if (resolucion === "devolver_dinero") {
+      const monto = Number(montoDevuelto);
+      // String vacío → Number("")=NaN; NaN<=0 es false, así que valida aparte
+      if (montoDevuelto === "" || !Number.isFinite(monto) || monto <= 0) {
+        setErrorMsg("Indica un monto a devolver válido (mayor a 0)");
+        return;
+      }
     }
 
     setSubmitting(true);

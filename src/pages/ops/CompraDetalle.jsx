@@ -312,8 +312,9 @@ export default function CompraDetalle() {
           items={items}
           onClose={() => setModalAbrir(false)}
           onCreated={(garantiaId) => {
+            // Navegamos directo al detalle de la garantía; no recargamos
+            // esta vista (evita setState sobre componente desmontado).
             setModalAbrir(false);
-            cargar();
             navigate(`/ops/garantias/compra/${garantiaId}`);
           }}
         />

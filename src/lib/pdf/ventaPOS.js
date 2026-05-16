@@ -25,12 +25,22 @@ const CW = W - MX * 2; // ancho contenido
  *   vendedor: string
  */
 export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
-  // Altura estimada: header (~55) + items (~9 c/u) + totales (~45) + footer (~25)
-  const altura = 55 + items.length * 9 + 45 + 25;
+  // Altura: medición real de los ítems (pass 1) para que nombres largos que
+  // envuelven a varias líneas no desborden la tirilla.
+  const probe = new jsPDF({ unit: "mm", format: [W, 1000] });
+  probe.setFontSize(7);
+  let itemsAlto = 0;
+  for (const it of items) {
+    const lineas = probe.splitTextToSize(it.producto?.nombre ?? "—", CW - 18);
+    // 3.6 primera línea + 3.6 por cada línea extra del nombre + 4.2 precio c/u
+    itemsAlto += 3.6 + Math.max(0, lineas.length - 1) * 3.6 + 4.2;
+  }
+  // header ~58 + items + totales ~50 + footer ~25, mínimo 120
+  const altura = Math.max(58 + itemsAlto + 50 + 25, 120);
 
   const doc = new jsPDF({
     unit: "mm",
-    format: [W, Math.max(altura, 120)],
+    format: [W, altura],
     compress: true,
   });
 
