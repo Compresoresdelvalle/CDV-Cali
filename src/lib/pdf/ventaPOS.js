@@ -1,0 +1,216 @@
+/**
+ * Generador de recibo POS de venta — Fase 13B.
+ *
+ * Formato tirilla 80mm de ancho, alto dinámico (estilo impresora térmica).
+ * Renderiza datos ya existentes de `ventas` + `detalle_venta`; NO toca BD.
+ *
+ * Uso:
+ *   const r = generarVentaPOS({ venta, items, vendedor });
+ *   r.print();   // abre preview imprimible
+ *   r.download(); // descarga el PDF
+ */
+import { jsPDF } from "jspdf";
+import { MARCA, formatCOP } from "./pdfStyles";
+
+const W = 80; // ancho tirilla en mm
+const MX = 5; // margen lateral
+const CW = W - MX * 2; // ancho contenido
+
+/**
+ * Args:
+ *   venta:   { numero, fecha, cliente_nombre, cliente_nit, metodo_pago,
+ *              subtotal, descuento_pct, iva_pct, total, sede_id }
+ *   items:   [{ producto:{nombre, referencia, unidad_medida}, cantidad,
+ *               precio_unitario, subtotal }]
+ *   vendedor: string
+ */
+export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
+  // Altura estimada: header (~55) + items (~9 c/u) + totales (~45) + footer (~25)
+  const altura = 55 + items.length * 9 + 45 + 25;
+
+  const doc = new jsPDF({
+    unit: "mm",
+    format: [W, Math.max(altura, 120)],
+    compress: true,
+  });
+
+  let y = 8;
+  const center = W / 2;
+
+  // ── Encabezado empresa ───────────────────────────────────────────────
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text(MARCA.nombre, center, y, { align: "center" });
+  y += 4.5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.text(MARCA.ciudad, center, y, { align: "center" });
+  y += 6;
+
+  // Línea
+  doc.setLineWidth(0.2);
+  doc.line(MX, y, W - MX, y);
+  y += 5;
+
+  // ── Datos de la venta ────────────────────────────────────────────────
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.text(
+    `RECIBO DE VENTA N° ${String(venta.numero ?? "—").padStart(5, "0")}`,
+    center,
+    y,
+    { align: "center" },
+  );
+  y += 5;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  const fecha = venta.fecha
+    ? new Date(venta.fecha).toLocaleString("es-CO", {
+        timeZone: "America/Bogota",
+        dateStyle: "short",
+        timeStyle: "short",
+      })
+    : "—";
+  doc.text(`Fecha: ${fecha}`, MX, y);
+  y += 3.8;
+  doc.text(`Cliente: ${venta.cliente_nombre || "Mostrador"}`, MX, y);
+  y += 3.8;
+  if (venta.cliente_nit) {
+    doc.text(`NIT/CC: ${venta.cliente_nit}`, MX, y);
+    y += 3.8;
+  }
+  doc.text(`Sede: ${venta.sede_id ?? "—"}`, MX, y);
+  y += 3.8;
+  doc.text(`Atendió: ${vendedor}`, MX, y);
+  y += 5;
+
+  // Línea
+  doc.line(MX, y, W - MX, y);
+  y += 4;
+
+  // ── Ítems ────────────────────────────────────────────────────────────
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.5);
+  doc.text("CANT  DESCRIPCIÓN", MX, y);
+  doc.text("TOTAL", W - MX, y, { align: "right" });
+  y += 3.5;
+  doc.setFont("helvetica", "normal");
+
+  for (const it of items) {
+    const nombre = it.producto?.nombre ?? "—";
+    const cant = it.cantidad ?? 0;
+    const precio = Number(it.precio_unitario ?? 0);
+    const sub = Number(it.subtotal ?? cant * precio);
+
+    // Línea 1: cantidad + nombre (envuelto)
+    const nombreLines = doc.splitTextToSize(nombre, CW - 18);
+    doc.setFontSize(7);
+    doc.text(String(cant), MX, y);
+    doc.text(nombreLines[0], MX + 9, y);
+    doc.text(formatCOP(sub), W - MX, y, { align: "right" });
+    y += 3.6;
+    // Líneas extra del nombre si es largo
+    for (let i = 1; i < nombreLines.length; i++) {
+      doc.text(nombreLines[i], MX + 9, y);
+      y += 3.6;
+    }
+    // Línea 2: precio unitario
+    doc.setFontSize(6);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`  ${formatCOP(precio)} c/u`, MX + 9, y);
+    doc.setTextColor(0, 0, 0);
+    y += 4.2;
+  }
+
+  // Línea
+  doc.line(MX, y, W - MX, y);
+  y += 4.5;
+
+  // ── Totales ──────────────────────────────────────────────────────────
+  const subtotal = Number(
+    venta.subtotal > 0
+      ? venta.subtotal
+      : items.reduce((s, it) => s + Number(it.subtotal ?? 0), 0),
+  );
+  const descPct = Number(venta.descuento_pct ?? 0);
+  const descuento = subtotal * (descPct / 100);
+  const baseIva = subtotal - descuento;
+  const ivaPct = Number(venta.iva_pct ?? 19);
+  const iva = baseIva * (ivaPct / 100);
+  const total = Number(venta.total > 0 ? venta.total : baseIva + iva);
+
+  doc.setFontSize(7.5);
+  const fila = (label, valor, bold = false) => {
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+    doc.text(label, MX, y);
+    doc.text(valor, W - MX, y, { align: "right" });
+    y += bold ? 5 : 3.8;
+  };
+  fila("Subtotal:", formatCOP(subtotal));
+  if (descPct > 0) fila(`Descuento (${descPct}%):`, `-${formatCOP(descuento)}`);
+  fila(`IVA ${ivaPct}%:`, formatCOP(iva));
+  doc.setFontSize(9);
+  fila("TOTAL:", formatCOP(total), true);
+
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  fila("Forma de pago:", String(venta.metodo_pago ?? "—"));
+
+  y += 2;
+  doc.line(MX, y, W - MX, y);
+  y += 5;
+
+  // ── Pie ──────────────────────────────────────────────────────────────
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "italic");
+  doc.text("¡Gracias por su compra!", center, y, { align: "center" });
+  y += 4;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6);
+  doc.setTextColor(120, 120, 120);
+  doc.text("Este recibo no es una factura electrónica.", center, y, {
+    align: "center",
+  });
+
+  // ── API ──────────────────────────────────────────────────────────────
+  const blob = doc.output("blob");
+  const filename = `Recibo_Venta_${String(venta.numero ?? "draft").padStart(5, "0")}.pdf`;
+
+  return {
+    blob,
+    filename,
+    download() {
+      doc.save(filename);
+    },
+    print() {
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url);
+      if (!win) {
+        URL.revokeObjectURL(url);
+        doc.save(filename);
+        return;
+      }
+      const triggerPrint = () => {
+        try {
+          win.print();
+        } catch {
+          /* algunos visores no permiten print() programático */
+        }
+      };
+      if (win.document?.readyState === "complete") triggerPrint();
+      else win.addEventListener("load", triggerPrint, { once: true });
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+    open() {
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, "_blank");
+      if (!win) {
+        URL.revokeObjectURL(url);
+        doc.save(filename);
+        return;
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+  };
+}

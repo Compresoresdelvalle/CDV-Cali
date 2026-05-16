@@ -16,6 +16,7 @@ import AbonosPanel from "../../components/ot/AbonosPanel";
 import AutorizacionPanel from "../../components/ot/AutorizacionPanel";
 import CotizacionesAsociadasOT from "../../components/ot/CotizacionesAsociadasOT";
 import ModalAbrirGarantiaVenta from "../../components/garantias/ModalAbrirGarantiaVenta";
+import { generarOrdenPDF } from "../../lib/pdf/ordenPDF";
 
 const ESTADOS = [
   "abierta",
@@ -306,6 +307,26 @@ export default function OrdenDetalle() {
       <PageHeader
         title={`Orden #${orden.numero}`}
         description={`${orden.cliente_nombre} · ${formatDate(orden.fecha)}`}
+        actions={
+          <button
+            onClick={() =>
+              generarOrdenPDF({
+                orden,
+                repuestos: detalles,
+                tecnico: orden.tecnico?.nombre ?? "—",
+              }).print()
+            }
+            className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer"
+            style={{
+              borderColor: "hsl(var(--primary))",
+              color: "hsl(var(--primary))",
+              backgroundColor: "hsl(var(--primary) / 0.08)",
+            }}
+            title="Imprimir orden de trabajo"
+          >
+            🖨️ Imprimir OT
+          </button>
+        }
       />
 
       {errorMsg && (
