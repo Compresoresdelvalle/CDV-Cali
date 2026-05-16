@@ -6,6 +6,7 @@ import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import PageHeader from "../../components/layout/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import ModalAbrirGarantiaVenta from "../../components/garantias/ModalAbrirGarantiaVenta";
+import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
 
 export default function VentaDetalle() {
   const { id } = useParams();
@@ -135,6 +136,24 @@ export default function VentaDetalle() {
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={venta.anulada ? "anulada" : "completada"} />
+            <button
+              onClick={() =>
+                generarVentaPOS({
+                  venta,
+                  items,
+                  vendedor: venta.vendedor?.nombre ?? "—",
+                }).print()
+              }
+              className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer"
+              style={{
+                borderColor: "hsl(var(--primary))",
+                color: "hsl(var(--primary))",
+                backgroundColor: "hsl(var(--primary) / 0.08)",
+              }}
+              title="Imprimir recibo POS"
+            >
+              🖨️ Imprimir recibo
+            </button>
             {!venta.anulada && (
               <button
                 onClick={() => setModalGarantia(true)}
