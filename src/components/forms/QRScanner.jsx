@@ -4,10 +4,29 @@ import { supabase } from "../../lib/supabase";
 
 const SCANNER_ID = "qr-scanner-viewport";
 
+// Traduce el error real de getUserMedia (DOMException) a un mensaje accionable.
+// html5-qrcode convierte sus errores en string y pierde `err.name`; por eso
+// pedimos el permiso de cámara nosotros mismos para obtener el error original.
+function traducirError(err) {
+  const name = err?.name;
+  if (name === "NotAllowedError" || name === "SecurityError")
+    return 'El navegador tiene bloqueada la cámara. Toca el ícono de cámara (o el candado) en la barra de direcciones, elige "Permitir cámara" y pulsa Reintentar.';
+  if (name === "NotFoundError" || name === "DevicesNotFoundError")
+    return "No se encontró ninguna cámara en este dispositivo.";
+  if (name === "NotReadableError" || name === "TrackStartError")
+    return "La cámara está siendo usada por otra aplicación. Ciérrala y pulsa Reintentar.";
+  if (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError")
+    return "La cámara del dispositivo no es compatible con el escáner.";
+  if (location.protocol !== "https:" && location.hostname !== "localhost")
+    return "La cámara solo funciona en sitios HTTPS o en localhost.";
+  return "No se pudo acceder a la cámara. Pulsa Reintentar.";
+}
+
 export default function QRScanner({ onFound, onClose }) {
   const scannerRef = useRef(null);
   const [status, setStatus] = useState("starting");
   const [errorMsg, setErrorMsg] = useState("");
+  const [intento, setIntento] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,16 +60,6 @@ export default function QRScanner({ onFound, onClose }) {
       }
     };
 
-    const traducirError = (err) => {
-      if (err?.name === "NotAllowedError")
-        return "Permiso de cámara denegado. Habilítalo en la configuración del navegador.";
-      if (err?.name === "NotFoundError")
-        return "No se detectó cámara en este dispositivo.";
-      if (location.protocol !== "https:" && location.hostname !== "localhost")
-        return "La cámara solo funciona en HTTPS o localhost.";
-      return err?.message ?? "No se pudo acceder a la cámara";
-    };
-
     const onDecoded = async (decodedText) => {
       if (cancelled) return;
       cancelled = true;
@@ -76,7 +85,39 @@ export default function QRScanner({ onFound, onClose }) {
     // Diferir el arranque un tick hace que el montaje descartado limpie su
     // timer ANTES de que dispare → solo se crea UN scanner: sin pelea por la
     // cámara ni dobles llamadas a getUserMedia.
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
+      // La cámara necesita un contexto seguro (HTTPS/localhost) y soporte de
+      // mediaDevices en el navegador.
+      if (!navigator.mediaDevices?.getUserMedia) {
+        if (!cancelled) {
+          setStatus("error");
+          setErrorMsg(
+            location.protocol !== "https:" && location.hostname !== "localhost"
+              ? "La cámara solo funciona en sitios HTTPS o en localhost."
+              : "Este navegador no permite el acceso a la cámara.",
+          );
+        }
+        return;
+      }
+
+      // Pedir permiso de cámara EXPLÍCITAMENTE: esto dispara el prompt del
+      // navegador (si el permiso está sin decidir) y nos da el error REAL
+      // — html5-qrcode lo convierte en string y se pierde `err.name`.
+      // El stream de prueba se libera enseguida; html5-qrcode abrirá el suyo.
+      try {
+        const probe = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+        });
+        probe.getTracks().forEach((t) => t.stop());
+      } catch (err) {
+        if (cancelled) return;
+        setStatus("error");
+        setErrorMsg(traducirError(err));
+        return;
+      }
+      if (cancelled) return;
+
+      // Con el permiso ya concedido, arrancar html5-qrcode.
       try {
         scanner = new Html5Qrcode(SCANNER_ID);
         scannerRef.current = scanner;
@@ -111,7 +152,7 @@ export default function QRScanner({ onFound, onClose }) {
       clearTimeout(timer);
       detener(scanner);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [intento]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
@@ -204,7 +245,7 @@ export default function QRScanner({ onFound, onClose }) {
 
         {status === "error" && (
           <div
-            className="px-5 py-4 border-t"
+            className="px-5 py-4 border-t space-y-3"
             style={{
               backgroundColor: "hsl(var(--destructive) / 0.05)",
               borderColor: "hsl(var(--destructive) / 0.2)",
@@ -216,12 +257,20 @@ export default function QRScanner({ onFound, onClose }) {
             >
               {errorMsg}
             </p>
-            <p
-              className="text-xs mt-1"
-              style={{ color: "hsl(var(--destructive) / 0.7)" }}
+            <button
+              onClick={() => {
+                setErrorMsg("");
+                setStatus("starting");
+                setIntento((n) => n + 1);
+              }}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold cursor-pointer min-h-[44px]"
+              style={{
+                backgroundColor: "hsl(var(--primary))",
+                color: "hsl(var(--primary-foreground))",
+              }}
             >
-              Verifica que el QR corresponda a un producto del sistema.
-            </p>
+              Reintentar
+            </button>
           </div>
         )}
 
