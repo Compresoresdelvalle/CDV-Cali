@@ -10,79 +10,106 @@ export default function QRScanner({ onFound, onClose }) {
   const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     let scanner = null;
-    let stopped = false;
 
-    const startScanner = async () => {
+    // Detiene y limpia el scanner de forma SEGURA.
+    // OJO: html5-qrcode `stop()` lanza una excepción SÍNCRONA (no una promesa
+    // rechazable) si el scanner todavía no está escaneando — un `.catch()`
+    // encadenado NO atrapa un throw síncrono, hay que envolverlo en try/catch.
+    const detener = (sc) => {
+      if (!sc) return;
       try {
-        scanner = new Html5Qrcode(SCANNER_ID);
-        scannerRef.current = scanner;
-
-        await scanner.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 240, height: 240 } },
-          async (decodedText) => {
-            if (stopped) return;
-            stopped = true;
-            setStatus("found");
-
+        const p = sc.stop();
+        if (p && typeof p.then === "function") {
+          p.catch(() => {}).finally(() => {
             try {
-              await scanner.stop();
+              sc.clear();
             } catch {
               /* ignore */
             }
-
-            const { data } = await supabase
-              .from("productos")
-              .select("id")
-              .eq("referencia", decodedText.trim())
-              .eq("activo", true)
-              .maybeSingle();
-
-            if (data?.id) {
-              onFound(data.id);
-            } else {
-              setStatus("error");
-              setErrorMsg(`Referencia no encontrada: ${decodedText}`);
-            }
-          },
-          () => {},
-        );
-        if (!stopped) setStatus("scanning");
-      } catch (err) {
-        setStatus("error");
-        // Mensaje específico según el error de permisos
-        if (err?.name === "NotAllowedError") {
-          setErrorMsg(
-            "Permiso de cámara denegado. Habilítalo en la configuración del navegador.",
-          );
-        } else if (err?.name === "NotFoundError") {
-          setErrorMsg("No se detectó cámara en este dispositivo.");
-        } else if (
-          location.protocol !== "https:" &&
-          location.hostname !== "localhost"
-        ) {
-          setErrorMsg("La cámara solo funciona en HTTPS o localhost.");
-        } else {
-          setErrorMsg(err?.message ?? "No se pudo acceder a la cámara");
+          });
+          return;
         }
+      } catch {
+        /* el scanner no estaba escaneando — ignorar */
+      }
+      try {
+        sc.clear();
+      } catch {
+        /* ignore */
       }
     };
 
-    startScanner();
+    const traducirError = (err) => {
+      if (err?.name === "NotAllowedError")
+        return "Permiso de cámara denegado. Habilítalo en la configuración del navegador.";
+      if (err?.name === "NotFoundError")
+        return "No se detectó cámara en este dispositivo.";
+      if (location.protocol !== "https:" && location.hostname !== "localhost")
+        return "La cámara solo funciona en HTTPS o localhost.";
+      return err?.message ?? "No se pudo acceder a la cámara";
+    };
 
-    // Cleanup robusto: stop() + clear() siempre que exista la instancia,
-    // independiente de isScanning (puede estar en estado "starting" si el
-    // componente se desmonta antes de que start() resuelva).
-    return () => {
-      stopped = true;
-      const sc = scannerRef.current;
-      if (!sc) return;
-      sc.stop()
-        .catch(() => {}) // no estaba scanning
-        .finally(() => {
-          sc.clear().catch(() => {}); // libera el video element y los tracks
+    const onDecoded = async (decodedText) => {
+      if (cancelled) return;
+      cancelled = true;
+      setStatus("found");
+      detener(scanner);
+
+      const { data } = await supabase
+        .from("productos")
+        .select("id")
+        .eq("referencia", decodedText.trim())
+        .eq("activo", true)
+        .maybeSingle();
+
+      if (data?.id) {
+        onFound(data.id);
+      } else {
+        setStatus("error");
+        setErrorMsg(`Referencia no encontrada: ${decodedText}`);
+      }
+    };
+
+    // StrictMode (dev) monta→desmonta→monta el componente de forma síncrona.
+    // Diferir el arranque un tick hace que el montaje descartado limpie su
+    // timer ANTES de que dispare → solo se crea UN scanner: sin pelea por la
+    // cámara ni dobles llamadas a getUserMedia.
+    const timer = setTimeout(() => {
+      try {
+        scanner = new Html5Qrcode(SCANNER_ID);
+        scannerRef.current = scanner;
+      } catch (err) {
+        if (!cancelled) {
+          setStatus("error");
+          setErrorMsg(traducirError(err));
+        }
+        return;
+      }
+      scanner
+        .start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 240, height: 240 } },
+          onDecoded,
+          () => {},
+        )
+        .then(() => {
+          // Si se desmontó mientras la cámara arrancaba, detener de inmediato.
+          if (cancelled) detener(scanner);
+          else setStatus("scanning");
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setStatus("error");
+          setErrorMsg(traducirError(err));
         });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      detener(scanner);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
