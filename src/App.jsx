@@ -46,6 +46,7 @@ import ReciboHistorial from "./pages/ops/Recibos/ReciboHistorial";
 import ReciboNuevo from "./pages/ops/Recibos/ReciboNuevo";
 import ReciboDetalle from "./pages/ops/Recibos/ReciboDetalle";
 import AdminDashboard from "./pages/admin/Dashboard";
+import Cierres from "./pages/admin/Cierres";
 import Alertas from "./pages/admin/Alertas";
 import Reorden from "./pages/admin/Reorden";
 import Top10 from "./pages/admin/Top10";
@@ -393,6 +394,7 @@ export default function App() {
           }
         >
           <Route index element={<AdminDashboard />} />
+          <Route path="cierres" element={<Cierres />} />
           <Route path="alertas" element={<Alertas />} />
           <Route path="conteo" element={<Conteo />} />
           <Route path="abc" element={<AnalisisABC />} />

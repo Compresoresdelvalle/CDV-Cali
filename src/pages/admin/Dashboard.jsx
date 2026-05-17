@@ -100,6 +100,12 @@ export default function Dashboard() {
         100
       : null;
 
+  // Ingresos por categoría (mes en curso) — base caja.
+  const ingresosProductos = Number(k.ventas_mes ?? 0);
+  const ingresosServicios = Number(k.ingresos_servicios_mes ?? 0);
+  const egresosMes = Number(k.compras_mes ?? 0);
+  const margenMes = ingresosProductos + ingresosServicios - egresosMes;
+
   return (
     <div
       className="p-4 sm:p-6 space-y-5 animate-fade-in"
@@ -156,6 +162,33 @@ export default function Dashboard() {
           danger={k.alertas_count > 0}
           onClick={() => navigate("/admin/alertas")}
         />
+      </div>
+
+      {/* Ingresos por categoría */}
+      <div>
+        <p
+          className="text-xs font-semibold uppercase tracking-wide mb-2"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Ingresos por categoría — mes en curso
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <KpiCard
+            label="Ingresos productos"
+            value={formatCOP(ingresosProductos)}
+          />
+          <KpiCard
+            label="Ingresos servicios"
+            value={formatCOP(ingresosServicios)}
+          />
+          <KpiCard label="Egresos" value={formatCOP(egresosMes)} />
+          <KpiCard
+            label="Margen"
+            value={formatCOP(margenMes)}
+            highlight
+            danger={margenMes < 0}
+          />
+        </div>
       </div>
 
       {/* KPIs operacionales */}

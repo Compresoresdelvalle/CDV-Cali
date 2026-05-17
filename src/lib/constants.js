@@ -100,6 +100,7 @@ export const MODULE_ROUTES = {
 // Módulos del Panel Admin
 export const ADMIN_MODULES = [
   { nombre: "Dashboard", icon: "📊", ruta: "/admin" },
+  { nombre: "Cierres", icon: "🧮", ruta: "/admin/cierres" },
   { nombre: "Alertas", icon: "🔔", ruta: "/admin/alertas" },
   { nombre: "Conteo", icon: "🔢", ruta: "/admin/conteo" },
   { nombre: "Análisis ABC", icon: "📈", ruta: "/admin/abc" },
