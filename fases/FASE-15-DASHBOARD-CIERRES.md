@@ -1,7 +1,13 @@
 # Fase 15 — Dashboard expandido + Cierres
 
-> **Estado:** pendiente de planeación detallada (`/plan mode`).
+> **Estado:** ✅ CERRADA (2026-05-17).
 > **Fuente cliente:** `requerimientos_reunion_cliente.md` §8.
+> **Implementado:** ingresos base CAJA; tabla `cierres` append-only; RPCs
+> `fn_preview_cierre` / `fn_generar_cierre`; `fn_dashboard_kpis` extendida;
+> página `src/pages/admin/Cierres.jsx`; sección "Ingresos por categoría" en el
+> Dashboard. Cierres consolidados (todas las sedes). §15.4 (garantías/recibos
+> en dashboard) quedó postergado a F19, como estaba previsto.
+> Detalle completo: `docs/ESTADO-PROYECTO.md` §3.
 
 ## Propósito
 

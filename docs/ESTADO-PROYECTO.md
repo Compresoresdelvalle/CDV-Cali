@@ -13,9 +13,8 @@
 2. Lee `CLAUDE.md` (reglas de código: tokens CSS, RLS, soft-delete, etc.).
 3. Lee el plan maestro: `C:\Users\davi-\.claude\plans\reactive-sprouting-kitten.md`
    — tiene el roadmap y los planes detallados de cada fase.
-4. **Estamos planeando la Fase 15.** Ver sección 7 abajo: hay **2 decisiones
-   pendientes** que el usuario debe responder antes de implementar.
-5. Working tree git limpio. Último commit: `1d75b52` (Fase 14).
+4. **Fase 15 cerrada.** La siguiente es la **Fase 16** (Frontend Redesign).
+5. Working tree git limpio.
 
 ---
 
@@ -38,19 +37,19 @@ compresores y repuestos neumáticos. Reemplaza un sistema fallido en AppSheet.
 Fases 0-8 cerradas (sistema base). Luego se insertaron fases extra (post-reunión
 con el cliente) antes del deploy v1.0:
 
-| Fase   | Nombre                                                      | Estado                           |
-| ------ | ----------------------------------------------------------- | -------------------------------- |
-| 9      | Configuración General (cuentas, parámetros, checklist)      | ✅ Cerrada                       |
-| 10     | Ajustes OT (checklist, autorización, abonos, 30 días)       | ✅ Cerrada                       |
-| 11     | Ajustes Cotizaciones (PDF, IVA editable, cuentas)           | ✅ Cerrada                       |
-| 11.5   | Workflow cotizaciones (borrador→enviada→aprobada/rechazada) | ✅ Cerrada                       |
-| 12     | Ajustes Inventario + Compras + Traspasos + Nuevo Producto   | ✅ Cerrada                       |
-| 13     | Garantías (compras y ventas) + Notas crédito                | ✅ Cerrada                       |
-| 13B    | Recibo POS de venta + impresión de OT                       | ✅ Cerrada                       |
-| **14** | **Recibos manuales completos**                              | ✅ **Cerrada (commit 1d75b52)**  |
-| **15** | **Dashboard expandido + Cierres**                           | 🟡 **EN PLANEACIÓN (siguiente)** |
-| 16     | Frontend Redesign + reestructura `src/features/`            | ⏳ Pendiente                     |
-| 17     | Deploy v1.0 (Netlify, QR masivo, smoke test)                | ⏳ Pendiente                     |
+| Fase   | Nombre                                                      | Estado                       |
+| ------ | ----------------------------------------------------------- | ---------------------------- |
+| 9      | Configuración General (cuentas, parámetros, checklist)      | ✅ Cerrada                   |
+| 10     | Ajustes OT (checklist, autorización, abonos, 30 días)       | ✅ Cerrada                   |
+| 11     | Ajustes Cotizaciones (PDF, IVA editable, cuentas)           | ✅ Cerrada                   |
+| 11.5   | Workflow cotizaciones (borrador→enviada→aprobada/rechazada) | ✅ Cerrada                   |
+| 12     | Ajustes Inventario + Compras + Traspasos + Nuevo Producto   | ✅ Cerrada                   |
+| 13     | Garantías (compras y ventas) + Notas crédito                | ✅ Cerrada                   |
+| 13B    | Recibo POS de venta + impresión de OT                       | ✅ Cerrada                   |
+| 14     | Recibos manuales completos                                  | ✅ Cerrada                   |
+| **15** | **Dashboard expandido + Cierres**                           | ✅ **Cerrada**               |
+| **16** | **Frontend Redesign + reestructura `src/features/`**        | ⏳ **Pendiente (siguiente)** |
+| 17     | Deploy v1.0 (Netlify, QR masivo, smoke test)                | ⏳ Pendiente                 |
 
 Post-v1.0 (no parte de v1): F18 Ensambles v2, F19 Dashboard avanzado
 (garantías/recibos en dashboard — el cliente lo postergó explícitamente).
@@ -147,6 +146,37 @@ Post-v1.0 (no parte de v1): F18 Ensambles v2, F19 Dashboard avanzado
   pago como abono de la OT.
 - **Tests:** E2E `tests/e2e/fase14-recibos.spec.js` (4/4) + SQL stress (10/10).
 
+### Fase 15 — Dashboard expandido + Cierres ✅ CERRADA
+
+- **Modelo de ingresos = base CAJA.** Productos = `SUM(ventas.total)` no
+  anuladas; servicios = `SUM(abonos.monto)` (abonos es la única fuente del cash
+  de OT); egresos = `SUM(compras.total)`; margen = ingresos − egresos.
+  Bucketing por día hábil `America/Bogota`.
+- **Migration:** `supabase/migrations/20260517000001_fase15_cierres.sql`
+  - Tabla `cierres` (id UUID, numero SERIAL, tipo diario/periodo, fecha_desde,
+    fecha_hasta, ingresos_productos/servicios/total, egresos, margen, conteos,
+    `detalle` JSONB con desglose por sede y por método de pago, cerrado_por,
+    created_at). **Append-only:** triggers anti-UPDATE y anti-DELETE.
+  - RLS solo Admin. Sin `GRANT UPDATE/DELETE`.
+  - Helper interno `_fn_cierre_totales(desde, hasta)` — calcula totales + detalle.
+  - RPC `fn_preview_cierre(desde, hasta)` — totales al vuelo + flag `ya_cubierto`
+    y array `solapamiento`.
+  - RPC `fn_generar_cierre(desde, hasta, tipo, observaciones)` — valida Admin,
+    no-solapamiento (con `pg_advisory_xact_lock`), recalcula en servidor e inserta.
+  - `fn_dashboard_kpis()` extendida con `ingresos_servicios_hoy` / `_mes`.
+- **Decisión de diseño:** se descartaron flags `ventas.cerrada` /
+  `ordenes_servicio.cerrada`; el invariante es "los rangos de cierres no se
+  solapan" + tabla append-only.
+- **Cierres consolidados** (todas las sedes); el desglose por sede vive en el
+  snapshot `detalle` JSONB.
+- **Frontend:** `src/pages/admin/Cierres.jsx` (generador rango+tipo, vista
+  previa, generar con confirmación, histórico tabla/cards con detalle
+  expandible). Dashboard: sección "Ingresos por categoría" (4 KpiCard).
+- **constants.js:** `Cierres` en `ADMIN_MODULES` (`🧮`, `/admin/cierres`).
+  **App.jsx:** ruta `/admin/cierres`.
+- **Tests:** E2E `tests/e2e/fase15-cierres.spec.js` (3/3) + SQL stress `_f15`
+  (7 casos, todos OK; corrido con rollback transaccional, sin residuo).
+
 ---
 
 ## 4. Bugs encontrados y resueltos (memoria histórica — no repetir)
@@ -230,44 +260,23 @@ referencia_id, referencia_tipo, usuario_id, observaciones`.
 
 ---
 
-## 7. SIGUIENTE PASO — Fase 15: Dashboard expandido + Cierres
+## 7. SIGUIENTE PASO — Fase 16: Frontend Redesign
 
-**Estado: EN PLANEACIÓN.** Se exploró el código y la BD. Falta que el usuario
-responda 2 decisiones de diseño y luego escribir el plan detallado.
+**Fase 15 cerrada** (ver sección 3). Decisiones que tomó el cliente: ingresos
+**por caja** y cierres **formales guardados, consolidados** (todas las sedes).
 
-**Alcance (MD cliente §8):**
+La **Fase 16** es la reestructura del frontend a `src/features/` + redesign.
+Ver `fases/FASE-16-FRONTEND-REDESIGN.md`. Cuando se arranque: leer este archivo,
+`CLAUDE.md`, y el MD de la fase; abrir `/plan mode` propio.
 
-- §8.1-8.2: ampliar Dashboard Admin — separar **ingresos por productos** (ventas)
-  vs **ingresos por servicios** (OTs: mano de obra, repuestos, valor revisión,
-  abonos), mostrar **egresos** (compras) y **margen**.
-- §8.3: módulo nuevo **Cierres** — página `/admin/cierres`, cierre diario/periódico
-  que consolida ingresos + egresos de un rango de fechas.
-- §8.4: garantías y recibos en el dashboard → NO incluir (fase posterior F19).
+**Recordatorio de diseño F15** que puede afectar fases futuras:
 
-**Decisiones PENDIENTES (preguntar al usuario antes de implementar):**
-
-1. **Base de cálculo de ingresos:**
-   - Opción A (recomendada) — **Por caja (lo que entró):** ingresos = ventas
-     pagadas + abonos recibidos a OTs. Refleja el dinero real del día. Encaja con
-     el concepto de "cierre de caja". Evita doble-conteo (abonos es la única
-     fuente del cash de OTs; OT.total no se cuenta directo).
-   - Opción B — **Por facturado (devengado):** ingresos = ventas.total + total de
-     OTs entregadas, sin importar si ya se cobró. Requiere elegir anchor temporal
-     (fecha vs fecha_entrega) y evitar contar abonos.
-
-2. **Módulo Cierres:**
-   - Opción A (recomendada) — **Cierre formal guardado:** cada cierre se guarda
-     en tabla `cierres` con consecutivo; queda histórico inmutable.
-   - Opción B — **Solo reporte al vuelo:** se calcula y muestra el periodo, sin
-     guardar nada.
-
-**Tablas/archivos previstos (sujeto a las decisiones):**
-
-- Tabla `cierres` (periodo, fecha, totales por categoría, sede, consecutivo, RLS).
-- RPC `fn_generar_cierre(desde, hasta, tipo)` y/o `fn_preview_cierre`.
-- Extender `fn_dashboard_kpis` con ingresos_productos / ingresos_servicios / egresos / margen.
-- Frontend: `src/pages/admin/Dashboard.jsx` (tarjetas nuevas), `Cierres.jsx` (nueva),
-  ruta `/admin/cierres`, entrada en `ADMIN_MODULES` de `constants.js`.
+- Un cierre ya guardado es un snapshot congelado: si después se borra un abono
+  dentro de un rango cerrado (vía `fn_anular_recibo`), el cierre NO se recalcula.
+  Es correcto por semántica de snapshot, pero genera una posible discrepancia
+  vivo-vs-cerrado. Documentar para finanzas si surge la duda.
+- Cierres es append-only; los tests E2E usan ventanas de fecha futuras
+  desechables porque la tabla no se puede limpiar.
 
 ---
 
