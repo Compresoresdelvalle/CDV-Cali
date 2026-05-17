@@ -6,3 +6,15 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Headers de seguridad. NOTA: la cámara (escáner QR) requiere camera=(self).
+# Una Content-Security-Policy se evaluará e implementará en la Fase 17 (deploy),
+# probándola contra el sitio desplegado para no romper Supabase/cámara/PDF.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    Permissions-Policy = "camera=(self), microphone=(), geolocation=()"

@@ -1,5 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
-
+/* IBM Plex Sans se carga vía <link> en index.html (no bloqueante). */
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
