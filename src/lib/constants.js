@@ -35,6 +35,7 @@ export const ROLE_MODULES = {
     "Ensambles",
     "Cotizaciones",
     "Garantías",
+    "Recibos",
     "Herramientas",
     "Devoluciones",
     "Productos",
@@ -55,6 +56,7 @@ export const ROLE_MODULES = {
     "Ventas",
     "Cotizaciones",
     "Garantías",
+    "Recibos",
     "Herramientas",
     "Productos",
   ],
@@ -74,6 +76,7 @@ export const MODULE_ICONS = {
   Devoluciones: "↩️",
   Productos: "🏷️",
   Garantías: "🛡️",
+  Recibos: "🧾",
   "→ Panel Admin": "📊",
 };
 
@@ -90,6 +93,7 @@ export const MODULE_ROUTES = {
   Devoluciones: "/ops/devoluciones",
   Productos: "/ops/productos",
   Garantías: "/ops/garantias",
+  Recibos: "/ops/recibos",
   "→ Panel Admin": "/admin",
 };
 

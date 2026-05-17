@@ -42,6 +42,9 @@ import OrdenNueva from "./pages/ops/OrdenNueva";
 import OrdenDetalle from "./pages/ops/OrdenDetalle";
 import EnsambleHistorial from "./pages/ops/EnsambleHistorial";
 import EnsambleNuevo from "./pages/ops/EnsambleNuevo";
+import ReciboHistorial from "./pages/ops/Recibos/ReciboHistorial";
+import ReciboNuevo from "./pages/ops/Recibos/ReciboNuevo";
+import ReciboDetalle from "./pages/ops/Recibos/ReciboDetalle";
 import AdminDashboard from "./pages/admin/Dashboard";
 import Alertas from "./pages/admin/Alertas";
 import Reorden from "./pages/admin/Reorden";
@@ -349,6 +352,31 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin", "Bodeguero"]}>
                 <DevolucionNueva />
+              </RoleGuard>
+            }
+          />
+          {/* Recibos — Fase 14 */}
+          <Route
+            path="recibos"
+            element={
+              <RoleGuard roles={["Admin", "Vendedor"]}>
+                <ReciboHistorial />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="recibos/nuevo"
+            element={
+              <RoleGuard roles={["Admin", "Vendedor"]}>
+                <ReciboNuevo />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="recibos/:id"
+            element={
+              <RoleGuard roles={["Admin", "Vendedor"]}>
+                <ReciboDetalle />
               </RoleGuard>
             }
           />
