@@ -142,8 +142,8 @@ export default function Cierres() {
         p_tipo: tipo,
         p_observaciones: observaciones.trim() || null,
       });
-      if (error) throw error;
       if (!mountedRef.current) return;
+      if (error) throw error;
       setOkMsg(`Cierre #${data?.numero ?? ""} generado correctamente`);
       setPreview(null);
       setObservaciones("");
@@ -500,6 +500,7 @@ function CierreRow({ c, expanded, onToggle }) {
         className="border-t cursor-pointer"
         style={{ borderColor: "hsl(var(--border))" }}
         onClick={onToggle}
+        aria-expanded={expanded}
         onMouseEnter={(e) =>
           (e.currentTarget.style.backgroundColor = "hsl(var(--muted) / 0.4)")
         }
@@ -582,6 +583,7 @@ function CierreCard({ c, expanded, onToggle }) {
     >
       <button
         onClick={onToggle}
+        aria-expanded={expanded}
         className="w-full text-left px-4 py-4 cursor-pointer"
       >
         <div className="flex items-center justify-between gap-2">

@@ -163,10 +163,14 @@ Post-v1.0 (no parte de v1): F18 Ensambles v2, F19 Dashboard avanzado
     y array `solapamiento`.
   - RPC `fn_generar_cierre(desde, hasta, tipo, observaciones)` — valida Admin,
     no-solapamiento (con `pg_advisory_xact_lock`), recalcula en servidor e inserta.
-  - `fn_dashboard_kpis()` extendida con `ingresos_servicios_hoy` / `_mes`.
+  - `fn_dashboard_kpis()` extendida con `ingresos_servicios_mes`.
+- **Migration de hardening:** `20260517000002_fase15_cierres_hardening.sql`
+  (correcciones de revisión de código): constraint `EXCLUDE USING gist` que
+  prohíbe rangos solapados a nivel de motor; `REVOKE` de `_fn_cierre_totales`
+  para `authenticated`; consistencia de TZ en `fn_dashboard_kpis`.
 - **Decisión de diseño:** se descartaron flags `ventas.cerrada` /
   `ordenes_servicio.cerrada`; el invariante es "los rangos de cierres no se
-  solapan" + tabla append-only.
+  solapan" (constraint EXCLUDE + tabla append-only).
 - **Cierres consolidados** (todas las sedes); el desglose por sede vive en el
   snapshot `detalle` JSONB.
 - **Frontend:** `src/pages/admin/Cierres.jsx` (generador rango+tipo, vista
