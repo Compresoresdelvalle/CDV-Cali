@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -53,7 +53,9 @@ export default function TraspasoNuevo() {
   const esAdmin = perfil?.rol === "Admin";
 
   // Sede origen: Admin puede elegir, el resto usa su sede
-  const [sedeOrigen, setSedeOrigen] = useState(esAdmin ? "" : perfil.sede_id);
+  const [sedeOrigen, setSedeOrigen] = useState(
+    esAdmin ? "" : (perfil?.sede_id ?? ""),
+  );
   const [sedeDestino, setSedeDestino] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [tipoTraspaso, setTipoTraspaso] = useState("normal"); // F12
@@ -65,6 +67,7 @@ export default function TraspasoNuevo() {
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
+  const guardandoRef = useRef(false);
 
   const buscarProductos = useCallback(
     async (q) => {
@@ -169,42 +172,34 @@ export default function TraspasoNuevo() {
       setError("Agrega al menos un producto al traspaso.");
       return;
     }
+    // Guard síncrono contra doble-submit (el `disabled` no es inmediato).
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
     setError(null);
     setGuardando(true);
     try {
-      // 1. Crear cabecera del traspaso
-      const { data: traspaso, error: e1 } = await supabase
-        .from("traspasos")
-        .insert({
-          sede_origen_id: sedeOrigen,
-          sede_destino_id: sedeDestino,
-          solicitado_por: perfil.id,
-          observaciones: observaciones.trim() || null,
-          estado: "borrador",
-          tipo: tipoTraspaso, // F12: normal | mercancia_abandonada | devolucion_garantia
-        })
-        .select("id, numero")
-        .single();
-      if (e1) throw new Error(e1.message);
-
-      // 2. Insertar detalle
-      const { error: e2 } = await supabase.from("detalle_traspaso").insert(
-        items.map((i) => ({
-          traspaso_id: traspaso.id,
+      // RPC server-authoritative: crea cabecera + detalle en una transacción
+      // y fija `solicitado_por = auth.uid()`.
+      const { data, error: rpcErr } = await supabase.rpc("fn_crear_traspaso", {
+        p_sede_origen: sedeOrigen,
+        p_sede_destino: sedeDestino,
+        p_tipo: tipoTraspaso,
+        p_observaciones: observaciones.trim() || null,
+        p_items: items.map((i) => ({
           producto_id: i.producto_id,
           cantidad_solicitada: i.cantidad_solicitada,
-          cantidad_enviada: 0,
-          cantidad_recibida: 0,
-          picking_completado: false,
         })),
-      );
-      if (e2) throw new Error(e2.message);
+      });
+      if (rpcErr) throw new Error(rpcErr.message);
+      if (!data?.traspaso_id)
+        throw new Error("Respuesta inesperada del servidor.");
 
-      navigate(`/ops/traspasos/${traspaso.id}`);
+      navigate(`/ops/traspasos/${data.traspaso_id}`);
     } catch (e) {
       setError(safeError(e, "Error al crear el traspaso"));
     } finally {
       setGuardando(false);
+      guardandoRef.current = false;
     }
   };
 

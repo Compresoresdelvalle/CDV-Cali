@@ -50,6 +50,14 @@ export default function PickingPage() {
           return;
         }
 
+        // Solo tiene sentido pickear un traspaso En Picking; si ya avanzó de
+        // estado, volver al detalle (evita togglear items sobre un traspaso
+        // verificado/enviado/recibido).
+        if (t.estado !== "picking") {
+          navigate(`/ops/traspasos/${id}`, { replace: true });
+          return;
+        }
+
         // Ordenar por prioridad_picking ASC, nulls last
         const sorted = [...(d ?? [])].sort((a, b) => {
           const pa = a.ubicacion?.prioridad_picking ?? 9999;
@@ -79,7 +87,9 @@ export default function PickingPage() {
 
     cargar();
     return () => clearTimeout(autoSaveRef.current);
-  }, [id, perfil, navigate]);
+    // Deps primitivas: depender del objeto `perfil` completo re-disparaba el
+    // fetch ante cualquier cambio del store y descartaba el picking en curso.
+  }, [id, perfil?.id, perfil?.rol, navigate]);
 
   /* ── Guardar progreso vía RPC ─────────────────────────────── */
   const guardarProgreso = useCallback(
@@ -137,7 +147,7 @@ export default function PickingPage() {
   };
 
   const setCantidad = (itemId, value) => {
-    const num = Math.max(1, parseInt(value) || 1);
+    const num = Math.min(100000, Math.max(1, parseInt(value, 10) || 1));
     setLocal((prev) => {
       const next = {
         ...prev,

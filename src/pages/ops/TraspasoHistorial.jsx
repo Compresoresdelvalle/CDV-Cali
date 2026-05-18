@@ -35,9 +35,14 @@ export default function TraspasoHistorial() {
   const [filtroEstado, setFiltroEstado] = useState("Todos");
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
+  // Token de secuencia: descarta respuestas obsoletas al cambiar de filtro.
+  const reqIdRef = useRef(0);
 
   const cargar = async (reset = false) => {
+    const myReq = ++reqIdRef.current;
     setLoading(true);
+    setErrorMsg(null);
     const currentPage = reset ? 0 : page;
     try {
       let query = supabase
@@ -54,7 +59,7 @@ export default function TraspasoHistorial() {
       if (!esAdmin) {
         // Bodeguero/Vendedor ve traspasos de su sede (origen o destino)
         query = query.or(
-          `sede_origen_id.eq.${perfil.sede_id},sede_destino_id.eq.${perfil.sede_id}`,
+          `sede_origen_id.eq.${perfil?.sede_id},sede_destino_id.eq.${perfil?.sede_id}`,
         );
       }
 
@@ -63,6 +68,7 @@ export default function TraspasoHistorial() {
       }
 
       const { data, error } = await query;
+      if (myReq !== reqIdRef.current) return; // respuesta obsoleta
       if (error) throw error;
 
       if (reset) {
@@ -74,19 +80,12 @@ export default function TraspasoHistorial() {
       }
       setHasMore((data ?? []).length === PAGE_SIZE);
     } catch {
-      // ignore
+      if (myReq === reqIdRef.current)
+        setErrorMsg("No se pudieron cargar los traspasos. Reintenta.");
     } finally {
-      setLoading(false);
+      if (myReq === reqIdRef.current) setLoading(false);
     }
   };
-
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     cargar(true);
@@ -161,6 +160,20 @@ export default function TraspasoHistorial() {
           </button>
         ))}
       </div>
+
+      {errorMsg && (
+        <div
+          role="alert"
+          className="rounded-lg border px-3 py-2 text-xs"
+          style={{
+            backgroundColor: "hsl(var(--destructive) / 0.08)",
+            borderColor: "hsl(var(--destructive) / 0.4)",
+            color: "hsl(var(--destructive))",
+          }}
+        >
+          {errorMsg}
+        </div>
+      )}
 
       {/* Contenido */}
       {loading && traspasos.length === 0 ? (
