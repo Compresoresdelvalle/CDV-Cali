@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -18,9 +18,15 @@ export default function DevolucionHistorial() {
   const [filtro, setFiltro] = useState("Todas");
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
+  // Token de secuencia: descarta respuestas obsoletas (cambio de filtro
+  // mientras hay una carga en vuelo) para no mezclar resultados.
+  const reqIdRef = useRef(0);
 
   const cargarDevoluciones = async (reset = false) => {
+    const myReq = ++reqIdRef.current;
     setLoading(true);
+    setErrorMsg(null);
     const currentPage = reset ? 0 : page;
     try {
       let query = supabase
@@ -33,12 +39,13 @@ export default function DevolucionHistorial() {
         .order("fecha", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
-      if (perfil?.rol !== "Admin") query = query.eq("sede_id", perfil.sede_id);
+      if (perfil?.rol !== "Admin") query = query.eq("sede_id", perfil?.sede_id);
       // La tabla usa reingresa_stock BOOLEAN (true=cliente, false=proveedor)
       if (filtro === "Cliente") query = query.eq("reingresa_stock", true);
       if (filtro === "Proveedor") query = query.eq("reingresa_stock", false);
 
       const { data, error } = await query;
+      if (myReq !== reqIdRef.current) return; // respuesta obsoleta
       if (error) throw error;
 
       if (reset) {
@@ -50,9 +57,10 @@ export default function DevolucionHistorial() {
       }
       setHasMore((data ?? []).length === PAGE_SIZE);
     } catch {
-      // ignore fetch errors
+      if (myReq === reqIdRef.current)
+        setErrorMsg("No se pudieron cargar las devoluciones. Reintenta.");
     } finally {
-      setLoading(false);
+      if (myReq === reqIdRef.current) setLoading(false);
     }
   };
 
@@ -119,6 +127,20 @@ export default function DevolucionHistorial() {
           </button>
         ))}
       </div>
+
+      {errorMsg && (
+        <div
+          role="alert"
+          className="rounded-lg border px-3 py-2 text-xs"
+          style={{
+            backgroundColor: "hsl(var(--destructive) / 0.08)",
+            borderColor: "hsl(var(--destructive) / 0.4)",
+            color: "hsl(var(--destructive))",
+          }}
+        >
+          {errorMsg}
+        </div>
+      )}
 
       {/* Contenido */}
       {loading && devoluciones.length === 0 ? (

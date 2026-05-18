@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -30,6 +30,10 @@ export default function DevolucionNueva() {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
   const [exito, setExito] = useState(null);
+  const guardandoRef = useRef(false);
+
+  const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   const buscarProductos = useCallback(async (q) => {
     if (!q || q.trim().length < 2) {
@@ -78,6 +82,22 @@ export default function DevolucionNueva() {
       setError("La cantidad debe ser al menos 1.");
       return;
     }
+    const ventaTrim = ventaId.trim();
+    if (tipo === "cliente") {
+      if (!ventaTrim) {
+        setError(
+          "La devolución de cliente requiere el ID de la venta original.",
+        );
+        return;
+      }
+      if (!UUID_RE.test(ventaTrim)) {
+        setError("El ID de venta no tiene un formato válido (UUID).");
+        return;
+      }
+    }
+    // Guard síncrono contra doble-submit (el `disabled` no es inmediato).
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
     setError(null);
     setExito(null);
     setGuardando(true);
@@ -87,13 +107,14 @@ export default function DevolucionNueva() {
         {
           p_tipo: tipo,
           p_producto_id: productoSeleccionado.id,
-          p_sede_id: perfil.sede_id,
+          p_sede_id: perfil?.sede_id,
           p_cantidad: cantidad,
           p_motivo: motivo.trim() || "Sin motivo especificado",
-          p_venta_id: ventaId.trim() || null,
+          p_venta_id: ventaTrim || null,
         },
       );
       if (rpcErr) throw new Error(rpcErr.message);
+      if (!data?.numero) throw new Error("Respuesta inesperada del servidor.");
       const delta = tipo === "cliente" ? `+${cantidad}` : `-${cantidad}`;
       setExito(
         `Devolución #${data.numero} registrada. Stock ajustado: ${delta} unidades.`,
@@ -108,6 +129,7 @@ export default function DevolucionNueva() {
       setError(safeError(e, "Error al registrar la devolución"));
     } finally {
       setGuardando(false);
+      guardandoRef.current = false;
     }
   };
 
@@ -118,7 +140,7 @@ export default function DevolucionNueva() {
     >
       <PageHeader
         title="Nueva Devolución"
-        description={perfil.sede_id}
+        description={perfil?.sede_id}
         actions={
           <button
             onClick={() => navigate("/ops/devoluciones")}
@@ -355,7 +377,7 @@ export default function DevolucionNueva() {
                 className="block text-xs font-medium mb-1.5"
                 style={{ color: "hsl(var(--muted-foreground))" }}
               >
-                ID de venta relacionada (opcional)
+                ID de venta relacionada *
               </label>
               <input
                 type="text"

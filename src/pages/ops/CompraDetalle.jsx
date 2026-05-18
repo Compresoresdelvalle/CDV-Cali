@@ -26,7 +26,7 @@ export default function CompraDetalle() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: c }, { data: d }, { data: g }] = await Promise.all([
+      const [compraRes, detRes, garRes] = await Promise.all([
         supabase
           .from("compras")
           .select(
@@ -49,9 +49,15 @@ export default function CompraDetalle() {
           .eq("compra_id", id)
           .order("fecha", { ascending: false }),
       ]);
-      setCompra(c);
-      setItems(d ?? []);
-      setGarantias(g ?? []);
+      // El error de la compra principal es bloqueante; los secundarios
+      // (detalle/garantías) solo degradan la vista, no la tumban.
+      if (compraRes.error) throw compraRes.error;
+      setCompra(compraRes.data);
+      setItems(detRes.data ?? []);
+      setGarantias(garRes.data ?? []);
+      if (detRes.error || garRes.error) {
+        setError("Algunos datos no se pudieron cargar completamente.");
+      }
     } catch (e) {
       setError(safeError(e, "Error al cargar la compra"));
     } finally {
