@@ -131,7 +131,7 @@ export default function CotizacionNueva() {
         .from("productos")
         .select("id, nombre, referencia, precio_venta, unidad_medida")
         .eq("id", productoId)
-        .single();
+        .maybeSingle();
       if (err || !data) return;
       agregarAlCarrito(data);
     } catch {
