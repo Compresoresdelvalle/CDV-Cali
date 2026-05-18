@@ -18,7 +18,7 @@
 | 7    | Órdenes + Ensambles + Herramientas   | ✅ Cerrada   | 0 / 7 / 10           | (ver commit qa fase7)  |
 | 8    | Dashboard Admin                      | ✅ Cerrada   | 0 / 3 / 3            | (ver commit qa fase8)  |
 | 9    | Configuración General                | ✅ Cerrada   | 0 / 2 / 2            | (ver commit qa fase9)  |
-| 10   | Ajustes OT                           | ⏳ Pendiente | —                    | —                      |
+| 10   | Ajustes OT                           | ✅ Cerrada   | 0 / 1 / 1            | (ver commit qa fase10) |
 | 11   | Ajustes Cotizaciones                 | ⏳ Pendiente | —                    | —                      |
 | 12   | Ajustes Inventario/Compras/Traspasos | ⏳ Pendiente | —                    | —                      |
 | 13   | Garantías                            | ⏳ Pendiente | —                    | —                      |
@@ -287,6 +287,26 @@ config. **Todos los hallazgos resueltos** (2 P1 + 2 P2).
 - **`index.jsx` `eslint-disable` de `searchParams`** — benigno: la sincronización tab→URL es unidireccional intencional; añadir la dep haría que la navegación externa se sobrescriba.
 
 **Verificado OK:** stress SQL 4/4 con rollback (Vendedor no escribe `parametros_sistema`/`cuentas_bancarias`/`checklist_componentes`; Admin sí); E2E `fase09-configuracion.spec.js` 5/5 (3 tabs, RBAC); `eslint` + `build` limpios.
+
+### Fase 10 — Ajustes OT ✅ CERRADA
+
+El frontend de OT (`OrdenDetalle`, `AbonosPanel`, `ChecklistRecepcion`,
+`CotizacionesAsociadasOT`) ya se revisó a fondo en la Fase 7; esta fase se
+enfocó en `AutorizacionPanel` y en las reglas de negocio de OT a nivel BD.
+**Hallazgos resueltos** (1 P1 + 1 P2).
+
+| ID     | Sev | Área         | Repro / Descripción                                                                                                                                                                                                                                   | Fix                                                                                     | Estado      |
+| ------ | --- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------- |
+| F10-01 | P1  | Bug / stock  | `trg_orden_consumir_repuesto`: `IF v_cant < cantidad` no detecta stock NULL (producto sin fila de inventario en la sede de la OT) → INSERT en `movimientos` con `stock_anterior=NULL` viola el NOT NULL. Alcanzable vía `fn_asociar_cotizacion_a_ot`. | `IF v_cant IS NULL OR v_cant < cantidad` → lanza "Stock insuficiente" claro. Stress OK. | ✅ Resuelto |
+| F10-02 | P2  | Doble-submit | `AutorizacionPanel.guardar` sin guard de ref síncrono.                                                                                                                                                                                                | `useRef` guard.                                                                         | ✅ Resuelto |
+
+**Verificado OK:** `trg_orden_validar_anticipo` (pendiente bloquea avanzar;
+autorizado+trabajo exige abono>0; no_autorizado+cierre exige valor_revision>0)
+y `trg_orden_validar_transicion` (máquina de estados + atajo no_autorizado)
+revisados y sólidos; `trg_orden_consumir_repuesto`/`trg_orden_revertir_repuesto`
+descuentan/reponen stock con `FOR UPDATE`; el equipo del cliente nunca entra al
+inventario (es texto en la OT, no un producto). Stress SQL del fix OK; E2E
+`fase10-ot.spec.js` 11/11 + `fase10-chaos.spec.js` 7/7; `eslint` + `build` limpios.
 
 ## Backlog (P2 sin resolver)
 

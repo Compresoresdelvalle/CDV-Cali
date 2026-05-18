@@ -16,16 +16,19 @@ lo que se encuentra en el momento**.
 
 ## Por dónde vamos
 
-| Fases               | Estado                               |
-| ------------------- | ------------------------------------ |
-| 0 … 9               | ✅ **Cerradas** y mergeadas a `main` |
-| **10 — Ajustes OT** | ⏭️ **SIGUIENTE**                     |
-| 11 → 15             | ⏳ Pendientes                        |
+| Fases                         | Estado                               |
+| ----------------------------- | ------------------------------------ |
+| 0 … 10                        | ✅ **Cerradas** y mergeadas a `main` |
+| **11 — Ajustes Cotizaciones** | ⏭️ **SIGUIENTE**                     |
+| 12 → 15                       | ⏳ Pendientes                        |
 
-Fase 9 cerrada: 2 P1 + 2 P2, todos resueltos (guards anti-doble-submit en los
-3 CRUD de Configuración; bounds de parámetros `decimal`; clamp de `orden`;
-null-safety). RLS Admin-only de las 3 tablas de config verificada. Stress SQL
-4/4, E2E `fase09-configuracion` 5/5.
+Fase 10 cerrada: 1 P1 + 1 P2 resueltos (fix de `trg_orden_consumir_repuesto`
+que crasheaba al consumir un repuesto sin stock previo en la sede; guard en
+`AutorizacionPanel`). El frontend de OT ya se cubrió en F7. Stress SQL OK,
+E2E `fase10-ot` 11/11 + `fase10-chaos` 7/7.
+
+**Pendiente de F4:** F4-08 — `CotizacionEditar` guarda con DELETE+INSERT no
+transaccional → corregir (RPC transaccional) durante el QA de Fase 11.
 
 ## Plantilla por fase (seguir IGUAL en cada una)
 
@@ -61,9 +64,9 @@ null-safety). RLS Admin-only de las 3 tablas de config verificada. Stress SQL
 
 ## Siguiente acción concreta
 
-Arrancar **QA Fase 10 (Ajustes OT)**: leer `fases/FASE-10-AJUSTES-OT.md`,
-lanzar los 3 agentes de revisión sobre los componentes y RPCs de OT
-introducidos/ajustados en F10 (autorización del cliente, abonos, checklist de
-recepción, valor por revisión, OT abandonada → `pendiente_recogida`). Ya
-existen `fase10-ot.spec.js` y `fase10-chaos.spec.js` — auditar vs criterios sin
-duplicar; arreglar lo encontrado; commit `qa(fase10)` + merge.
+Arrancar **QA Fase 11 (Ajustes Cotizaciones)**: leer `fases/FASE-11-AJUSTES-COTIZACIONES.md`,
+lanzar los 3 agentes de revisión sobre `CotizacionNueva/Detalle/Editar/Historial.jsx`,
+los componentes en `src/components/cotizaciones/` y las RPC de cotización.
+**Arreglar F4-08** (CotizacionEditar DELETE+INSERT no transaccional → RPC).
+Ya hay 4 specs `fase11-*` — auditar vs criterios sin duplicar; arreglar lo
+encontrado; commit `qa(fase11)` + merge.
