@@ -344,6 +344,36 @@ intercambio de ruta SPA (capturaba los botones "Convertir en venta" del
 historial) → se cambió a aserción web-first `toHaveCount(0)` tras esperar el
 detalle cargado.
 
+## Fase 12 — Ajustes Inventario + Compras + Traspasos
+
+Inventario, Compras y Traspasos ya se revisaron a fondo en las Fases 3/5/6;
+esta fase se enfocó en las **adiciones** de la F12: doble código de producto,
+categoría nuevo/segunda-mano, multi-proveedor, alertas de rotación, conteo
+cíclico, estado de compra. Los agentes reportaron un "P0 esquema F12 inexistente"
+que resultó **falso positivo** (leen archivos de migración; el esquema sí está
+aplicado — migración `20260510052124 fase12_*`). **Hallazgos resueltos**
+(1 P1 + 3 P2).
+
+| ID     | Sev | Área             | Repro / Descripción                                                                                                                                                                                                          | Fix                                                                                                   | Estado      |
+| ------ | --- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------- |
+| F12-01 | P1  | RBAC / RLS       | La policy `compras_update` solo exigía `Admin OR misma sede` → un Vendedor/Técnico de la sede podía hacer `UPDATE compras SET recibida=true` directo (la app marca recibida con UPDATE directo) y disparar la suma de stock. | Policy restringida a `Admin + Bodeguero` (USING + WITH CHECK). Migración `20260518000013`. Stress OK. | ✅ Resuelto |
+| F12-02 | P2  | Auditoría / race | `trg_compra_sumar_stock` lee stock con `FOR UPDATE`, pero si la fila de `inventario` no existe no bloquea nada → dos compras concurrentes de un producto nuevo dejan `movimientos.stock_anterior` inconsistente.             | `INSERT … ON CONFLICT DO NOTHING` antes del `SELECT … FOR UPDATE` (patrón del fix F6-04). Stress OK.  | ✅ Resuelto |
+| F12-03 | P2  | Seguridad        | `fn_alertas_rotacion` (SECURITY DEFINER) no validaba sesión ni rol → cualquier usuario autenticado podía leer rotación/ventas/stock de todas las sedes vía RPC directo.                                                      | Validación `auth.uid()` + rol `Admin` al inicio de la función. Stress OK.                             | ✅ Resuelto |
+| F12-04 | P2  | Frontend / React | `Alertas.jsx` usaba `key={referencia-sede}` en la lista de stock → claves no únicas si dos productos comparten referencia (o es null) en la misma sede.                                                                      | Se agrega `id` al `select` de `inventario` y se usa como `key`.                                       | ✅ Resuelto |
+
+**Verificado OK:** `fn_registrar_conteo` es sólido (valida sesión + rol
+`Admin/Bodeguero`, deriva sede server-side, `FOR UPDATE` sobre `inventario`);
+`productos_proveedores` SÍ tiene RLS (lectura global del catálogo, escritura
+`Admin/Bodeguero`); `fn_recalcular_abc` SÍ tiene `search_path`;
+`fn_registrar_compra` server-authoritative. Stress SQL 5/5 (RLS `compras`,
+`fn_alertas_rotacion`, trigger de compra producto-nuevo); E2E
+`fase12-inventario-compras-traspasos` 7/7; `eslint` + `build` limpios.
+
+**Diferido (no es bug — feature no construida):** §12.12 organización física
+por `stand`/`piso`/`espacio` en `ubicaciones` nunca se implementó (las columnas
+no existen). Es trabajo de feature (esquema + etiqueta QR + filtros de UI), no
+un defecto — queda como pendiente de producto, no de QA.
+
 ## Backlog (P2 sin resolver)
 
 - **F2-04 (P2, seguridad):** el login con PIN de 4 dígitos no tiene rate-limiting ni bloqueo por intentos fallidos del lado del cliente. Brute-force teórico (10.000 combos). App interna de 6 usuarios; Supabase Auth tiene rate-limiting de plataforma.
