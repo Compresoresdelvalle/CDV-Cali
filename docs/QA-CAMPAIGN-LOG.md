@@ -17,7 +17,7 @@
 | 6    | Traspasos + Picking                  | ✅ Cerrada   | 0 / 9 / 5            | (ver commit qa fase6)  |
 | 7    | Órdenes + Ensambles + Herramientas   | ✅ Cerrada   | 0 / 7 / 10           | (ver commit qa fase7)  |
 | 8    | Dashboard Admin                      | ✅ Cerrada   | 0 / 3 / 3            | (ver commit qa fase8)  |
-| 9    | Configuración General                | ⏳ Pendiente | —                    | —                      |
+| 9    | Configuración General                | ✅ Cerrada   | 0 / 2 / 2            | (ver commit qa fase9)  |
 | 10   | Ajustes OT                           | ⏳ Pendiente | —                    | —                      |
 | 11   | Ajustes Cotizaciones                 | ⏳ Pendiente | —                    | —                      |
 | 12   | Ajustes Inventario/Compras/Traspasos | ⏳ Pendiente | —                    | —                      |
@@ -264,6 +264,29 @@ propia sobre RLS, triggers de OT/ensamble y `fn_procesar`/`fn_asociar`.
 **Backlog P2 (documentado, no bloqueante):** `fn_top_productos`/`fn_dashboard_kpis` sin clamp de parámetros (los valores vienen de botones fijos de la UI); `Conteo` sobre-trae filas de `inventario` de todas las sedes y filtra en JS.
 
 **Verificado OK:** stress SQL 2/2 con rollback (Admin no puede auto-desactivarse; sí puede desactivar a otro usuario); E2E `admin-fase8.spec.js` 10/10; `eslint` + `build` limpios; RoleGuard `/admin/*` redirige a los no-Admin.
+
+### Fase 9 — Configuración General ✅ CERRADA
+
+3 agentes revisaron `src/pages/admin/Configuracion/*` (`index`, `Parametros`,
+`CuentasBancarias`, `ChecklistOT`) + verificación de RLS de las 3 tablas de
+config. **Todos los hallazgos resueltos** (2 P1 + 2 P2).
+
+**Resueltos:**
+
+| ID    | Sev | Área         | Repro / Descripción                                                                                                    | Fix                                             | Estado      |
+| ----- | --- | ------------ | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ----------- |
+| F9-01 | P1  | Doble-submit | `Parametros`, `CuentasBancarias` y `ChecklistOT`: `guardar` solo con state `saving` (no síncrono) → doble-tap duplica. | `useRef` guard síncrono en los tres.            | ✅ Resuelto |
+| F9-02 | P1  | Validación   | `Parametros.validate`: los `BOUNDS` solo se aplicaban a tipo `int`; un parámetro `decimal` se escapaba del rango.      | `checkBounds` unificado para `int` y `decimal`. | ✅ Resuelto |
+| F9-03 | P2  | Input        | `ChecklistOT`: el campo `orden` aceptaba negativos y decimales.                                                        | `Math.max(0, Math.trunc(...))`.                 | ✅ Resuelto |
+| F9-04 | P2  | Crash        | `CuentasBancarias`: `c.banco.toLowerCase()` en el chequeo de duplicados crashea si una fila tiene `banco` nulo.        | `c.banco?.toLowerCase()`.                       | ✅ Resuelto |
+
+**Descartados (falsos positivos):**
+
+- **"Las 3 tablas de config no tienen RLS" (reportado P0)** — FALSO: `parametros_sistema`, `cuentas_bancarias` y `checklist_componentes` tienen política `admin_write_*` (ALL, `get_my_rol()='Admin'`). Stress: Vendedor bloqueado en las 3.
+- **Números de cuenta bancaria sin enmascarar** — por diseño: el número va en el PDF de la cotización para que el cliente pague; debe ser visible.
+- **`index.jsx` `eslint-disable` de `searchParams`** — benigno: la sincronización tab→URL es unidireccional intencional; añadir la dep haría que la navegación externa se sobrescriba.
+
+**Verificado OK:** stress SQL 4/4 con rollback (Vendedor no escribe `parametros_sistema`/`cuentas_bancarias`/`checklist_componentes`; Admin sí); E2E `fase09-configuracion.spec.js` 5/5 (3 tabs, RBAC); `eslint` + `build` limpios.
 
 ## Backlog (P2 sin resolver)
 
