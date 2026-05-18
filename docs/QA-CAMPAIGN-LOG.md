@@ -13,7 +13,7 @@
 | 2    | Login + Layout + Roles               | ✅ Cerrada   | 0 / 3 / 6            | (ver commit qa fase2)  |
 | 3    | Inventario + QR + Realtime           | ✅ Cerrada   | 0 / 5 / 3            | (ver commit qa fase3)  |
 | 4    | Ventas + Cotizaciones                | ✅ Cerrada   | 4 / 1 / 2            | (ver commits qa fase4) |
-| 5    | Compras + Devoluciones               | 🟡 En curso  | —                    | —                      |
+| 5    | Compras + Devoluciones               | ✅ Cerrada   | 0 / 6 / 7            | (ver commit qa fase5)  |
 | 6    | Traspasos + Picking                  | ⏳ Pendiente | —                    | —                      |
 | 7    | Órdenes + Ensambles + Herramientas   | ⏳ Pendiente | —                    | —                      |
 | 8    | Dashboard Admin                      | ⏳ Pendiente | —                    | —                      |
@@ -104,6 +104,48 @@ quedaron resueltos, descartados como falsos positivos, o routeados a su fase.
 - **F4-09 (P2):** Edge Functions `registrar-venta`/`convertir-cotizacion` posiblemente código muerto duplicado de las RPCs + CORS `*`. Decidir/limpiar en el deploy.
 
 **Verificado OK:** stock con `FOR UPDATE` y validación antes de descontar (trigger); atomicidad de la venta; anulación idempotente; `fn_anular_venta` valida rol Admin en el servidor; `fn_convertir_cotizacion` valida rol/sede, evita doble conversión y exige estado `aprobada`.
+
+### Fase 5 — Compras + Devoluciones ✅ CERRADA
+
+3 agentes (code-reviewer, typescript-reviewer, security-reviewer) revisaron
+`CompraNueva/Detalle/Historial.jsx` y `DevolucionNueva/Historial.jsx`; revisión
+de BD propia sobre `trg_compra_sumar_stock`, `fn_registrar_devolucion` y la RLS
+de `compras`/`detalle_compra`/`devoluciones`. **Todos los hallazgos resueltos**
+(6 P1 + 7 P2); sin backlog.
+
+**Resueltos — P1:**
+
+| ID    | Sev | Área                  | Repro / Descripción                                                                                                                                                            | Fix                                                                                                                                                                | Estado      |
+| ----- | --- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
+| F5-01 | P1  | Seguridad / auditoría | `CompraNueva` insertaba `compras.registrado_por` desde el cliente; la RLS `compras_insert` no lo validaba → un bodeguero con devtools podía atribuir la compra a otro usuario. | RPC `fn_registrar_compra` (`SECURITY DEFINER`) fija `registrado_por = auth.uid()`; se elimina la política de INSERT directo. Stress: registrado_por = el llamante. | ✅ Resuelto |
+| F5-02 | P1  | Datos / integridad    | `compras.subtotal/iva/total` y `detalle_compra.subtotal` se calculaban en el cliente sin recomputar en el servidor → podían no cuadrar con el detalle.                         | El RPC recalcula subtotal (Σ cantidad×costo), IVA 19% y total. Stress: subtotal/total = recomputado.                                                               | ✅ Resuelto |
+| F5-03 | P1  | Atomicidad            | `CompraNueva` registraba con 3 inserts NO transaccionales (compra → detalle → recibir) → si el insert de detalle fallaba quedaba una compra huérfana.                          | El RPC inserta compra + detalle (+ recepción opcional) en una sola transacción.                                                                                    | ✅ Resuelto |
+| F5-04 | P1  | Seguridad / RLS       | La política `dev_all` (cmd=ALL) permitía INSERT/UPDATE crudos a `devoluciones` saltándose las validaciones de `fn_registrar_devolucion`; sin restricción de sede en SELECT.    | Reemplazada por `dev_select` (SELECT, Admin o sede propia); las escrituras solo vía el RPC. Stress: INSERT directo bloqueado por RLS.                              | ✅ Resuelto |
+| F5-05 | P1  | Race condition        | `CompraHistorial` y `DevolucionHistorial`: al cambiar de filtro con una carga en vuelo, la respuesta vieja pisaba/mezclaba resultados.                                         | Token de secuencia (`reqIdRef`); las respuestas obsoletas se descartan.                                                                                            | ✅ Resuelto |
+| F5-06 | P1  | TOCTOU                | `marcarRecibida` hacía `UPDATE recibida=true` sin verificar el estado previo → doble-tap / dos pestañas re-disparaban el flujo de recepción.                                   | `.eq("recibida", false)` en el UPDATE: el segundo no afecta filas. (El trigger ya guardaba, esto es defensa en el cliente.)                                        | ✅ Resuelto |
+
+**Resueltos — P2:**
+
+| ID    | Sev | Área         | Repro / Descripción                                                                                                                         | Fix                                                                                               | Estado      |
+| ----- | --- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------- |
+| F5-07 | P2  | Crash        | `CompraNueva/Historial` y `DevolucionNueva/Historial` accedían a `perfil.id`/`perfil.sede_id` sin optional chaining.                        | `perfil?.…` en los 4 archivos.                                                                    | ✅ Resuelto |
+| F5-08 | P2  | Doble-submit | El `disabled` de React no es síncrono → un doble-clic veloz podía registrar 2 compras / 2 devoluciones.                                     | `guardandoRef` (guard síncrono) en `CompraNueva` y `DevolucionNueva`.                             | ✅ Resuelto |
+| F5-09 | P2  | Input        | `setCantidadDirecta` borraba la fila al teclear "0"; cantidad/costo sin tope superior.                                                      | Cantidad clampada a `[1, 100000]` (no borra al editar); costo limitado a `99 999 999`.            | ✅ Resuelto |
+| F5-10 | P2  | Validación   | `DevolucionNueva` enviaba `venta_id` como texto libre; la etiqueta decía "(opcional)" pero el RPC lo exige.                                 | Validación de formato UUID en cliente + etiqueta corregida a obligatoria para devolución cliente. | ✅ Resuelto |
+| F5-11 | P2  | UX / errores | `CompraHistorial`/`DevolucionHistorial` y `marcarRecibida` se tragaban los errores en silencio.                                             | Estado `errorMsg` + banner `role="alert"`.                                                        | ✅ Resuelto |
+| F5-12 | P2  | Robustez     | `CompraDetalle` desestructuraba `Promise.all` sin revisar el `.error` de cada query → pantalla vacía sin diagnóstico.                       | Se revisa `compraRes.error` (bloqueante) y `detRes/garRes.error` (degradado, con banner).         | ✅ Resuelto |
+| F5-13 | P2  | Tests        | `tests/integration/devoluciones.test.js`: 3 tests obsoletos (esperaban que la devolución a proveedor SUMARA stock; cliente sin `venta_id`). | Corregidos al contrato real (proveedor RESTA; cliente sin `venta_id` → 400). 8/8 en verde.        | ✅ Resuelto |
+
+**Descartados (falsos positivos):**
+
+- **Inyección PostgREST en `.or(ilike)`** — `sanitizeSearch` ya elimina los metacaracteres `, . * ( ) :`, así que no hay breakout del filtro.
+- **`costo_unitario = 0`** — el agente sugirió `CHECK (> 0)`, pero un costo 0 es legítimo (muestra/bonificación del proveedor); el constraint `>= 0` se mantiene.
+
+**Routeado a Fase 17 (Deploy):**
+
+- **F5-14 (P2):** la Edge Function `registrar-devolucion` está ACTIVA en Supabase pero su fuente NO está en el repo (`supabase/functions/` solo tiene 3 de 4) — drift de deploy. Es un wrapper delgado del RPC `fn_registrar_devolucion`; la UI usa el RPC directo. Decidir/limpiar/versionar junto con las otras Edge Functions en el deploy (ver F4-09).
+
+**Verificado OK:** stress SQL 7/7 (RPC registra compra con `registrado_por`/totales correctos; recepción suma stock +10 y crea movimiento; bloquea sede ajena, rol vendedor, producto inexistente, e INSERT directo a `compras`/`devoluciones`) con rollback; `trg_compra_sumar_stock` tiene advisory lock + `FOR UPDATE` y guarda contra doble-recepción; `fn_registrar_devolucion` valida venta/cantidad/stock; integración `devoluciones.test.js` 8/8; E2E `fase05-compras-devoluciones.spec.js` 6/6; `eslint` + `build` limpios.
 
 ## Backlog (P2 sin resolver)
 

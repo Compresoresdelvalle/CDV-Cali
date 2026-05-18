@@ -1,7 +1,7 @@
 # 🔄 RETOMAR AQUÍ — Campaña de QA fase por fase
 
 > **Léeme apenas se compacte el contexto.** Resume qué estamos haciendo, cómo,
-> y por dónde vamos. Última actualización: **2026-05-17**.
+> y por dónde vamos. Última actualización: **2026-05-18**.
 
 ## Qué estamos haciendo
 
@@ -16,13 +16,15 @@ lo que se encuentra en el momento**.
 
 ## Por dónde vamos
 
-| Fases                          | Estado                               |
-| ------------------------------ | ------------------------------------ |
-| 0, 1, 2, 3, 4                  | ✅ **Cerradas** y mergeadas a `main` |
-| **5 — Compras + Devoluciones** | ⏭️ **SIGUIENTE**                     |
-| 6 → 15                         | ⏳ Pendientes                        |
+| Fases                       | Estado                               |
+| --------------------------- | ------------------------------------ |
+| 0, 1, 2, 3, 4, 5            | ✅ **Cerradas** y mergeadas a `main` |
+| **6 — Traspasos + Picking** | ⏭️ **SIGUIENTE**                     |
+| 7 → 15                      | ⏳ Pendientes                        |
 
-Último commit en `main`: `1b9d27c` (cierre de Fase 4). Working tree limpio.
+Fase 5 cerrada: 6 P1 + 7 P2, todos resueltos (RPC `fn_registrar_compra`
+server-authoritative, RLS de `devoluciones` endurecida, races de paginación,
+TOCTOU de recepción). Stress SQL 7/7, integración 8/8, E2E 6/6.
 
 ## Plantilla por fase (seguir IGUAL en cada una)
 
@@ -58,9 +60,10 @@ lo que se encuentra en el momento**.
 
 ## Siguiente acción concreta
 
-Arrancar **QA Fase 5 (Compras + Devoluciones)**: leer la sección Fase 5 de
+Arrancar **QA Fase 6 (Traspasos + Picking)**: leer la sección Fase 6 de
 `fases/FASE-04-AL-09-MODULOS.md`, lanzar los 3-4 agentes de revisión sobre
-`CompraNueva/Detalle/Historial.jsx`, `DevolucionNueva/Historial.jsx`, el
-trigger `trg_compra_sumar_stock` y `fn_registrar_devolucion`; crear
-`tests/e2e/fase05-compras-devoluciones.spec.js`; arreglar lo encontrado;
-commit `qa(fase5)` + merge.
+`TraspasoNuevo/Detalle/Historial.jsx`, `PickingPage.jsx`,
+`RecepcionTraspaso.jsx`, `VerificacionTraspaso.jsx`, la Edge Function
+`procesar-traspaso` y `fn_procesar_traspaso`; completar/crear
+`tests/e2e/fase06-traspasos.spec.js` (ya existe `traspasos.spec.js`, no
+duplicar casos); arreglar lo encontrado; commit `qa(fase6)` + merge.

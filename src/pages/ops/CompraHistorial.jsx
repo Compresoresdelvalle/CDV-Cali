@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -21,9 +21,15 @@ export default function CompraHistorial() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [recibiendoId, setRecibiendoId] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
+  // Token de secuencia: descarta respuestas obsoletas (cambio de filtro
+  // mientras hay una carga en vuelo) para no mezclar resultados.
+  const reqIdRef = useRef(0);
 
   const cargarCompras = async (reset = false) => {
+    const myReq = ++reqIdRef.current;
     setLoading(true);
+    setErrorMsg(null);
     const currentPage = reset ? 0 : page;
     try {
       let query = supabase
@@ -36,13 +42,14 @@ export default function CompraHistorial() {
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (perfil?.rol !== "Admin")
-        query = query.eq("sede_destino_id", perfil.sede_id);
+        query = query.eq("sede_destino_id", perfil?.sede_id);
       if (filtro === "Registrada") query = query.eq("recibida", false);
       if (filtro === "Recibida") query = query.eq("recibida", true);
       if (filtro === "Garantía")
         query = query.eq("estado", "devolucion_garantia");
 
       const { data, error } = await query;
+      if (myReq !== reqIdRef.current) return; // respuesta obsoleta
       if (error) throw error;
 
       if (reset) {
@@ -54,9 +61,10 @@ export default function CompraHistorial() {
       }
       setHasMore((data ?? []).length === PAGE_SIZE);
     } catch {
-      // ignore fetch errors
+      if (myReq === reqIdRef.current)
+        setErrorMsg("No se pudieron cargar las compras. Reintenta.");
     } finally {
-      setLoading(false);
+      if (myReq === reqIdRef.current) setLoading(false);
     }
   };
 
@@ -67,17 +75,25 @@ export default function CompraHistorial() {
 
   const marcarRecibida = async (compraId) => {
     setRecibiendoId(compraId);
+    setErrorMsg(null);
     try {
-      const { error } = await supabase
+      // `.eq("recibida", false)`: si otra pestaña/usuario ya la recibió,
+      // el segundo UPDATE no afecta filas y no re-dispara el trigger.
+      const { data, error } = await supabase
         .from("compras")
         .update({ recibida: true, fecha_recepcion: new Date().toISOString() })
-        .eq("id", compraId);
+        .eq("id", compraId)
+        .eq("recibida", false)
+        .select("id");
       if (error) throw error;
+      if (!data || data.length === 0) {
+        setErrorMsg("Esa compra ya estaba recibida.");
+      }
       setCompras((prev) =>
         prev.map((c) => (c.id === compraId ? { ...c, recibida: true } : c)),
       );
     } catch {
-      // ignore
+      setErrorMsg("No se pudo marcar la compra como recibida. Reintenta.");
     } finally {
       setRecibiendoId(null);
     }
@@ -137,6 +153,20 @@ export default function CompraHistorial() {
           </button>
         ))}
       </div>
+
+      {errorMsg && (
+        <div
+          role="alert"
+          className="rounded-lg border px-3 py-2 text-xs"
+          style={{
+            backgroundColor: "hsl(var(--destructive) / 0.08)",
+            borderColor: "hsl(var(--destructive) / 0.4)",
+            color: "hsl(var(--destructive))",
+          }}
+        >
+          {errorMsg}
+        </div>
+      )}
 
       {/* Contenido */}
       {loading && compras.length === 0 ? (

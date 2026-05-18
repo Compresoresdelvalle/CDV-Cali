@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -31,6 +31,7 @@ export default function CompraNueva() {
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
+  const guardandoRef = useRef(false);
 
   const buscarProductos = useCallback(async (q) => {
     if (!q || q.trim().length < 2) {
@@ -100,17 +101,19 @@ export default function CompraNueva() {
 
   const setCantidadDirecta = (productoId, valor) => {
     const n = parseInt(valor, 10);
-    if (isNaN(n) || n < 0) return;
+    if (isNaN(n)) return;
+    // Se clampa a [1, 100000]; teclear 0 NO elimina la fila (eso es la X).
+    const clamped = Math.min(100000, Math.max(1, n));
     setCarrito((prev) =>
-      prev
-        .map((i) => (i.producto_id !== productoId ? i : { ...i, cantidad: n }))
-        .filter((i) => i.cantidad > 0),
+      prev.map((i) =>
+        i.producto_id !== productoId ? i : { ...i, cantidad: clamped },
+      ),
     );
   };
 
   const setCostoDirecto = (productoId, valor) => {
     const n = parseFloat(valor);
-    if (isNaN(n) || n < 0) return;
+    if (isNaN(n) || n < 0 || n > 99999999) return;
     setCarrito((prev) =>
       prev.map((i) =>
         i.producto_id !== productoId ? i : { ...i, costo_unitario: n },
@@ -138,55 +141,34 @@ export default function CompraNueva() {
       setError("Agrega al menos un producto.");
       return;
     }
+    // Guard síncrono: el `disabled` de React no evita el doble-clic veloz.
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
     setError(null);
     setGuardando(true);
     try {
-      // 1. Insertar compra con recibida=false
-      const { data: compra, error: e1 } = await supabase
-        .from("compras")
-        .insert({
-          proveedor: proveedor.trim(),
-          registrado_por: perfil.id,
-          sede_destino_id: perfil.sede_id,
-          subtotal,
-          iva,
-          total,
-          factura_proveedor: facturaProveedor.trim() || null,
-          observaciones: observaciones.trim() || null,
-          recibida: false,
-          // estado: 'completada' por default en BD. Las devoluciones por
-          // garantía son acción posterior sobre compras ya recibidas (F13).
-        })
-        .select("id, numero")
-        .single();
-      if (e1) throw new Error(e1.message);
-
-      // 2. Insertar detalle
-      const { error: e2 } = await supabase.from("detalle_compra").insert(
-        carrito.map((i) => ({
-          compra_id: compra.id,
+      // RPC server-authoritative: registra compra + detalle en una sola
+      // transacción, fija `registrado_por` y recalcula los totales.
+      const { error: rpcErr } = await supabase.rpc("fn_registrar_compra", {
+        p_sede_id: perfil?.sede_id,
+        p_proveedor: proveedor.trim(),
+        p_factura_proveedor: facturaProveedor.trim() || null,
+        p_observaciones: observaciones.trim() || null,
+        p_recibir: recibirAhora,
+        p_items: carrito.map((i) => ({
           producto_id: i.producto_id,
           cantidad: i.cantidad,
           costo_unitario: i.costo_unitario,
-          subtotal: i.cantidad * i.costo_unitario,
         })),
-      );
-      if (e2) throw new Error(e2.message);
-
-      // 3. Si checkbox marcado → activar trigger de stock
-      if (recibirAhora) {
-        const { error: e3 } = await supabase
-          .from("compras")
-          .update({ recibida: true, fecha_recepcion: new Date().toISOString() })
-          .eq("id", compra.id);
-        if (e3) throw new Error(e3.message);
-      }
+      });
+      if (rpcErr) throw new Error(rpcErr.message);
 
       navigate("/ops/compras");
     } catch (e) {
       setError(safeError(e, "Error al guardar la compra"));
     } finally {
       setGuardando(false);
+      guardandoRef.current = false;
     }
   };
 
@@ -197,7 +179,7 @@ export default function CompraNueva() {
     >
       <PageHeader
         title="Nueva Compra"
-        description={perfil.sede_id}
+        description={perfil?.sede_id}
         actions={
           <button
             onClick={() => navigate("/ops/compras")}
