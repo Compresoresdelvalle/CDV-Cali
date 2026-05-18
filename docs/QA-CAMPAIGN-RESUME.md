@@ -16,16 +16,16 @@ lo que se encuentra en el momento**.
 
 ## Por dónde vamos
 
-| Fases                         | Estado                               |
-| ----------------------------- | ------------------------------------ |
-| 0 … 8                         | ✅ **Cerradas** y mergeadas a `main` |
-| **9 — Configuración General** | ⏭️ **SIGUIENTE**                     |
-| 10 → 15                       | ⏳ Pendientes                        |
+| Fases               | Estado                               |
+| ------------------- | ------------------------------------ |
+| 0 … 9               | ✅ **Cerradas** y mergeadas a `main` |
+| **10 — Ajustes OT** | ⏭️ **SIGUIENTE**                     |
+| 11 → 15             | ⏳ Pendientes                        |
 
-Fase 8 cerrada: 3 P1 + 3 P2, todos resueltos (trigger anti-lockout de
-`usuarios` — un Admin podía auto-desactivarse; validaciones de `Usuarios`;
-manejo de errores y race en `Auditoria`; guards en `Dashboard`; 4 locators
-rotos en `admin-fase8.spec.js`). Stress SQL 2/2, E2E `admin-fase8` 10/10.
+Fase 9 cerrada: 2 P1 + 2 P2, todos resueltos (guards anti-doble-submit en los
+3 CRUD de Configuración; bounds de parámetros `decimal`; clamp de `orden`;
+null-safety). RLS Admin-only de las 3 tablas de config verificada. Stress SQL
+4/4, E2E `fase09-configuracion` 5/5.
 
 ## Plantilla por fase (seguir IGUAL en cada una)
 
@@ -61,9 +61,9 @@ rotos en `admin-fase8.spec.js`). Stress SQL 2/2, E2E `admin-fase8` 10/10.
 
 ## Siguiente acción concreta
 
-Arrancar **QA Fase 9 (Configuración General)**: leer `fases/FASE-09-CONFIGURACION-GENERAL.md`,
-lanzar los 3 agentes de revisión sobre `src/pages/admin/Configuracion/*`
-(`index.jsx`, `Parametros.jsx`, `CuentasBancarias.jsx`, `ChecklistOT.jsx`);
-auditar la RLS de las tablas de parámetros/config (solo Admin escribe) con
-stress SQL; crear `tests/e2e/fase09-configuracion.spec.js`; arreglar lo
-encontrado; commit `qa(fase9)` + merge.
+Arrancar **QA Fase 10 (Ajustes OT)**: leer `fases/FASE-10-AJUSTES-OT.md`,
+lanzar los 3 agentes de revisión sobre los componentes y RPCs de OT
+introducidos/ajustados en F10 (autorización del cliente, abonos, checklist de
+recepción, valor por revisión, OT abandonada → `pendiente_recogida`). Ya
+existen `fase10-ot.spec.js` y `fase10-chaos.spec.js` — auditar vs criterios sin
+duplicar; arreglar lo encontrado; commit `qa(fase10)` + merge.

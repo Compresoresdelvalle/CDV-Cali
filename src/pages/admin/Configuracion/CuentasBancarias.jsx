@@ -13,6 +13,7 @@ export default function CuentasBancarias() {
   const [editando, setEditando] = useState(null); // cuenta o {nuevo:true}
   const [saving, setSaving] = useState(false);
   const mountedRef = useRef(true);
+  const savingRef = useRef(false);
   const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -71,7 +72,7 @@ export default function CuentasBancarias() {
     // Validación de unicidad cliente (banco, numero) — el UNIQUE BD también lo bloquea
     const duplicada = cuentas.find(
       (c) =>
-        c.banco.toLowerCase() === banco.toLowerCase() &&
+        c.banco?.toLowerCase() === banco.toLowerCase() &&
         c.numero === numero &&
         c.id !== editando.id,
     );
@@ -79,6 +80,8 @@ export default function CuentasBancarias() {
       setErrorMsg(`Ya existe la cuenta ${banco} (${numero})`);
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setErrorMsg("");
     setOkMsg("");
@@ -110,6 +113,7 @@ export default function CuentasBancarias() {
     } catch (err) {
       setErrorMsg(safeError(err, "Error al guardar"));
     } finally {
+      savingRef.current = false;
       if (mountedRef.current) setSaving(false);
     }
   };

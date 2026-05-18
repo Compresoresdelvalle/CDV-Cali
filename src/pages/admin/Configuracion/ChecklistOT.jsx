@@ -11,6 +11,7 @@ export default function ChecklistOT() {
   const [editando, setEditando] = useState(null); // item o {nuevo:true}
   const [saving, setSaving] = useState(false);
   const mountedRef = useRef(true);
+  const savingRef = useRef(false);
   const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -62,9 +63,10 @@ export default function ChecklistOT() {
       setErrorMsg("Nombre obligatorio");
       return;
     }
-    const orden = Number.isFinite(Number(editando.orden))
-      ? Number(editando.orden)
-      : 0;
+    // `orden` siempre entero >= 0 (el ordenamiento del checklist lo asume).
+    const orden = Math.max(0, Math.trunc(Number(editando.orden) || 0));
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setErrorMsg("");
     setOkMsg("");
@@ -89,6 +91,7 @@ export default function ChecklistOT() {
     } catch (err) {
       setErrorMsg(safeError(err, "Error al guardar"));
     } finally {
+      savingRef.current = false;
       if (mountedRef.current) setSaving(false);
     }
   };

@@ -20,6 +20,7 @@ export default function Parametros() {
   const [edits, setEdits] = useState({}); // { key: value pendiente }
   const [savingKey, setSavingKey] = useState(null);
   const mountedRef = useRef(true);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -55,18 +56,22 @@ export default function Parametros() {
   const validate = (p, raw) => {
     const v = String(raw).trim();
     if (!v) return "Valor obligatorio";
-    if (p.tipo === "int") {
-      if (!/^-?\d+$/.test(v)) return "Debe ser entero";
-      const n = parseInt(v, 10);
+    const checkBounds = (n) => {
       const b = BOUNDS[p.key];
       if (b) {
         if (n < b.min) return `Debe ser ≥ ${b.min}`;
         if (n > b.max) return `Debe ser ≤ ${b.max}`;
-      } else {
-        if (n < 0) return "No puede ser negativo";
+      } else if (n < 0) {
+        return "No puede ser negativo";
       }
+      return null;
+    };
+    if (p.tipo === "int") {
+      if (!/^-?\d+$/.test(v)) return "Debe ser entero";
+      return checkBounds(parseInt(v, 10));
     } else if (p.tipo === "decimal") {
       if (!/^-?\d+(\.\d+)?$/.test(v)) return "Debe ser numérico";
+      return checkBounds(parseFloat(v));
     } else if (p.tipo === "bool") {
       if (!["true", "false"].includes(v)) return "Debe ser true o false";
     }
@@ -80,6 +85,8 @@ export default function Parametros() {
       setErrorMsg(`${p.key}: ${err}`);
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSavingKey(p.key);
     setErrorMsg("");
     setOkMsg("");
@@ -96,6 +103,7 @@ export default function Parametros() {
     } catch (e) {
       setErrorMsg(safeError(e, "Error al guardar"));
     } finally {
+      savingRef.current = false;
       if (mountedRef.current) setSavingKey(null);
     }
   };
