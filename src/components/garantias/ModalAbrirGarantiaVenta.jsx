@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, safeError } from "../../lib/utils";
+import { formatCOP, safeError, sanitizeSearch } from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 
 /**
@@ -33,6 +33,7 @@ export default function ModalAbrirGarantiaVenta({
   const [resultados, setResultados] = useState([]);
   const [items, setItems] = useState([]); // [{ producto_id, nombre, cantidad }]
   const mountedRef = useRef(true);
+  const guardandoRef = useRef(false);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -45,15 +46,22 @@ export default function ModalAbrirGarantiaVenta({
       setResultados([]);
       return;
     }
-    const { data } = await supabase
+    // sanitizeSearch elimina los metacaracteres PostgREST (`,().:*`) para que
+    // el término no pueda manipular el filtro `.or()`.
+    const term = sanitizeSearch(q);
+    if (term.length < 2) {
+      setResultados([]);
+      return;
+    }
+    const { data, error } = await supabase
       .from("productos")
       .select("id, nombre, referencia, codigo_interno")
       .eq("activo", true)
       .or(
-        `nombre.ilike.%${q}%,referencia.ilike.%${q}%,codigo_interno.ilike.%${q}%`,
+        `nombre.ilike.%${term}%,referencia.ilike.%${term}%,codigo_interno.ilike.%${term}%`,
       )
       .limit(15);
-    if (mountedRef.current) setResultados(data ?? []);
+    if (mountedRef.current) setResultados(error ? [] : (data ?? []));
   };
   const buscarDebounced = useDebouncedCallback(buscar, 300);
 
@@ -90,6 +98,9 @@ export default function ModalAbrirGarantiaVenta({
       }
     }
 
+    // Guard síncrono anti doble-submit (el `disabled` no aplica de inmediato).
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
     setSubmitting(true);
     try {
       const payload = {
@@ -114,6 +125,7 @@ export default function ModalAbrirGarantiaVenta({
       setErrorMsg(safeError(err, "Error al abrir garantía"));
     } finally {
       setSubmitting(false);
+      guardandoRef.current = false;
     }
   };
 

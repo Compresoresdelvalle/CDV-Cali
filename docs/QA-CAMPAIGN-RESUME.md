@@ -16,21 +16,20 @@ lo que se encuentra en el momento**.
 
 ## Por dónde vamos
 
-| Fases              | Estado                               |
-| ------------------ | ------------------------------------ |
-| 0 … 12             | ✅ **Cerradas** y mergeadas a `main` |
-| **13 — Garantías** | ⏭️ **SIGUIENTE**                     |
-| 14 → 15            | ⏳ Pendientes                        |
+| Fases            | Estado                               |
+| ---------------- | ------------------------------------ |
+| 0 … 13           | ✅ **Cerradas** y mergeadas a `main` |
+| **14 — Recibos** | ⏭️ **SIGUIENTE**                     |
+| 15               | ⏳ Pendiente                         |
 
-Fase 12 cerrada: 1 P1 + 3 P2 resueltos. F12-01 (RBAC): la policy
-`compras_update` no restringía rol → Vendedor/Técnico de la sede podía marcar
-recibida una compra; restringida a Admin+Bodeguero. F12-02: race de auditoría
-en `trg_compra_sumar_stock` con producto nuevo. F12-03: `fn_alertas_rotacion`
-sin checks de auth/rol. F12-04: keys React no únicas en `Alertas.jsx`. El "P0
-esquema F12 inexistente" de los agentes fue falso positivo (el esquema sí está
-aplicado). Stress SQL 5/5; E2E `fase12-*` 7/7. **Diferido:** §12.12
-(organización física stand/piso/espacio) nunca se implementó — es feature, no
-bug.
+Fase 13 cerrada: 3 P1 + 4 P2 resueltos. F13-01: `fn_abrir_garantia_compra`
+confiaba en el `costo_unitario` del cliente para la nota crédito → ahora lo
+lee de `detalle_compra`. F13-02 (RBAC): ningún RPC de garantía validaba la
+sede → un no-Admin podía operar sobre otra sede. F13-03: `monto_devuelto` sin
+tope → topado al total original. F13-04: guards anti doble-submit en los
+modales. F13-05: inyección de filtro PostgREST en el buscador. F13-06: errores
+de carga silenciados. F13-07: Técnico excluido de las rutas de garantía pese a
+permitírselo el RPC. Stress SQL 4/4; E2E `fase13-garantias` 8/8.
 
 ## Plantilla por fase (seguir IGUAL en cada una)
 
@@ -66,7 +65,7 @@ bug.
 
 ## Siguiente acción concreta
 
-Arrancar **QA Fase 13 (Garantías)**: leer `fases/FASE-13-GARANTIAS.md`, lanzar
-los agentes de revisión (code/ts/security + database) sobre las páginas/RPC de
-garantías de venta y de compra. Ya hay spec `fase13-garantias` — auditar vs
-criterios sin duplicar; arreglar lo encontrado; commit `qa(fase13)` + merge.
+Arrancar **QA Fase 14 (Recibos manuales)**: leer `fases/FASE-14-RECIBOS.md`,
+lanzar los agentes de revisión (code/ts/security + database) sobre las
+páginas/RPC de recibos. Ya hay spec `fase14-recibos` — auditar vs criterios
+sin duplicar; arreglar lo encontrado; commit `qa(fase14)` + merge.

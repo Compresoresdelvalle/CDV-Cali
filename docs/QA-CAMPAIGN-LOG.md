@@ -374,6 +374,36 @@ por `stand`/`piso`/`espacio` en `ubicaciones` nunca se implementó (las columnas
 no existen). Es trabajo de feature (esquema + etiqueta QR + filtros de UI), no
 un defecto — queda como pendiente de producto, no de QA.
 
+## Fase 13 — Garantías
+
+Módulo de garantías de compra (proveedor → nosotros) y de venta (cliente →
+nosotros). La revisión se centró en los RPC `fn_abrir_garantia_compra` y
+`fn_abrir_garantia_venta` y en los dos modales. **Hallazgos resueltos**
+(3 P1 + 4 P2).
+
+| ID     | Sev | Área                 | Repro / Descripción                                                                                                                                                                           | Fix                                                                                                                   | Estado      |
+| ------ | --- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------- |
+| F13-01 | P1  | Server-authoritative | `fn_abrir_garantia_compra` usaba el `costo_unitario` enviado por el cliente para calcular el monto de la `notas_credito_proveedor` → un cliente manipulado podía inflar la nota crédito.      | El costo se lee de `detalle_compra` (autoritativo); de paso valida que el producto pertenezca a la compra. Stress OK. | ✅ Resuelto |
+| F13-02 | P1  | RBAC                 | Ni `fn_abrir_garantia_venta` ni `fn_abrir_garantia_compra` validaban que la venta/OT/compra fuera de la sede del usuario → un no-Admin podía abrir garantía (y descontar stock) en otra sede. | Verificación `sede = get_my_sede_id()` para no-Admin en ambas funciones. Stress OK.                                   | ✅ Resuelto |
+| F13-03 | P1  | Seguridad            | `fn_abrir_garantia_venta` aceptaba cualquier `monto_devuelto` del cliente sin tope → devolución de dinero arbitraria.                                                                         | Se topa al total de la venta/OT original y se exige monto > 0. Stress OK.                                             | ✅ Resuelto |
+| F13-04 | P2  | Doble-submit         | Ninguno de los dos modales de garantía tenía guard síncrono → un doble-clic podía abrir dos garantías (doble descuento de stock).                                                             | `useRef` guard síncrono en `ModalAbrirGarantiaCompra` y `ModalAbrirGarantiaVenta`.                                    | ✅ Resuelto |
+| F13-05 | P2  | Seguridad            | `ModalAbrirGarantiaVenta.buscar` interpolaba el término crudo en el filtro `.or()` de PostgREST → un `,`/`)` podía manipular la consulta.                                                     | Se pasa el término por `sanitizeSearch` (elimina metacaracteres `,().:*`).                                            | ✅ Resuelto |
+| F13-06 | P2  | Frontend             | `GarantiaCompraDetalle` y `GarantiaVentaDetalle` descartaban el `error` de cada query del `Promise.all` → un fallo (RLS, red) se mostraba como "Garantía no encontrada" sin diagnóstico.      | Se verifican los `error` de cada query; `GarantiaVentaDetalle` ahora resetea `errorMsg` al recargar.                  | ✅ Resuelto |
+| F13-07 | P2  | RBAC / UX            | El RPC `fn_abrir_garantia_venta` permite a un Técnico abrir garantías (desde una OT), pero las rutas `garantias` y `garantias/venta/:id` excluían a Técnico → no podía ver lo que creó.       | Se añade `Tecnico` al `RoleGuard` de ambas rutas.                                                                     | ✅ Resuelto |
+
+**Verificado OK:** las 4 tablas de garantías (`garantias_compra/venta` +
+`detalle_*`) SÍ tienen RLS activa; ambos RPC son `SECURITY DEFINER` con
+`search_path` y validan `auth.uid()` + rol; el stock se descuenta con
+`FOR UPDATE`. Stress SQL 4/4 (cross-sede, tope de monto, monto cero, producto
+ajeno a la compra); E2E `fase13-garantias` 8/8; `eslint` + `build` limpios.
+
+**No es bug:** `devolver_dinero` no escribe en `movimientos` — correcto, esa
+tabla es solo de stock; el monto queda en `garantias_venta.monto_devuelto`. La
+idempotencia (no abrir dos garantías idénticas) se cubre con el guard
+front-end F13-04 — abrir varias garantías legítimas sobre una misma venta sí
+es válido (distintos ítems, distintas fechas), por eso no se puso constraint
+`UNIQUE`.
+
 ## Backlog (P2 sin resolver)
 
 - **F2-04 (P2, seguridad):** el login con PIN de 4 dígitos no tiene rate-limiting ni bloqueo por intentos fallidos del lado del cliente. Brute-force teórico (10.000 combos). App interna de 6 usuarios; Supabase Auth tiene rate-limiting de plataforma.
