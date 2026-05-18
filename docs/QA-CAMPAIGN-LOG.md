@@ -10,8 +10,8 @@
 | ---- | ------------------------------------ | ------------ | -------------------- | --------------------- |
 | 0    | Setup                                | ✅ Cerrada   | 0 / 3 / 4            | (ver commit qa fase0) |
 | 1    | Base de datos                        | ✅ Cerrada   | 0 / 3 / 8            | (ver commit qa fase1) |
-| 2    | Login + Layout + Roles               | 🟡 En curso  | —                    | —                     |
-| 3    | Inventario + QR + Realtime           | ⏳ Pendiente | —                    | —                     |
+| 2    | Login + Layout + Roles               | ✅ Cerrada   | 0 / 3 / 6            | (ver commit qa fase2) |
+| 3    | Inventario + QR + Realtime           | 🟡 En curso  | —                    | —                     |
 | 4    | Ventas + Cotizaciones                | ⏳ Pendiente | —                    | —                     |
 | 5    | Compras + Devoluciones               | ⏳ Pendiente | —                    | —                     |
 | 6    | Traspasos + Picking                  | ⏳ Pendiente | —                    | —                     |
@@ -45,7 +45,25 @@
 
 **Verificado OK:** RLS habilitado en las 37 tablas; la RLS aísla a un vendedor a su sede (stress: 36/150 filas de inventario, 0 de otras sedes); `movimientos` es append-only (UPDATE y DELETE bloqueados por trigger); las RPCs de escritura (`fn_registrar_venta`, `fn_anular_venta`, `fn_procesar_traspaso`, `fn_registrar_devolucion`) validan `auth.uid()`.
 
+### Fase 2 — Login + Layout + Roles
+
+| ID    | Fase | Sev | Área              | Repro / Descripción                                                                                                               | Causa raíz                                                               | Fix (commit)                                                   | Estado      |
+| ----- | ---- | --- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------- | ----------- |
+| F2-01 | 2    | P1  | Seguridad / Login | La pantalla de login mostraba "PIN de prueba: 1234" a cualquier visitante en producción.                                          | Texto de ayuda de desarrollo sin condicionar.                            | Condicionado a `import.meta.env.DEV`.                          | ✅ Resuelto |
+| F2-02 | 2    | P1  | Robustez / Login  | La carga de usuarios (`supabase.from('usuarios')`) no manejaba error → en fallo de red, spinner infinito sin mensaje.             | `.then(({data}))` ignoraba `error` y no había `.catch`.                  | Se maneja `error` y se agrega `.catch` con mensaje al usuario. | ✅ Resuelto |
+| F2-03 | 2    | P1  | UI / navegación   | `Garantías` y `Recibos` no estaban en `MODULE_GROUP` de `AppShell` → caían a un grupo sin renderizar en el sidebar de escritorio. | F13/F14 agregaron los módulos a `ROLE_MODULES` pero no a `MODULE_GROUP`. | Agregados a `MODULE_GROUP` (grupo "Operaciones").              | ✅ Resuelto |
+
+**Verificado OK:** E2E `fase02-login.spec.js` 5/5 (login por rol, menú por rol, PIN incorrecto no entra, RBAC del RoleGuard, persistencia de sesión al recargar); el cleanup de `init()` del authStore sí lo invoca `App.jsx` (el "leak" reportado por un agente era falso positivo); las races sutiles del authStore son benignas (refetch del mismo perfil).
+
 ## Backlog (P2 sin resolver)
+
+- **F2-04 (P2, seguridad):** el login con PIN de 4 dígitos no tiene rate-limiting ni bloqueo por intentos fallidos del lado del cliente. Brute-force teórico (10.000 combos). App interna de 6 usuarios; Supabase Auth tiene rate-limiting de plataforma.
+- **F2-05 (P2, seguridad):** la pantalla de login lista nombres + roles + sede de los empleados sin sesión (rol `anon`). Es por diseño (UX de selección de usuario); no expone PIN/hash.
+- **F2-06 (P2, diseño):** `Login.jsx` y partes de `AdminShell.jsx` usan colores hardcodeados en vez de tokens `hsl(var(--*))` (viola Regla #1 de CLAUDE.md; el Login es excepción de marca).
+- **F2-07 (P2, a11y/robustez):** teclado de PIN sin `aria-label` por dígito; `setTimeout` de autofocus sin cleanup; `getInitials` falla con nombres de espacios dobles.
+- **F2-08 (P2, seguridad):** las sub-rutas de `/admin` no tienen `RoleGuard` propio (solo el del layout). La seguridad real es la RLS; conviene defense-in-depth en rutas sensibles.
+
+## Backlog Fase 0/1 (P2 sin resolver)
 
 - **F1-04 (P2, seguridad):** ~16 funciones más (RPCs de escritura que SÍ validan `auth.uid()`, funciones-trigger, `get_my_rol`/`get_my_sede_id`) siguen ejecutables por `anon`. Defense-in-depth, no es un hueco activo. Revocar requiere análisis de blast-radius (la RLS depende de los helpers).
 - **F1-05 (P2, seguridad):** políticas RLS always-true `herr_all` (`herramientas_prestamo`) y `dt_all` (`detalle_traspaso`) coexisten con políticas granulares que las hacen redundantes; conviene eliminarlas.

@@ -21,6 +21,8 @@ const MODULE_GROUP = {
   Cotizaciones: "Operaciones",
   Compras: "Operaciones",
   Devoluciones: "Operaciones",
+  Garantías: "Operaciones",
+  Recibos: "Operaciones",
   Traspasos: "Logística",
   Ensambles: "Servicio",
   Órdenes: "Servicio",
