@@ -226,8 +226,20 @@ export default function Login() {
       .select("nombre, rol, sede_id")
       .eq("activo", true)
       .order("nombre")
-      .then(({ data }) => {
-        if (data) setUsuarios(data);
+      .then(({ data, error }) => {
+        if (error) {
+          setLocalError(
+            "No se pudieron cargar los usuarios. Revisa tu conexión.",
+          );
+        } else if (data) {
+          setUsuarios(data);
+        }
+        setLoadingUsers(false);
+      })
+      .catch(() => {
+        setLocalError(
+          "No se pudieron cargar los usuarios. Revisa tu conexión.",
+        );
         setLoadingUsers(false);
       });
   }, []);
@@ -527,7 +539,7 @@ export default function Login() {
                     </div>
                   )}
 
-                  {!cargando && !displayError && (
+                  {import.meta.env.DEV && !cargando && !displayError && (
                     <p className="text-center text-xs text-white/30">
                       PIN de prueba:{" "}
                       <span className="font-mono font-medium text-white/50">
