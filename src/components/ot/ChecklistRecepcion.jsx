@@ -39,20 +39,24 @@ export default function ChecklistRecepcion({
       // Sembrar filas faltantes para componentes activos sin marcar
       // (idempotente: el migration ya las creó al INSERT, esto cubre
       // componentes nuevos agregados por admin después de crear la OT)
-      const { data: componentes } = await supabase
+      const { data: componentes, error: eComp } = await supabase
         .from("checklist_componentes")
         .select("id")
         .eq("activo", true);
+      if (eComp) throw eComp;
       if (componentes?.length) {
         const rows = componentes.map((c) => ({
           orden_id: ordenId,
           componente_id: c.id,
           marcado: false,
         }));
-        await supabase.from("ot_checklist").upsert(rows, {
-          onConflict: "orden_id,componente_id",
-          ignoreDuplicates: true,
-        });
+        const { error: eUpsert } = await supabase
+          .from("ot_checklist")
+          .upsert(rows, {
+            onConflict: "orden_id,componente_id",
+            ignoreDuplicates: true,
+          });
+        if (eUpsert) throw eUpsert;
       }
       // Cargar checklist con inner-join filtrado por activo (server-side)
       const { data, error } = await supabase

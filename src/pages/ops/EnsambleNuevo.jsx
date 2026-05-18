@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -26,6 +26,7 @@ export default function EnsambleNuevo() {
   const [observaciones, setObservaciones] = useState("");
   const [creando, setCreando] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const creandoRef = useRef(false);
 
   // Buscar producto resultado por nombre/referencia (limitado a productos con BOM definido)
   useEffect(() => {
@@ -105,8 +106,17 @@ export default function EnsambleNuevo() {
           setErrorMsg("Este producto no tiene receta BOM definida");
           return;
         }
+        // Filtra filas BOM cuyo componente fue eliminado (join devuelve null).
+        const recetaValida = receta.filter((r) => r.componente);
+        if (recetaValida.length === 0) {
+          setBom([]);
+          setErrorMsg(
+            "La receta BOM referencia componentes inválidos (productos eliminados)",
+          );
+          return;
+        }
 
-        const compIds = receta.map((r) => r.componente.id);
+        const compIds = recetaValida.map((r) => r.componente.id);
         const { data: inv, error: e2 } = await timeout(
           supabase
             .from("inventario")
@@ -120,7 +130,7 @@ export default function EnsambleNuevo() {
         (inv ?? []).forEach((r) => stockMap.set(r.producto_id, r.cantidad));
 
         setBom(
-          receta.map((r) => ({
+          recetaValida.map((r) => ({
             componente_id: r.componente.id,
             referencia: r.componente.referencia,
             nombre: r.componente.nombre,
@@ -138,7 +148,10 @@ export default function EnsambleNuevo() {
     cargarBom();
   }, [productoSel, perfil?.sede_id]);
 
-  const cantProd = Math.max(1, parseInt(cantidadProducida, 10) || 1);
+  const cantProd = Math.min(
+    9999,
+    Math.max(1, parseInt(cantidadProducida, 10) || 1),
+  );
 
   // Estado de cada componente: requerido vs disponible × cantProd
   const componentesEnriched = bom.map((c) => {
@@ -155,6 +168,10 @@ export default function EnsambleNuevo() {
 
   const completar = async () => {
     if (!productoSel || !todoOk || creando) return;
+    // Guard síncrono: sin esto, un doble-tap crea DOS ensambles y descuenta
+    // stock dos veces (el `creando` de state no frena el segundo tap veloz).
+    if (creandoRef.current) return;
+    creandoRef.current = true;
     setCreando(true);
     setErrorMsg("");
     try {
@@ -164,8 +181,8 @@ export default function EnsambleNuevo() {
         .insert({
           producto_resultado_id: productoSel.id,
           cantidad_producida: cantProd,
-          realizado_por: perfil.id,
-          sede_id: perfil.sede_id,
+          realizado_por: perfil?.id,
+          sede_id: perfil?.sede_id,
           observaciones: observaciones.trim() || null,
           completado: false,
         })
@@ -214,6 +231,7 @@ export default function EnsambleNuevo() {
       setErrorMsg(safeError(err, "Error al completar ensamble"));
     } finally {
       setCreando(false);
+      creandoRef.current = false;
     }
   };
 

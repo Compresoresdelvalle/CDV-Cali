@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -60,6 +60,8 @@ export default function OrdenDetalle() {
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [modalGarantia, setModalGarantia] = useState(false);
   const [imprimiendo, setImprimiendo] = useState(false);
+  const agregandoRef = useRef(false);
+  const cambiandoRef = useRef(false);
 
   // Guard anti doble-click: imprime la OT una sola vez por tap
   const imprimirOT = () => {
@@ -71,6 +73,9 @@ export default function OrdenDetalle() {
         repuestos: detalles,
         tecnico: orden.tecnico?.nombre ?? "—",
       }).print();
+    } catch (err) {
+      console.error("[OrdenDetalle] imprimir:", err);
+      setErrorMsg(safeError(err, "No se pudo generar el PDF de la orden"));
     } finally {
       setTimeout(() => setImprimiendo(false), 1500);
     }
@@ -189,6 +194,10 @@ export default function OrdenDetalle() {
   }, [search, sedeOrden]);
 
   const agregarRepuesto = async (producto) => {
+    // Guard síncrono: un doble-tap insertaría el repuesto dos veces
+    // (doble fila en detalle_orden + doble descuento de stock vía trigger).
+    if (agregandoRef.current) return;
+    agregandoRef.current = true;
     setAgregando(true);
     setErrorMsg("");
     try {
@@ -197,7 +206,6 @@ export default function OrdenDetalle() {
         setErrorMsg(
           `Sin stock en esta sede para "${producto.nombre}" (disponible: ${stockSede})`,
         );
-        setAgregando(false);
         return;
       }
       // Para reportes de margen: el COSTO de un repuesto consumido es
@@ -222,6 +230,7 @@ export default function OrdenDetalle() {
       setErrorMsg(safeError(err, "Error al agregar repuesto"));
     } finally {
       setAgregando(false);
+      agregandoRef.current = false;
     }
   };
 
@@ -250,23 +259,35 @@ export default function OrdenDetalle() {
   };
 
   const cambiarEstado = async (nuevoEstado) => {
+    if (cambiandoRef.current) return;
+    cambiandoRef.current = true;
     setCambiandoEstado(true);
     setErrorMsg("");
     try {
       const update = { estado: nuevoEstado };
       if (nuevoEstado === "entregada")
         update.fecha_entrega = new Date().toISOString();
-      const { error } = await supabase
+      // Guard optimista: solo aplica si la OT sigue en el estado que la UI
+      // cree (otra pestaña/usuario pudo haberlo cambiado).
+      const { data, error } = await supabase
         .from("ordenes_servicio")
         .update(update)
-        .eq("id", id);
+        .eq("id", id)
+        .eq("estado", orden.estado)
+        .select("id");
       if (error) throw error;
+      if (!data || data.length === 0) {
+        setErrorMsg(
+          "El estado de la orden cambió mientras tanto. Se recargó la información.",
+        );
+      }
       await cargar();
     } catch (err) {
       console.error("[OrdenDetalle] estado:", err);
       setErrorMsg(safeError(err, "Error al cambiar estado"));
     } finally {
       setCambiandoEstado(false);
+      cambiandoRef.current = false;
     }
   };
 

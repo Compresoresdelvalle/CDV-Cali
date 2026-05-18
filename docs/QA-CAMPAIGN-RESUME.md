@@ -16,16 +16,16 @@ lo que se encuentra en el momento**.
 
 ## Por dónde vamos
 
-| Fases                                      | Estado                               |
-| ------------------------------------------ | ------------------------------------ |
-| 0, 1, 2, 3, 4, 5, 6                        | ✅ **Cerradas** y mergeadas a `main` |
-| **7 — Órdenes + Ensambles + Herramientas** | ⏭️ **SIGUIENTE**                     |
-| 8 → 15                                     | ⏳ Pendientes                        |
+| Fases                   | Estado                               |
+| ----------------------- | ------------------------------------ |
+| 0, 1, 2, 3, 4, 5, 6, 7  | ✅ **Cerradas** y mergeadas a `main` |
+| **8 — Dashboard Admin** | ⏭️ **SIGUIENTE**                     |
+| 9 → 15                  | ⏳ Pendientes                        |
 
-Fase 6 cerrada: 9 P1 + 5 P2, todos resueltos (RPC `fn_crear_traspaso`
-server-authoritative, `fn_procesar_traspaso` con rol/sede + validación de
-cantidades, RLS de `traspasos` endurecida, fix de `trg_traspaso_entrada` que
-fallaba al recibir en una sede sin stock previo). Stress SQL 12/12, E2E 5/5.
+Fase 7 cerrada: 7 P1 + 10 P2, todos resueltos (RLS endurecida — eliminadas
+`ord_all` y `herr_all` que anulaban las políticas granulares; `abonos`
+separado insert/delete; guards anti-doble-submit en ensambles/abonos/OT/
+herramientas; varios crashes y races). Stress SQL 6/6, E2E `ordenes` 9/9.
 
 ## Plantilla por fase (seguir IGUAL en cada una)
 
@@ -61,11 +61,9 @@ fallaba al recibir en una sede sin stock previo). Stress SQL 12/12, E2E 5/5.
 
 ## Siguiente acción concreta
 
-Arrancar **QA Fase 7 (Órdenes de servicio + Ensambles + Herramientas)** — la
-fase más compleja. Leer la sección Fase 7 de `fases/FASE-04-AL-09-MODULOS.md`,
-lanzar los 3-4 agentes de revisión sobre `OrdenNueva/Detalle/Historial.jsx`,
-`EnsambleNuevo/Historial.jsx`, `Herramientas.jsx` y sus componentes en
-`src/components/ot/`; auditar las RPCs/triggers de OT, ensambles y herramientas.
-Ya existen specs `ordenes.spec.js`, `ensambles.spec.js`, `herramientas.spec.js`,
-`stress-fase7.spec.js` — auditar vs criterios sin duplicar; arreglar lo
-encontrado; commit `qa(fase7)` + merge.
+Arrancar **QA Fase 8 (Dashboard Admin + Gestión)**: leer la sección Fase 8 de
+`fases/FASE-04-AL-09-MODULOS.md`, lanzar los 3 agentes de revisión sobre
+`src/pages/admin/Dashboard.jsx`, `Alertas.jsx`, `Auditoria.jsx`, `Usuarios.jsx`,
+`Top10.jsx`, `AnalisisABC.jsx`, `Reorden.jsx`, `Conteo.jsx`; auditar la RPC
+`fn_dashboard_kpis()` y las vistas. Ya existe `admin-fase8.spec.js` — auditar
+vs criterios sin duplicar; arreglar lo encontrado; commit `qa(fase8)` + merge.

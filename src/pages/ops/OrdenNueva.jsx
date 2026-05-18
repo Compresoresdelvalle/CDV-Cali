@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -27,6 +27,7 @@ export default function OrdenNueva() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const savingRef = useRef(false);
 
   useEffect(() => {
     const cargarTecnicos = async () => {
@@ -107,13 +108,15 @@ export default function OrdenNueva() {
       setError("Cliente, equipo y técnico son obligatorios");
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError("");
     try {
-      const costo = parseFloat(costoManoObra) || 0;
+      const costo = Math.max(0, parseFloat(costoManoObra) || 0);
       // La sede de la orden es la del técnico asignado (no la del Admin que crea)
       const tecnicoSeleccionado = tecnicos.find((t) => t.id === tecnicoId);
-      const sedeOrden = tecnicoSeleccionado?.sede_id ?? perfil.sede_id;
+      const sedeOrden = tecnicoSeleccionado?.sede_id ?? perfil?.sede_id;
       if (!sedeOrden) {
         setError(
           "No se pudo determinar la sede. Revisa que tu usuario o el técnico tenga sede asignada.",
@@ -157,6 +160,7 @@ export default function OrdenNueva() {
       setError(safeError(err, "Error al crear la orden"));
     } finally {
       setSaving(false);
+      savingRef.current = false;
     }
   };
 
