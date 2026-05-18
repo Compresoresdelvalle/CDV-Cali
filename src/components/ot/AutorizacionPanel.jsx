@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
 import FeedbackBanners from "../ui/FeedbackBanners";
@@ -35,6 +35,7 @@ export default function AutorizacionPanel({
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [okMsg, setOkMsg] = useState("");
+  const savingRef = useRef(false);
 
   useEffect(() => {
     setEstado(estadoAutorizacion ?? "pendiente");
@@ -66,6 +67,8 @@ export default function AutorizacionPanel({
     } else {
       payload.valor_revision = null;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       const { error } = await supabase
@@ -79,6 +82,7 @@ export default function AutorizacionPanel({
       setErrorMsg(safeError(err, "Error al guardar"));
     } finally {
       setSaving(false);
+      savingRef.current = false;
     }
   };
 
