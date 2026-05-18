@@ -308,6 +308,42 @@ descuentan/reponen stock con `FOR UPDATE`; el equipo del cliente nunca entra al
 inventario (es texto en la OT, no un producto). Stress SQL del fix OK; E2E
 `fase10-ot.spec.js` 11/11 + `fase10-chaos.spec.js` 7/7; `eslint` + `build` limpios.
 
+## Fase 11 — Ajustes Cotizaciones
+
+La edición de cotizaciones escribía directo a las tablas (`UPDATE cotizaciones`
+
+- `DELETE/INSERT detalle`) sin transacción y con precios del cliente. Se
+  reemplazó por un RPC server-authoritative (`fn_editar_cotizacion`, mismo patrón
+  que ventas). Un stress test del RPC reveló además que `cliente_nombre` es
+  `NOT NULL` pero ningún formulario ni RPC lo exigía. **Hallazgos resueltos**
+  (4 P1 + 1 P2).
+
+| ID     | Sev | Área              | Repro / Descripción                                                                                                                                                                             | Fix                                                                                                                                                                                               | Estado      |
+| ------ | --- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| F4-08  | P1  | Transaccionalidad | `CotizacionEditar.guardarCambios` hacía `UPDATE cotizaciones` + `DELETE`/`INSERT detalle` NO transaccional → si el INSERT falla, la cotización queda sin ítems. (Diferido desde Fase 4.)        | RPC `fn_editar_cotizacion`: cotización + detalle + cuentas en una sola transacción. Migración `20260518000010`.                                                                                   | ✅ Resuelto |
+| F11-01 | P1  | Seguridad         | `precio_unitario`/`subtotal`/`total` venían del cliente sin recalcular en el servidor → se podía editar una cotización a $0 (misma clase que F4-05 en ventas).                                  | `fn_editar_cotizacion` recalcula precios desde `productos.precio_venta`; el cliente solo envía `{producto_id, cantidad}`.                                                                         | ✅ Resuelto |
+| F11-02 | P1  | RBAC / estado     | Se podía editar una cotización `aprobada` o ya convertida en venta vía URL directa, sin validación server-side.                                                                                 | RPC valida estado editable (`borrador`/`enviada`/`rechazada`), `venta_id IS NULL` y sede; el frontend agrega pantalla `noEditable`.                                                               | ✅ Resuelto |
+| F11-03 | P1  | Bug / datos       | `cotizaciones.cliente_nombre` es `NOT NULL` pero ni los formularios ni los RPCs lo exigían → crash `23502` al guardar con nombre vacío. Detectado por el stress test de `fn_editar_cotizacion`. | Validación server-side (nombre no vacío + `TRIM`) en `fn_editar_cotizacion` y `fn_registrar_cotizacion` (migraciones `000011`/`000012`) + pre-validación en `CotizacionNueva`/`CotizacionEditar`. | ✅ Resuelto |
+| F11-04 | P2  | Doble-submit      | `guardarCotizacion`/`guardarCambios`/`convertirEnVenta` sin guard síncrono; `CotizacionHistorial` con race de paginación al cambiar de filtro rápido.                                           | `useRef` guards en las 4 páginas de cotización; token de secuencia (`reqIdRef`) en el listado; banners de error en carga.                                                                         | ✅ Resuelto |
+
+**Verificado OK:** stress SQL de `fn_editar_cotizacion` 6/6 (recálculo
+server-side; bloqueo de `aprobada`/convertida/nombre vacío/sin ítems/descuento
+
+> 100). El workflow F11.5 (`borrador → enviada → aprobada → venta`) es
+> server-authoritative vía `fn_cambiar_estado_cotizacion`; solo una cotización
+> `aprobada` muestra "Convertir en venta" (verificado en `CotizacionDetalle` y en
+> las filas de `CotizacionHistorial`). E2E: `fase11-cotizaciones` 8/8,
+> `fase11-chaos` 8/8, `fase11-5-workflow` 5/5, `fase11-flujo-integrado` 12/12.
+> `eslint` + `build` limpios.
+
+**Tests obsoletos corregidos** (no eran bugs de la app): `T5/T6/T7/T11` de
+`fase11-flujo-integrado` predataban la regla F11.5 (intentaban convertir un
+`borrador` directo) → se añadió el helper `aprobarCotizacion`. `W5` de
+`fase11-5-workflow` usaba un `count()` puntual que corría una carrera con el
+intercambio de ruta SPA (capturaba los botones "Convertir en venta" del
+historial) → se cambió a aserción web-first `toHaveCount(0)` tras esperar el
+detalle cargado.
+
 ## Backlog (P2 sin resolver)
 
 - **F2-04 (P2, seguridad):** el login con PIN de 4 dígitos no tiene rate-limiting ni bloqueo por intentos fallidos del lado del cliente. Brute-force teórico (10.000 combos). App interna de 6 usuarios; Supabase Auth tiene rate-limiting de plataforma.

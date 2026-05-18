@@ -30,6 +30,8 @@ export default function CotizacionEditar() {
   const [loading, setLoading] = useState(true);
   const [numero, setNumero] = useState(null);
   const [estadoOriginal, setEstadoOriginal] = useState(null);
+  const [noEditable, setNoEditable] = useState(null); // mensaje si no se puede editar
+  const guardandoRef = useRef(false);
 
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState([]);
@@ -63,7 +65,7 @@ export default function CotizacionEditar() {
             supabase
               .from("detalle_cotizacion")
               .select(
-                `*, producto:producto_id(id, nombre, referencia, unidad_medida)`,
+                `*, producto:producto_id(id, nombre, referencia, unidad_medida, precio_venta)`,
               )
               .eq("cotizacion_id", id),
           ]);
@@ -73,6 +75,14 @@ export default function CotizacionEditar() {
 
         setNumero(cot.numero);
         setEstadoOriginal(cot.estado);
+        // Solo editable en borrador/enviada/rechazada y si no fue convertida.
+        if (cot.venta_id) {
+          setNoEditable("Esta cotización ya fue convertida en venta.");
+        } else if (!["borrador", "enviada", "rechazada"].includes(cot.estado)) {
+          setNoEditable(
+            `No se puede editar una cotización en estado "${cot.estado}".`,
+          );
+        }
         setClienteNombre(cot.cliente_nombre ?? "");
         setClienteNit(cot.cliente_nit ?? "");
         setClienteEmail(cot.cliente_email ?? "");
@@ -96,7 +106,9 @@ export default function CotizacionEditar() {
             nombre: i.producto?.nombre ?? "—",
             referencia: i.producto?.referencia ?? "",
             unidad: i.producto?.unidad_medida ?? "",
-            precio_unitario: i.precio_unitario,
+            // Precio SIEMPRE del catálogo (server-authoritative); el RPC lo
+            // recalcula así, mostrar el del catálogo evita desincronía.
+            precio_unitario: i.producto?.precio_venta ?? i.precio_unitario,
             cantidad: i.cantidad,
           })),
         );
@@ -194,20 +206,12 @@ export default function CotizacionEditar() {
 
   const setCantidadDirecta = (productoId, valor) => {
     const n = parseInt(valor, 10);
-    if (isNaN(n) || n < 0) return;
-    setCarrito((prev) =>
-      prev
-        .map((i) => (i.producto_id !== productoId ? i : { ...i, cantidad: n }))
-        .filter((i) => i.cantidad > 0),
-    );
-  };
-
-  const setPrecioDirecto = (productoId, valor) => {
-    const n = parseFloat(valor);
-    if (isNaN(n) || n < 0) return;
+    if (isNaN(n)) return;
+    // Clamp [1, 100000]; teclear 0 NO elimina la fila (eso es la X).
+    const clamped = Math.min(100000, Math.max(1, n));
     setCarrito((prev) =>
       prev.map((i) =>
-        i.producto_id !== productoId ? i : { ...i, precio_unitario: n },
+        i.producto_id !== productoId ? i : { ...i, cantidad: clamped },
       ),
     );
   };
@@ -229,9 +233,12 @@ export default function CotizacionEditar() {
   const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
   const guardarCambios = async () => {
-    if (guardando) return; // anti double-click
     if (carrito.length === 0) return;
     setError(null);
+    if (!clienteNombre.trim()) {
+      setError("El nombre del cliente es obligatorio");
+      return;
+    }
     if (clienteEmail && !EMAIL_REGEX.test(clienteEmail)) {
       setError("Email inválido");
       return;
@@ -240,69 +247,43 @@ export default function CotizacionEditar() {
       setError("Email demasiado largo (máx 254 caracteres)");
       return;
     }
+    // Guard síncrono anti doble-submit.
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
     const cuentasLimpias = cuentasIds.filter(
       (cid) => Number.isInteger(cid) && cid > 0,
     );
     setGuardando(true);
     try {
-      const { error: updErr } = await supabase
-        .from("cotizaciones")
-        .update({
-          cliente_nombre: clienteNombre || null,
-          cliente_nit: clienteNit || null,
-          cliente_email: clienteEmail || null,
-          cliente_telefono: clienteTelefono || null,
-          descuento_pct: descuentoPct,
-          vigencia_dias: vigenciaDias,
-          iva_pct: ivaPct,
-          observaciones: observaciones || null,
-          condiciones_pago: condicionesPago || null,
-          tiempo_entrega_nota: tiempoEntregaNota || null,
-          subtotal,
-          total,
-          estado:
-            estadoOriginal === "borrador" ||
-            estadoOriginal === "enviada" ||
-            estadoOriginal === "rechazada"
-              ? "borrador"
-              : estadoOriginal,
-        })
-        .eq("id", id);
-      if (updErr) throw new Error(updErr.message);
-
-      // Sincronizar cuentas bancarias asociadas vía RPC atómica (audit fix)
-      const { error: syncErr } = await supabase.rpc(
-        "fn_sync_cotizacion_cuentas",
-        {
-          p_cotizacion_id: id,
-          p_cuentas_ids: cuentasLimpias,
-        },
-      );
-      if (syncErr) throw new Error(syncErr.message);
-
-      const { error: delErr } = await supabase
-        .from("detalle_cotizacion")
-        .delete()
-        .eq("cotizacion_id", id);
-      if (delErr) throw new Error(delErr.message);
-
-      const detalles = carrito.map((i) => ({
-        cotizacion_id: id,
-        producto_id: i.producto_id,
-        cantidad: i.cantidad,
-        precio_unitario: i.precio_unitario,
-        subtotal: i.cantidad * i.precio_unitario,
-      }));
-      const { error: insErr } = await supabase
-        .from("detalle_cotizacion")
-        .insert(detalles);
-      if (insErr) throw new Error(insErr.message);
+      // RPC server-authoritative: recalcula precios desde el catálogo, valida
+      // el estado editable, y hace cotización + detalle + cuentas en una sola
+      // transacción (cierra F4-08, F11-01 y F11-02).
+      const { error: rpcErr } = await supabase.rpc("fn_editar_cotizacion", {
+        p_cotizacion_id: id,
+        p_cliente_nombre: clienteNombre || null,
+        p_cliente_nit: clienteNit || null,
+        p_cliente_email: clienteEmail || null,
+        p_cliente_telefono: clienteTelefono || null,
+        p_descuento_pct: descuentoPct,
+        p_vigencia_dias: vigenciaDias,
+        p_iva_pct: ivaPct,
+        p_observaciones: observaciones || null,
+        p_condiciones_pago: condicionesPago || null,
+        p_tiempo_entrega_nota: tiempoEntregaNota || null,
+        p_items: carrito.map((i) => ({
+          producto_id: i.producto_id,
+          cantidad: i.cantidad,
+        })),
+        p_cuentas_ids: cuentasLimpias,
+      });
+      if (rpcErr) throw new Error(rpcErr.message);
 
       navigate(`/ops/cotizaciones/${id}`);
     } catch (e) {
       setError(safeError(e, "Error al guardar los cambios"));
     } finally {
       setGuardando(false);
+      guardandoRef.current = false;
     }
   };
 
@@ -339,6 +320,31 @@ export default function CotizacionEditar() {
         <p className="text-sm" style={{ color: "hsl(var(--destructive))" }}>
           {error}
         </p>
+      </div>
+    );
+  }
+
+  // F11-02: una cotización aprobada/vencida o ya convertida no es editable.
+  if (noEditable) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center gap-4 min-h-[60vh] p-6 text-center"
+        style={{ backgroundColor: "hsl(var(--background))" }}
+      >
+        <p className="text-sm" style={{ color: "hsl(var(--foreground))" }}>
+          {noEditable}
+        </p>
+        <button
+          onClick={() => navigate(`/ops/cotizaciones/${id}`)}
+          className="h-10 px-4 rounded-lg border text-sm font-medium cursor-pointer"
+          style={{
+            borderColor: "hsl(var(--border))",
+            color: "hsl(var(--muted-foreground))",
+            backgroundColor: "hsl(var(--card))",
+          }}
+        >
+          ← Volver a la cotización
+        </button>
       </div>
     );
   }
@@ -573,27 +579,18 @@ export default function CotizacionEditar() {
                       +
                     </button>
                   </div>
-                  <div className="flex-1 relative">
-                    <span
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-xs"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      $
-                    </span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={item.precio_unitario}
-                      onChange={(e) =>
-                        setPrecioDirecto(item.producto_id, e.target.value)
-                      }
-                      className="w-full pl-6 pr-3 py-1.5 rounded-lg text-sm border text-right focus:outline-none"
-                      style={{
-                        borderColor: "hsl(var(--border))",
-                        color: "hsl(var(--foreground))",
-                        backgroundColor: "hsl(var(--background))",
-                      }}
-                    />
+                  {/* Precio del catálogo — solo lectura (el RPC lo recalcula;
+                      la negociación se hace con el descuento %). */}
+                  <div
+                    className="flex-1 relative text-right pr-3 py-1.5 rounded-lg text-sm border tabular-nums"
+                    style={{
+                      borderColor: "hsl(var(--border))",
+                      color: "hsl(var(--muted-foreground))",
+                      backgroundColor: "hsl(var(--muted) / 0.3)",
+                    }}
+                    title="Precio del catálogo (no editable)"
+                  >
+                    {formatCOP(item.precio_unitario)}
                   </div>
                   <p
                     className="text-sm font-semibold w-20 text-right tabular-nums"

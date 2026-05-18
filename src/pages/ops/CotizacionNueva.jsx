@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -41,6 +41,7 @@ export default function CotizacionNueva() {
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
+  const guardandoRef = useRef(false);
 
   // Defaults desde parámetros del sistema (Fase 9)
   useEffect(() => {
@@ -177,20 +178,12 @@ export default function CotizacionNueva() {
 
   const setCantidadDirecta = (productoId, valor) => {
     const n = parseInt(valor, 10);
-    if (isNaN(n) || n < 0) return;
-    setCarrito((prev) =>
-      prev
-        .map((i) => (i.producto_id !== productoId ? i : { ...i, cantidad: n }))
-        .filter((i) => i.cantidad > 0),
-    );
-  };
-
-  const setPrecioDirecto = (productoId, valor) => {
-    const n = parseFloat(valor);
-    if (isNaN(n) || n < 0) return;
+    if (isNaN(n)) return;
+    // Clamp [1, 100000]; teclear 0 NO elimina la fila (eso es la X).
+    const clamped = Math.min(100000, Math.max(1, n));
     setCarrito((prev) =>
       prev.map((i) =>
-        i.producto_id !== productoId ? i : { ...i, precio_unitario: n },
+        i.producto_id !== productoId ? i : { ...i, cantidad: clamped },
       ),
     );
   };
@@ -213,11 +206,14 @@ export default function CotizacionNueva() {
   const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
   const guardarCotizacion = async () => {
-    if (guardando) return; // anti double-click
     if (carrito.length === 0) return;
     setError(null);
     if (!perfil?.sede_id) {
       setError("Tu usuario no tiene sede asignada. Contacta al Admin.");
+      return;
+    }
+    if (!clienteNombre.trim()) {
+      setError("El nombre del cliente es obligatorio");
       return;
     }
     if (clienteEmail && !EMAIL_REGEX.test(clienteEmail)) {
@@ -228,10 +224,13 @@ export default function CotizacionNueva() {
       setError("Email demasiado largo (máx 254 caracteres)");
       return;
     }
+    // Guard síncrono anti doble-submit (el `disabled` no es inmediato).
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
     const cuentasLimpias = cuentasIds.filter(
       (id) => Number.isInteger(id) && id > 0,
     );
-    setGuardando(true); // ANTES del await — cierra ventana de doble click
+    setGuardando(true);
     try {
       const { data: rpcData, error: rpcErr } = await supabase.rpc(
         "fn_registrar_cotizacion",
@@ -288,6 +287,7 @@ export default function CotizacionNueva() {
       setError(safeError(e, "Error al guardar la cotización"));
     } finally {
       setGuardando(false);
+      guardandoRef.current = false;
     }
   };
 
@@ -516,27 +516,18 @@ export default function CotizacionNueva() {
                       +
                     </button>
                   </div>
-                  <div className="flex-1 relative">
-                    <span
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-xs"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      $
-                    </span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={item.precio_unitario}
-                      onChange={(e) =>
-                        setPrecioDirecto(item.producto_id, e.target.value)
-                      }
-                      className="w-full pl-6 pr-3 py-1.5 rounded-lg text-sm border text-right focus:outline-none"
-                      style={{
-                        borderColor: "hsl(var(--border))",
-                        color: "hsl(var(--foreground))",
-                        backgroundColor: "hsl(var(--background))",
-                      }}
-                    />
+                  {/* Precio del catálogo — solo lectura (el RPC lo recalcula;
+                      la negociación se hace con el descuento %). */}
+                  <div
+                    className="flex-1 relative text-right pr-3 py-1.5 rounded-lg text-sm border tabular-nums"
+                    style={{
+                      borderColor: "hsl(var(--border))",
+                      color: "hsl(var(--muted-foreground))",
+                      backgroundColor: "hsl(var(--muted) / 0.3)",
+                    }}
+                    title="Precio del catálogo (no editable)"
+                  >
+                    {formatCOP(item.precio_unitario)}
                   </div>
                   <p
                     className="text-sm font-semibold w-20 text-right tabular-nums"
