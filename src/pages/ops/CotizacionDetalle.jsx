@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
@@ -21,37 +21,43 @@ export default function CotizacionDetalle() {
   const [loading, setLoading] = useState(true);
   const [convirtiendo, setConvirtiendo] = useState(false);
   const [error, setError] = useState(null);
+  const convirtiendoRef = useRef(false);
 
   const cargar = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const [{ data: cot }, { data: det }, { data: cuentas }] =
-        await Promise.all([
-          supabase
-            .from("cotizaciones")
-            .select(
-              `*, vendedor:vendedor_id(nombre), ot:ot_id(id, numero, estado), venta:venta_id(id, numero)`,
-            )
-            .eq("id", id)
-            .single(),
-          supabase
-            .from("detalle_cotizacion")
-            .select(
-              `*, producto:producto_id(nombre, referencia, unidad_medida)`,
-            )
-            .eq("cotizacion_id", id),
-          supabase
-            .from("cotizacion_cuentas_bancarias")
-            .select(
-              "cuenta:cuenta_id(id, banco, tipo, numero, titular, marca_iva)",
-            )
-            .eq("cotizacion_id", id),
-        ]);
-      setCotizacion(cot);
-      setItems(det ?? []);
-      setCuentasPDF((cuentas ?? []).map((r) => r.cuenta).filter(Boolean));
-    } catch {
-      // ignore
+      const [cotRes, detRes, cuentasRes] = await Promise.all([
+        supabase
+          .from("cotizaciones")
+          .select(
+            `*, vendedor:vendedor_id(nombre), ot:ot_id(id, numero, estado), venta:venta_id(id, numero)`,
+          )
+          .eq("id", id)
+          .single(),
+        supabase
+          .from("detalle_cotizacion")
+          .select(`*, producto:producto_id(nombre, referencia, unidad_medida)`)
+          .eq("cotizacion_id", id),
+        supabase
+          .from("cotizacion_cuentas_bancarias")
+          .select(
+            "cuenta:cuenta_id(id, banco, tipo, numero, titular, marca_iva)",
+          )
+          .eq("cotizacion_id", id),
+      ]);
+      // El error de la cotización es bloqueante; los secundarios solo degradan.
+      if (cotRes.error) throw cotRes.error;
+      setCotizacion(cotRes.data);
+      setItems(detRes.data ?? []);
+      setCuentasPDF(
+        (cuentasRes.data ?? []).map((r) => r.cuenta).filter(Boolean),
+      );
+      if (detRes.error || cuentasRes.error) {
+        setError("Algunos datos no se pudieron cargar completamente.");
+      }
+    } catch (e) {
+      setError(safeError(e, "Error al cargar la cotización"));
     } finally {
       setLoading(false);
     }
@@ -78,14 +84,20 @@ export default function CotizacionDetalle() {
   };
 
   const convertirEnVenta = async () => {
-    if (convirtiendo) return; // anti double-click
+    // Guard síncrono: el `await confirm` abre una ventana donde el `disabled`
+    // de React aún no aplica — un doble-tap dispararía dos conversiones.
+    if (convirtiendoRef.current) return;
+    convirtiendoRef.current = true;
     const ok = await confirm({
       titulo: "Convertir cotización en venta",
       mensaje: `Se generará una venta a partir de la cotización #${cotizacion?.numero ?? "?"} por ${formatCOP(cotizacion?.total ?? 0)}. Esta acción descuenta stock del inventario y NO se puede deshacer fácilmente.`,
       confirmLabel: "Sí, convertir",
       danger: true,
     });
-    if (!ok) return;
+    if (!ok) {
+      convirtiendoRef.current = false;
+      return;
+    }
     setConvirtiendo(true);
     setError(null);
     try {
@@ -99,6 +111,7 @@ export default function CotizacionDetalle() {
       setError(safeError(e, "Error al convertir la cotización"));
     } finally {
       setConvirtiendo(false);
+      convirtiendoRef.current = false;
     }
   };
 

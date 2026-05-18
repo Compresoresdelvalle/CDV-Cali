@@ -193,10 +193,20 @@ test.describe("Fase 11.5 — Workflow Cotización", () => {
   }) => {
     await crearCotSuelta(page, "W5");
 
-    // En borrador NO debe haber botón convertir
-    const btnConvertir = page.getByRole("button", {
-      name: /convertir.*venta|convertir en venta|→ venta/i,
+    // Esperar a que el detalle esté cargado. crearCotSuelta puede devolver la
+    // URL del detalle antes de que React intercambie el DOM del historial — y
+    // el historial SÍ tiene botones "Convertir en venta" en filas aprobadas.
+    // Sin esta espera, un count() puntual capturaría el DOM del historial.
+    await expect(page.getByRole("heading", { name: /borrador/i })).toBeVisible({
+      timeout: 8000,
     });
-    expect(await btnConvertir.count()).toBe(0);
+
+    // En el detalle de un borrador NO debe haber botón convertir. toHaveCount
+    // reintenta hasta que la página se estabiliza (web-first assertion).
+    await expect(
+      page.getByRole("button", {
+        name: /convertir.*venta|convertir en venta|→ venta/i,
+      }),
+    ).toHaveCount(0);
   });
 });

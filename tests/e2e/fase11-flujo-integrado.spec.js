@@ -142,6 +142,41 @@ async function crearCotizacionSuelta(page, suffix) {
   return page.url();
 }
 
+/**
+ * Lleva una cotización borrador → enviada → aprobada vía el panel de estado
+ * (Fase 11.5). El botón "Convertir en venta" SOLO aparece en estado aprobada.
+ * Al terminar, deja la página en el detalle con el botón convertir visible.
+ */
+async function aprobarCotizacion(page, cotUrl) {
+  await page.goto(cotUrl);
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(800);
+
+  // borrador → enviada
+  await page.getByRole("button", { name: /marcar como enviada/i }).click();
+  let dlg = page.getByRole("alertdialog");
+  await dlg.waitFor({ state: "visible", timeout: 5000 });
+  await dlg
+    .getByRole("button", { name: /marcar enviada|confirmar|sí/i })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("button", { name: /cliente aprobó/i }),
+  ).toBeVisible({ timeout: 10000 });
+
+  // enviada → aprobada
+  await page.getByRole("button", { name: /cliente aprobó/i }).click();
+  dlg = page.getByRole("alertdialog");
+  await dlg.waitFor({ state: "visible", timeout: 5000 });
+  await dlg
+    .getByRole("button", { name: /aprobar|confirmar|sí/i })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("button", { name: /convertir en venta/i }),
+  ).toBeVisible({ timeout: 10000 });
+}
+
 test.describe("Fase 11 — Flujo integrado OT ↔ Cotización ↔ Venta", () => {
   test.setTimeout(90000);
 
@@ -219,7 +254,7 @@ test.describe("Fase 11 — Flujo integrado OT ↔ Cotización ↔ Venta", () => 
     await crearCotizacionSuelta(page, "T2");
 
     // Paso 2: crear OT
-    const otUrl = await crearOTMinima(page, "T2", "50000");
+    await crearOTMinima(page, "T2", "50000");
 
     // Paso 3: en OT abrir "Asociar cotización existente"
     await page
@@ -258,7 +293,7 @@ test.describe("Fase 11 — Flujo integrado OT ↔ Cotización ↔ Venta", () => 
   }) => {
     // Setup como T2
     await crearCotizacionSuelta(page, "T3");
-    const otUrl = await crearOTMinima(page, "T3", "50000");
+    await crearOTMinima(page, "T3", "50000");
 
     await page
       .getByRole("button", { name: /asociar cotizaci.*existente/i })
@@ -319,7 +354,7 @@ test.describe("Fase 11 — Flujo integrado OT ↔ Cotización ↔ Venta", () => 
     page,
   }) => {
     await crearCotizacionSuelta(page, "T4");
-    const otUrl = await crearOTMinima(page, "T4", "50000");
+    await crearOTMinima(page, "T4", "50000");
 
     // Asociar cotización
     await page
@@ -395,6 +430,8 @@ test.describe("Fase 11 — Flujo integrado OT ↔ Cotización ↔ Venta", () => 
     page,
   }) => {
     const cotUrl = await crearCotizacionSuelta(page, "T6");
+    // F11.5: solo una cotización aprobada se convierte en venta.
+    await aprobarCotizacion(page, cotUrl);
 
     // Botón "Convertir en venta"
     const btnConvertir = page.getByRole("button", {
@@ -437,6 +474,8 @@ test.describe("Fase 11 — Flujo integrado OT ↔ Cotización ↔ Venta", () => 
     page,
   }) => {
     const cotUrl = await crearCotizacionSuelta(page, "T7");
+    // F11.5: solo una cotización aprobada se convierte en venta.
+    await aprobarCotizacion(page, cotUrl);
 
     await page.getByRole("button", { name: /convertir en venta/i }).click();
     const dialog = page.getByRole("alertdialog");
@@ -517,7 +556,7 @@ test.describe("Fase 11 — Flujo integrado OT ↔ Cotización ↔ Venta", () => 
   }) => {
     // Setup: cot suelta, OT, asociar, desvincular
     const cotUrl = await crearCotizacionSuelta(page, "T11");
-    const otUrl = await crearOTMinima(page, "T11", "50000");
+    await crearOTMinima(page, "T11", "50000");
 
     await page
       .getByRole("button", { name: /asociar cotizaci.*existente/i })
@@ -560,10 +599,8 @@ test.describe("Fase 11 — Flujo integrado OT ↔ Cotización ↔ Venta", () => 
       page.getByText(/eliminad.*reintegrad|desvinculada/i).first(),
     ).toBeVisible({ timeout: 8000 });
 
-    // Ir a la cotización y convertir
-    await page.goto(cotUrl);
-    await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1500);
+    // Ir a la cotización, aprobarla (F11.5) y convertir
+    await aprobarCotizacion(page, cotUrl);
 
     await page.getByRole("button", { name: /convertir en venta/i }).click();
     const dlg2 = page.getByRole("alertdialog");
@@ -585,6 +622,8 @@ test.describe("Fase 11 — Flujo integrado OT ↔ Cotización ↔ Venta", () => 
     page,
   }) => {
     const cotUrl = await crearCotizacionSuelta(page, "T5");
+    // F11.5: solo una cotización aprobada se convierte en venta.
+    await aprobarCotizacion(page, cotUrl);
     const btn = page.getByRole("button", { name: /convertir en venta/i });
     await btn.waitFor({ state: "visible", timeout: 5000 });
     await btn.click();
