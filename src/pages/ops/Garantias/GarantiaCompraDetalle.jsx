@@ -24,7 +24,11 @@ export default function GarantiaCompraDetalle() {
     setLoading(true);
     setErrorMsg("");
     try {
-      const [{ data: g }, { data: d }, { data: n }] = await Promise.all([
+      const [
+        { data: g, error: gErr },
+        { data: d, error: dErr },
+        { data: n, error: nErr },
+      ] = await Promise.all([
         supabase
           .from("garantias_compra")
           .select(
@@ -46,6 +50,9 @@ export default function GarantiaCompraDetalle() {
           .eq("garantia_compra_id", id)
           .maybeSingle(),
       ]);
+      if (gErr) throw gErr;
+      if (dErr) throw dErr;
+      if (nErr) throw nErr;
       setGarantia(g);
       setDetalles(d ?? []);
       setNotaCredito(n);

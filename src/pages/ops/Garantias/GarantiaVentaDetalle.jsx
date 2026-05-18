@@ -19,25 +19,29 @@ export default function GarantiaVentaDetalle() {
   useEffect(() => {
     const cargar = async () => {
       setLoading(true);
+      setErrorMsg("");
       try {
-        const [{ data: gar }, { data: det }] = await Promise.all([
-          supabase
-            .from("garantias_venta")
-            .select(
-              `id, numero, fecha, resolucion, estado, motivo, monto_devuelto,
+        const [{ data: gar, error: garErr }, { data: det, error: detErr }] =
+          await Promise.all([
+            supabase
+              .from("garantias_venta")
+              .select(
+                `id, numero, fecha, resolucion, estado, motivo, monto_devuelto,
                venta:venta_id(id, numero, cliente_nombre, fecha, total),
                orden:orden_servicio_id(id, numero, cliente_nombre, fecha_entrega, total),
                ot_reparacion:ot_reparacion_id(id, numero, estado, tipo)`,
-            )
-            .eq("id", id)
-            .single(),
-          supabase
-            .from("detalle_garantia_venta")
-            .select(
-              `id, cantidad, producto:producto_id(nombre, codigo_interno, referencia)`,
-            )
-            .eq("garantia_id", id),
-        ]);
+              )
+              .eq("id", id)
+              .single(),
+            supabase
+              .from("detalle_garantia_venta")
+              .select(
+                `id, cantidad, producto:producto_id(nombre, codigo_interno, referencia)`,
+              )
+              .eq("garantia_id", id),
+          ]);
+        if (garErr) throw garErr;
+        if (detErr) throw detErr;
         setG(gar);
         setDetalles(det ?? []);
       } catch (err) {

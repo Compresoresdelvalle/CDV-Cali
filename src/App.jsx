@@ -190,7 +190,7 @@ export default function App() {
           <Route
             path="garantias"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor", "Tecnico"]}>
                 <GarantiasIndex />
               </RoleGuard>
             }
@@ -206,7 +206,7 @@ export default function App() {
           <Route
             path="garantias/venta/:id"
             element={
-              <RoleGuard roles={["Admin", "Vendedor"]}>
+              <RoleGuard roles={["Admin", "Vendedor", "Tecnico"]}>
                 <GarantiaVentaDetalle />
               </RoleGuard>
             }

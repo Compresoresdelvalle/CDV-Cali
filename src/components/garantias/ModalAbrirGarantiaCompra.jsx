@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
 
@@ -27,6 +27,7 @@ export default function ModalAbrirGarantiaCompra({
   const [motivo, setMotivo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const guardandoRef = useRef(false);
 
   const toggleItem = (it) => {
     setSel((prev) =>
@@ -55,6 +56,9 @@ export default function ModalAbrirGarantiaCompra({
       setErrorMsg("Selecciona al menos un item para abrir la garantía");
       return;
     }
+    // Guard síncrono anti doble-submit (el `disabled` no aplica de inmediato).
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
     setSubmitting(true);
     try {
       const payload = {
@@ -76,6 +80,7 @@ export default function ModalAbrirGarantiaCompra({
       setErrorMsg(safeError(err, "Error al abrir garantía"));
     } finally {
       setSubmitting(false);
+      guardandoRef.current = false;
     }
   };
 
