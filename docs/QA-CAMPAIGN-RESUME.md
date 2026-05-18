@@ -16,20 +16,21 @@ lo que se encuentra en el momento**.
 
 ## Por dónde vamos
 
-| Fases                           | Estado                               |
-| ------------------------------- | ------------------------------------ |
-| 0 … 11                          | ✅ **Cerradas** y mergeadas a `main` |
-| **12 — Ajustes Inv/Compras/Tr** | ⏭️ **SIGUIENTE**                     |
-| 13 → 15                         | ⏳ Pendientes                        |
+| Fases              | Estado                               |
+| ------------------ | ------------------------------------ |
+| 0 … 12             | ✅ **Cerradas** y mergeadas a `main` |
+| **13 — Garantías** | ⏭️ **SIGUIENTE**                     |
+| 14 → 15            | ⏳ Pendientes                        |
 
-Fase 11 cerrada: 4 P1 + 1 P2 resueltos. La edición de cotizaciones pasó a un
-RPC server-authoritative (`fn_editar_cotizacion`) que cierra F4-08
-(transaccionalidad), F11-01 (precios del cliente) y F11-02 (editar cotización
-no editable). Un stress test reveló F11-03 (`cliente_nombre NOT NULL` no
-exigido → crash `23502`), corregido en los RPC de crear/editar + formularios.
-Stress SQL 6/6; E2E `fase11-cotizaciones` 8/8, `fase11-chaos` 8/8,
-`fase11-5-workflow` 5/5, `fase11-flujo-integrado` 12/12 (4 tests obsoletos +
-1 flaky corregidos).
+Fase 12 cerrada: 1 P1 + 3 P2 resueltos. F12-01 (RBAC): la policy
+`compras_update` no restringía rol → Vendedor/Técnico de la sede podía marcar
+recibida una compra; restringida a Admin+Bodeguero. F12-02: race de auditoría
+en `trg_compra_sumar_stock` con producto nuevo. F12-03: `fn_alertas_rotacion`
+sin checks de auth/rol. F12-04: keys React no únicas en `Alertas.jsx`. El "P0
+esquema F12 inexistente" de los agentes fue falso positivo (el esquema sí está
+aplicado). Stress SQL 5/5; E2E `fase12-*` 7/7. **Diferido:** §12.12
+(organización física stand/piso/espacio) nunca se implementó — es feature, no
+bug.
 
 ## Plantilla por fase (seguir IGUAL en cada una)
 
@@ -60,12 +61,12 @@ Stress SQL 6/6; E2E `fase11-cotizaciones` 8/8, `fase11-chaos` 8/8,
 
 - **Fase 16:** polish de a11y/táctil de varias pantallas (botones 48px, focus rings, roles ARIA).
 - **Fase 17:** F0-06 (CSP en `netlify.toml`), F4-09 (Edge Functions `registrar-venta`/`convertir-cotizacion` posible código muerto + CORS `*`).
+- **Feature pendiente (no QA):** §12.12 — organización física `stand`/`piso`/`espacio` en `ubicaciones` nunca se construyó (columnas inexistentes). Es feature, queda como decisión de producto.
 - **Backlog P2** general: ver sección "Backlog" en `docs/QA-CAMPAIGN-LOG.md` (consolidación de RLS, índices de FK, etc.).
 
 ## Siguiente acción concreta
 
-Arrancar **QA Fase 12 (Ajustes Inventario/Compras/Traspasos)**: leer
-`fases/FASE-12-*.md`, lanzar los agentes de revisión (code/ts/security +
-database) sobre las páginas/stores/RPC de inventario, compras y traspasos.
-Ya hay specs `fase12-*` — auditar vs criterios sin duplicar; arreglar lo
-encontrado; commit `qa(fase12)` + merge.
+Arrancar **QA Fase 13 (Garantías)**: leer `fases/FASE-13-GARANTIAS.md`, lanzar
+los agentes de revisión (code/ts/security + database) sobre las páginas/RPC de
+garantías de venta y de compra. Ya hay spec `fase13-garantias` — auditar vs
+criterios sin duplicar; arreglar lo encontrado; commit `qa(fase13)` + merge.

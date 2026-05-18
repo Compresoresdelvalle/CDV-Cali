@@ -47,7 +47,7 @@ export default function Alertas() {
         supabase
           .from("inventario")
           .select(
-            `cantidad, estado_stock, sede:sede_id(nombre), producto:producto_id(referencia, nombre, stock_minimo)`,
+            `id, cantidad, estado_stock, sede:sede_id(nombre), producto:producto_id(referencia, nombre, stock_minimo)`,
           )
           .in("estado_stock", ["Bajo", "Agotado"])
           .order("estado_stock", { ascending: false })
@@ -203,7 +203,7 @@ export default function Alertas() {
           <ul className="space-y-2" role="list">
             {datos.stock.map((s) => (
               <li
-                key={`${s.producto?.referencia}-${s.sede?.nombre}`}
+                key={s.id}
                 className="rounded-lg border px-4 py-3 flex items-center justify-between gap-3"
                 style={{
                   backgroundColor: "hsl(var(--card))",
