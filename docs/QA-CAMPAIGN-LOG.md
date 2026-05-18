@@ -16,7 +16,7 @@
 | 5    | Compras + Devoluciones               | ✅ Cerrada   | 0 / 6 / 7            | (ver commit qa fase5)  |
 | 6    | Traspasos + Picking                  | ✅ Cerrada   | 0 / 9 / 5            | (ver commit qa fase6)  |
 | 7    | Órdenes + Ensambles + Herramientas   | ✅ Cerrada   | 0 / 7 / 10           | (ver commit qa fase7)  |
-| 8    | Dashboard Admin                      | ⏳ Pendiente | —                    | —                      |
+| 8    | Dashboard Admin                      | ✅ Cerrada   | 0 / 3 / 3            | (ver commit qa fase8)  |
 | 9    | Configuración General                | ⏳ Pendiente | —                    | —                      |
 | 10   | Ajustes OT                           | ⏳ Pendiente | —                    | —                      |
 | 11   | Ajustes Cotizaciones                 | ⏳ Pendiente | —                    | —                      |
@@ -231,6 +231,39 @@ propia sobre RLS, triggers de OT/ensamble y `fn_procesar`/`fn_asociar`.
 - **`cambiarEstado` con UPDATE directo "peligroso"** — respaldado por `trg_orden_validar_transicion` (transiciones) y `trg_orden_validar_anticipo` (autorización/anticipo) server-side.
 
 **Verificado OK:** stress SQL 6/6 con rollback (Vendedor no inserta abono ni herramienta; Técnico no borra abono; UPDATE cruzado de sede / OT entregada → 0 filas; `costo_mano_obra` negativo bloqueado por CHECK); E2E `ordenes.spec.js` 9/9; `eslint` + `build` limpios.
+
+### Fase 8 — Dashboard Admin + Gestión ✅ CERRADA
+
+3 agentes (code/typescript/security) revisaron las 8 páginas del Panel Admin
+(`Dashboard`, `Alertas`, `Auditoria`, `Usuarios`, `Top10`, `AnalisisABC`,
+`Reorden`, `Conteo`) + revisión de RLS y el trigger de `usuarios`.
+**Todos los hallazgos resueltos** (3 P1 + 3 P2).
+
+**Resueltos — P1:**
+
+| ID    | Sev | Área              | Repro / Descripción                                                                                                                                                                                        | Fix                                                                                                                  | Estado      |
+| ----- | --- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------- |
+| F8-01 | P1  | Seguridad / datos | `trg_usuarios_inmutables` hacía `RETURN NEW` inmediato para Admin → un Admin podía poner `activo=false` sobre su propia fila (modal de Usuarios o API) y, si es el único Admin, dejar el panel sin acceso. | Chequeo de auto-desactivación ANTES del early-return de Admin (aplica a todos los roles). Stress: bloqueado OK.      | ✅ Resuelto |
+| F8-02 | P1  | Robustez / UX     | `Usuarios.guardar`: sin validación de nombre (guardaba `""`), sin guard de doble-submit, y el checkbox "activo" no se deshabilitaba para uno mismo.                                                        | Validación de nombre, `useRef` guard, bloqueo de auto-desactivación en el cliente, checkbox deshabilitado para self. | ✅ Resuelto |
+| F8-03 | P1  | Robustez          | `Auditoria`: el `Promise.all` de los selectores (sede/usuario) descartaba errores y no tenía `.catch` (promesa flotante); la paginación no tenía guard de race.                                            | Manejo de errores + `.catch`; token de secuencia (`reqIdRef`) en `cargar`.                                           | ✅ Resuelto |
+
+**Resueltos — P2:**
+
+| ID    | Sev | Área  | Repro / Descripción                                                                                                                                                 | Fix                                                                            | Estado      |
+| ----- | --- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------- |
+| F8-04 | P2  | Crash | `Dashboard`: `k.top5_productos_mes.map` sin `?? []` (crash si el RPC devuelve un valor no-array).                                                                   | `(k.top5_productos_mes ?? []).map(...)`.                                       | ✅ Resuelto |
+| F8-05 | P2  | Fuga  | `Dashboard`: el `setTimeout` del `Promise.race` quedaba colgado si la RPC resolvía antes (refresco cada 60 s).                                                      | Se captura el id del timer y se limpia en `finally`.                           | ✅ Resuelto |
+| F8-06 | P2  | Tests | `admin-fase8.spec.js`: 4 locators mezclaban CSS con la sintaxis `text=` de Playwright (error de parseo); 2 modales se buscaban como `<dialog>/<form>` inexistentes. | Locators corregidos con `.or(getByText(...))` y `getByRole('heading')`. 10/10. | ✅ Resuelto |
+
+**Descartados (falsos positivos / no explotables):**
+
+- **`u_update_self` permite auto-escalar rol/sede** — NO explotable: `trg_usuarios_inmutables` bloquea server-side cualquier cambio de `rol`/`sede_id`/`activo` hecho por un no-Admin. La política RLS sin restricción de columnas es defensa-en-profundidad mejorable, pero el trigger es la barrera efectiva.
+- **`eslint-disable` de la dep `cargar` en Top10/Conteo** — benigno: esas páginas no paginan, `cargar` solo lee estado de filtro ya cubierto.
+- **`new Date(undefined)` → NaN en Alertas** — no alcanzable: la query filtra `fecha_devolucion_esperada` no nula con `.lt(...)`.
+
+**Backlog P2 (documentado, no bloqueante):** `fn_top_productos`/`fn_dashboard_kpis` sin clamp de parámetros (los valores vienen de botones fijos de la UI); `Conteo` sobre-trae filas de `inventario` de todas las sedes y filtra en JS.
+
+**Verificado OK:** stress SQL 2/2 con rollback (Admin no puede auto-desactivarse; sí puede desactivar a otro usuario); E2E `admin-fase8.spec.js` 10/10; `eslint` + `build` limpios; RoleGuard `/admin/*` redirige a los no-Admin.
 
 ## Backlog (P2 sin resolver)
 

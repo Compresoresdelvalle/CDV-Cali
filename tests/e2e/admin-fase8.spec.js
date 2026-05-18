@@ -119,12 +119,13 @@ test.describe("Admin Fase 8", () => {
         .first(),
     ).toBeVisible({ timeout: 12_000 });
 
-    // Debe mostrar tabla, lista vacía o mensaje de vacío — nunca un error de crash
+    // Debe mostrar tabla, lista vacía o mensaje de vacío — nunca un error de crash.
+    // Nota: no se puede mezclar `text=` con selectores CSS en una lista por comas;
+    // se combina el CSS con `.or(getByText(...))`.
     await expect(
       page
-        .locator(
-          'table, ul[role="list"], text=/Sin sugerencias|No hay/i, text=/sugerencias de reorden/i',
-        )
+        .locator('table, ul[role="list"]')
+        .or(page.getByText(/Sin sugerencias|No hay|sugerencias de reorden/i))
         .first(),
     ).toBeVisible({ timeout: 12_000 });
 
@@ -159,7 +160,10 @@ test.describe("Admin Fase 8", () => {
     }
 
     await expect(
-      page.locator('ul[role="list"], table, text=/Sin ventas|No hay/i').first(),
+      page
+        .locator('ul[role="list"], table')
+        .or(page.getByText(/Sin ventas|No hay/i))
+        .first(),
     ).toBeVisible({ timeout: 10_000 });
   });
 
@@ -177,13 +181,22 @@ test.describe("Admin Fase 8", () => {
 
     // Los 3 botones/cards de clasificación A, B, C deben estar presentes
     await expect(
-      page.locator('button:has-text("A"), text=/Clase A/i').first(),
+      page
+        .locator('button:has-text("A")')
+        .or(page.getByText(/Clase A/i))
+        .first(),
     ).toBeVisible({ timeout: 10_000 });
     await expect(
-      page.locator('button:has-text("B"), text=/Clase B/i').first(),
+      page
+        .locator('button:has-text("B")')
+        .or(page.getByText(/Clase B/i))
+        .first(),
     ).toBeVisible({ timeout: 8_000 });
     await expect(
-      page.locator('button:has-text("C"), text=/Clase C/i').first(),
+      page
+        .locator('button:has-text("C")')
+        .or(page.getByText(/Clase C/i))
+        .first(),
     ).toBeVisible({ timeout: 8_000 });
 
     // Clic en filtro "A" — lista debe cambiar (no error)
@@ -216,7 +229,8 @@ test.describe("Admin Fase 8", () => {
     // Tabla (desktop) o lista mobile debe estar presente
     await expect(
       page
-        .locator('table, ul[role="list"], text=/Sin movimientos|No hay/i')
+        .locator('table, ul[role="list"]')
+        .or(page.getByText(/Sin movimientos|No hay/i))
         .first(),
     ).toBeVisible({ timeout: 15_000 });
 
@@ -266,12 +280,10 @@ test.describe("Admin Fase 8", () => {
     if (await editBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
       await editBtn.click();
 
-      // Modal debe aparecer
+      // Modal debe aparecer — el modal de Usuarios renderiza el encabezado
+      // "Editar usuario" (es un overlay de divs, no un <dialog>/<form>).
       await expect(
-        page
-          .locator('dialog, [role="dialog"], .modal, form')
-          .filter({ hasText: /Editar|Usuario/i })
-          .first(),
+        page.getByRole("heading", { name: /Editar usuario/i }),
       ).toBeVisible({ timeout: 8_000 });
 
       // Screenshot — modal usuarios
@@ -313,12 +325,10 @@ test.describe("Admin Fase 8", () => {
     // Abrir modal
     await nuevoBtn.click();
 
-    // Modal debe aparecer con campo de producto / formulario
+    // Modal debe aparecer — renderiza el encabezado "Nuevo conteo cíclico"
+    // (overlay de divs, no un <dialog>/<form>).
     await expect(
-      page
-        .locator('dialog, [role="dialog"], form, div[class*="modal"]')
-        .filter({ hasText: /Conteo|producto|referencia/i })
-        .first(),
+      page.getByRole("heading", { name: /Nuevo conteo/i }),
     ).toBeVisible({ timeout: 8_000 });
 
     await page.screenshot({

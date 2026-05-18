@@ -16,6 +16,7 @@ export default function Usuarios() {
   const [okMsg, setOkMsg] = useState("");
   const [editando, setEditando] = useState(null); // user object or null
   const mountedRef = useRef(true);
+  const guardandoRef = useRef(false);
   const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -59,6 +60,18 @@ export default function Usuarios() {
 
   const guardar = async () => {
     if (!editando) return;
+    if (!editando.nombre.trim()) {
+      setErrorMsg("El nombre es obligatorio.");
+      return;
+    }
+    // Anti-lockout: bloquear la auto-desactivación también desde el modal
+    // (el servidor lo refuerza vía trg_usuarios_inmutables).
+    if (editando.id === perfil?.id && !editando.activo) {
+      setErrorMsg("No puedes desactivar tu propio usuario (lockout).");
+      return;
+    }
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
     setErrorMsg("");
     setOkMsg("");
     try {
@@ -73,11 +86,13 @@ export default function Usuarios() {
         .update(update)
         .eq("id", editando.id);
       if (error) throw error;
-      setOkMsg(`Usuario "${editando.nombre}" actualizado`);
+      setOkMsg(`Usuario "${editando.nombre.trim()}" actualizado`);
       setEditando(null);
       await cargar();
     } catch (err) {
       setErrorMsg(safeError(err, "Error al guardar"));
+    } finally {
+      guardandoRef.current = false;
     }
   };
 
@@ -334,10 +349,18 @@ export default function Usuarios() {
                   ))}
                 </select>
               </Field>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label
+                className="flex items-center gap-2 cursor-pointer"
+                title={
+                  editando.id === perfil?.id
+                    ? "No puedes desactivar tu propio usuario"
+                    : undefined
+                }
+              >
                 <input
                   type="checkbox"
                   checked={editando.activo}
+                  disabled={editando.id === perfil?.id}
                   onChange={(e) =>
                     setEditando({ ...editando, activo: e.target.checked })
                   }

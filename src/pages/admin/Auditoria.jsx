@@ -37,6 +37,8 @@ export default function Auditoria() {
   const [hasMore, setHasMore] = useState(true);
 
   const mountedRef = useRef(true);
+  // Token de secuencia: descarta respuestas de carga obsoletas.
+  const reqIdRef = useRef(0);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -49,14 +51,24 @@ export default function Auditoria() {
     Promise.all([
       supabase.from("sedes").select("id, nombre").eq("activa", true),
       supabase.from("usuarios").select("id, nombre").eq("activo", true),
-    ]).then(([s, u]) => {
-      if (!mountedRef.current) return;
-      setSedes(s.data ?? []);
-      setUsuarios(u.data ?? []);
-    });
+    ])
+      .then(([s, u]) => {
+        if (!mountedRef.current) return;
+        if (s.error || u.error) {
+          setErrorMsg("No se pudieron cargar los filtros de sede/usuario.");
+          return;
+        }
+        setSedes(s.data ?? []);
+        setUsuarios(u.data ?? []);
+      })
+      .catch((err) => {
+        if (mountedRef.current)
+          setErrorMsg(safeError(err, "Error al cargar filtros"));
+      });
   }, []);
 
   const cargar = async (reset = false) => {
+    const myReq = ++reqIdRef.current;
     setLoading(true);
     setErrorMsg("");
     const currentPage = reset ? 0 : page;
@@ -73,10 +85,12 @@ export default function Auditoria() {
           .limit(500);
         productoIds = (prods ?? []).map((p) => p.id);
         if (productoIds.length === 0) {
-          if (!mountedRef.current) return;
-          setMovimientos(reset ? [] : (p) => p);
+          if (!mountedRef.current || myReq !== reqIdRef.current) return;
+          if (reset) {
+            setMovimientos([]);
+            setPage(1);
+          }
           setHasMore(false);
-          if (reset) setPage(1);
           return;
         }
       }
@@ -100,7 +114,7 @@ export default function Auditoria() {
       if (productoIds) q = q.in("producto_id", productoIds);
 
       const { data, error } = await q;
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || myReq !== reqIdRef.current) return;
       if (error) throw error;
 
       const items = data ?? [];
@@ -113,10 +127,10 @@ export default function Auditoria() {
       }
       setHasMore(items.length === PAGE_SIZE);
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || myReq !== reqIdRef.current) return;
       setErrorMsg(safeError(err, "Error al cargar movimientos"));
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && myReq === reqIdRef.current) setLoading(false);
     }
   };
 

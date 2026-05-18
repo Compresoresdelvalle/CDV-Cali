@@ -21,12 +21,16 @@ export default function Dashboard() {
   const cargar = async () => {
     setLoading(true);
     setErrorMsg("");
+    let timer;
     try {
       const { data, error } = await Promise.race([
         supabase.rpc("fn_dashboard_kpis"),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout: red lenta")), 15000),
-        ),
+        new Promise((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Timeout: red lenta")),
+            15000,
+          );
+        }),
       ]);
       if (!mountedRef.current) return;
       if (error) throw error;
@@ -36,6 +40,7 @@ export default function Dashboard() {
       if (!mountedRef.current) return;
       setErrorMsg(safeError(err, "Error al cargar dashboard"));
     } finally {
+      clearTimeout(timer); // evita un timer colgado si la RPC resolvió antes
       if (mountedRef.current) setLoading(false);
     }
   };
@@ -244,7 +249,7 @@ export default function Dashboard() {
             <Empty>Sin ventas este mes</Empty>
           ) : (
             <ul className="space-y-2" role="list">
-              {k.top5_productos_mes.map((p, i) => (
+              {(k.top5_productos_mes ?? []).map((p, i) => (
                 <li
                   key={p.referencia}
                   className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg"

@@ -16,16 +16,16 @@ lo que se encuentra en el momento**.
 
 ## Por dónde vamos
 
-| Fases                   | Estado                               |
-| ----------------------- | ------------------------------------ |
-| 0, 1, 2, 3, 4, 5, 6, 7  | ✅ **Cerradas** y mergeadas a `main` |
-| **8 — Dashboard Admin** | ⏭️ **SIGUIENTE**                     |
-| 9 → 15                  | ⏳ Pendientes                        |
+| Fases                         | Estado                               |
+| ----------------------------- | ------------------------------------ |
+| 0 … 8                         | ✅ **Cerradas** y mergeadas a `main` |
+| **9 — Configuración General** | ⏭️ **SIGUIENTE**                     |
+| 10 → 15                       | ⏳ Pendientes                        |
 
-Fase 7 cerrada: 7 P1 + 10 P2, todos resueltos (RLS endurecida — eliminadas
-`ord_all` y `herr_all` que anulaban las políticas granulares; `abonos`
-separado insert/delete; guards anti-doble-submit en ensambles/abonos/OT/
-herramientas; varios crashes y races). Stress SQL 6/6, E2E `ordenes` 9/9.
+Fase 8 cerrada: 3 P1 + 3 P2, todos resueltos (trigger anti-lockout de
+`usuarios` — un Admin podía auto-desactivarse; validaciones de `Usuarios`;
+manejo de errores y race en `Auditoria`; guards en `Dashboard`; 4 locators
+rotos en `admin-fase8.spec.js`). Stress SQL 2/2, E2E `admin-fase8` 10/10.
 
 ## Plantilla por fase (seguir IGUAL en cada una)
 
@@ -61,9 +61,9 @@ herramientas; varios crashes y races). Stress SQL 6/6, E2E `ordenes` 9/9.
 
 ## Siguiente acción concreta
 
-Arrancar **QA Fase 8 (Dashboard Admin + Gestión)**: leer la sección Fase 8 de
-`fases/FASE-04-AL-09-MODULOS.md`, lanzar los 3 agentes de revisión sobre
-`src/pages/admin/Dashboard.jsx`, `Alertas.jsx`, `Auditoria.jsx`, `Usuarios.jsx`,
-`Top10.jsx`, `AnalisisABC.jsx`, `Reorden.jsx`, `Conteo.jsx`; auditar la RPC
-`fn_dashboard_kpis()` y las vistas. Ya existe `admin-fase8.spec.js` — auditar
-vs criterios sin duplicar; arreglar lo encontrado; commit `qa(fase8)` + merge.
+Arrancar **QA Fase 9 (Configuración General)**: leer `fases/FASE-09-CONFIGURACION-GENERAL.md`,
+lanzar los 3 agentes de revisión sobre `src/pages/admin/Configuracion/*`
+(`index.jsx`, `Parametros.jsx`, `CuentasBancarias.jsx`, `ChecklistOT.jsx`);
+auditar la RLS de las tablas de parámetros/config (solo Admin escribe) con
+stress SQL; crear `tests/e2e/fase09-configuracion.spec.js`; arreglar lo
+encontrado; commit `qa(fase9)` + merge.
