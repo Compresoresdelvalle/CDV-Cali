@@ -32,6 +32,7 @@ export default function Herramientas() {
   const [accionando, setAccionando] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
   const mountedRef = useRef(true);
+  const accionandoRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -119,6 +120,8 @@ export default function Herramientas() {
   }, [filtro, search, perfil?.sede_id]);
 
   const devolver = async (h) => {
+    if (accionandoRef.current) return;
+    accionandoRef.current = true;
     setAccionando(h.id);
     setErrorMsg("");
     try {
@@ -151,6 +154,7 @@ export default function Herramientas() {
       setErrorMsg(safeError(err, "Error al devolver herramienta"));
     } finally {
       setAccionando(null);
+      accionandoRef.current = false;
     }
   };
 
@@ -401,6 +405,7 @@ function HerramientaCard({ h, accionando, onPrestar, onDevolver }) {
 
 function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
   const perfil = useAuthStore((s) => s.perfil);
+  const savingRef = useRef(false);
   const [usuarioId, setUsuarioId] = useState("");
   const [fechaEsperada, setFechaEsperada] = useState(() => {
     const d = new Date();
@@ -417,6 +422,8 @@ function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
       setError("Selecciona un usuario");
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError("");
     try {
@@ -425,6 +432,8 @@ function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
         `${fechaEsperada}T17:00:00-05:00`,
       ).toISOString();
       // Defensa en profundidad: restringir UPDATE a la sede del usuario.
+      // `.eq("estado","disponible")` evita prestar dos veces la misma
+      // herramienta (race entre dos modales abiertos en paralelo).
       let q = supabase
         .from("herramientas_prestamo")
         .update({
@@ -436,16 +445,22 @@ function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
           fecha_devolucion_real: null,
           observaciones: observaciones || null,
         })
-        .eq("id", herramienta.id);
+        .eq("id", herramienta.id)
+        .eq("estado", "disponible");
       if (perfil?.rol !== "Admin" && perfil?.sede_id)
         q = q.eq("sede_id", perfil.sede_id);
-      const { error: e2 } = await q;
+      const { data, error: e2 } = await q.select("id");
       if (e2) throw e2;
+      if (!data || data.length === 0) {
+        setError("La herramienta ya no está disponible o no tienes permiso.");
+        return;
+      }
       await onSaved();
     } catch (err) {
       setError(safeError(err, "Error al prestar"));
     } finally {
       setSaving(false);
+      savingRef.current = false;
     }
   };
 
@@ -547,6 +562,7 @@ function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
 
 function ModalNueva({ sedeDefault, onClose, onSaved }) {
   const perfil = useAuthStore((s) => s.perfil);
+  const savingRef = useRef(false);
   const [nombre, setNombre] = useState("");
   const [codigo, setCodigo] = useState("");
   const [sedeId, setSedeId] = useState(sedeDefault);
@@ -573,6 +589,8 @@ function ModalNueva({ sedeDefault, onClose, onSaved }) {
       setError("El nombre es obligatorio");
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError("");
     try {
@@ -590,6 +608,7 @@ function ModalNueva({ sedeDefault, onClose, onSaved }) {
       setError(safeError(err, "Error al crear"));
     } finally {
       setSaving(false);
+      savingRef.current = false;
     }
   };
 

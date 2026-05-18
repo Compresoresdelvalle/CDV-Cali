@@ -36,6 +36,9 @@ export default function CotizacionesAsociadasOT({
   const [showSelector, setShowSelector] = useState(false);
   const [confirmCrearOtra, setConfirmCrearOtra] = useState(false);
   const mountedRef = useRef(true);
+  // Guard síncrono: evita disparar dos RPC concurrentes (asociar/desasociar)
+  // por un doble-click antes del re-render.
+  const accionRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -84,6 +87,8 @@ export default function CotizacionesAsociadasOT({
   };
 
   const asociarExistente = async (cotId) => {
+    if (accionRef.current) return;
+    accionRef.current = true;
     try {
       // RPC: setea ot_id + COPIA items a detalle_orden (descuenta stock,
       // recalcula total OT vía triggers). Atómico server-side.
@@ -103,10 +108,14 @@ export default function CotizacionesAsociadasOT({
       onChange?.(); // refresca OrdenDetalle (total, repuestos)
     } catch (err) {
       setErrorMsg(safeError(err, "Error al asociar cotización"));
+    } finally {
+      accionRef.current = false;
     }
   };
 
   const desasociar = async (cotId) => {
+    if (accionRef.current) return;
+    accionRef.current = true;
     try {
       // RPC: borra los repuestos copiados de ESTA cotización (los manuales
       // se preservan via cotizacion_id NULL) y quita el vínculo ot_id.
@@ -126,6 +135,8 @@ export default function CotizacionesAsociadasOT({
       onChange?.();
     } catch (err) {
       setErrorMsg(safeError(err, "Error al desvincular"));
+    } finally {
+      accionRef.current = false;
     }
   };
 

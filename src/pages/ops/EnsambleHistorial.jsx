@@ -21,6 +21,9 @@ export default function EnsambleHistorial() {
   const [hasMore, setHasMore] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const mountedRef = useRef(true);
+  // Token de secuencia: descarta respuestas obsoletas (cambio de filtro o
+  // "Cargar más" mientras hay otra carga en vuelo).
+  const reqIdRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -31,6 +34,7 @@ export default function EnsambleHistorial() {
 
   const cargar = async (reset = false, signal) => {
     if (!mountedRef.current) return;
+    const myReq = ++reqIdRef.current;
     setLoading(true);
     setErrorMsg("");
     const currentPage = reset ? 0 : page;
@@ -61,7 +65,8 @@ export default function EnsambleHistorial() {
           ),
         ),
       ]);
-      if (signal?.aborted || !mountedRef.current) return;
+      if (signal?.aborted || !mountedRef.current || myReq !== reqIdRef.current)
+        return;
       if (error) throw error;
 
       if (reset) {
@@ -73,11 +78,12 @@ export default function EnsambleHistorial() {
       }
       setHasMore((data ?? []).length === PAGE_SIZE);
     } catch (err) {
-      if (signal?.aborted || !mountedRef.current) return;
+      if (signal?.aborted || !mountedRef.current || myReq !== reqIdRef.current)
+        return;
       setErrorMsg(safeError(err, "Error al cargar ensambles"));
     } finally {
-      // SIEMPRE limpiar loading — incluso si abortado, para no dejar la UI atorada
-      if (mountedRef.current) setLoading(false);
+      // Solo la petición más reciente controla el loading.
+      if (mountedRef.current && myReq === reqIdRef.current) setLoading(false);
     }
   };
 

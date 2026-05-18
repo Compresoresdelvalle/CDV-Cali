@@ -40,6 +40,7 @@ export default function AbonosPanel({
   });
   const [saving, setSaving] = useState(false);
   const mountedRef = useRef(true);
+  const savingRef = useRef(false);
   const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -101,6 +102,9 @@ export default function AbonosPanel({
       });
       if (!ok) return;
     }
+    // Guard síncrono contra doble-submit (registraría dos abonos).
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setErrorMsg("");
     setOkMsg("");
@@ -121,6 +125,7 @@ export default function AbonosPanel({
     } catch (err) {
       setErrorMsg(safeError(err, "Error al registrar abono"));
     } finally {
+      savingRef.current = false;
       if (mountedRef.current) setSaving(false);
     }
   };
@@ -145,7 +150,7 @@ export default function AbonosPanel({
     }
   };
 
-  const total = abonos.reduce((s, a) => s + Number(a.monto), 0);
+  const total = abonos.reduce((s, a) => s + (Number(a.monto) || 0), 0);
   const saldoPendiente = Math.max(0, Number(totalOT) - total);
   const montoActual = Number(form.monto) || 0;
   const excedeAbono =

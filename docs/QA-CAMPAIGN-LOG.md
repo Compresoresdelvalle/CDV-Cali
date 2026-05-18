@@ -15,7 +15,7 @@
 | 4    | Ventas + Cotizaciones                | ✅ Cerrada   | 4 / 1 / 2            | (ver commits qa fase4) |
 | 5    | Compras + Devoluciones               | ✅ Cerrada   | 0 / 6 / 7            | (ver commit qa fase5)  |
 | 6    | Traspasos + Picking                  | ✅ Cerrada   | 0 / 9 / 5            | (ver commit qa fase6)  |
-| 7    | Órdenes + Ensambles + Herramientas   | ⏳ Pendiente | —                    | —                      |
+| 7    | Órdenes + Ensambles + Herramientas   | ✅ Cerrada   | 0 / 7 / 10           | (ver commit qa fase7)  |
 | 8    | Dashboard Admin                      | ⏳ Pendiente | —                    | —                      |
 | 9    | Configuración General                | ⏳ Pendiente | —                    | —                      |
 | 10   | Ajustes OT                           | ⏳ Pendiente | —                    | —                      |
@@ -188,6 +188,49 @@ de `traspasos`/`detalle_traspaso`. **Todos los hallazgos resueltos** (9 P1 + 5 P
 - `RecepcionTraspaso.jsx` usa `color: "#fff"` hardcodeado en 2 botones (viola Regla #1 de CLAUDE.md). Polish visual no funcional → se corrige en F16 junto con los demás colores hardcodeados (ver F2-06).
 
 **Verificado OK:** stress SQL 12/12 con rollback (flujo completo crear→picking→verificar→enviar→recibir; stock sale de origen −5 y entra a destino +5 incluso en sede sin stock previo; bloquea cantidad negativa, picker=verificador, recibida>enviada, vendedor creando/procesando, y UPDATE directo a `traspasos`); `fn_procesar_traspaso` con `FOR UPDATE` y máquina de estados; triggers `trg_traspaso_salida/entrada` con advisory lock; E2E `fase06-traspasos.spec.js` 5/5; `eslint` + `build` limpios.
+
+### Fase 7 — Órdenes + Ensambles + Herramientas ✅ CERRADA
+
+La fase más compleja: 11 archivos frontend (`Orden*`, `Ensamble*`, `Herramientas`,
+`src/components/ot/*`). 3 agentes (code/typescript/security) + revisión de BD
+propia sobre RLS, triggers de OT/ensamble y `fn_procesar`/`fn_asociar`.
+**Todos los hallazgos resueltos** (7 P1 + 10 P2).
+
+**Resueltos — P1:**
+
+| ID    | Sev | Área              | Repro / Descripción                                                                                                                                  | Fix                                                                                                         | Estado      |
+| ----- | --- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------- |
+| F7-01 | P1  | Seguridad / RLS   | `ordenes_servicio` tenía la política legacy `ord_all` (Admin/Tecnico, sin sede) que con OR ANULABA la granular `os_update` (sede+técnico+estado).    | `DROP POLICY ord_all`: la granular `os_*` toma efecto. Stress: UPDATE de OT entregada → 0 filas.            | ✅ Resuelto |
+| F7-02 | P1  | Seguridad / RLS   | `herramientas_prestamo` tenía `herr_all` con `USING (true)` → CUALQUIER autenticado podía insertar/actualizar/borrar herramientas de cualquier sede. | `DROP POLICY herr_all`: las granulares `hp_*` (INSERT solo-Admin, UPDATE por sede) toman efecto. Stress OK. | ✅ Resuelto |
+| F7-03 | P1  | Seguridad / datos | `EnsambleNuevo`: el guard `creando` (state) no es síncrono → un doble-tap creaba DOS ensambles y descontaba stock dos veces.                         | `useRef` guard síncrono en `completar`.                                                                     | ✅ Resuelto |
+| F7-04 | P1  | Doble-submit      | `OrdenDetalle.agregarRepuesto` sin guard de ref → doble-tap inserta el repuesto dos veces (doble fila + doble descuento de stock vía trigger).       | `useRef` guard.                                                                                             | ✅ Resuelto |
+| F7-05 | P1  | Robustez          | `OrdenDetalle.imprimirOT` no tenía `catch`: si `generarOrdenPDF` lanzaba, el error se tragaba sin avisar.                                            | `try/catch` con banner de error.                                                                            | ✅ Resuelto |
+| F7-06 | P1  | Doble-submit      | `AbonosPanel.guardar` solo con state `saving` → doble-tap registra dos abonos (pagos duplicados).                                                    | `useRef` guard.                                                                                             | ✅ Resuelto |
+| F7-07 | P1  | Race condition    | `EnsambleHistorial`: "Cargar más" no llevaba AbortController; cambiar de filtro con una carga en vuelo mezclaba páginas de filtros distintos.        | Token de secuencia (`reqIdRef`).                                                                            | ✅ Resuelto |
+
+**Resueltos — P2:**
+
+| ID    | Sev | Área          | Repro / Descripción                                                                                                                                                                         | Fix                                                                                          | Estado      |
+| ----- | --- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------- |
+| F7-08 | P2  | Seguridad     | `abonos_write` (cmd=ALL) permitía a un Vendedor registrar abonos y a un Técnico ELIMINARLOS (la UI solo muestra borrar a Admin).                                                            | Separada en `abonos_insert` (Admin/Técnico, sede de la OT) y `abonos_delete` (solo Admin).   | ✅ Resuelto |
+| F7-09 | P2  | Datos         | `ordenes_servicio.costo_mano_obra` sin CHECK; `OrdenNueva` aceptaba `parseFloat` negativo.                                                                                                  | `CHECK (costo_mano_obra >= 0)` + `Math.max(0, …)` en el cliente. Stress: negativo bloqueado. | ✅ Resuelto |
+| F7-10 | P2  | Input         | `EnsambleNuevo`: cantidad a producir sin tope superior.                                                                                                                                     | Clamp a `[1, 9999]`.                                                                         | ✅ Resuelto |
+| F7-11 | P2  | Crash         | `EnsambleNuevo`: `r.componente.id` crasheaba si una fila BOM referenciaba un producto eliminado (join → null).                                                                              | Filtra filas con componente nulo y avisa.                                                    | ✅ Resuelto |
+| F7-12 | P2  | Race / TOCTOU | `OrdenDetalle.cambiarEstado` no verificaba el estado previo contra la BD.                                                                                                                   | `.eq("estado", orden.estado)` + aviso si la fila cambió mientras tanto.                      | ✅ Resuelto |
+| F7-13 | P2  | Doble-submit  | `OrdenNueva.guardar` sin guard de ref.                                                                                                                                                      | `useRef` guard.                                                                              | ✅ Resuelto |
+| F7-14 | P2  | Race / submit | `Herramientas`: `devolver`/`ModalPrestar`/`ModalNueva` sin guard de ref; `ModalPrestar` sin `.eq("estado","disponible")` (race de doble-préstamo).                                          | `useRef` guards + `.eq("estado","disponible")` con chequeo de filas.                         | ✅ Resuelto |
+| F7-15 | P2  | Robustez      | `ChecklistRecepcion`: el error del sembrado (`select` de componentes + `upsert`) se descartaba en silencio.                                                                                 | Se capturan y propagan ambos errores.                                                        | ✅ Resuelto |
+| F7-16 | P2  | Doble-click   | `CotizacionesAsociadasOT`: `asociarExistente`/`desasociar` sin guard → doble-click dispara dos RPC.                                                                                         | `useRef` guard compartido.                                                                   | ✅ Resuelto |
+| F7-17 | P2  | Tests         | `ordenes.spec.js` "cambiar estado a En proceso" era obsoleto: no contemplaba la compuerta de autorización (Fase 10) que bloquea `abierta→en_proceso` con `estado_autorizacion='pendiente'`. | Test reescrito para aceptar ambos desenlaces válidos (transición o bloqueo informado). 9/9.  | ✅ Resuelto |
+
+**Descartados (falsos positivos):**
+
+- **`no_autorizado` shortcut "podría no estar en el trigger"** — `trg_orden_validar_transicion` SÍ implementa el salto `abierta→completada` para OT no autorizadas.
+- **`actualizar_items` permitiría a un no-picker alterar el picking** (Fase 6) — N/A; y el RPC de traspaso ya valida el picker.
+- **Stock de ensamble manipulable** — `trg_ensamble_stock` valida stock con `FOR UPDATE` + advisory lock y lanza excepción server-side; el `todoOk` del cliente es solo UX.
+- **`cambiarEstado` con UPDATE directo "peligroso"** — respaldado por `trg_orden_validar_transicion` (transiciones) y `trg_orden_validar_anticipo` (autorización/anticipo) server-side.
+
+**Verificado OK:** stress SQL 6/6 con rollback (Vendedor no inserta abono ni herramienta; Técnico no borra abono; UPDATE cruzado de sede / OT entregada → 0 filas; `costo_mano_obra` negativo bloqueado por CHECK); E2E `ordenes.spec.js` 9/9; `eslint` + `build` limpios.
 
 ## Backlog (P2 sin resolver)
 
