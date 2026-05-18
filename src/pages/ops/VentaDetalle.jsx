@@ -135,9 +135,9 @@ export default function VentaDetalle() {
           (s, i) => s + (i.subtotal ?? i.cantidad * i.precio_unitario),
           0,
         );
-  const descuento = subtotalCalc * (venta.descuento_pct / 100);
+  const descuento = subtotalCalc * ((venta.descuento_pct ?? 0) / 100);
   const baseIva = subtotalCalc - descuento;
-  const iva = baseIva * (venta.iva_pct / 100);
+  const iva = baseIva * ((venta.iva_pct ?? 19) / 100);
   const totalCalc = venta.total > 0 ? venta.total : baseIva + iva;
 
   return (

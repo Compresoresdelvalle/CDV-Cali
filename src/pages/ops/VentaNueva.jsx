@@ -76,7 +76,7 @@ export default function VentaNueva() {
         setBuscando(false);
       }
     },
-    [perfil.sede_id],
+    [perfil?.sede_id],
   );
 
   const buscarDebounced = useDebouncedCallback(buscarProductos, 300);
@@ -97,13 +97,13 @@ export default function VentaNueva() {
             .select("id, nombre, referencia, precio_venta, unidad_medida")
             .eq("id", productoId)
             .eq("activo", true)
-            .single(),
+            .maybeSingle(),
           supabase
             .from("inventario")
             .select("cantidad")
-            .eq("sede_id", perfil.sede_id)
+            .eq("sede_id", perfil?.sede_id)
             .eq("producto_id", productoId)
-            .single(),
+            .maybeSingle(),
         ]);
         if (!prod || !inv || inv.cantidad <= 0) return;
         agregarAlCarrito({ ...prod, stock_disponible: inv.cantidad });
@@ -111,7 +111,7 @@ export default function VentaNueva() {
         // silently ignore
       }
     },
-    [perfil.sede_id],
+    [perfil?.sede_id],
   );
 
   const agregarAlCarrito = (prod) => {

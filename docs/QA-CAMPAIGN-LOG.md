@@ -6,24 +6,24 @@
 
 ## Estado por fase
 
-| Fase | Tema                                 | Estado       | Hallazgos (P0/P1/P2) | Commit                |
-| ---- | ------------------------------------ | ------------ | -------------------- | --------------------- |
-| 0    | Setup                                | ✅ Cerrada   | 0 / 3 / 4            | (ver commit qa fase0) |
-| 1    | Base de datos                        | ✅ Cerrada   | 0 / 3 / 8            | (ver commit qa fase1) |
-| 2    | Login + Layout + Roles               | ✅ Cerrada   | 0 / 3 / 6            | (ver commit qa fase2) |
-| 3    | Inventario + QR + Realtime           | ✅ Cerrada   | 0 / 5 / 3            | (ver commit qa fase3) |
-| 4    | Ventas + Cotizaciones                | 🟡 En curso  | —                    | —                     |
-| 5    | Compras + Devoluciones               | ⏳ Pendiente | —                    | —                     |
-| 6    | Traspasos + Picking                  | ⏳ Pendiente | —                    | —                     |
-| 7    | Órdenes + Ensambles + Herramientas   | ⏳ Pendiente | —                    | —                     |
-| 8    | Dashboard Admin                      | ⏳ Pendiente | —                    | —                     |
-| 9    | Configuración General                | ⏳ Pendiente | —                    | —                     |
-| 10   | Ajustes OT                           | ⏳ Pendiente | —                    | —                     |
-| 11   | Ajustes Cotizaciones                 | ⏳ Pendiente | —                    | —                     |
-| 12   | Ajustes Inventario/Compras/Traspasos | ⏳ Pendiente | —                    | —                     |
-| 13   | Garantías                            | ⏳ Pendiente | —                    | —                     |
-| 14   | Recibos manuales                     | ⏳ Pendiente | —                    | —                     |
-| 15   | Dashboard + Cierres                  | ⏳ Pendiente | —                    | —                     |
+| Fase | Tema                                 | Estado       | Hallazgos (P0/P1/P2)   | Commit                |
+| ---- | ------------------------------------ | ------------ | ---------------------- | --------------------- |
+| 0    | Setup                                | ✅ Cerrada   | 0 / 3 / 4              | (ver commit qa fase0) |
+| 1    | Base de datos                        | ✅ Cerrada   | 0 / 3 / 8              | (ver commit qa fase1) |
+| 2    | Login + Layout + Roles               | ✅ Cerrada   | 0 / 3 / 6              | (ver commit qa fase2) |
+| 3    | Inventario + QR + Realtime           | ✅ Cerrada   | 0 / 5 / 3              | (ver commit qa fase3) |
+| 4    | Ventas + Cotizaciones                | ⚠️ Parcial   | 4 / 3 / 2 (P0 abierto) | (ver commit qa fase4) |
+| 5    | Compras + Devoluciones               | ⏳ Pendiente | —                      | —                     |
+| 6    | Traspasos + Picking                  | ⏳ Pendiente | —                      | —                     |
+| 7    | Órdenes + Ensambles + Herramientas   | ⏳ Pendiente | —                      | —                     |
+| 8    | Dashboard Admin                      | ⏳ Pendiente | —                      | —                     |
+| 9    | Configuración General                | ⏳ Pendiente | —                      | —                     |
+| 10   | Ajustes OT                           | ⏳ Pendiente | —                      | —                     |
+| 11   | Ajustes Cotizaciones                 | ⏳ Pendiente | —                      | —                     |
+| 12   | Ajustes Inventario/Compras/Traspasos | ⏳ Pendiente | —                      | —                     |
+| 13   | Garantías                            | ⏳ Pendiente | —                      | —                     |
+| 14   | Recibos manuales                     | ⏳ Pendiente | —                      | —                     |
+| 15   | Dashboard + Cierres                  | ⏳ Pendiente | —                      | —                     |
 
 ## Hallazgos
 
@@ -73,6 +73,33 @@ Todos los hallazgos se corrigieron en el momento (P1 y P2).
 **Verificado OK:** E2E `fase03-inventario.spec.js` 3/3 (carga del listado, búsqueda server-side, apertura de detalle); `sanitizeSearch` se aplica correctamente (sin inyección PostgREST en la búsqueda); el inventario carga 39 productos tras el cambio a `productos!inner`.
 
 **Routeado a Fase 16 (Frontend Redesign):** detalles de UI no funcionales — botones de filtro de 36px (CLAUDE.md pide 48px), filas de tabla clickeables sin `role`/`tabIndex`, `focus-visible` ring en inputs. Son polish de accesibilidad/táctil, parte natural del rediseño de F16.
+
+### Fase 4 — Ventas + Cotizaciones ⚠️ PARCIAL
+
+3 agentes revisaron frontend + RPCs/triggers + seguridad. Los crashes de
+frontend se corrigieron; **quedan hallazgos P0/P1 de BD que requieren tu
+decisión** antes de tocar las RPCs financieras del core.
+
+**Resueltos:**
+
+| ID    | Sev | Área      | Repro / Descripción                                                                                                                 | Fix                                                                                              | Estado      |
+| ----- | --- | --------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------- |
+| F4-01 | P0  | Crash     | `VentaNueva` accedía a `perfil.sede_id` (sin `?.`) en un array de deps → `TypeError` en render si el perfil aún no cargaba.         | `perfil?.sede_id`.                                                                               | ✅ Resuelto |
+| F4-02 | P0  | Datos     | `VentaDetalle` calculaba `descuento_pct/100` e `iva_pct/100` sin fallback → "$ NaN" si la columna era null.                         | `(venta.descuento_pct ?? 0)` / `(venta.iva_pct ?? 19)`.                                          | ✅ Resuelto |
+| F4-03 | P0  | Seguridad | `descuento_pct` se aceptaba sin tope → `fn_registrar_venta`/`fn_registrar_cotizacion` con `descuento_pct=200` daban una venta a $0. | CHECK `descuento_pct BETWEEN 0 AND 100` en `ventas` y `cotizaciones` (bloquea a nivel de motor). | ✅ Resuelto |
+| F4-04 | P1  | Robustez  | `.single()` en el escaneo QR de `VentaNueva`/`CotizacionNueva` lanzaba error si no había fila.                                      | `.maybeSingle()`.                                                                                | ✅ Resuelto |
+
+**Abiertos — requieren decisión / trabajo cuidadoso en RPCs del core:**
+
+| ID    | Sev    | Área                 | Descripción                                                                                                                                                                                                                      | Acción requerida                                                                                                                                                                                 |
+| ----- | ------ | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| F4-05 | **P0** | Seguridad financiera | `fn_registrar_venta` y `fn_registrar_cotizacion` aceptan `precio_unitario` del payload del cliente sin validarlo contra `productos.precio_venta`. Un vendedor (con devtools) puede registrar una venta con `precio_unitario: 1`. | **Decisión de producto:** ¿se permite precio negociado/manual, o el precio SIEMPRE debe venir del catálogo? Según la respuesta, modificar el RPC para ignorar el precio del cliente o validarlo. |
+| F4-06 | P1     | Seguridad            | `fn_convertir_cotizacion` no valida rol ni ownership → cualquier usuario autenticado puede convertir la cotización de otro vendedor.                                                                                             | Agregar chequeo `auth.uid()` + rol/ownership al RPC.                                                                                                                                             |
+| F4-07 | P1     | Datos                | `fn_convertir_cotizacion` (versión final) no inserta `costo_unitario` en `detalle_venta` → la venta convertida queda con margen mal calculado.                                                                                   | Leer `costo_promedio` del producto e insertarlo.                                                                                                                                                 |
+| F4-08 | P1     | Pérdida de datos     | `CotizacionEditar` guarda con `DELETE` + `INSERT` no transaccional de `detalle_cotizacion` → si el INSERT falla, la cotización queda sin ítems.                                                                                  | Mover el guardado a un RPC transaccional.                                                                                                                                                        |
+| F4-09 | P2     | Deuda técnica        | Las Edge Functions `registrar-venta` / `convertir-cotizacion` parecen código muerto duplicado de las RPCs; CORS `*`.                                                                                                             | Confirmar qué usa el frontend; eliminar la ruta sin uso.                                                                                                                                         |
+
+**Verificado OK:** stock con `FOR UPDATE` y validación antes de descontar (trigger); atomicidad de la venta; anulación idempotente; `fn_anular_venta` valida rol Admin en el servidor (el gate de UI es solo cosmético, correcto).
 
 ## Backlog (P2 sin resolver)
 
