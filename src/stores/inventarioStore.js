@@ -4,6 +4,11 @@ import { sanitizeSearch } from "../lib/utils";
 
 const PAGE_SIZE = 50;
 
+// Token de versión global: cada fetch toma uno; los resultados de fetches
+// obsoletos (el usuario cambió filtros/búsqueda mientras una query iba lenta)
+// se descartan al volver.
+let fetchSeq = 0;
+
 export const useInventarioStore = create((set, get) => ({
   items: [],
   loading: false,
@@ -54,6 +59,8 @@ export const useInventarioStore = create((set, get) => ({
       set({ loading: true, error: null, items: [], page: 0 });
     }
 
+    const seq = ++fetchSeq;
+
     try {
       const s = get();
       const offset = append ? s.page * PAGE_SIZE : 0;
@@ -61,11 +68,16 @@ export const useInventarioStore = create((set, get) => ({
       // Búsqueda server-side: primero obtenemos IDs de productos que coinciden
       // F12: extiende búsqueda a codigo_interno y codigo_proveedor.
       // F12: aplica filtro tipo (nuevo/segunda_mano) en la pre-query.
+      // Tope de 500 para no generar una URL gigante en el `.in()` posterior.
       let productoIds = null;
       const busquedaRaw = s.filtroBusqueda.trim();
       const necesitaPreFiltro = !!busquedaRaw || !!s.filtroTipo;
       if (necesitaPreFiltro) {
-        let pq = supabase.from("productos").select("id").eq("activo", true);
+        let pq = supabase
+          .from("productos")
+          .select("id")
+          .eq("activo", true)
+          .limit(500);
         if (busquedaRaw) {
           const busqueda = sanitizeSearch(busquedaRaw);
           pq = pq.or(
@@ -73,7 +85,12 @@ export const useInventarioStore = create((set, get) => ({
           );
         }
         if (s.filtroTipo) pq = pq.eq("tipo", s.filtroTipo);
-        const { data: prods } = await pq;
+        const { data: prods, error: pqError } = await pq;
+        if (seq !== fetchSeq) return;
+        if (pqError) {
+          set({ error: pqError.message, loading: false, loadingMore: false });
+          return;
+        }
         productoIds = prods?.map((p) => p.id) ?? [];
         if (productoIds.length === 0) {
           set({
@@ -87,17 +104,21 @@ export const useInventarioStore = create((set, get) => ({
         }
       }
 
+      // `productos!inner` + filtro `activo` → PostgREST descarta las filas de
+      // inventario cuyo producto está inactivo. Un join embebido normal solo
+      // anularía la relación, dejando filas que truncarían la paginación.
       let q = supabase
         .from("inventario")
         .select(
           `
           id, cantidad, estado_stock, ubicacion_id, sede_id,
-          producto:productos(id, referencia, codigo_interno, codigo_proveedor,
+          producto:productos!inner(id, referencia, codigo_interno, codigo_proveedor,
                              tipo, nombre, categoria, marca,
                              precio_venta, stock_minimo, stock_maximo, activo),
           sede:sedes(id, nombre)
         `,
         )
+        .eq("producto.activo", true)
         .range(offset, offset + PAGE_SIZE - 1);
 
       if (s.filtroSede) q = q.eq("sede_id", s.filtroSede);
@@ -105,38 +126,39 @@ export const useInventarioStore = create((set, get) => ({
       if (productoIds) q = q.in("producto_id", productoIds);
 
       const { data, error } = await q;
+      if (seq !== fetchSeq) return; // un fetch más nuevo ya está en curso
 
       if (error) {
         set({ error: error.message, loading: false, loadingMore: false });
         return;
       }
 
-      // Filtrar productos inactivos y ordenar por nombre en cliente
-      const items = (data ?? [])
-        .filter((i) => i.producto?.activo !== false)
-        .sort((a, b) =>
-          (a.producto?.nombre ?? "").localeCompare(
-            b.producto?.nombre ?? "",
-            "es",
-          ),
-        );
+      const raw = data ?? [];
+      // Orden por nombre dentro de la página.
+      const items = [...raw].sort((a, b) =>
+        (a.producto?.nombre ?? "").localeCompare(
+          b.producto?.nombre ?? "",
+          "es",
+        ),
+      );
 
       if (append) {
         set((prev) => ({
           items: [...prev.items, ...items],
           page: prev.page + 1,
-          hasMore: items.length === PAGE_SIZE,
+          hasMore: raw.length === PAGE_SIZE,
           loadingMore: false,
         }));
       } else {
         set({
           items,
           page: 1,
-          hasMore: items.length === PAGE_SIZE,
+          hasMore: raw.length === PAGE_SIZE,
           loading: false,
         });
       }
     } catch (e) {
+      if (seq !== fetchSeq) return;
       set({ error: e.message, loading: false, loadingMore: false });
     }
   },
@@ -160,5 +182,6 @@ export const useInventarioStore = create((set, get) => ({
       filtroSede: null,
       filtroBusqueda: "",
       filtroEstado: null,
+      filtroTipo: null,
     }),
 }));
