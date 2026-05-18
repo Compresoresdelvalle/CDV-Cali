@@ -11,8 +11,8 @@
 | 0    | Setup                                | ✅ Cerrada   | 0 / 3 / 4            | (ver commit qa fase0) |
 | 1    | Base de datos                        | ✅ Cerrada   | 0 / 3 / 8            | (ver commit qa fase1) |
 | 2    | Login + Layout + Roles               | ✅ Cerrada   | 0 / 3 / 6            | (ver commit qa fase2) |
-| 3    | Inventario + QR + Realtime           | 🟡 En curso  | —                    | —                     |
-| 4    | Ventas + Cotizaciones                | ⏳ Pendiente | —                    | —                     |
+| 3    | Inventario + QR + Realtime           | ✅ Cerrada   | 0 / 5 / 3            | (ver commit qa fase3) |
+| 4    | Ventas + Cotizaciones                | 🟡 En curso  | —                    | —                     |
 | 5    | Compras + Devoluciones               | ⏳ Pendiente | —                    | —                     |
 | 6    | Traspasos + Picking                  | ⏳ Pendiente | —                    | —                     |
 | 7    | Órdenes + Ensambles + Herramientas   | ⏳ Pendiente | —                    | —                     |
@@ -54,6 +54,25 @@
 | F2-03 | 2    | P1  | UI / navegación   | `Garantías` y `Recibos` no estaban en `MODULE_GROUP` de `AppShell` → caían a un grupo sin renderizar en el sidebar de escritorio. | F13/F14 agregaron los módulos a `ROLE_MODULES` pero no a `MODULE_GROUP`. | Agregados a `MODULE_GROUP` (grupo "Operaciones").              | ✅ Resuelto |
 
 **Verificado OK:** E2E `fase02-login.spec.js` 5/5 (login por rol, menú por rol, PIN incorrecto no entra, RBAC del RoleGuard, persistencia de sesión al recargar); el cleanup de `init()` del authStore sí lo invoca `App.jsx` (el "leak" reportado por un agente era falso positivo); las races sutiles del authStore son benignas (refetch del mismo perfil).
+
+### Fase 3 — Inventario + QR + Realtime
+
+Todos los hallazgos se corrigieron en el momento (P1 y P2).
+
+| ID    | Fase | Sev | Área           | Repro / Descripción                                                                                                                                       | Fix                                                                                                                             | Estado      |
+| ----- | ---- | --- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| F3-01 | 3    | P1  | Race condition | `fetchInventario` no descartaba resultados obsoletos → al cambiar filtro/búsqueda rápido, una query lenta pisaba los datos correctos.                     | Token de versión `fetchSeq`; los resultados de fetches viejos se descartan.                                                     | ✅ Resuelto |
+| F3-02 | 3    | P1  | Paginación     | El filtro de productos inactivos se hacía en cliente tras `.range(50)` → páginas con <50 ítems → `hasMore` falso prematuro, productos que nunca cargaban. | `producto:productos!inner(...)` + `.eq('producto.activo', true)` → PostgREST filtra server-side; `hasMore` con el conteo crudo. | ✅ Resuelto |
+| F3-03 | 3    | P1  | Rendimiento    | La pre-query de búsqueda no tenía límite → un término común con 3.000 productos generaría una URL gigante (`.in()`) y error 414.                          | `.limit(500)` en la pre-query.                                                                                                  | ✅ Resuelto |
+| F3-04 | 3    | P1  | Robustez       | El error de la pre-query de productos se ignoraba → en fallo de red mostraba "Sin resultados" falso.                                                      | Se desestructura y propaga `error` de la pre-query.                                                                             | ✅ Resuelto |
+| F3-05 | 3    | P1  | Realtime       | Crear un producto inserta filas en 4 sedes → 4 eventos INSERT → 4 re-fetch completos seguidos.                                                            | Re-fetch con debounce de 400 ms (agrupa los eventos).                                                                           | ✅ Resuelto |
+| F3-06 | 3    | P2  | Crash          | `mov.tipo.toLowerCase()` en `ProductoDetalle` lanzaba excepción si `tipo` era null.                                                                       | Guarda `(mov.tipo ?? "")`.                                                                                                      | ✅ Resuelto |
+| F3-07 | 3    | P2  | UX             | `QRPrintLabel`: si el navegador bloqueaba la ventana emergente, no pasaba nada (el operario creía que falló la impresora).                                | Alerta clara cuando `window.open` devuelve null.                                                                                | ✅ Resuelto |
+| F3-08 | 3    | P2  | Bug menor      | `inventarioStore.reset()` no limpiaba `filtroTipo` → filtro fantasma tras logout.                                                                         | Agregado `filtroTipo: null` al `reset()`.                                                                                       | ✅ Resuelto |
+
+**Verificado OK:** E2E `fase03-inventario.spec.js` 3/3 (carga del listado, búsqueda server-side, apertura de detalle); `sanitizeSearch` se aplica correctamente (sin inyección PostgREST en la búsqueda); el inventario carga 39 productos tras el cambio a `productos!inner`.
+
+**Routeado a Fase 16 (Frontend Redesign):** detalles de UI no funcionales — botones de filtro de 36px (CLAUDE.md pide 48px), filas de tabla clickeables sin `role`/`tabIndex`, `focus-visible` ring en inputs. Son polish de accesibilidad/táctil, parte natural del rediseño de F16.
 
 ## Backlog (P2 sin resolver)
 

@@ -469,7 +469,7 @@ export default function ProductoDetalle() {
                       className="text-sm font-semibold capitalize"
                       style={{ color: "hsl(var(--foreground))" }}
                     >
-                      {mov.tipo.toLowerCase().replace("_", " ")}
+                      {(mov.tipo ?? "").toLowerCase().replace("_", " ")}
                     </span>
                     <span
                       className="text-sm font-bold tabular-nums"

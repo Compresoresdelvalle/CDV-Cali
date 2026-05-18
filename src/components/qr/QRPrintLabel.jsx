@@ -62,6 +62,11 @@ export default function QRPrintLabel({ referencia, nombre }) {
     if (win) {
       win.document.write(html);
       win.document.close();
+    } else {
+      // El navegador bloqueó la ventana emergente.
+      alert(
+        "El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio e intenta de nuevo.",
+      );
     }
   };
 

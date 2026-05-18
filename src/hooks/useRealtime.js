@@ -13,12 +13,15 @@ export function useRealtimeInventario() {
   const fetchInventario = useInventarioStore((s) => s.fetchInventario);
 
   useEffect(() => {
+    let refetchTimer = null;
     const channel = supabase
       .channel("inventario-realtime")
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "inventario" },
         (payload) => {
+          // updateItem solo modifica un item ya presente en el store (match
+          // por id), así que no inyecta filas de otras sedes no cargadas.
           updateItem(payload.new.id, payload.new);
         },
       )
@@ -26,15 +29,17 @@ export function useRealtimeInventario() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "inventario" },
         () => {
-          // Producto nuevo: refrescar lista (no podemos sólo agregar el item
-          // porque el SELECT del store hace JOIN a productos y la fila INSERT
-          // no trae esos campos). Re-fetch es lo más simple y barato.
-          fetchInventario(false);
+          // Crear un producto inserta filas de inventario en varias sedes →
+          // varios eventos INSERT seguidos. Se agrupan en un solo re-fetch
+          // con debounce para no disparar N recargas (y N resets de página).
+          clearTimeout(refetchTimer);
+          refetchTimer = setTimeout(() => fetchInventario(false), 400);
         },
       )
       .subscribe();
 
     return () => {
+      clearTimeout(refetchTimer);
       supabase.removeChannel(channel);
     };
   }, [updateItem, fetchInventario]);
