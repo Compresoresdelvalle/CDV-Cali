@@ -59,46 +59,44 @@ export default function TraspasoDetalle() {
   const esAdmin = perfil?.rol === "Admin";
   const esBodeguero = perfil?.rol === "Bodeguero";
 
+  const accionandoRef = useRef(false);
+
   const cargar = async () => {
     setLoading(true);
     try {
-      const [{ data: t }, { data: d }] = await Promise.all([
-        supabase
-          .from("traspasos")
-          .select(
-            `*,
-             solicitante:solicitado_por(nombre),
-             picker:picker_id(nombre),
-             verificador:verificado_por(nombre),
-             receptor:recibido_por(nombre)`,
-          )
-          .eq("id", id)
-          .single(),
-        supabase
-          .from("detalle_traspaso")
-          .select(
-            `*, producto:producto_id(nombre, referencia, unidad_medida),
-             ubicacion:ubicacion_origen_id(pasillo, estante, nivel, prioridad_picking)`,
-          )
-          .eq("traspaso_id", id)
-          .order("created_at"),
-      ]);
+      const [{ data: t, error: errT }, { data: d, error: errD }] =
+        await Promise.all([
+          supabase
+            .from("traspasos")
+            .select(
+              `*,
+               solicitante:solicitado_por(nombre),
+               picker:picker_id(nombre),
+               verificador:verificado_por(nombre),
+               receptor:recibido_por(nombre)`,
+            )
+            .eq("id", id)
+            .single(),
+          supabase
+            .from("detalle_traspaso")
+            .select(
+              `*, producto:producto_id(nombre, referencia, unidad_medida),
+               ubicacion:ubicacion_origen_id(pasillo, estante, nivel, prioridad_picking)`,
+            )
+            .eq("traspaso_id", id)
+            .order("created_at"),
+        ]);
+      // El error de la cabecera es bloqueante; el del detalle solo degrada.
+      if (errT) throw errT;
       setTraspaso(t);
       setItems(d ?? []);
-    } catch {
-      // ignore
+      if (errD) setError("No se pudo cargar el detalle de productos.");
+    } catch (e) {
+      setError(safeError(e, "Error al cargar el traspaso"));
     } finally {
       setLoading(false);
     }
   };
-
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     cargar();
@@ -107,6 +105,8 @@ export default function TraspasoDetalle() {
 
   // ── Acción: iniciar picking ───────────────────────────────
   const iniciarPicking = async () => {
+    if (accionandoRef.current) return;
+    accionandoRef.current = true;
     setError(null);
     setAccionando(true);
     try {
@@ -121,11 +121,14 @@ export default function TraspasoDetalle() {
       setError(safeError(e, "Error en operación de traspaso"));
     } finally {
       setAccionando(false);
+      accionandoRef.current = false;
     }
   };
 
   // ── Acción: enviar (verificado → en_transito) ────────────
   const enviarTraspaso = async () => {
+    if (accionandoRef.current) return;
+    accionandoRef.current = true;
     setError(null);
     setAccionando(true);
     try {
@@ -140,6 +143,7 @@ export default function TraspasoDetalle() {
       setError(safeError(e, "Error en operación de traspaso"));
     } finally {
       setAccionando(false);
+      accionandoRef.current = false;
     }
   };
 

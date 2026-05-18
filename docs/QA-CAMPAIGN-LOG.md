@@ -14,7 +14,7 @@
 | 3    | Inventario + QR + Realtime           | ✅ Cerrada   | 0 / 5 / 3            | (ver commit qa fase3)  |
 | 4    | Ventas + Cotizaciones                | ✅ Cerrada   | 4 / 1 / 2            | (ver commits qa fase4) |
 | 5    | Compras + Devoluciones               | ✅ Cerrada   | 0 / 6 / 7            | (ver commit qa fase5)  |
-| 6    | Traspasos + Picking                  | ⏳ Pendiente | —                    | —                      |
+| 6    | Traspasos + Picking                  | ✅ Cerrada   | 0 / 9 / 5            | (ver commit qa fase6)  |
 | 7    | Órdenes + Ensambles + Herramientas   | ⏳ Pendiente | —                    | —                      |
 | 8    | Dashboard Admin                      | ⏳ Pendiente | —                    | —                      |
 | 9    | Configuración General                | ⏳ Pendiente | —                    | —                      |
@@ -146,6 +146,48 @@ de `compras`/`detalle_compra`/`devoluciones`. **Todos los hallazgos resueltos**
 - **F5-14 (P2):** la Edge Function `registrar-devolucion` está ACTIVA en Supabase pero su fuente NO está en el repo (`supabase/functions/` solo tiene 3 de 4) — drift de deploy. Es un wrapper delgado del RPC `fn_registrar_devolucion`; la UI usa el RPC directo. Decidir/limpiar/versionar junto con las otras Edge Functions en el deploy (ver F4-09).
 
 **Verificado OK:** stress SQL 7/7 (RPC registra compra con `registrado_por`/totales correctos; recepción suma stock +10 y crea movimiento; bloquea sede ajena, rol vendedor, producto inexistente, e INSERT directo a `compras`/`devoluciones`) con rollback; `trg_compra_sumar_stock` tiene advisory lock + `FOR UPDATE` y guarda contra doble-recepción; `fn_registrar_devolucion` valida venta/cantidad/stock; integración `devoluciones.test.js` 8/8; E2E `fase05-compras-devoluciones.spec.js` 6/6; `eslint` + `build` limpios.
+
+### Fase 6 — Traspasos + Picking ✅ CERRADA
+
+3 agentes (code/typescript/security) revisaron `TraspasoNuevo/Detalle/Historial.jsx`,
+`PickingPage.jsx`, `VerificacionTraspaso.jsx`, `RecepcionTraspaso.jsx`; revisión
+de BD propia sobre `fn_procesar_traspaso`, `trg_traspaso_salida/entrada` y la RLS
+de `traspasos`/`detalle_traspaso`. **Todos los hallazgos resueltos** (9 P1 + 5 P2).
+
+**Resueltos — P1:**
+
+| ID    | Sev | Área              | Repro / Descripción                                                                                                                                                                            | Fix                                                                                                                                       | Estado      |
+| ----- | --- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| F6-01 | P1  | Seguridad / RBAC  | `fn_procesar_traspaso` no validaba rol ni sede en `iniciar_picking`/`verificar`/`enviar` → cualquier autenticado (incl. Vendedor) podía manejar el ciclo y mover stock.                        | Cada acción valida rol Admin/Bodeguero y sede (origen para picking/verificar/enviar, destino para recibir). Stress: vendedor bloqueado.   | ✅ Resuelto |
+| F6-02 | P1  | Seguridad / RLS   | La política `trasp_all` (cmd=ALL) permitía UPDATE directo de cualquier traspaso → saltarse la máquina de estados y la regla picker≠verificador.                                                | `trasp_all`/`trasp_read` → `trasp_select` (solo SELECT por sede). Escrituras solo vía RPCs. Stress: UPDATE directo afecta 0 filas.        | ✅ Resuelto |
+| F6-03 | P1  | Atomicidad        | `TraspasoNuevo` creaba con 2 inserts no-transaccionales y `solicitado_por` del cliente → traspaso huérfano + spoofing.                                                                         | RPC `fn_crear_traspaso` server-authoritative (cabecera + detalle en una transacción, `solicitado_por = auth.uid()`).                      | ✅ Resuelto |
+| F6-04 | P1  | Bug / stock       | `trg_traspaso_entrada`: `SELECT … INTO v_stock_ant` dejaba NULL si la sede destino no stockeaba el producto → INSERT en `movimientos` violaba el NOT NULL → la recepción fallaba por completo. | `v_stock_ant := COALESCE(v_stock_ant, 0)` tras el SELECT. Stress: recepción a sede sin stock previo OK.                                   | ✅ Resuelto |
+| F6-05 | P1  | Seguridad / stock | `actualizar_items` aceptaba `cantidad_enviada` negativa (inflaba stock origen vía trigger); `recibir` aceptaba `cantidad_recibida` > enviada (inflaba destino).                                | El RPC valida `cantidad_enviada >= 0` y `0 ≤ cantidad_recibida ≤ cantidad_enviada`; CHECK constraints no-negativos en `detalle_traspaso`. | ✅ Resuelto |
+| F6-06 | P1  | Pérdida de datos  | `PickingPage`/`Verificacion`/`Recepcion`: el `useEffect` dependía del objeto `perfil` → cualquier cambio del store re-disparaba el fetch y descartaba el picking en curso.                     | Deps primitivas (`perfil?.id`, `perfil?.rol`, …).                                                                                         | ✅ Resuelto |
+| F6-07 | P1  | Doble-submit      | Los handlers de transición (`iniciarPicking`, `enviar`, `verificar`, `confirmarRecepcion`, crear traspaso) no tenían guard síncrono.                                                           | `useRef` guard en cada handler.                                                                                                           | ✅ Resuelto |
+| F6-08 | P1  | Robustez          | `TraspasoDetalle` desestructuraba `Promise.all` sin revisar el `.error` de cada query; `catch {}` vacío.                                                                                       | Se revisa `errT` (bloqueante) y `errD` (degradado); `catch` con banner.                                                                   | ✅ Resuelto |
+| F6-09 | P1  | Race condition    | `TraspasoHistorial`: cambiar de filtro con una carga en vuelo mezclaba/duplicaba páginas.                                                                                                      | Token de secuencia (`reqIdRef`).                                                                                                          | ✅ Resuelto |
+
+**Resueltos — P2:**
+
+| ID    | Sev | Área          | Repro / Descripción                                                                             | Fix                                                            | Estado      |
+| ----- | --- | ------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------- |
+| F6-10 | P2  | Navegación    | Picking/Verificacion/Recepcion no validaban el `estado` del traspaso al entrar por URL directa. | Redirigen al detalle si el estado no corresponde a esa página. | ✅ Resuelto |
+| F6-11 | P2  | UX / errores  | `TraspasoHistorial` se tragaba los errores de carga en silencio.                                | Estado `errorMsg` + banner `role="alert"`.                     | ✅ Resuelto |
+| F6-12 | P2  | Crash         | `TraspasoNuevo`/`Historial` accedían a `perfil.sede_id` sin optional chaining.                  | `perfil?.…`.                                                   | ✅ Resuelto |
+| F6-13 | P2  | Input         | `parseInt` sin radix en PickingPage/Recepcion; cantidad de picking sin tope superior.           | `parseInt(v, 10)`; cantidad pickeada clampada a `[1, 100000]`. | ✅ Resuelto |
+| F6-14 | P2  | Código muerto | `mountedRef` declarado y mantenido en 3 páginas pero nunca consultado antes de un `setState`.   | Eliminado.                                                     | ✅ Resuelto |
+
+**Descartados (falsos positivos):**
+
+- **`tipo` de traspaso sin validar server-side** — `traspasos.tipo` es un ENUM (`tipo_traspaso`); un valor inválido falla en el cast. No requiere CHECK.
+- **`actualizar_items` permitiría a un no-picker alterar el picking** — el RPC YA valida `v_uid = v_picker` en esa acción.
+
+**Routeado a Fase 16 (Frontend Redesign):**
+
+- `RecepcionTraspaso.jsx` usa `color: "#fff"` hardcodeado en 2 botones (viola Regla #1 de CLAUDE.md). Polish visual no funcional → se corrige en F16 junto con los demás colores hardcodeados (ver F2-06).
+
+**Verificado OK:** stress SQL 12/12 con rollback (flujo completo crear→picking→verificar→enviar→recibir; stock sale de origen −5 y entra a destino +5 incluso en sede sin stock previo; bloquea cantidad negativa, picker=verificador, recibida>enviada, vendedor creando/procesando, y UPDATE directo a `traspasos`); `fn_procesar_traspaso` con `FOR UPDATE` y máquina de estados; triggers `trg_traspaso_salida/entrada` con advisory lock; E2E `fase06-traspasos.spec.js` 5/5; `eslint` + `build` limpios.
 
 ## Backlog (P2 sin resolver)
 

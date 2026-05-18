@@ -31,13 +31,7 @@ export default function RecepcionTraspaso() {
 
   const esAdmin = perfil?.rol === "Admin";
 
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const recibiendoRef = useRef(false);
 
   /* ── Cargar datos ─────────────────────────────────────────── */
   useEffect(() => {
@@ -72,6 +66,11 @@ export default function RecepcionTraspaso() {
           navigate(`/ops/traspasos/${id}`, { replace: true });
           return;
         }
+        // Solo se recibe un traspaso En Tránsito.
+        if (t.estado !== "en_transito") {
+          navigate(`/ops/traspasos/${id}`, { replace: true });
+          return;
+        }
 
         setTraspaso(t);
         setItems(d ?? []);
@@ -91,7 +90,8 @@ export default function RecepcionTraspaso() {
     };
 
     cargar();
-  }, [id, perfil, navigate, esAdmin]);
+    // Deps primitivas: depender del objeto `perfil` re-disparaba el fetch.
+  }, [id, perfil?.id, perfil?.sede_id, esAdmin, navigate]);
 
   /* ── Calcular diferencias ─────────────────────────────────── */
   const hayDiferencias = items.some((item) => {
@@ -107,6 +107,8 @@ export default function RecepcionTraspaso() {
 
   /* ── Acción: recibir ──────────────────────────────────────── */
   const confirmarRecepcion = async () => {
+    if (recibiendoRef.current) return;
+    recibiendoRef.current = true;
     setRecibiendo(true);
     setError(null);
     try {
@@ -127,6 +129,7 @@ export default function RecepcionTraspaso() {
       setConfirmarDiff(false);
     } finally {
       setRecibiendo(false);
+      recibiendoRef.current = false;
     }
   };
 
@@ -142,7 +145,7 @@ export default function RecepcionTraspaso() {
     // Cap entre 0 y cantidad_enviada (no se puede recibir más de lo enviado)
     const item = items?.find((it) => it.id === itemId);
     const max = item?.cantidad_enviada ?? item?.cantidad_solicitada ?? Infinity;
-    const num = Math.min(max, Math.max(0, parseInt(value) || 0));
+    const num = Math.min(max, Math.max(0, parseInt(value, 10) || 0));
     setRecibidas((prev) => ({ ...prev, [itemId]: num }));
   };
 

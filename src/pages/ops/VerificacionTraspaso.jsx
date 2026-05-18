@@ -30,13 +30,7 @@ export default function VerificacionTraspaso() {
   const esAdmin = perfil?.rol === "Admin";
   const esBodeguero = perfil?.rol === "Bodeguero";
 
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const verificandoRef = useRef(false);
 
   /* ── Cargar datos ─────────────────────────────────────────── */
   useEffect(() => {
@@ -76,6 +70,11 @@ export default function VerificacionTraspaso() {
           navigate(`/ops/traspasos/${id}`, { replace: true });
           return;
         }
+        // Solo se verifica un traspaso En Picking.
+        if (t.estado !== "picking") {
+          navigate(`/ops/traspasos/${id}`, { replace: true });
+          return;
+        }
 
         setTraspaso(t);
         setItems(d ?? []);
@@ -87,10 +86,13 @@ export default function VerificacionTraspaso() {
     };
 
     cargar();
-  }, [id, perfil, navigate, esAdmin, esBodeguero]);
+    // Deps primitivas: depender del objeto `perfil` re-disparaba el fetch.
+  }, [id, perfil?.id, esAdmin, esBodeguero, navigate]);
 
   /* ── Acción: verificar ────────────────────────────────────── */
   const verificar = async () => {
+    if (verificandoRef.current) return;
+    verificandoRef.current = true;
     setVerificando(true);
     setError(null);
     try {
@@ -105,6 +107,7 @@ export default function VerificacionTraspaso() {
       setError(safeError(e, "Error en verificación de traspaso"));
     } finally {
       setVerificando(false);
+      verificandoRef.current = false;
     }
   };
 
