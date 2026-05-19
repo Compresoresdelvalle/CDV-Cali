@@ -5,15 +5,19 @@
  * en el Dashboard, previsualizar + generar un cierre, y rechazo de solapamiento.
  *
  * Nota: `cierres` es append-only (no se puede borrar). Cada corrida usa una
- * ventana de fecha futura única para no colisionar con corridas previas.
+ * ventana de fecha única (en el pasado lejano) para no colisionar con
+ * corridas previas. No se usan fechas futuras: cerrar un periodo futuro es
+ * un sin-sentido contable y la app lo rechaza.
  */
 import { test, expect } from "@playwright/test";
 import { loginUI } from "./helpers.js";
 
-// Día futuro único por corrida — dentro de 2090-2098, derivado del reloj.
+// Día único por corrida — pasado lejano (2000-2008), derivado del reloj.
+// Pasado, para no colisionar con datos reales ni con la validación de la app
+// que prohíbe cerrar periodos con fecha futura.
 function fechaUnica() {
   const offset = Date.now() % 3000;
-  const d = new Date(Date.UTC(2090, 0, 1));
+  const d = new Date(Date.UTC(2000, 0, 1));
   d.setUTCDate(d.getUTCDate() + offset);
   return d.toISOString().slice(0, 10);
 }

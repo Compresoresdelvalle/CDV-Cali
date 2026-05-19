@@ -434,6 +434,45 @@ fuera de rango, sede forjada, OT de otra sede, anular de otra sede); E2E
 la barra inferior móvil (2 `<a>` en el DOM) → se cambió a
 `.first()` + `toBeVisible`.
 
+## Fase 15 — Dashboard + Cierres
+
+Última fase. El módulo ya se había construido y **endurecido** al inicio de la
+campaña, así que esta pasada confirma que el endurecimiento se sostuvo: la
+revisión de seguridad no encontró ningún P0/P1 (append-only en `cierres` con
+doble capa — triggers + REVOKE —, `EXCLUDE` de solapamiento sobre `daterange`
+correcto, RPCs de cierre solo-Admin + `search_path` + totales server-authoritative
+
+- advisory lock). **Hallazgos resueltos** (4 P2).
+
+| ID     | Sev | Área              | Repro / Descripción                                                                                                                                                                                          | Fix                                                                                                    | Estado      |
+| ------ | --- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ----------- |
+| F15-01 | P2  | Correctitud / TZ  | `fn_dashboard_kpis` agrupaba las ventas por día UTC (`fecha::date = CURRENT_DATE`), pero los cierres usan el día `America/Bogota` → el dashboard no cuadraba con el cierre del mismo día (ventas nocturnas). | Todo el bucketing de fechas usa el día de Bogota. Migración `20260518000016`. Función de solo lectura. | ✅ Resuelto |
+| F15-02 | P2  | Doble-submit      | `Cierres.generar` solo se protegía con el estado `generating` (no síncrono) → un doble-tap podía disparar dos `fn_generar_cierre`.                                                                           | `useRef` guard síncrono (el `EXCLUDE` ya rechazaría el duplicado, pero evita el error confuso).        | ✅ Resuelto |
+| F15-03 | P2  | Race / validación | Si se cambiaban las fechas mientras la previsualización estaba en vuelo, el preview mostrado quedaba desfasado del rango a generar; además no se bloqueaban fechas futuras.                                  | Token de secuencia para descartar previews obsoletos + validación de fecha no futura.                  | ✅ Resuelto |
+| F15-04 | P2  | Frontend / TZ     | `Dashboard` (gráfico de tendencia) hacía `new Date("YYYY-MM-DD")`, que se parsea como UTC → en zona Colombia el tooltip mostraba el día anterior.                                                            | Se ancla la fecha a mediodía local antes de formatear.                                                 | ✅ Resuelto |
+
+**Verificado OK:** revisión de seguridad sin P0/P1; `cierres` append-only
+real; `EXCLUDE` sobre `daterange WITH &&` no necesita `btree_gist` (el "P1
+btree_gist faltante" de un agente fue falso positivo); `fn_generar_cierre`
+valida Admin + fechas + hace chequeo explícito de solapamiento bajo advisory
+lock. E2E `fase15-cierres` 3/3; `eslint` + `build` limpios.
+
+**Diferido (no es bug):** `ventas.cerrada`/`ordenes_servicio.cerrada` existen
+pero `fn_generar_cierre` no las marca — la invariante anti-doble-conteo ya la
+garantizan los periodos de cierre no solapados (`EXCLUDE` + chequeo explícito);
+estampar el flag exigiría además cablear el lado lector (bloquear anulaciones
+de transacciones cerradas) → es trabajo de feature, no un defecto.
+
+---
+
+## ✅ Campaña de QA completada
+
+Las **16 fases (0 → 15)** quedaron auditadas, corregidas, verificadas,
+commiteadas y mergeadas a `main`. Total: **16 commits `qa(faseXX)`**.
+Cada fase: revisión con agentes (code/ts/security + database/architect),
+stress SQL con rollback, E2E aislado, `eslint` + `build` limpios. El backlog
+de P2 documentado abajo queda como mejoras incrementales (no bloquea v1.0).
+
 ## Backlog (P2 sin resolver)
 
 - **F2-04 (P2, seguridad):** el login con PIN de 4 dígitos no tiene rate-limiting ni bloqueo por intentos fallidos del lado del cliente. Brute-force teórico (10.000 combos). App interna de 6 usuarios; Supabase Auth tiene rate-limiting de plataforma.
