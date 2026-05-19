@@ -15,6 +15,7 @@ export default function ReciboHistorial() {
   const [filtro, setFiltro] = useState("Todos"); // Todos | Vigentes | Anulados
 
   useEffect(() => {
+    let cancelado = false;
     const cargar = async () => {
       setLoading(true);
       setErrorMsg("");
@@ -30,14 +31,17 @@ export default function ReciboHistorial() {
         if (filtro === "Anulados") q = q.eq("anulado", true);
         const { data, error } = await q;
         if (error) throw error;
-        setRecibos(data ?? []);
+        if (!cancelado) setRecibos(data ?? []);
       } catch (err) {
-        setErrorMsg(safeError(err, "Error al cargar recibos"));
+        if (!cancelado) setErrorMsg(safeError(err, "Error al cargar recibos"));
       } finally {
-        setLoading(false);
+        if (!cancelado) setLoading(false);
       }
     };
     cargar();
+    return () => {
+      cancelado = true;
+    };
   }, [filtro]);
 
   return (

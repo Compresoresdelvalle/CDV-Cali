@@ -62,6 +62,19 @@ export default function ReciboDetalle() {
       recibidoPor: recibo.recibidor?.nombre ?? "—",
     });
 
+  // Envuelve la generación del PDF: si jsPDF falla, muestra el error en vez
+  // de dejar una excepción sin manejar.
+  const manejarPDF = (accion) => {
+    setErrorMsg("");
+    try {
+      const pdf = construirPDF();
+      if (accion === "print") pdf.print();
+      else pdf.download();
+    } catch (err) {
+      setErrorMsg(safeError(err, "No se pudo generar el PDF del recibo"));
+    }
+  };
+
   const anular = async () => {
     const ok = await confirm({
       titulo: "Anular recibo",
@@ -169,7 +182,7 @@ export default function ReciboDetalle() {
       {/* Acciones */}
       <div className="flex flex-wrap gap-2">
         <button
-          onClick={() => construirPDF().print()}
+          onClick={() => manejarPDF("print")}
           className="text-sm px-4 py-2 rounded-lg cursor-pointer min-h-[44px]"
           style={{
             backgroundColor: "hsl(var(--primary))",
@@ -179,7 +192,7 @@ export default function ReciboDetalle() {
           🖨️ Imprimir
         </button>
         <button
-          onClick={() => construirPDF().download()}
+          onClick={() => manejarPDF("download")}
           className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[44px]"
           style={{
             borderColor: "hsl(var(--border))",

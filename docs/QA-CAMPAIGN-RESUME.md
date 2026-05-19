@@ -16,20 +16,20 @@ lo que se encuentra en el momento**.
 
 ## Por dónde vamos
 
-| Fases            | Estado                               |
-| ---------------- | ------------------------------------ |
-| 0 … 13           | ✅ **Cerradas** y mergeadas a `main` |
-| **14 — Recibos** | ⏭️ **SIGUIENTE**                     |
-| 15               | ⏳ Pendiente                         |
+| Fases                        | Estado                               |
+| ---------------------------- | ------------------------------------ |
+| 0 … 14                       | ✅ **Cerradas** y mergeadas a `main` |
+| **15 — Dashboard + Cierres** | ⏭️ **SIGUIENTE (última)**            |
 
-Fase 13 cerrada: 3 P1 + 4 P2 resueltos. F13-01: `fn_abrir_garantia_compra`
-confiaba en el `costo_unitario` del cliente para la nota crédito → ahora lo
-lee de `detalle_compra`. F13-02 (RBAC): ningún RPC de garantía validaba la
-sede → un no-Admin podía operar sobre otra sede. F13-03: `monto_devuelto` sin
-tope → topado al total original. F13-04: guards anti doble-submit en los
-modales. F13-05: inyección de filtro PostgREST en el buscador. F13-06: errores
-de carga silenciados. F13-07: Técnico excluido de las rutas de garantía pese a
-permitírselo el RPC. Stress SQL 4/4; E2E `fase13-garantias` 8/8.
+Fase 14 cerrada: 4 P1 + 3 P2 resueltos. F14-01: `fn_registrar_recibo`
+insertaba subtotal/total/abonos_previos/saldo del cliente → ahora se recalculan
+server-side. F14-02/03 (RBAC): `sede_id` y la OT/cotización vinculadas no se
+validaban contra la sede → un Vendedor podía operar en otra sede. F14-04:
+`fn_anular_recibo` sin check de sede. F14-05: guard anti doble-submit. F14-06:
+IVA sin acotar en el frontend. F14-07: PDF sin try/catch + setState tras
+desmontaje. Stress SQL 5/5; E2E `fase14-recibos` 4/4 (1 test obsoleto
+corregido). Fase 15 ya fue auditada al inicio de la campaña — falta cerrar el
+ciclo formal de QA.
 
 ## Plantilla por fase (seguir IGUAL en cada una)
 
@@ -65,7 +65,9 @@ permitírselo el RPC. Stress SQL 4/4; E2E `fase13-garantias` 8/8.
 
 ## Siguiente acción concreta
 
-Arrancar **QA Fase 14 (Recibos manuales)**: leer `fases/FASE-14-RECIBOS.md`,
-lanzar los agentes de revisión (code/ts/security + database) sobre las
-páginas/RPC de recibos. Ya hay spec `fase14-recibos` — auditar vs criterios
-sin duplicar; arreglar lo encontrado; commit `qa(fase14)` + merge.
+Arrancar **QA Fase 15 (Dashboard + Cierres)** — última fase: leer
+`fases/FASE-15-DASHBOARD-CIERRES.md`, lanzar los agentes de revisión
+(code/ts/security + database) sobre Dashboard, Cierres y sus RPC. Ya hay spec
+`fase15-cierres` y la fase fue endurecida al inicio de la campaña — auditar vs
+criterios; arreglar lo encontrado; commit `qa(fase15)` + merge. Con esto la
+campaña de QA queda completa.
