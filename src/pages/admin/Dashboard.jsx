@@ -493,7 +493,9 @@ function LineChart({ data }) {
         <g key={i}>
           <circle cx={p.x} cy={p.y} r="3" fill="hsl(var(--primary))" />
           <title>
-            {new Date(p.fecha).toLocaleDateString("es-CO", {
+            {/* Ancla a mediodía local: `new Date("YYYY-MM-DD")` se parsea como
+                UTC y, en zona Colombia (UTC-5), mostraría el día anterior. */}
+            {new Date(`${p.fecha}T12:00:00`).toLocaleDateString("es-CO", {
               weekday: "short",
               day: "numeric",
             })}

@@ -45,6 +45,8 @@ export default function Cierres() {
   const [errorMsg, setErrorMsg] = useState("");
   const [okMsg, setOkMsg] = useState("");
   const mountedRef = useRef(true);
+  const generandoRef = useRef(false); // guard síncrono anti doble-submit
+  const previewSeqRef = useRef(0); // token de secuencia anti preview obsoleto
   const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -76,21 +78,27 @@ export default function Cierres() {
     cargarHistorial();
   }, []);
 
+  // Invalida cualquier previsualización en vuelo y descarta la mostrada.
+  const invalidarPreview = () => {
+    previewSeqRef.current += 1;
+    setPreview(null);
+  };
+
   // Mantiene hasta = desde cuando el cierre es diario.
   const onTipo = (t) => {
     setTipo(t);
-    setPreview(null);
+    invalidarPreview();
     if (t === "diario") setHasta(desde);
   };
   const onDesde = (v) => {
     setDesde(v);
-    setPreview(null);
+    invalidarPreview();
     if (tipo === "diario") setHasta(v);
     else if (hasta < v) setHasta(v);
   };
   const onHasta = (v) => {
     setHasta(v);
-    setPreview(null);
+    invalidarPreview();
   };
 
   const previsualizar = async () => {
@@ -105,25 +113,38 @@ export default function Cierres() {
       setErrorMsg("La fecha hasta no puede ser anterior a la fecha desde");
       return;
     }
+    if (desde > hoy || hasta > hoy) {
+      setErrorMsg("No se puede cerrar un periodo con fechas futuras");
+      return;
+    }
+    // Token de secuencia: si las fechas cambian mientras el RPC está en
+    // vuelo, esta respuesta se descarta y no contamina el preview mostrado.
+    const myReq = (previewSeqRef.current += 1);
     setPreviewing(true);
     try {
       const { data, error } = await supabase.rpc("fn_preview_cierre", {
         p_desde: desde,
         p_hasta: hasta,
       });
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || myReq !== previewSeqRef.current) return;
       if (error) throw error;
       setPreview(data);
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || myReq !== previewSeqRef.current) return;
       setErrorMsg(safeError(err, "Error al previsualizar el cierre"));
     } finally {
-      if (mountedRef.current) setPreviewing(false);
+      if (mountedRef.current && myReq === previewSeqRef.current) {
+        setPreviewing(false);
+      }
     }
   };
 
   const generar = async () => {
     if (!preview || preview.ya_cubierto) return;
+    // Guard síncrono: el `await confirm` abre una ventana donde el `disabled`
+    // del botón aún no aplica — un doble-tap dispararía dos cierres.
+    if (generandoRef.current) return;
+    generandoRef.current = true;
     const ok = await confirm({
       titulo: "Generar cierre",
       mensaje: `Se generará un cierre ${tipo} del ${fmtFecha(desde)} al ${fmtFecha(
@@ -131,7 +152,10 @@ export default function Cierres() {
       )} por ${formatCOP(Number(preview.ingresos_total))}. Una vez guardado es inmutable y no podrá editarse ni borrarse.`,
       confirmLabel: "Generar cierre",
     });
-    if (!ok) return;
+    if (!ok) {
+      generandoRef.current = false;
+      return;
+    }
     setErrorMsg("");
     setOkMsg("");
     setGenerating(true);
@@ -149,9 +173,11 @@ export default function Cierres() {
       setObservaciones("");
       await cargarHistorial();
     } catch (err) {
-      if (!mountedRef.current) return;
-      setErrorMsg(safeError(err, "Error al generar el cierre"));
+      if (mountedRef.current) {
+        setErrorMsg(safeError(err, "Error al generar el cierre"));
+      }
     } finally {
+      generandoRef.current = false;
       if (mountedRef.current) setGenerating(false);
     }
   };

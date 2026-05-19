@@ -16,20 +16,21 @@ lo que se encuentra en el momento**.
 
 ## Por dónde vamos
 
-| Fases                        | Estado                               |
-| ---------------------------- | ------------------------------------ |
-| 0 … 14                       | ✅ **Cerradas** y mergeadas a `main` |
-| **15 — Dashboard + Cierres** | ⏭️ **SIGUIENTE (última)**            |
+| Fases  | Estado                                     |
+| ------ | ------------------------------------------ |
+| 0 … 15 | ✅ **TODAS cerradas** y mergeadas a `main` |
 
-Fase 14 cerrada: 4 P1 + 3 P2 resueltos. F14-01: `fn_registrar_recibo`
-insertaba subtotal/total/abonos_previos/saldo del cliente → ahora se recalculan
-server-side. F14-02/03 (RBAC): `sede_id` y la OT/cotización vinculadas no se
-validaban contra la sede → un Vendedor podía operar en otra sede. F14-04:
-`fn_anular_recibo` sin check de sede. F14-05: guard anti doble-submit. F14-06:
-IVA sin acotar en el frontend. F14-07: PDF sin try/catch + setState tras
-desmontaje. Stress SQL 5/5; E2E `fase14-recibos` 4/4 (1 test obsoleto
-corregido). Fase 15 ya fue auditada al inicio de la campaña — falta cerrar el
-ciclo formal de QA.
+🎉 **Campaña de QA completada.** Las 16 fases (0→15) auditadas, corregidas,
+verificadas y mergeadas — 16 commits `qa(faseXX)`. Ver `docs/QA-CAMPAIGN-LOG.md`
+para el detalle de hallazgos por fase y el backlog de P2.
+
+Fase 15 cerrada: 4 P2 resueltos. F15-01: `fn_dashboard_kpis` agrupaba ventas
+por día UTC en vez de día Bogota (no cuadraba con los cierres). F15-02: guard
+anti doble-submit en `generar`. F15-03: token de secuencia anti preview
+obsoleto + validación de fecha no futura. F15-04: el gráfico del Dashboard
+mostraba el día anterior por parseo UTC. La revisión de seguridad no encontró
+P0/P1 — el endurecimiento inicial de la fase se sostuvo. Stress/verificación
+de `fn_dashboard_kpis` OK; E2E `fase15-cierres` 3/3.
 
 ## Plantilla por fase (seguir IGUAL en cada una)
 
@@ -65,9 +66,8 @@ ciclo formal de QA.
 
 ## Siguiente acción concreta
 
-Arrancar **QA Fase 15 (Dashboard + Cierres)** — última fase: leer
-`fases/FASE-15-DASHBOARD-CIERRES.md`, lanzar los agentes de revisión
-(code/ts/security + database) sobre Dashboard, Cierres y sus RPC. Ya hay spec
-`fase15-cierres` y la fase fue endurecida al inicio de la campaña — auditar vs
-criterios; arreglar lo encontrado; commit `qa(fase15)` + merge. Con esto la
-campaña de QA queda completa.
+✅ **Campaña terminada — no hay fase pendiente.** Las 16 fases están cerradas
+y mergeadas a `main`. Si se reanuda trabajo: revisar el backlog de P2 en
+`docs/QA-CAMPAIGN-LOG.md` (consolidación de RLS, índices de FK, CSP, etc.) o
+avanzar a Fase 16 (rediseño) / Fase 17 (deploy v1.0), que quedaron fuera de
+esta campaña funcional.
