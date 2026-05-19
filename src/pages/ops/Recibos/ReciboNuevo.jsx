@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../../lib/supabase";
 import { formatCOP, safeError } from "../../../lib/utils";
@@ -27,6 +27,7 @@ export default function ReciboNuevo() {
   const [cuentas, setCuentas] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const guardandoRef = useRef(false);
 
   // Campos del recibo
   const [clienteNombre, setClienteNombre] = useState("");
@@ -58,7 +59,8 @@ export default function ReciboNuevo() {
 
   // Calculados
   const subN = Number(subtotal) || 0;
-  const ivaN = Number(ivaPct) || 0;
+  // IVA acotado a [0,100] — el input HTML no impide teclear fuera de rango.
+  const ivaN = Math.min(100, Math.max(0, Number(ivaPct) || 0));
   const total = subN * (1 + ivaN / 100);
   const pagadoN = Number(montoPagado) || 0;
   const saldo = total - abonosPrevios - pagadoN;
@@ -137,6 +139,13 @@ export default function ReciboNuevo() {
       setErrorMsg("El concepto es obligatorio");
       return;
     }
+    if (subN < 0) {
+      setErrorMsg("El subtotal no puede ser negativo");
+      return;
+    }
+    // Guard síncrono anti doble-submit (el `disabled` no aplica de inmediato).
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
     setSubmitting(true);
     try {
       const payload = {
@@ -166,6 +175,7 @@ export default function ReciboNuevo() {
       setErrorMsg(safeError(err, "Error al registrar recibo"));
     } finally {
       setSubmitting(false);
+      guardandoRef.current = false;
     }
   };
 

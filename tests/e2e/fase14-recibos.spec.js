@@ -12,9 +12,10 @@ test.describe("Fase 14 — Recibos", () => {
     page,
   }) => {
     await loginUI(page, "maria");
-    // El link de Recibos vive en un grupo plegable del sidebar; basta con
-    // verificar que está registrado en el DOM para el rol Vendedor.
-    await expect(page.locator('a[href="/ops/recibos"]')).toHaveCount(1, {
+    // Recibos se registra en el sidebar de escritorio Y en la barra inferior
+    // móvil → el enlace aparece más de una vez en el DOM. Basta con verificar
+    // que al menos uno esté presente y visible para el rol Vendedor.
+    await expect(page.locator('a[href="/ops/recibos"]').first()).toBeVisible({
       timeout: 15_000,
     });
   });

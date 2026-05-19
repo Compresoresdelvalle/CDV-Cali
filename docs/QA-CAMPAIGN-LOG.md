@@ -404,6 +404,36 @@ front-end F13-04 — abrir varias garantías legítimas sobre una misma venta s�
 es válido (distintos ítems, distintas fechas), por eso no se puso constraint
 `UNIQUE`.
 
+## Fase 14 — Recibos manuales
+
+Módulo de recibos de pago: creación manual (desde cero o desde una
+cotización), vínculo opcional con OT (consolida abonos), PDF. La revisión se
+centró en `fn_registrar_recibo`, `fn_anular_recibo` y las tres páginas de
+recibos. **Hallazgos resueltos** (4 P1 + 3 P2).
+
+| ID     | Sev | Área                 | Repro / Descripción                                                                                                                                                                              | Fix                                                                                                                                                                        | Estado      |
+| ------ | --- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| F14-01 | P1  | Server-authoritative | `fn_registrar_recibo` insertaba `subtotal`/`total`/`abonos_previos`/`saldo` y los subtotales de ítem tal cual venían del cliente → se podía forjar un saldo en cero o `abonos_previos` inflados. | El servidor recalcula: subtotal (suma de ítems o monto manual sin ítems), `total`, `abonos_previos` (suma real de la OT) y `saldo`. Migración `20260518000015`. Stress OK. | ✅ Resuelto |
+| F14-02 | P1  | RBAC                 | El cliente podía mandar cualquier `sede_id`; al ser el RPC `SECURITY DEFINER` la RLS no aplica → un Vendedor creaba recibos en otra sede.                                                        | Un no-Admin queda forzado a su propia sede. Stress OK.                                                                                                                     | ✅ Resuelto |
+| F14-03 | P1  | RBAC                 | `orden_id` y `cotizacion_id` no se validaban contra la sede del usuario → un Vendedor podía vincular (y abonar) una OT de otra sede.                                                             | Se valida la pertenencia de sede de la OT y la cotización vinculadas. Stress OK.                                                                                           | ✅ Resuelto |
+| F14-04 | P2  | RBAC                 | `fn_anular_recibo` no verificaba la sede → un Vendedor podía anular recibos (y borrar abonos) de otra sede.                                                                                      | Verificación de sede antes de anular. Stress OK.                                                                                                                           | ✅ Resuelto |
+| F14-05 | P1  | Doble-submit         | `ReciboNuevo.guardar` solo se protegía con el estado `submitting` (no síncrono) → un doble-clic creaba dos recibos.                                                                              | `useRef` guard síncrono.                                                                                                                                                   | ✅ Resuelto |
+| F14-06 | P1  | Frontend             | `ivaPct` no se acotaba en JS (el `<input max>` no impide teclear) → un IVA negativo/excesivo producía totales erróneos.                                                                          | `ivaN` acotado a `[0,100]`; validación de subtotal no negativo en `guardar` (el servidor también lo acota).                                                                | ✅ Resuelto |
+| F14-07 | P2  | Frontend             | `ReciboDetalle` llamaba al generador de PDF sin `try/catch` (excepción jsPDF sin manejar); `ReciboHistorial` hacía `setState` sin guard de desmontaje.                                           | `manejarPDF` envuelve la generación; `ReciboHistorial` usa flag `cancelado` en el cleanup del efecto.                                                                      | ✅ Resuelto |
+
+**Verificado OK:** ambos RPC son `SECURITY DEFINER` con `search_path`,
+validan `auth.uid()` + rol; `fn_anular_recibo` usa `FOR UPDATE` + flag
+`anulado` (doble-anulación rechazada); el consecutivo `recibos.numero` usa una
+secuencia (race-safe); `fn_total_abonos_ot` retorna escalar (el "P1 Number(tot)"
+de un agente fue falso positivo). Stress SQL 5/5 (recálculo server-side, IVA
+fuera de rango, sede forjada, OT de otra sede, anular de otra sede); E2E
+`fase14-recibos` 4/4; `eslint` + `build` limpios.
+
+**Test obsoleto corregido:** "Vendedor tiene Recibos en el menú" usaba
+`toHaveCount(1)`, pero el enlace se registra en el sidebar de escritorio Y en
+la barra inferior móvil (2 `<a>` en el DOM) → se cambió a
+`.first()` + `toBeVisible`.
+
 ## Backlog (P2 sin resolver)
 
 - **F2-04 (P2, seguridad):** el login con PIN de 4 dígitos no tiene rate-limiting ni bloqueo por intentos fallidos del lado del cliente. Brute-force teórico (10.000 combos). App interna de 6 usuarios; Supabase Auth tiene rate-limiting de plataforma.
