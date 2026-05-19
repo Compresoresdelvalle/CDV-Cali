@@ -144,7 +144,7 @@ export default function CotizacionEditar() {
     }
   }, []);
 
-  const buscarDebounced = useDebounce(buscarProductos, 300);
+  const buscarDebounced = useDebounce(buscarProductos, 400);
 
   const handleBusquedaChange = (e) => {
     const val = e.target.value;

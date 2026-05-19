@@ -179,7 +179,7 @@ Font: `"IBM Plex Sans", system-ui, -apple-system, sans-serif`
 - Cards en móvil, tabla en desktop
 - Botón flotante de QR scanner siempre visible en módulos que lo usan
 - Colores de estado de stock con alto contraste (visible sin leer texto)
-- Búsqueda con debounce 300ms, server-side con `ilike`
+- Búsqueda con debounce 400ms, server-side con `ilike`
 - Teclado numérico grande para el PIN (no teclado del sistema)
 
 ## Estructura del proyecto

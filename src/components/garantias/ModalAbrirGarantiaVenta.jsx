@@ -63,7 +63,7 @@ export default function ModalAbrirGarantiaVenta({
       .limit(15);
     if (mountedRef.current) setResultados(error ? [] : (data ?? []));
   };
-  const buscarDebounced = useDebouncedCallback(buscar, 300);
+  const buscarDebounced = useDebouncedCallback(buscar, 400);
 
   const addItem = (p) => {
     setItems((prev) =>

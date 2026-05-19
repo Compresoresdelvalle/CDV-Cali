@@ -79,7 +79,7 @@ export default function SelectorCotizacionExistente({
     }
   };
 
-  const buscarDebounced = useDebouncedCallback(buscar, 300);
+  const buscarDebounced = useDebouncedCallback(buscar, 400);
 
   useEffect(() => {
     buscar(busqueda);

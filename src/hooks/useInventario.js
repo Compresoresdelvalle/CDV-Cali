@@ -9,7 +9,7 @@ const SENTINEL = Symbol("init");
  * Hook que orquesta el ciclo de vida del inventario:
  * - Inicializa filtros según el rol del usuario
  * - Dispara re-fetch cuando cambian filtros (sede/estado/categoría)
- * - Debounce de 300ms para la búsqueda
+ * - Debounce de 400ms para la búsqueda
  * - Provee `loadMore` para infinite scroll
  */
 export function useInventario() {
@@ -18,7 +18,7 @@ export function useInventario() {
   const initiated = useRef(false);
 
   // Debounce SOLO para disparar el fetch (filtroBusqueda en store se actualiza inmediato)
-  const debouncedBusqueda = useDebounce(store.filtroBusqueda, 300);
+  const debouncedBusqueda = useDebounce(store.filtroBusqueda, 400);
   const prevDebounced = useRef(SENTINEL);
 
   // ── Init: una sola vez cuando el perfil está disponible ──────────────

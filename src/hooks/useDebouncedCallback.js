@@ -8,7 +8,7 @@ import { useRef, useCallback } from "react";
  * a callback — useful for search handlers where you want to fire an async
  * function at most once every `delay` ms.
  */
-export function useDebouncedCallback(fn, delay = 300) {
+export function useDebouncedCallback(fn, delay = 400) {
   const timer = useRef(null);
   return useCallback(
     (...args) => {

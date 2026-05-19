@@ -79,7 +79,7 @@ export default function VentaNueva() {
     [perfil?.sede_id],
   );
 
-  const buscarDebounced = useDebouncedCallback(buscarProductos, 300);
+  const buscarDebounced = useDebouncedCallback(buscarProductos, 400);
 
   const handleBusquedaChange = (e) => {
     const val = e.target.value;
