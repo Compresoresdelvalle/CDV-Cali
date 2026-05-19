@@ -116,7 +116,7 @@ export default function TraspasoNuevo() {
     [sedeOrigen],
   );
 
-  const buscarDebounced = useDebouncedCallback(buscarProductos, 300);
+  const buscarDebounced = useDebouncedCallback(buscarProductos, 400);
 
   const agregarItem = (prod) => {
     setBusqueda("");
