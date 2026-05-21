@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../stores/authStore";
@@ -7,6 +7,7 @@ import PageHeader from "../../components/layout/PageHeader";
 import QRGenerator from "../../components/qr/QRGenerator";
 import QRPrintLabel from "../../components/qr/QRPrintLabel";
 import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 
 export default function ProductoDetalle() {
@@ -22,6 +23,14 @@ export default function ProductoDetalle() {
   const [proveedores, setProveedores] = useState([]); // F12: historial proveedores
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // ── Edición de precio (solo Admin) ───────────────────────────────────
+  const [editandoPrecio, setEditandoPrecio] = useState(false);
+  const [nuevoPrecio, setNuevoPrecio] = useState("");
+  const [guardandoPrecio, setGuardandoPrecio] = useState(false);
+  const [errorPrecio, setErrorPrecio] = useState("");
+  const guardandoPrecioRef = useRef(false);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
     if (!productoId || authLoading) return;
@@ -85,6 +94,52 @@ export default function ProductoDetalle() {
       cancelled = true;
     };
   }, [productoId, authLoading]);
+
+  const abrirEditarPrecio = () => {
+    if (!producto) return;
+    setNuevoPrecio(String(producto.precio_venta ?? ""));
+    setErrorPrecio("");
+    setEditandoPrecio(true);
+  };
+
+  const guardarPrecio = async () => {
+    if (!producto) return;
+    setErrorPrecio("");
+    const precio = Number(nuevoPrecio);
+    if (!Number.isFinite(precio) || precio < 0) {
+      setErrorPrecio("El precio debe ser un número mayor o igual a 0");
+      return;
+    }
+    if (precio === Number(producto.precio_venta)) {
+      setEditandoPrecio(false);
+      return; // sin cambio
+    }
+    const ok = await confirm({
+      titulo: "Confirmar cambio de precio",
+      mensaje: `Se cambiará el precio de "${producto.nombre}" de ${formatCOP(
+        producto.precio_venta,
+      )} a ${formatCOP(precio)}. El nuevo precio aplicará a todas las cotizaciones y ventas futuras. ¿Confirmar?`,
+      confirmLabel: "Sí, cambiar precio",
+    });
+    if (!ok) return;
+    if (guardandoPrecioRef.current) return;
+    guardandoPrecioRef.current = true;
+    setGuardandoPrecio(true);
+    try {
+      const { error: rpcErr } = await supabase.rpc(
+        "fn_editar_precio_producto",
+        { p_producto_id: producto.id, p_precio_venta: precio },
+      );
+      if (rpcErr) throw rpcErr;
+      setProducto((p) => (p ? { ...p, precio_venta: precio } : p));
+      setEditandoPrecio(false);
+    } catch (err) {
+      setErrorPrecio(safeError(err, "Error al actualizar el precio"));
+    } finally {
+      setGuardandoPrecio(false);
+      guardandoPrecioRef.current = false;
+    }
+  };
 
   if (loading) return <LoadingSkeleton />;
   if (error) return <ErrorState message={error} onBack={() => navigate(-1)} />;
@@ -213,6 +268,15 @@ export default function ProductoDetalle() {
             >
               {formatCOP(producto.precio_venta)}
             </p>
+            {esAdmin && (
+              <button
+                onClick={abrirEditarPrecio}
+                className="mt-2 text-xs font-medium cursor-pointer"
+                style={{ color: "hsl(var(--primary))" }}
+              >
+                ✏️ Editar precio
+              </button>
+            )}
           </div>
           {esAdmin && (
             <div className="px-5 py-3.5">
@@ -524,6 +588,108 @@ export default function ProductoDetalle() {
           </ul>
         )}
       </Section>
+
+      {/* ── Modal: editar precio (solo Admin) ── */}
+      {esAdmin && editandoPrecio && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => !guardandoPrecio && setEditandoPrecio(false)}
+        >
+          <div
+            className="rounded-xl border p-5 w-full max-w-md space-y-3"
+            style={{
+              backgroundColor: "hsl(var(--card))",
+              borderColor: "hsl(var(--border))",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              className="text-lg font-semibold"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
+              Editar precio de venta
+            </h3>
+            <p
+              className="text-xs"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              <strong>{producto.nombre}</strong> · precio actual:{" "}
+              {formatCOP(producto.precio_venta)}
+            </p>
+            {errorPrecio && (
+              <div
+                role="alert"
+                className="rounded-lg border px-3 py-2 text-xs"
+                style={{
+                  backgroundColor: "hsl(var(--destructive) / 0.08)",
+                  borderColor: "hsl(var(--destructive) / 0.4)",
+                  color: "hsl(var(--destructive))",
+                }}
+              >
+                {errorPrecio}
+              </div>
+            )}
+            <div>
+              <label
+                className="text-xs"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                Nuevo precio (COP)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={nuevoPrecio}
+                onChange={(e) => setNuevoPrecio(e.target.value)}
+                disabled={guardandoPrecio}
+                autoFocus
+                className="w-full mt-1 px-3 py-2 rounded-lg border text-sm min-h-[44px]"
+                style={{
+                  backgroundColor: "hsl(var(--background))",
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--foreground))",
+                }}
+              />
+              {Number(nuevoPrecio) > 0 && (
+                <p
+                  className="text-xs mt-1"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                >
+                  Vista previa: {formatCOP(Number(nuevoPrecio))}
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setEditandoPrecio(false)}
+                disabled={guardandoPrecio}
+                className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[44px] disabled:opacity-50"
+                style={{
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--muted-foreground))",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardarPrecio}
+                disabled={guardandoPrecio}
+                className="text-sm px-5 py-2 rounded-lg cursor-pointer min-h-[44px] disabled:opacity-50"
+                style={{
+                  backgroundColor: "hsl(var(--primary))",
+                  color: "hsl(var(--primary-foreground))",
+                }}
+              >
+                {guardandoPrecio ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog />
     </div>
   );
 }
