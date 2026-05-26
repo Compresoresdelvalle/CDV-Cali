@@ -473,6 +473,12 @@ Cada fase: revisión con agentes (code/ts/security + database/architect),
 stress SQL con rollback, E2E aislado, `eslint` + `build` limpios. El backlog
 de P2 documentado abajo queda como mejoras incrementales (no bloquea v1.0).
 
+## Correcciones post-campaña
+
+| ID    | Sev | Área       | Repro / Descripción                                                                                                                                                                                                                                                   | Fix                                                                                                                                         | Estado      |
+| ----- | --- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| F7-08 | P1  | RBAC / RLS | **Regresión de F7.** La policy `os_update` tenía `estado <> 'entregada'` también en el `WITH CHECK` (valida la fila nueva) → era imposible marcar CUALQUIER OT como `entregada`, incluso siendo Admin (error RLS → "No tienes permisos"). Reportado por el compañero. | Se quita `estado <> 'entregada'` del `WITH CHECK` (queda solo en `USING` para la inmutabilidad). Migración `20260525000001`. Stress 2/2 OK. | ✅ Resuelto |
+
 ## Backlog (P2 sin resolver)
 
 - **F2-04 (P2, seguridad):** el login con PIN de 4 dígitos no tiene rate-limiting ni bloqueo por intentos fallidos del lado del cliente. Brute-force teórico (10.000 combos). App interna de 6 usuarios; Supabase Auth tiene rate-limiting de plataforma.
