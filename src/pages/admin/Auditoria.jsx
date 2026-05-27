@@ -1,7 +1,29 @@
 import { useState, useEffect, useRef } from "react";
+import {
+  Shield,
+  Search,
+  Filter,
+  TrendingUp,
+  TrendingDown,
+  SlidersHorizontal,
+  RotateCcw,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  RefreshCw,
+  Hash,
+  MapPin,
+  Calendar,
+} from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatDate, safeError, sanitizeSearch } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
+import {
+  movimientoToken,
+  movimientoLabel,
+  movimientoModulo,
+  iniciales,
+  pillStyle,
+  surfaceInputStyle,
+} from "../../lib/admin-ops-ui";
 
 const TIPOS = [
   "Todos",
@@ -29,6 +51,8 @@ export default function Auditoria() {
   const [search, setSearch] = useState("");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
+  const [showFiltros, setShowFiltros] = useState(false);
+  const [seleccionado, setSeleccionado] = useState(null);
 
   const [sedes, setSedes] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -88,6 +112,7 @@ export default function Auditoria() {
           if (!mountedRef.current || myReq !== reqIdRef.current) return;
           if (reset) {
             setMovimientos([]);
+            setSeleccionado(null);
             setPage(1);
           }
           setHasMore(false);
@@ -99,8 +124,9 @@ export default function Auditoria() {
         .from("movimientos")
         .select(
           `id, tipo, cantidad, stock_anterior, stock_posterior, fecha, observaciones, sede_id, producto_id,
+           referencia_id, referencia_tipo,
            producto:producto_id(referencia, nombre),
-           usuario:usuario_id(nombre),
+           usuario:usuario_id(nombre, rol),
            sede:sede_id(nombre)`,
         )
         .order("fecha", { ascending: false })
@@ -120,6 +146,7 @@ export default function Auditoria() {
       const items = data ?? [];
       if (reset) {
         setMovimientos(items);
+        setSeleccionado(items[0] ?? null);
         setPage(1);
       } else {
         setMovimientos((p) => [...p, ...items]);
@@ -142,22 +169,76 @@ export default function Auditoria() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo, sedeId, usuarioId, fechaDesde, fechaHasta, search]);
 
+  const limpiar = () => {
+    setTipo("Todos");
+    setSedeId("");
+    setUsuarioId("");
+    setSearch("");
+    setFechaDesde("");
+    setFechaHasta("");
+  };
+
+  const hayFiltros =
+    tipo !== "Todos" ||
+    sedeId ||
+    usuarioId ||
+    fechaDesde ||
+    fechaHasta ||
+    search;
+
+  // KPIs derivados de la página cargada (datos reales en memoria).
+  const totalCargados = movimientos.length;
+  const entradas = movimientos.filter((m) => Number(m.cantidad) > 0).length;
+  const salidas = movimientos.filter((m) => Number(m.cantidad) < 0).length;
+  const ajustes = movimientos.filter(
+    (m) => m.tipo === "ajuste" || m.tipo === "conteo_ajuste",
+  ).length;
+
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Auditoría de movimientos"
-        description={
-          loading
-            ? "Cargando…"
-            : `${movimientos.length}${hasMore ? "+" : ""} registros`
-        }
-      />
+    <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7 animate-fade-in">
+      {/* Page head */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p
+            className="m-0 mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Admin · Auditoría
+          </p>
+          <h1
+            className="m-0 text-[24px] font-semibold leading-tight tracking-[-0.018em]"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            Bitácora de movimientos
+          </h1>
+          <p
+            className="mt-1 text-[13px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Registro inmutable (append-only) de toda la actividad de stock.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowFiltros((v) => !v)}
+          className="inline-flex h-12 items-center gap-1.5 rounded-md border px-4 text-[12.5px] font-medium transition-colors cursor-pointer"
+          style={{
+            borderColor: showFiltros
+              ? "hsl(var(--primary))"
+              : "hsl(var(--border))",
+            backgroundColor: "hsl(var(--card))",
+            color: showFiltros
+              ? "hsl(var(--primary))"
+              : "hsl(var(--muted-foreground))",
+          }}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={1.5} />
+          Filtros avanzados
+        </button>
+      </div>
 
       {errorMsg && (
         <div
+          role="alert"
           className="rounded-lg border px-3 py-2 text-xs"
           style={{
             backgroundColor: "hsl(var(--destructive) / 0.08)",
@@ -169,267 +250,655 @@ export default function Auditoria() {
         </div>
       )}
 
-      {/* Filtros */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <Select label="Tipo" value={tipo} onChange={setTipo} options={TIPOS} />
-        <Select
-          label="Sede"
-          value={sedeId}
-          onChange={setSedeId}
-          options={[
-            { value: "", label: "Todas" },
-            ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
-          ]}
-          objectOptions
+      {/* KPI cards (estilo Lovable) */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiCard
+          label="Movimientos cargados"
+          value={`${totalCargados}${hasMore ? "+" : ""}`}
+          sub="En esta vista"
+          icon={Shield}
         />
-        <Select
-          label="Usuario"
-          value={usuarioId}
-          onChange={setUsuarioId}
-          options={[
-            { value: "", label: "Todos" },
-            ...usuarios.map((u) => ({ value: u.id, label: u.nombre })),
-          ]}
-          objectOptions
+        <KpiCard
+          label="Entradas"
+          value={entradas}
+          sub="Compras · entradas · prod."
+          token="--success"
+          icon={TrendingUp}
         />
-        <Field label="Buscar producto">
+        <KpiCard
+          label="Salidas"
+          value={salidas}
+          sub="Ventas · consumos · salidas"
+          token="--destructive"
+          icon={TrendingDown}
+        />
+        <KpiCard
+          label="Ajustes"
+          value={ajustes}
+          sub="Manuales y de conteo"
+          token={ajustes > 0 ? "--warning" : "--muted-foreground"}
+          icon={SlidersHorizontal}
+        />
+      </div>
+
+      {/* Toolbar: búsqueda + tipo + reset */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[240px] flex-1">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
+            strokeWidth={1.5}
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          />
           <input
-            type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Nombre o referencia"
-            className="w-full h-10 px-3 rounded-lg border text-sm"
-            style={inputStyle}
+            placeholder="Buscar por producto, nombre o referencia…"
+            className="h-12 w-full rounded-md border pl-9 pr-3 text-[13px]"
+            style={surfaceInputStyle}
           />
-        </Field>
-        <Field label="Desde">
-          <input
-            type="date"
-            value={fechaDesde}
-            onChange={(e) => setFechaDesde(e.target.value)}
-            className="w-full h-10 px-3 rounded-lg border text-sm"
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="Hasta">
-          <input
-            type="date"
-            value={fechaHasta}
-            onChange={(e) => setFechaHasta(e.target.value)}
-            className="w-full h-10 px-3 rounded-lg border text-sm"
-            style={inputStyle}
-          />
-        </Field>
-        <button
-          onClick={() => {
-            setTipo("Todos");
-            setSedeId("");
-            setUsuarioId("");
-            setSearch("");
-            setFechaDesde("");
-            setFechaHasta("");
-          }}
-          className="h-10 px-3 rounded-lg text-sm font-medium border cursor-pointer self-end"
+        </div>
+        <div
+          className="flex items-center gap-1 rounded-md border p-1"
           style={{
             borderColor: "hsl(var(--border))",
-            color: "hsl(var(--muted-foreground))",
+            backgroundColor: "hsl(var(--muted) / 0.4)",
           }}
         >
-          Limpiar filtros
-        </button>
-      </div>
-
-      {/* Tabla desktop */}
-      <div
-        className="hidden md:block overflow-x-auto rounded-xl border"
-        style={{ borderColor: "hsl(var(--border))" }}
-      >
-        <table className="w-full border-collapse">
-          <thead>
-            <tr
-              style={{
-                backgroundColor: "hsl(var(--muted) / 0.4)",
-                borderBottom: "1px solid hsl(var(--border))",
-              }}
-            >
-              {[
-                "Fecha",
-                "Tipo",
-                "Producto",
-                "Cantidad",
-                "Stock antes",
-                "Stock después",
-                "Sede",
-                "Usuario",
-              ].map((c) => (
-                <th
-                  key={c}
-                  className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-left"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {movimientos.map((m, idx) => (
-              <tr
-                key={m.id}
-                style={{
-                  borderTop:
-                    idx === 0 ? "none" : "1px solid hsl(var(--border) / 0.5)",
-                }}
-              >
-                <td
-                  className="px-3 py-2 text-xs"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  {formatDate(m.fecha)}
-                </td>
-                <td className="px-3 py-2">
-                  <TipoBadge tipo={m.tipo} />
-                </td>
-                <td className="px-3 py-2">
-                  <p
-                    className="text-sm font-medium truncate max-w-[200px]"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {m.producto?.nombre}
-                  </p>
-                  <p
-                    className="text-xs font-mono"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {m.producto?.referencia}
-                  </p>
-                </td>
-                <td
-                  className="px-3 py-2 text-sm font-bold tabular-nums"
-                  style={{
-                    color:
-                      m.cantidad > 0
-                        ? "hsl(var(--success))"
-                        : "hsl(var(--destructive))",
-                  }}
-                >
-                  {m.cantidad > 0 ? "+" : ""}
-                  {m.cantidad}
-                </td>
-                <td
-                  className="px-3 py-2 text-xs tabular-nums"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  {m.stock_anterior}
-                </td>
-                <td
-                  className="px-3 py-2 text-xs font-medium tabular-nums"
-                  style={{ color: "hsl(var(--foreground))" }}
-                >
-                  {m.stock_posterior}
-                </td>
-                <td
-                  className="px-3 py-2 text-xs"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  {m.sede?.nombre ?? m.sede_id}
-                </td>
-                <td
-                  className="px-3 py-2 text-xs"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  {m.usuario?.nombre}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {movimientos.length === 0 && !loading && (
-          <p
-            className="text-center py-8 text-sm"
+          <Filter
+            className="ml-1 h-3.5 w-3.5"
+            strokeWidth={1.5}
             style={{ color: "hsl(var(--muted-foreground))" }}
+          />
+          <select
+            value={tipo}
+            onChange={(e) => setTipo(e.target.value)}
+            className="h-9 rounded bg-transparent px-2 text-[12px] outline-none cursor-pointer"
+            style={{ color: "hsl(var(--foreground))" }}
           >
-            Sin movimientos con esos filtros
-          </p>
-        )}
-      </div>
-
-      {/* Mobile cards */}
-      <ul className="md:hidden space-y-2" role="list">
-        {movimientos.map((m) => (
-          <li
-            key={m.id}
-            className="rounded-lg border p-3"
+            {TIPOS.map((t) => (
+              <option
+                key={t}
+                value={t}
+                style={{ backgroundColor: "hsl(var(--card))" }}
+              >
+                {t === "Todos" ? "Todos los tipos" : movimientoLabel(t)}
+              </option>
+            ))}
+          </select>
+        </div>
+        {hayFiltros && (
+          <button
+            onClick={limpiar}
+            className="inline-flex h-12 items-center gap-1.5 rounded-md border px-3 text-[12px] font-medium transition-colors cursor-pointer"
             style={{
-              backgroundColor: "hsl(var(--card))",
               borderColor: "hsl(var(--border))",
+              backgroundColor: "hsl(var(--card))",
+              color: "hsl(var(--muted-foreground))",
             }}
           >
-            <div className="flex items-start justify-between gap-2 mb-1">
-              <TipoBadge tipo={m.tipo} />
-              <p
-                className="text-sm font-bold tabular-nums"
-                style={{
-                  color:
-                    m.cantidad > 0
-                      ? "hsl(var(--success))"
-                      : "hsl(var(--destructive))",
-                }}
-              >
-                {m.cantidad > 0 ? "+" : ""}
-                {m.cantidad}
-              </p>
-            </div>
-            <p
-              className="text-sm font-medium truncate"
-              style={{ color: "hsl(var(--foreground))" }}
-            >
-              {m.producto?.nombre}
-            </p>
-            <p
-              className="text-xs"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              {formatDate(m.fecha)} · {m.usuario?.nombre} ·{" "}
-              {m.sede?.nombre ?? m.sede_id}
-            </p>
-            <p
-              className="text-xs mt-0.5"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Stock: {m.stock_anterior} → {m.stock_posterior}
-            </p>
-          </li>
-        ))}
-      </ul>
+            <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Limpiar
+          </button>
+        )}
+        <span
+          className="ml-auto font-mono text-[11px] tracking-[0.04em]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          {loading
+            ? "cargando…"
+            : `${totalCargados}${hasMore ? "+" : ""} eventos`}
+        </span>
+      </div>
 
-      {hasMore && !loading && (
-        <button
-          onClick={() => cargar(false)}
-          className="w-full py-3 rounded-xl text-sm font-medium border cursor-pointer"
+      {/* Filtros avanzados (panel colapsable) */}
+      {showFiltros && (
+        <div
+          className="grid gap-3 rounded-[10px] border p-4 sm:grid-cols-2 lg:grid-cols-4"
           style={{
+            backgroundColor: "hsl(var(--card))",
             borderColor: "hsl(var(--border))",
-            color: "hsl(var(--muted-foreground))",
           }}
         >
-          Cargar más
-        </button>
+          <Select
+            label="Sede"
+            value={sedeId}
+            onChange={setSedeId}
+            options={[
+              { value: "", label: "Todas" },
+              ...sedes.map((s) => ({ value: s.id, label: s.nombre })),
+            ]}
+          />
+          <Select
+            label="Usuario"
+            value={usuarioId}
+            onChange={setUsuarioId}
+            options={[
+              { value: "", label: "Todos" },
+              ...usuarios.map((u) => ({ value: u.id, label: u.nombre })),
+            ]}
+          />
+          <Field label="Desde">
+            <input
+              type="date"
+              value={fechaDesde}
+              onChange={(e) => setFechaDesde(e.target.value)}
+              className="h-11 w-full rounded-lg border px-3 text-sm"
+              style={surfaceInputStyle}
+            />
+          </Field>
+          <Field label="Hasta">
+            <input
+              type="date"
+              value={fechaHasta}
+              onChange={(e) => setFechaHasta(e.target.value)}
+              className="h-11 w-full rounded-lg border px-3 text-sm"
+              style={surfaceInputStyle}
+            />
+          </Field>
+        </div>
+      )}
+
+      {/* Grid: tabla + detalle (master-detail Lovable) */}
+      <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+        {/* ── Lista de eventos ───────────────────────────────────────── */}
+        <section
+          className="overflow-hidden rounded-[10px] border"
+          style={{
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+          }}
+        >
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr
+                  className="text-left"
+                  style={{
+                    backgroundColor: "hsl(var(--muted) / 0.3)",
+                    borderBottom: "1px solid hsl(var(--border))",
+                  }}
+                >
+                  {[
+                    "Fecha · hora",
+                    "Movimiento",
+                    "Producto",
+                    "Cantidad",
+                    "Módulo",
+                    "Usuario",
+                  ].map((c, i) => (
+                    <th
+                      key={c}
+                      className={`px-3 py-2.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.06em] ${
+                        i === 3 ? "text-right" : "text-left"
+                      }`}
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {movimientos.map((m) => {
+                  const positivo = Number(m.cantidad) > 0;
+                  const activo = seleccionado?.id === m.id;
+                  return (
+                    <tr
+                      key={m.id}
+                      onClick={() => setSeleccionado(m)}
+                      className="cursor-pointer border-t transition-colors"
+                      style={{
+                        borderColor: "hsl(var(--border) / 0.6)",
+                        backgroundColor: activo
+                          ? "hsl(var(--primary) / 0.08)"
+                          : "transparent",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!activo)
+                          e.currentTarget.style.backgroundColor =
+                            "hsl(var(--muted) / 0.4)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!activo)
+                          e.currentTarget.style.backgroundColor = "transparent";
+                      }}
+                    >
+                      <td className="px-3 py-3">
+                        <div
+                          className="text-[12px]"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
+                          {formatDate(m.fecha)}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <TipoBadge tipo={m.tipo} />
+                      </td>
+                      <td className="px-3 py-3">
+                        <p
+                          className="max-w-[200px] truncate text-[13px] font-medium"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
+                          {m.producto?.nombre}
+                        </p>
+                        <p
+                          className="font-mono text-[11px]"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
+                          {m.producto?.referencia}
+                        </p>
+                      </td>
+                      <td
+                        className="px-3 py-3 text-right font-mono text-[13px] font-bold tabular-nums"
+                        style={{
+                          color: positivo
+                            ? "hsl(var(--success))"
+                            : "hsl(var(--destructive))",
+                        }}
+                      >
+                        {positivo ? "+" : ""}
+                        {m.cantidad}
+                      </td>
+                      <td
+                        className="px-3 py-3 text-[12px]"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        {movimientoModulo(m.tipo)}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold"
+                            style={{
+                              backgroundColor: "hsl(var(--muted))",
+                              color: "hsl(var(--foreground))",
+                            }}
+                          >
+                            {iniciales(m.usuario?.nombre)}
+                          </span>
+                          <span
+                            className="text-[12px]"
+                            style={{ color: "hsl(var(--foreground))" }}
+                          >
+                            {m.usuario?.nombre ?? "—"}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {movimientos.length === 0 && !loading && (
+              <p
+                className="py-10 text-center text-sm"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                Sin movimientos con esos filtros
+              </p>
+            )}
+          </div>
+
+          {/* Mobile cards */}
+          <ul className="divide-y md:hidden" role="list">
+            {movimientos.map((m) => {
+              const positivo = Number(m.cantidad) > 0;
+              const activo = seleccionado?.id === m.id;
+              return (
+                <li key={m.id} style={{ borderColor: "hsl(var(--border))" }}>
+                  <button
+                    onClick={() => setSeleccionado(m)}
+                    className="w-full px-4 py-3 text-left cursor-pointer transition-colors"
+                    style={{
+                      backgroundColor: activo
+                        ? "hsl(var(--primary) / 0.08)"
+                        : "transparent",
+                    }}
+                  >
+                    <div className="mb-1 flex items-start justify-between gap-2">
+                      <TipoBadge tipo={m.tipo} />
+                      <p
+                        className="font-mono text-sm font-bold tabular-nums"
+                        style={{
+                          color: positivo
+                            ? "hsl(var(--success))"
+                            : "hsl(var(--destructive))",
+                        }}
+                      >
+                        {positivo ? "+" : ""}
+                        {m.cantidad}
+                      </p>
+                    </div>
+                    <p
+                      className="truncate text-sm font-medium"
+                      style={{ color: "hsl(var(--foreground))" }}
+                    >
+                      {m.producto?.nombre}
+                    </p>
+                    <p
+                      className="font-mono text-xs"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      {m.producto?.referencia}
+                    </p>
+                    <p
+                      className="mt-1 text-xs"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      {formatDate(m.fecha)} · {m.usuario?.nombre} ·{" "}
+                      {m.sede?.nombre ?? m.sede_id}
+                    </p>
+                    <p
+                      className="font-mono text-xs"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      Stock: {m.stock_anterior} → {m.stock_posterior}
+                    </p>
+                  </button>
+                </li>
+              );
+            })}
+            {movimientos.length === 0 && !loading && (
+              <li
+                className="px-4 py-10 text-center text-sm"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                Sin movimientos con esos filtros
+              </li>
+            )}
+          </ul>
+
+          {hasMore && !loading && (
+            <div
+              className="border-t p-3"
+              style={{ borderColor: "hsl(var(--border))" }}
+            >
+              <button
+                onClick={() => cargar(false)}
+                className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-md border text-[13px] font-medium transition-colors cursor-pointer"
+                style={{
+                  borderColor: "hsl(var(--border))",
+                  backgroundColor: "hsl(var(--card))",
+                  color: "hsl(var(--muted-foreground))",
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.backgroundColor =
+                    "hsl(var(--muted) / 0.4)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.backgroundColor = "hsl(var(--card))")
+                }
+              >
+                <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.5} />
+                Cargar más
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* ── Panel de detalle ───────────────────────────────────────── */}
+        <DetallePanel mov={seleccionado} />
+      </div>
+
+      {/* Footer trazabilidad */}
+      <div
+        className="flex items-center gap-2 rounded-[10px] border px-4 py-3 text-[12px]"
+        style={{
+          borderColor: "hsl(var(--border))",
+          backgroundColor: "hsl(var(--muted) / 0.3)",
+          color: "hsl(var(--muted-foreground))",
+        }}
+      >
+        <Shield
+          className="h-3.5 w-3.5 shrink-0"
+          strokeWidth={1.5}
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        />
+        Registro append-only: los movimientos quedan asociados a usuario, sede y
+        fecha, y no pueden editarse ni borrarse.
+      </div>
+    </div>
+  );
+}
+
+/* ── Panel de detalle (master-detail Lovable, datos reales) ───────────── */
+function DetallePanel({ mov }) {
+  if (!mov) {
+    return (
+      <aside
+        className="rounded-[10px] border p-6 text-center text-[12px]"
+        style={{
+          backgroundColor: "hsl(var(--card))",
+          borderColor: "hsl(var(--border))",
+          color: "hsl(var(--muted-foreground))",
+        }}
+      >
+        Selecciona un movimiento para ver el detalle
+      </aside>
+    );
+  }
+
+  const positivo = Number(mov.cantidad) > 0;
+  const filas = [
+    {
+      label: "Fecha · hora",
+      value: formatDate(mov.fecha),
+      icon: Calendar,
+    },
+    {
+      label: "Usuario",
+      value: `${mov.usuario?.nombre ?? "—"}${mov.usuario?.rol ? ` (${mov.usuario.rol})` : ""}`,
+    },
+    {
+      label: "Módulo",
+      value: movimientoModulo(mov.tipo),
+    },
+    {
+      label: "Sede",
+      value: mov.sede?.nombre ?? mov.sede_id,
+      icon: MapPin,
+    },
+    {
+      label: "Origen",
+      value: mov.referencia_tipo
+        ? `${mov.referencia_tipo}${mov.referencia_id ? ` · ${String(mov.referencia_id).slice(0, 8)}` : ""}`
+        : "—",
+      mono: true,
+    },
+    {
+      label: "Stock",
+      value: `${mov.stock_anterior} → ${mov.stock_posterior}`,
+      mono: true,
+    },
+  ];
+
+  return (
+    <aside
+      className="self-start rounded-[10px] border"
+      style={{
+        backgroundColor: "hsl(var(--card))",
+        borderColor: "hsl(var(--border))",
+      }}
+    >
+      {/* Cabecera */}
+      <div
+        className="border-b p-4"
+        style={{ borderColor: "hsl(var(--border))" }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span
+            className="font-mono text-[11px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            {String(mov.id).slice(0, 8)}…
+          </span>
+          <TipoBadge tipo={mov.tipo} />
+        </div>
+        <p
+          className="mt-2 text-[14px] font-semibold"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
+          {mov.producto?.nombre ?? "—"}
+        </p>
+        <p
+          className="font-mono text-[11px]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          {mov.producto?.referencia}
+        </p>
+        <div className="mt-3 flex items-center gap-2">
+          <span
+            className="grid h-7 w-7 place-items-center rounded-md"
+            style={{
+              backgroundColor: positivo
+                ? "hsl(var(--success) / 0.12)"
+                : "hsl(var(--destructive) / 0.12)",
+              color: positivo
+                ? "hsl(var(--success))"
+                : "hsl(var(--destructive))",
+            }}
+          >
+            {positivo ? (
+              <ArrowDownToLine className="h-3.5 w-3.5" strokeWidth={1.75} />
+            ) : (
+              <ArrowUpFromLine className="h-3.5 w-3.5" strokeWidth={1.75} />
+            )}
+          </span>
+          <span
+            className="font-mono text-[20px] font-bold tabular-nums"
+            style={{
+              color: positivo
+                ? "hsl(var(--success))"
+                : "hsl(var(--destructive))",
+            }}
+          >
+            {positivo ? "+" : ""}
+            {mov.cantidad}
+          </span>
+          <span
+            className="text-[12px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            unidades
+          </span>
+        </div>
+      </div>
+
+      {/* Filas de detalle (datos reales) */}
+      <dl className="divide-y" style={{ borderColor: "hsl(var(--border))" }}>
+        {filas.map((r) => {
+          const Icon = r.icon;
+          return (
+            <div
+              key={r.label}
+              className="flex items-center justify-between gap-3 px-4 py-2.5 text-[12px]"
+            >
+              <dt
+                className="flex items-center gap-1.5"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                {Icon && <Icon className="h-3 w-3" strokeWidth={1.5} />}
+                {r.label}
+              </dt>
+              <dd
+                className={`text-right ${r.mono ? "font-mono text-[11.5px]" : ""}`}
+                style={{ color: "hsl(var(--foreground))" }}
+              >
+                {r.value}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+
+      {/* Observaciones */}
+      {mov.observaciones && (
+        <div
+          className="border-t px-4 py-3"
+          style={{ borderColor: "hsl(var(--border))" }}
+        >
+          <p
+            className="mb-1 font-mono text-[10.5px] uppercase tracking-[0.06em]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Observaciones
+          </p>
+          <p
+            className="text-[12.5px] italic"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            {mov.observaciones}
+          </p>
+        </div>
+      )}
+
+      {/* Nota de trazabilidad: firma/hash no rastreados (honesto, sin inventar) */}
+      <div
+        className="flex items-start gap-2 border-t px-4 py-3"
+        style={{
+          borderColor: "hsl(var(--border))",
+          backgroundColor: "hsl(var(--muted) / 0.3)",
+        }}
+      >
+        <Hash
+          className="mt-0.5 h-3.5 w-3.5 shrink-0"
+          strokeWidth={1.5}
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        />
+        <p
+          className="text-[11px] leading-snug"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Inmutabilidad garantizada por trigger append-only en la base de datos.
+          La firma criptográfica e IP de origen no se registran en esta versión.
+        </p>
+      </div>
+    </aside>
+  );
+}
+
+/* ── KPI card (estilo Lovable cockpit) ────────────────────────────────── */
+function KpiCard({ label, value, sub, token, icon: Icon }) {
+  return (
+    <div
+      className="rounded-[10px] border p-4"
+      style={{
+        backgroundColor: "hsl(var(--card))",
+        borderColor: "hsl(var(--border))",
+      }}
+    >
+      <div
+        className="flex items-center gap-1.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
+        {Icon && <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />}
+        {label}
+      </div>
+      <div
+        className="mt-2 font-mono text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums"
+        style={{
+          color: token ? `hsl(var(${token}))` : "hsl(var(--foreground))",
+        }}
+      >
+        {value}
+      </div>
+      {sub && (
+        <div
+          className="mt-0.5 text-[11px]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          {sub}
+        </div>
       )}
     </div>
   );
 }
 
-const inputStyle = {
-  backgroundColor: "hsl(var(--card))",
-  borderColor: "hsl(var(--border))",
-  color: "hsl(var(--foreground))",
-};
-
 function Field({ label, children }) {
   return (
     <label className="block">
       <span
-        className="block text-xs font-medium mb-1"
+        className="mb-1 block text-xs font-medium"
         style={{ color: "hsl(var(--muted-foreground))" }}
       >
         {label}
@@ -439,60 +908,33 @@ function Field({ label, children }) {
   );
 }
 
-function Select({ label, value, onChange, options, objectOptions }) {
+function Select({ label, value, onChange, options }) {
   return (
     <Field label={label}>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full h-10 px-3 rounded-lg border text-sm"
-        style={inputStyle}
+        className="h-11 w-full rounded-lg border px-3 text-sm"
+        style={surfaceInputStyle}
       >
-        {options.map((o, i) =>
-          objectOptions ? (
-            <option key={o.value || i} value={o.value}>
-              {o.label}
-            </option>
-          ) : (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ),
-        )}
+        {options.map((o) => (
+          <option key={o.value || "__all"} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </select>
     </Field>
   );
 }
 
 function TipoBadge({ tipo }) {
-  const isOut = [
-    "venta",
-    "traspaso_salida",
-    "ensamble_consumo",
-    "orden_consumo",
-  ].includes(tipo);
-  const isIn = [
-    "compra",
-    "traspaso_entrada",
-    "devolucion",
-    "ensamble_produccion",
-  ].includes(tipo);
-  const color = isOut
-    ? "destructive"
-    : isIn
-      ? "success"
-      : tipo === "ajuste" || tipo === "conteo_ajuste"
-        ? "warning"
-        : "muted";
+  const token = movimientoToken(tipo);
   return (
     <span
-      className="px-2 py-0.5 rounded text-xs font-medium font-mono"
-      style={{
-        backgroundColor: `hsl(var(--${color}) / 0.15)`,
-        color: `hsl(var(--${color}))`,
-      }}
+      className="inline-flex items-center rounded-[3px] border px-1.5 py-0.5 font-mono text-[11px] font-medium leading-[1.4]"
+      style={pillStyle(token)}
     >
-      {tipo}
+      {movimientoLabel(tipo)}
     </span>
   );
 }

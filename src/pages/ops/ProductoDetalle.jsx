@@ -1,9 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  Package,
+  Store,
+  QrCode,
+  Tag,
+  ClipboardList,
+} from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../stores/authStore";
 import StatusBadge from "../../components/ui/StatusBadge";
-import PageHeader from "../../components/layout/PageHeader";
 import QRGenerator from "../../components/qr/QRGenerator";
 import QRPrintLabel from "../../components/qr/QRPrintLabel";
 import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
@@ -128,7 +135,10 @@ export default function ProductoDetalle() {
     try {
       const { error: rpcErr } = await supabase.rpc(
         "fn_editar_precio_producto",
-        { p_producto_id: producto.id, p_precio_venta: precio },
+        {
+          p_producto_id: producto.id,
+          p_precio_venta: precio,
+        },
       );
       if (rpcErr) throw rpcErr;
       setProducto((p) => (p ? { ...p, precio_venta: precio } : p));
@@ -148,446 +158,309 @@ export default function ProductoDetalle() {
   const stockTotal = inventario.reduce((sum, i) => sum + i.cantidad, 0);
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      {/* ── PageHeader ── */}
-      <PageHeader
-        title={producto.nombre}
-        description={
-          [producto.codigo_interno, producto.codigo_proveedor]
-            .filter(Boolean)
-            .join(" · ") || producto.referencia
-        }
-        actions={
-          <div className="flex items-center gap-2 flex-wrap">
-            <TipoProductoBadge tipo={producto.tipo} />
-            {!producto.activo && (
-              <span
-                className="text-xs font-semibold px-2 py-1 rounded-full"
-                style={{
-                  backgroundColor: "hsl(var(--destructive) / 0.1)",
-                  color: "hsl(var(--destructive))",
-                }}
-              >
-                Inactivo
-              </span>
-            )}
-            <button
-              onClick={() => navigate(-1)}
-              className="h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"
-              style={{
-                borderColor: "hsl(var(--border))",
-                color: "hsl(var(--muted-foreground))",
-                backgroundColor: "hsl(var(--card))",
-              }}
-            >
-              ← Volver
-            </button>
-          </div>
-        }
-      />
-
-      {/* ── Tarjeta principal ── */}
-      <div
-        className="rounded-xl border overflow-hidden"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
+    <div className="mx-auto w-full max-w-[1100px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
+      <button
+        onClick={() => navigate(-1)}
+        className="back-btn mb-3 inline-flex items-center gap-1.5"
       >
-        <div
-          className="px-5 py-4 border-b"
-          style={{
-            borderColor: "hsl(var(--border))",
-            backgroundColor: "hsl(var(--muted) / 0.3)",
-          }}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1
-                className="text-base font-bold leading-tight"
-                style={{ color: "hsl(var(--foreground))" }}
-              >
-                {producto.nombre}
-              </h1>
-              <p
-                className="text-xs font-mono mt-0.5"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                {producto.referencia}
-              </p>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {producto.categoria && <Tag>{producto.categoria}</Tag>}
-                {producto.marca && <Tag variant="accent">{producto.marca}</Tag>}
-                {producto.modelo && <Tag>{producto.modelo}</Tag>}
-              </div>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <p
-                className="text-3xl font-black tabular-nums"
-                style={{ color: "hsl(var(--foreground))" }}
-              >
-                {stockTotal}
-              </p>
-              <p
-                className="text-[10px] uppercase tracking-wide"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                total
-              </p>
-            </div>
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+        Volver
+      </button>
+
+      {/* ── Header ─────────────────────────────────────────────────── */}
+      <div
+        className="flex flex-col items-start gap-4 border-b pb-4 md:flex-row md:gap-6"
+        style={{ borderColor: "var(--n-150)" }}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="ph-eyebrow">Producto</div>
+          <div className="ph-client">{producto.nombre}</div>
+          <div className="ph-sub">
+            <span className="font-mono" style={{ color: "var(--n-900)" }}>
+              {[producto.codigo_interno, producto.codigo_proveedor]
+                .filter(Boolean)
+                .join(" · ") || producto.referencia}
+            </span>
           </div>
-
-          {producto.descripcion && (
-            <p
-              className="text-xs mt-3 leading-relaxed"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              {producto.descripcion}
-            </p>
-          )}
-        </div>
-
-        {/* Precios */}
-        <div
-          className={`grid divide-x ${esAdmin ? "grid-cols-2" : "grid-cols-1"}`}
-          style={{ borderColor: "hsl(var(--border))" }}
-        >
-          <div className="px-5 py-3.5">
-            <p
-              className="text-[10px] uppercase tracking-wide font-medium"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Precio venta
-            </p>
-            <p
-              className="text-base font-bold mt-0.5"
-              style={{ color: "hsl(var(--foreground))" }}
-            >
-              {formatCOP(producto.precio_venta)}
-            </p>
-            {esAdmin && (
-              <button
-                onClick={abrirEditarPrecio}
-                className="mt-2 text-xs font-medium cursor-pointer"
-                style={{ color: "hsl(var(--primary))" }}
-              >
-                ✏️ Editar precio
-              </button>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <TipoProductoBadge tipo={producto.tipo} />
+            {producto.categoria && <Chip>{producto.categoria}</Chip>}
+            {producto.marca && <Chip variant="accent">{producto.marca}</Chip>}
+            {producto.modelo && <Chip>{producto.modelo}</Chip>}
+            {!producto.activo && (
+              <StatusBadge status="anulada">Inactivo</StatusBadge>
             )}
           </div>
-          {esAdmin && (
-            <div className="px-5 py-3.5">
-              <p
-                className="text-[10px] uppercase tracking-wide font-medium"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                Costo promedio
-              </p>
-              <p
-                className="text-base font-bold mt-0.5"
-                style={{ color: "hsl(var(--foreground))" }}
-              >
-                {formatCOP(producto.costo_promedio)}
-              </p>
-            </div>
-          )}
         </div>
-
-        {/* Mínimo / Máximo */}
-        <div
-          className="grid grid-cols-2 divide-x border-t"
-          style={{ borderColor: "hsl(var(--border))" }}
-        >
-          <div className="px-5 py-3.5">
-            <p
-              className="text-[10px] uppercase tracking-wide font-medium"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Stock mínimo
-            </p>
-            <p
-              className="text-sm font-semibold mt-0.5"
-              style={{ color: "hsl(var(--foreground))" }}
-            >
-              {producto.stock_minimo}
-            </p>
-          </div>
-          <div className="px-5 py-3.5">
-            <p
-              className="text-[10px] uppercase tracking-wide font-medium"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Stock máximo
-            </p>
-            <p
-              className="text-sm font-semibold mt-0.5"
-              style={{ color: "hsl(var(--foreground))" }}
-            >
-              {producto.stock_maximo}
-            </p>
-          </div>
+        <div className="flex flex-col items-start md:items-end">
+          <span className="ph-total-lbl">Stock total</span>
+          <span className="ph-total tabular-nums">{stockTotal}</span>
         </div>
       </div>
 
-      {/* ── Stock por sede ── */}
-      <Section title="Stock por sede" icon="🏪">
-        {inventario.length === 0 ? (
-          <p
-            className="text-sm px-4 py-3"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Sin registros de inventario
-          </p>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr
-                className="text-left border-b"
-                style={{ borderColor: "hsl(var(--border))" }}
-              >
-                {["Sede", "Cant.", "Estado", "Ubicación"].map((col, i) => (
-                  <th
-                    key={col}
-                    className={`px-4 py-2.5 text-xs font-semibold${i === 3 ? " hidden sm:table-cell" : ""}`}
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {inventario.map((inv, idx) => (
-                <tr
-                  key={inv.id}
-                  style={{
-                    borderTop:
-                      idx === 0 ? "none" : `1px solid hsl(var(--border) / 0.5)`,
-                  }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.backgroundColor =
-                      "hsl(var(--muted) / 0.4)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.backgroundColor = "")
-                  }
-                >
-                  <td
-                    className="px-4 py-3 text-sm"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {inv.sede?.nombre}
-                  </td>
-                  <td
-                    className="px-4 py-3 text-right font-bold tabular-nums"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {inv.cantidad}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={inv.estado_stock} />
-                  </td>
-                  <td
-                    className="px-4 py-3 text-xs hidden sm:table-cell"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {inv.ubicacion_id ?? "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Section>
-
-      {/* ── QR ── */}
-      <Section title="Código QR" icon="📱">
-        <div className="flex flex-col sm:flex-row items-center gap-6 px-4 py-4">
-          <div
-            className="p-4 rounded-xl border"
-            style={{
-              backgroundColor: "hsl(var(--card))",
-              borderColor: "hsl(var(--border))",
-            }}
-          >
-            <QRGenerator value={producto.referencia} size={160} />
-          </div>
-          <div className="flex flex-col gap-3 items-center sm:items-start">
-            <div>
-              <p
-                className="text-xs uppercase tracking-wide font-medium"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                Referencia
-              </p>
-              <p
-                className="text-lg font-bold font-mono mt-0.5"
-                style={{ color: "hsl(var(--foreground))" }}
-              >
-                {producto.referencia}
-              </p>
-            </div>
-            <p
-              className="text-xs text-center sm:text-left"
-              style={{ color: "hsl(var(--muted-foreground))" }}
+      {/* ── Precios ────────────────────────────────────────────────── */}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="Precio venta" value={formatCOP(producto.precio_venta)}>
+          {esAdmin && (
+            <button
+              onClick={abrirEditarPrecio}
+              className="mt-2 cursor-pointer text-xs font-medium"
+              style={{ color: "var(--p-700)" }}
             >
-              Escanea con la app para ver el detalle del producto.
+              ✏️ Editar precio
+            </button>
+          )}
+        </Stat>
+        {esAdmin && (
+          <Stat
+            label="Costo promedio"
+            value={formatCOP(producto.costo_promedio)}
+          />
+        )}
+        <Stat label="Stock mínimo" value={producto.stock_minimo} small />
+        <Stat label="Stock máximo" value={producto.stock_maximo ?? "—"} small />
+      </div>
+
+      {producto.descripcion && (
+        <p
+          className="mt-3 text-[13px] leading-relaxed"
+          style={{ color: "var(--n-500)" }}
+        >
+          {producto.descripcion}
+        </p>
+      )}
+
+      {/* ── Bloques ────────────────────────────────────────────────── */}
+      <div className="mt-4 flex flex-col gap-3">
+        {/* Stock por sede */}
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico">
+              <Store className="h-3.5 w-3.5" strokeWidth={2} />
+            </div>
+            <div className="ib-title">Stock por sede</div>
+            <div className="ib-aux">{inventario.length} sedes</div>
+          </div>
+          {inventario.length === 0 ? (
+            <p className="px-4 py-3 text-sm" style={{ color: "var(--n-500)" }}>
+              Sin registros de inventario
             </p>
-            <QRPrintLabel
-              referencia={producto.referencia}
-              nombre={producto.nombre}
-            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="prod-tbl">
+                <tbody>
+                  {inventario.map((inv) => (
+                    <tr key={inv.id}>
+                      <td>
+                        <div className="p-nm">{inv.sede?.nombre}</div>
+                        <div className="p-meta">
+                          {inv.ubicacion_id ?? "Sin ubicación"}
+                        </div>
+                      </td>
+                      <td style={{ width: 120 }}>
+                        <StatusBadge status={inv.estado_stock} />
+                      </td>
+                      <td className="p-sub" style={{ width: 90 }}>
+                        {inv.cantidad}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Código QR */}
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico info">
+              <QrCode className="h-3.5 w-3.5" strokeWidth={2} />
+            </div>
+            <div className="ib-title">Código QR</div>
+          </div>
+          <div className="flex flex-col items-center gap-6 px-4 py-4 sm:flex-row">
+            <div
+              className="rounded-xl border p-4"
+              style={{
+                backgroundColor: "#fff",
+                borderColor: "var(--n-200)",
+              }}
+            >
+              <QRGenerator value={producto.referencia} size={160} />
+            </div>
+            <div className="flex flex-col items-center gap-3 sm:items-start">
+              <div>
+                <p
+                  className="font-mono text-[10px] uppercase tracking-[0.08em]"
+                  style={{ color: "var(--n-300)" }}
+                >
+                  Referencia
+                </p>
+                <p
+                  className="mt-0.5 font-mono text-lg font-semibold"
+                  style={{ color: "var(--n-900)" }}
+                >
+                  {producto.referencia}
+                </p>
+              </div>
+              <p
+                className="text-center text-xs sm:text-left"
+                style={{ color: "var(--n-500)" }}
+              >
+                Escanea con la app para ver el detalle del producto.
+              </p>
+              <QRPrintLabel
+                referencia={producto.referencia}
+                nombre={producto.nombre}
+              />
+            </div>
           </div>
         </div>
-      </Section>
 
-      {/* ── F12: Proveedores (último primero) ── */}
-      <Section title="Proveedores" icon="🏷️">
-        {proveedores.length === 0 ? (
-          <p
-            className="text-sm px-4 py-3"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Aún no hay compras registradas. Al recibir la primera compra quedará
-            aquí el proveedor.
-          </p>
-        ) : (
-          <ul>
-            {proveedores.map((p, idx) => (
-              <li
-                key={p.proveedor}
-                className="px-4 py-3 flex items-center justify-between gap-3"
-                style={{
-                  borderTop:
-                    idx === 0 ? "none" : `1px solid hsl(var(--border) / 0.5)`,
-                }}
-              >
-                <div className="min-w-0">
-                  <p
-                    className="text-sm font-semibold"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {idx === 0 && (
+        {/* Proveedores (F12) */}
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico">
+              <Tag className="h-3.5 w-3.5" strokeWidth={2} />
+            </div>
+            <div className="ib-title">Proveedores</div>
+            {proveedores.length > 0 && (
+              <div className="ib-aux">{proveedores.length}</div>
+            )}
+          </div>
+          {proveedores.length === 0 ? (
+            <p className="px-4 py-3 text-sm" style={{ color: "var(--n-500)" }}>
+              Aún no hay compras registradas. Al recibir la primera compra
+              quedará aquí el proveedor.
+            </p>
+          ) : (
+            <ul>
+              {proveedores.map((p, idx) => (
+                <li
+                  key={p.proveedor}
+                  className="flex items-center justify-between gap-3 px-4 py-3"
+                  style={{
+                    borderTop: idx === 0 ? "none" : "1px solid var(--n-100)",
+                  }}
+                >
+                  <div className="min-w-0">
+                    <p
+                      className="flex items-center gap-2 text-sm font-semibold"
+                      style={{ color: "var(--n-900)" }}
+                    >
+                      {idx === 0 && (
+                        <span
+                          className="pill pill-success"
+                          style={{ height: 18 }}
+                        >
+                          <span className="dot" />
+                          Último
+                        </span>
+                      )}
+                      {p.proveedor}
+                    </p>
+                    {p.ultima_compra_at && (
+                      <p className="text-xs" style={{ color: "var(--n-500)" }}>
+                        Última compra: {formatDate(p.ultima_compra_at)}
+                      </p>
+                    )}
+                  </div>
+                  {p.ultimo_costo != null && (
+                    <span
+                      className="font-mono text-sm tabular-nums"
+                      style={{ color: "var(--n-500)" }}
+                    >
+                      {formatCOP(p.ultimo_costo)}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Últimos movimientos */}
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico">
+              <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
+            </div>
+            <div className="ib-title">Últimos 10 movimientos</div>
+            <div className="ib-aux">{movimientos.length}</div>
+          </div>
+          {movimientos.length === 0 ? (
+            <p className="px-4 py-3 text-sm" style={{ color: "var(--n-500)" }}>
+              Sin movimientos registrados
+            </p>
+          ) : (
+            <ul>
+              {movimientos.map((mov, idx) => (
+                <li
+                  key={mov.id}
+                  className="flex items-start gap-3 px-4 py-3"
+                  style={{
+                    borderTop: idx === 0 ? "none" : "1px solid var(--n-100)",
+                  }}
+                >
+                  <MovimientoIcon tipo={mov.tipo} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
                       <span
-                        className="mr-2 px-2 py-0.5 rounded text-[10px] font-bold"
+                        className="text-sm font-semibold capitalize"
+                        style={{ color: "var(--n-900)" }}
+                      >
+                        {(mov.tipo ?? "").toLowerCase().replace("_", " ")}
+                      </span>
+                      <span
+                        className="font-mono text-sm font-bold tabular-nums"
                         style={{
-                          backgroundColor: "hsl(var(--success) / 0.15)",
-                          color: "hsl(var(--success))",
+                          color:
+                            mov.cantidad >= 0
+                              ? "var(--succ-700)"
+                              : "var(--dang-700)",
                         }}
                       >
-                        ÚLTIMO
+                        {mov.cantidad >= 0 ? "+" : ""}
+                        {mov.cantidad}
                       </span>
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-2">
+                      <span
+                        className="font-mono text-[11px]"
+                        style={{ color: "var(--n-500)" }}
+                      >
+                        {mov.sede_id}
+                      </span>
+                      <span style={{ color: "var(--n-200)" }}>·</span>
+                      <span
+                        className="font-mono text-[11px] tabular-nums"
+                        style={{ color: "var(--n-500)" }}
+                      >
+                        {mov.stock_anterior} → {mov.stock_posterior}
+                      </span>
+                    </div>
+                    {mov.observaciones && (
+                      <p
+                        className="mt-1 truncate text-[11px] italic"
+                        style={{ color: "var(--n-500)" }}
+                      >
+                        {mov.observaciones}
+                      </p>
                     )}
-                    {p.proveedor}
-                  </p>
-                  {p.ultima_compra_at && (
                     <p
-                      className="text-xs"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
+                      className="mt-0.5 font-mono text-[10px]"
+                      style={{ color: "var(--n-300)" }}
                     >
-                      Última compra: {formatDate(p.ultima_compra_at)}
+                      {formatDate(mov.fecha)}
                     </p>
-                  )}
-                </div>
-                {p.ultimo_costo != null && (
-                  <span
-                    className="text-sm font-mono tabular-nums"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {formatCOP(p.ultimo_costo)}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      {/* ── Últimos movimientos ── */}
-      <Section title="Últimos 10 movimientos" icon="📋">
-        {movimientos.length === 0 ? (
-          <p
-            className="text-sm px-4 py-3"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Sin movimientos registrados
-          </p>
-        ) : (
-          <ul>
-            {movimientos.map((mov, idx) => (
-              <li
-                key={mov.id}
-                className="px-4 py-3 flex items-start gap-3"
-                style={{
-                  borderTop:
-                    idx === 0 ? "none" : `1px solid hsl(var(--border) / 0.5)`,
-                }}
-              >
-                <MovimientoIcon tipo={mov.tipo} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className="text-sm font-semibold capitalize"
-                      style={{ color: "hsl(var(--foreground))" }}
-                    >
-                      {(mov.tipo ?? "").toLowerCase().replace("_", " ")}
-                    </span>
-                    <span
-                      className="text-sm font-bold tabular-nums"
-                      style={{
-                        color:
-                          mov.cantidad >= 0
-                            ? "hsl(var(--success))"
-                            : "hsl(var(--destructive))",
-                      }}
-                    >
-                      {mov.cantidad >= 0 ? "+" : ""}
-                      {mov.cantidad}
-                    </span>
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span
-                      className="text-[11px]"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {mov.sede_id}
-                    </span>
-                    <span
-                      className="text-xs"
-                      style={{ color: "hsl(var(--border))" }}
-                    >
-                      ·
-                    </span>
-                    <span
-                      className="text-[11px] tabular-nums"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {mov.stock_anterior} → {mov.stock_posterior}
-                    </span>
-                  </div>
-                  {mov.observaciones && (
-                    <p
-                      className="text-[11px] mt-1 italic truncate"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {mov.observaciones}
-                    </p>
-                  )}
-                  <p
-                    className="text-[10px] mt-0.5"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {formatDate(mov.fecha)}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
 
       {/* ── Modal: editar precio (solo Admin) ── */}
       {esAdmin && editandoPrecio && (
@@ -597,23 +470,20 @@ export default function ProductoDetalle() {
           onClick={() => !guardandoPrecio && setEditandoPrecio(false)}
         >
           <div
-            className="rounded-xl border p-5 w-full max-w-md space-y-3"
+            className="w-full max-w-md space-y-3 rounded-xl border p-5"
             style={{
-              backgroundColor: "hsl(var(--card))",
-              borderColor: "hsl(var(--border))",
+              backgroundColor: "var(--n-0)",
+              borderColor: "var(--n-200)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <h3
               className="text-lg font-semibold"
-              style={{ color: "hsl(var(--foreground))" }}
+              style={{ color: "var(--n-950)" }}
             >
               Editar precio de venta
             </h3>
-            <p
-              className="text-xs"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
+            <p className="text-xs" style={{ color: "var(--n-500)" }}>
               <strong>{producto.nombre}</strong> · precio actual:{" "}
               {formatCOP(producto.precio_venta)}
             </p>
@@ -622,19 +492,16 @@ export default function ProductoDetalle() {
                 role="alert"
                 className="rounded-lg border px-3 py-2 text-xs"
                 style={{
-                  backgroundColor: "hsl(var(--destructive) / 0.08)",
-                  borderColor: "hsl(var(--destructive) / 0.4)",
-                  color: "hsl(var(--destructive))",
+                  backgroundColor: "var(--dang-50)",
+                  borderColor: "var(--dang-200)",
+                  color: "var(--dang-700)",
                 }}
               >
                 {errorPrecio}
               </div>
             )}
             <div>
-              <label
-                className="text-xs"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
+              <label className="text-xs" style={{ color: "var(--n-500)" }}>
                 Nuevo precio (COP)
               </label>
               <input
@@ -645,18 +512,15 @@ export default function ProductoDetalle() {
                 onChange={(e) => setNuevoPrecio(e.target.value)}
                 disabled={guardandoPrecio}
                 autoFocus
-                className="w-full mt-1 px-3 py-2 rounded-lg border text-sm min-h-[44px]"
+                className="mt-1 min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
                 style={{
-                  backgroundColor: "hsl(var(--background))",
-                  borderColor: "hsl(var(--border))",
-                  color: "hsl(var(--foreground))",
+                  backgroundColor: "var(--n-0)",
+                  borderColor: "var(--n-200)",
+                  color: "var(--n-900)",
                 }}
               />
               {Number(nuevoPrecio) > 0 && (
-                <p
-                  className="text-xs mt-1"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
+                <p className="mt-1 text-xs" style={{ color: "var(--n-500)" }}>
                   Vista previa: {formatCOP(Number(nuevoPrecio))}
                 </p>
               )}
@@ -665,10 +529,10 @@ export default function ProductoDetalle() {
               <button
                 onClick={() => setEditandoPrecio(false)}
                 disabled={guardandoPrecio}
-                className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[44px] disabled:opacity-50"
+                className="min-h-[44px] rounded-lg border px-4 py-2 text-sm disabled:opacity-50"
                 style={{
-                  borderColor: "hsl(var(--border))",
-                  color: "hsl(var(--muted-foreground))",
+                  borderColor: "var(--n-200)",
+                  color: "var(--n-500)",
                 }}
               >
                 Cancelar
@@ -676,11 +540,8 @@ export default function ProductoDetalle() {
               <button
                 onClick={guardarPrecio}
                 disabled={guardandoPrecio}
-                className="text-sm px-5 py-2 rounded-lg cursor-pointer min-h-[44px] disabled:opacity-50"
-                style={{
-                  backgroundColor: "hsl(var(--primary))",
-                  color: "hsl(var(--primary-foreground))",
-                }}
+                className="min-h-[44px] rounded-lg px-5 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--p-700)", color: "#fff" }}
               >
                 {guardandoPrecio ? "Guardando..." : "Guardar"}
               </button>
@@ -696,51 +557,45 @@ export default function ProductoDetalle() {
 
 /* ── Helpers ── */
 
-function Section({ title, icon, children }) {
+function Stat({ label, value, small, children }) {
   return (
     <div
-      className="rounded-xl border overflow-hidden"
-      style={{
-        backgroundColor: "hsl(var(--card))",
-        borderColor: "hsl(var(--border))",
-      }}
+      className="rounded-[10px] border px-4 py-3.5"
+      style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
     >
-      <div
-        className="px-4 py-3 border-b flex items-center gap-2"
-        style={{
-          borderColor: "hsl(var(--border))",
-          backgroundColor: "hsl(var(--muted) / 0.3)",
-        }}
+      <p
+        className="font-mono text-[10px] uppercase tracking-[0.08em]"
+        style={{ color: "var(--n-300)" }}
       >
-        <span className="text-base">{icon}</span>
-        <h2
-          className="text-sm font-bold"
-          style={{ color: "hsl(var(--foreground))" }}
-        >
-          {title}
-        </h2>
-      </div>
+        {label}
+      </p>
+      <p
+        className={`mt-0.5 font-bold tabular-nums ${small ? "text-sm" : "text-base"}`}
+        style={{ color: "var(--n-950)" }}
+      >
+        {value}
+      </p>
       {children}
     </div>
   );
 }
 
-function Tag({ children, variant = "default" }) {
+function Chip({ children, variant = "default" }) {
   const styles =
     variant === "accent"
       ? {
-          backgroundColor: "hsl(var(--primary) / 0.1)",
-          color: "hsl(var(--primary))",
-          border: "1px solid hsl(var(--primary) / 0.2)",
+          backgroundColor: "var(--p-50)",
+          color: "var(--p-700)",
+          borderColor: "var(--p-200)",
         }
       : {
-          backgroundColor: "hsl(var(--muted))",
-          color: "hsl(var(--muted-foreground))",
-          border: "1px solid hsl(var(--border))",
+          backgroundColor: "var(--n-50)",
+          color: "var(--n-700)",
+          borderColor: "var(--n-200)",
         };
   return (
     <span
-      className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+      className="rounded-full border px-2 py-0.5 text-[10px] font-medium"
       style={styles}
     >
       {children}
@@ -750,46 +605,18 @@ function Tag({ children, variant = "default" }) {
 
 function MovimientoIcon({ tipo }) {
   const colores = {
-    COMPRA: {
-      bg: "hsl(var(--success) / 0.1)",
-      color: "hsl(var(--success))",
-      symbol: "↓",
-    },
-    VENTA: {
-      bg: "hsl(var(--destructive) / 0.1)",
-      color: "hsl(var(--destructive))",
-      symbol: "↑",
-    },
-    TRASPASO: {
-      bg: "hsl(var(--info) / 0.1)",
-      color: "hsl(var(--info))",
-      symbol: "⇄",
-    },
-    AJUSTE: {
-      bg: "hsl(var(--warning) / 0.1)",
-      color: "hsl(var(--warning))",
-      symbol: "≈",
-    },
-    DEVOLUCION: {
-      bg: "hsl(var(--primary) / 0.1)",
-      color: "hsl(var(--primary))",
-      symbol: "↩",
-    },
-    ENSAMBLE: {
-      bg: "hsl(var(--info) / 0.1)",
-      color: "hsl(var(--info))",
-      symbol: "⚙",
-    },
-    default: {
-      bg: "hsl(var(--muted))",
-      color: "hsl(var(--muted-foreground))",
-      symbol: "•",
-    },
+    COMPRA: { bg: "var(--succ-50)", color: "var(--succ-700)", symbol: "↓" },
+    VENTA: { bg: "var(--dang-50)", color: "var(--dang-700)", symbol: "↑" },
+    TRASPASO: { bg: "var(--info-50)", color: "var(--info-700)", symbol: "⇄" },
+    AJUSTE: { bg: "var(--warn-50)", color: "var(--warn-700)", symbol: "≈" },
+    DEVOLUCION: { bg: "var(--p-50)", color: "var(--p-700)", symbol: "↩" },
+    ENSAMBLE: { bg: "var(--info-50)", color: "var(--info-700)", symbol: "⚙" },
+    default: { bg: "var(--n-100)", color: "var(--n-500)", symbol: "•" },
   };
   const cfg = colores[tipo] ?? colores.default;
   return (
     <div
-      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
+      className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold"
       style={{ backgroundColor: cfg.bg, color: cfg.color }}
     >
       {cfg.symbol}
@@ -799,34 +626,22 @@ function MovimientoIcon({ tipo }) {
 
 function LoadingSkeleton() {
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-pulse"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
+    <div className="mx-auto w-full max-w-[1100px] px-4 py-5 sm:px-7 sm:py-6 animate-pulse">
       <div
-        className="h-8 rounded-lg w-1/2"
-        style={{ backgroundColor: "hsl(var(--muted))" }}
+        className="h-8 w-1/2 rounded-lg"
+        style={{ backgroundColor: "var(--n-100)" }}
       />
       <div
-        className="rounded-xl border h-40"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
+        className="mt-4 h-40 rounded-[10px] border"
+        style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
       />
       <div
-        className="rounded-xl border h-32"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
+        className="mt-3 h-32 rounded-[10px] border"
+        style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
       />
       <div
-        className="rounded-xl border h-56"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
+        className="mt-3 h-56 rounded-[10px] border"
+        style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
       />
     </div>
   );
@@ -834,29 +649,24 @@ function LoadingSkeleton() {
 
 function ErrorState({ message, onBack }) {
   return (
-    <div
-      className="flex flex-col items-center justify-center min-h-[60vh] px-8 text-center"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <div className="text-5xl mb-4">⚠️</div>
-      <p className="font-bold" style={{ color: "hsl(var(--foreground))" }}>
+    <div className="flex min-h-[60vh] flex-col items-center justify-center px-8 text-center">
+      <div
+        className="hrm-tool-ico xl mb-4"
+        style={{ width: 64, height: 64 }}
+        aria-hidden
+      >
+        <Package className="h-7 w-7" strokeWidth={1.5} />
+      </div>
+      <p className="font-bold" style={{ color: "var(--n-950)" }}>
         No se pudo cargar el producto
       </p>
-      <p
-        className="text-sm mt-1"
-        style={{ color: "hsl(var(--muted-foreground))" }}
-      >
+      <p className="mt-1 text-sm" style={{ color: "var(--n-500)" }}>
         {message}
       </p>
       <button
         onClick={onBack}
-        className="mt-6 px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-opacity"
-        style={{
-          backgroundColor: "hsl(var(--primary))",
-          color: "hsl(var(--primary-foreground))",
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
-        onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+        className="btn btn-pri mt-6 justify-center"
+        style={{ height: 48 }}
       >
         Volver
       </button>

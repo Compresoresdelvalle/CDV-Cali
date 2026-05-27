@@ -1,16 +1,23 @@
 import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  ArrowRight,
+  Search,
+  Check,
+  CheckCircle2,
+  Inbox,
+  Info,
+  Package,
+  ClipboardList,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { sanitizeSearch, safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 
-const inputStyle = {
-  backgroundColor: "hsl(var(--card))",
-  borderColor: "hsl(var(--border))",
-  color: "hsl(var(--foreground))",
-};
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function DevolucionNueva() {
   const navigate = useNavigate();
@@ -31,9 +38,6 @@ export default function DevolucionNueva() {
   const [error, setError] = useState(null);
   const [exito, setExito] = useState(null);
   const guardandoRef = useRef(false);
-
-  const UUID_RE =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   const buscarProductos = useCallback(async (q) => {
     if (!q || q.trim().length < 2) {
@@ -133,398 +137,455 @@ export default function DevolucionNueva() {
     }
   };
 
-  return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Nueva Devolución"
-        description={perfil?.sede_id}
-        actions={
-          <button
-            onClick={() => navigate("/ops/devoluciones")}
-            className="h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-              backgroundColor: "hsl(var(--card))",
-            }}
-          >
-            Cancelar
-          </button>
+  const tipoInfo =
+    tipo === "cliente"
+      ? {
+          eyebrow: "Devolución de cliente",
+          desc: "Reingresa stock al inventario tras validar el estado físico.",
+          signo: "+",
+          tone: "var(--succ-700)",
         }
-      />
+      : {
+          eyebrow: "Devolución a proveedor",
+          desc: "Devuelve mercancía al proveedor por defecto, vencimiento o error de pedido.",
+          signo: "−",
+          tone: "var(--warn-700)",
+        };
 
-      {/* Tipo */}
-      <SectionCard title="Tipo de devolución">
-        <div className="flex gap-3">
-          {[
-            {
-              value: "cliente",
-              label: "Devolución de cliente",
-              desc: "Suma stock",
-            },
-            {
-              value: "proveedor",
-              label: "Devolución a proveedor",
-              desc: "Resta stock",
-            },
-          ].map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setTipo(opt.value)}
-              className="flex-1 py-3 px-4 rounded-xl border text-left transition-all cursor-pointer"
-              style={
-                tipo === opt.value
-                  ? {
-                      backgroundColor: "hsl(var(--primary) / 0.08)",
-                      borderColor: "hsl(var(--primary))",
-                      color: "hsl(var(--primary))",
-                    }
-                  : {
-                      backgroundColor: "hsl(var(--card))",
-                      borderColor: "hsl(var(--border))",
-                      color: "hsl(var(--foreground))",
-                    }
-              }
-            >
-              <p className="text-sm font-semibold">{opt.label}</p>
-              <p
-                className="text-xs mt-0.5"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                {opt.desc}
-              </p>
-            </button>
-          ))}
+  // Pasos del wizard. El backend pide producto + (UUID de venta para cliente);
+  // se reflejan en el stepper aunque la lógica real no use buscador de venta.
+  const pasoProducto = !!productoSeleccionado;
+  const pasoDetalle =
+    pasoProducto &&
+    cantidad >= 1 &&
+    (tipo === "proveedor" || UUID_RE.test(ventaId.trim()));
+
+  const puedeRegistrar = pasoProducto && cantidad >= 1 && !guardando;
+
+  return (
+    <div className="flex h-full flex-col animate-fade-in">
+      {/* ── Breadcrumb ──────────────────────────────────────────────── */}
+      <div
+        className="border-b px-4 pt-5 sm:px-7"
+        style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+      >
+        <button
+          onClick={() => navigate("/ops/devoluciones")}
+          className="back-btn inline-flex items-center gap-1.5"
+        >
+          <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+          Volver a Devoluciones
+        </button>
+      </div>
+
+      {/* ── Encabezado + toggle tipo ────────────────────────────────── */}
+      <div
+        className="flex flex-wrap items-end justify-between gap-4 border-b px-4 pb-5 pt-3 sm:px-7"
+        style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+      >
+        <div className="min-w-0">
+          <p
+            className="mb-1 font-mono text-[11px] uppercase tracking-[0.08em]"
+            style={{ color: "var(--n-500)" }}
+          >
+            Operaciones · Post-venta · {perfil?.sede_id ?? "—"}
+          </p>
+          <h1
+            className="m-0 text-[22px] font-semibold tracking-[-0.01em]"
+            style={{ color: "var(--n-950)" }}
+          >
+            Nueva devolución ·{" "}
+            {tipo === "cliente" ? "De cliente" : "A proveedor"}
+          </h1>
+          <p className="mt-1 text-[13px]" style={{ color: "var(--n-500)" }}>
+            {tipoInfo.desc}
+          </p>
         </div>
-      </SectionCard>
+        <div
+          className="flex h-9 overflow-hidden rounded-md border text-[12px] font-medium"
+          style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+        >
+          {[
+            { value: "cliente", label: "Cliente" },
+            { value: "proveedor", label: "Proveedor" },
+          ].map((t) => {
+            const on = tipo === t.value;
+            return (
+              <button
+                key={t.value}
+                onClick={() => setTipo(t.value)}
+                className="px-4 transition-colors"
+                style={{
+                  backgroundColor: on ? "var(--n-950)" : "transparent",
+                  color: on ? "var(--n-0)" : "var(--n-500)",
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-      {/* Producto */}
-      <SectionCard title="Producto">
-        <div className="space-y-3">
-          <div className="relative">
-            <SearchIcon />
-            <input
-              type="text"
-              value={busqueda}
-              onChange={handleBusquedaChange}
-              placeholder="Buscar producto por nombre o referencia..."
-              className="w-full pl-9 pr-4 py-3 rounded-xl text-sm border focus:outline-none transition-all"
-              style={inputStyle}
-            />
-          </div>
+      {/* ── Cuerpo ──────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-auto px-4 pb-14 pt-5 sm:px-7">
+        {/* Stepper */}
+        <div className="stepper mb-5 overflow-x-auto">
+          <Step
+            n={1}
+            label="Producto"
+            state={pasoProducto ? "done" : "active"}
+          />
+          <Line done={pasoProducto} />
+          <Step
+            n={2}
+            label={tipo === "cliente" ? "Detalle y venta origen" : "Detalle"}
+            state={pasoDetalle ? "done" : pasoProducto ? "active" : "todo"}
+          />
+          <Line done={pasoDetalle} />
+          <Step
+            n={3}
+            label="Confirmar"
+            state={pasoDetalle ? "active" : "todo"}
+          />
+        </div>
 
-          {buscando && (
-            <p
-              className="text-xs"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Buscando...
-            </p>
-          )}
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_340px]">
+          {/* ── Columna principal ─────────────────────────────────── */}
+          <div className="flex flex-col gap-3.5">
+            {/* Producto */}
+            <div className="iblock flex flex-col gap-3.5">
+              <div className="ib-head">
+                <div className="ib-ico">
+                  <Package className="h-3.5 w-3.5" strokeWidth={2} />
+                </div>
+                <div className="ib-title">Producto a devolver</div>
+              </div>
 
-          {resultados.length > 0 && (
-            <div
-              className="border rounded-xl overflow-hidden"
-              style={{ borderColor: "hsl(var(--border))" }}
-            >
-              {resultados.map((r, idx) => (
-                <button
-                  key={r.id}
-                  onClick={() => seleccionarProducto(r)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-left transition-all cursor-pointer"
-                  style={{
-                    borderTop:
-                      idx === 0 ? "none" : `1px solid hsl(var(--border) / 0.5)`,
-                    backgroundColor: "hsl(var(--card))",
-                  }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.backgroundColor =
-                      "hsl(var(--muted) / 0.5)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.backgroundColor = "hsl(var(--card))")
-                  }
+              <div
+                className="flex h-12 items-center gap-2.5 rounded-lg border px-3.5"
+                style={{
+                  borderColor: "var(--n-200)",
+                  backgroundColor: "var(--n-0)",
+                }}
+              >
+                <Search
+                  className="h-4 w-4 shrink-0"
+                  strokeWidth={1.5}
+                  style={{ color: "var(--n-500)" }}
+                />
+                <input
+                  type="text"
+                  value={busqueda}
+                  onChange={handleBusquedaChange}
+                  placeholder="Buscar por nombre o referencia del catálogo…"
+                  className="flex-1 border-none bg-transparent text-[14px] outline-none"
+                  style={{ color: "var(--n-950)" }}
+                />
+              </div>
+
+              {buscando && (
+                <p className="text-xs" style={{ color: "var(--n-500)" }}>
+                  Buscando…
+                </p>
+              )}
+
+              {resultados.length > 0 && (
+                <div
+                  className="overflow-hidden rounded-lg border"
+                  style={{ borderColor: "var(--n-150)" }}
                 >
-                  <div>
-                    <p
-                      className="text-sm font-medium"
-                      style={{ color: "hsl(var(--foreground))" }}
+                  {resultados.map((r, idx) => (
+                    <button
+                      key={r.id}
+                      onClick={() => seleccionarProducto(r)}
+                      className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
+                      style={{
+                        borderTop:
+                          idx === 0 ? "none" : "1px solid var(--n-100)",
+                        backgroundColor: "var(--n-0)",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor = "var(--n-50)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "var(--n-0)")
+                      }
                     >
-                      {r.nombre}
+                      <div>
+                        <p
+                          className="text-sm font-medium"
+                          style={{ color: "var(--n-950)" }}
+                        >
+                          {r.nombre}
+                        </p>
+                        <p
+                          className="font-mono text-[11px]"
+                          style={{ color: "var(--n-500)" }}
+                        >
+                          {r.referencia} · {r.unidad_medida}
+                        </p>
+                      </div>
+                      <Check
+                        className="h-4 w-4 shrink-0"
+                        style={{ color: "var(--n-400)" }}
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {productoSeleccionado && (
+                <div
+                  className="flex items-center gap-3 rounded-xl border px-4 py-3"
+                  style={{
+                    backgroundColor: "var(--succ-50)",
+                    borderColor: "var(--succ-border)",
+                  }}
+                >
+                  <CheckCircle2
+                    className="h-5 w-5 shrink-0"
+                    style={{ color: "var(--succ-600)" }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="truncate text-sm font-semibold"
+                      style={{ color: "var(--n-950)" }}
+                    >
+                      {productoSeleccionado.nombre}
                     </p>
                     <p
-                      className="text-xs"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
+                      className="font-mono text-xs"
+                      style={{ color: "var(--n-500)" }}
                     >
-                      {r.referencia} · {r.unidad_medida}
+                      {productoSeleccionado.referencia}
                     </p>
                   </div>
-                  <CheckIcon />
-                </button>
-              ))}
+                  <button
+                    onClick={() => {
+                      setProductoSeleccionado(null);
+                      setBusqueda("");
+                    }}
+                    className="text-xs font-medium"
+                    style={{ color: "var(--p-600)" }}
+                  >
+                    Cambiar
+                  </button>
+                </div>
+              )}
             </div>
-          )}
 
-          {productoSeleccionado && (
-            <div
-              className="flex items-center gap-3 px-4 py-3 rounded-xl border"
-              style={{
-                backgroundColor: "hsl(var(--success) / 0.06)",
-                borderColor: "hsl(var(--success) / 0.3)",
-              }}
-            >
-              <span style={{ color: "hsl(var(--success))" }}>
-                <CheckCircleIcon />
-              </span>
-              <div className="flex-1 min-w-0">
+            {/* Detalle y motivo */}
+            <div className="iblock flex flex-col gap-3.5">
+              <div className="ib-head">
+                <div className="ib-ico">
+                  <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
+                </div>
+                <div className="ib-title">Detalle de la devolución</div>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <Field label="Cantidad" req>
+                  <div className="flex items-center gap-2">
+                    <QtyBtn
+                      onClick={() => setCantidad((n) => Math.max(1, n - 1))}
+                    >
+                      −
+                    </QtyBtn>
+                    <input
+                      type="number"
+                      min="1"
+                      value={cantidad}
+                      onChange={(e) =>
+                        setCantidad(
+                          Math.max(1, parseInt(e.target.value, 10) || 1),
+                        )
+                      }
+                      className="w-20 rounded-xl border py-2.5 text-center font-mono text-lg font-bold outline-none"
+                      style={{
+                        borderColor: "var(--n-150)",
+                        color: "var(--n-950)",
+                        backgroundColor: "var(--n-0)",
+                      }}
+                    />
+                    <QtyBtn onClick={() => setCantidad((n) => n + 1)}>+</QtyBtn>
+                  </div>
+                </Field>
+
+                <Field label="Motivo (opcional)">
+                  <textarea
+                    value={motivo}
+                    onChange={(e) => setMotivo(e.target.value)}
+                    placeholder="Describe el motivo de la devolución…"
+                    rows={3}
+                    className="ftextarea"
+                  />
+                </Field>
+
+                {tipo === "cliente" && (
+                  <Field label="ID de venta relacionada" req>
+                    <input
+                      type="text"
+                      value={ventaId}
+                      onChange={(e) => setVentaId(e.target.value)}
+                      placeholder="UUID de la venta original"
+                      className="finput sans"
+                    />
+                    {/* Nuestro flujo vincula por UUID de venta (no por buscador
+                        de venta-origen como el diseño Lovable). Lógica real
+                        intacta: fn_registrar_devolucion exige este p_venta_id. */}
+                    <div
+                      className="mt-1.5 flex items-center gap-2 rounded-md px-3 py-2 text-[11.5px]"
+                      style={{
+                        backgroundColor: "var(--info-50)",
+                        color: "var(--info-700)",
+                      }}
+                    >
+                      <Info className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        La devolución de cliente debe vincularse a la venta
+                        original mediante su identificador (UUID).
+                      </span>
+                    </div>
+                  </Field>
+                )}
+              </div>
+            </div>
+
+            {exito && (
+              <div
+                className="rounded-[10px] border px-4 py-3"
+                style={{
+                  backgroundColor: "var(--succ-50)",
+                  borderColor: "var(--succ-border)",
+                }}
+              >
                 <p
-                  className="text-sm font-semibold truncate"
-                  style={{ color: "hsl(var(--foreground))" }}
+                  className="text-sm font-medium"
+                  style={{ color: "var(--succ-700)" }}
+                >
+                  {exito}
+                </p>
+              </div>
+            )}
+
+            {error && (
+              <div
+                className="rounded-[10px] border px-4 py-3"
+                style={{
+                  backgroundColor: "var(--dang-50)",
+                  borderColor: "var(--dang-border)",
+                }}
+              >
+                <p className="text-sm" style={{ color: "var(--dang-700)" }}>
+                  {error}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Resumen (sticky) ──────────────────────────────────── */}
+          <aside className="cart">
+            <span className="cart-eyebrow">Resumen de la devolución</span>
+            {productoSeleccionado ? (
+              <>
+                <div className="cart-line">
+                  <span>{tipoInfo.eyebrow}</span>
+                </div>
+                <p
+                  className="text-[12.5px] font-medium leading-tight"
+                  style={{ color: "var(--n-950)" }}
                 >
                   {productoSeleccionado.nombre}
                 </p>
                 <p
-                  className="text-xs"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
+                  className="font-mono text-[11px]"
+                  style={{ color: "var(--n-500)" }}
                 >
                   {productoSeleccionado.referencia}
                 </p>
+                <div className="cart-line tot">
+                  <span>Ajuste de stock</span>
+                  <span className="v" style={{ color: tipoInfo.tone }}>
+                    {tipoInfo.signo}
+                    {cantidad} ud.
+                  </span>
+                </div>
+                <button
+                  onClick={registrar}
+                  disabled={!puedeRegistrar}
+                  className="btn btn-pri mt-2 w-full justify-center disabled:opacity-40"
+                  style={{ height: 48 }}
+                >
+                  {guardando ? (
+                    "Registrando…"
+                  ) : (
+                    <>
+                      Registrar devolución
+                      <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />
+                    </>
+                  )}
+                </button>
+              </>
+            ) : (
+              <div
+                className="flex flex-col items-center justify-center gap-3 px-3 py-10 text-center"
+                style={{ color: "var(--n-500)" }}
+              >
+                <Inbox className="h-7 w-7" strokeWidth={1.5} />
+                <div className="max-w-[220px] text-[12.5px] leading-[1.5]">
+                  Selecciona un producto para continuar
+                </div>
               </div>
-              <button
-                onClick={() => {
-                  setProductoSeleccionado(null);
-                  setBusqueda("");
-                }}
-                className="text-xs cursor-pointer"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                Cambiar
-              </button>
-            </div>
-          )}
+            )}
+          </aside>
         </div>
-      </SectionCard>
-
-      {/* Detalles */}
-      <SectionCard title="Detalles">
-        <div className="space-y-3">
-          <div>
-            <label
-              className="block text-xs font-medium mb-1.5"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Cantidad *
-            </label>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCantidad((n) => Math.max(1, n - 1))}
-                className="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl border cursor-pointer"
-                style={{
-                  borderColor: "hsl(var(--border))",
-                  color: "hsl(var(--muted-foreground))",
-                  backgroundColor: "hsl(var(--card))",
-                }}
-              >
-                −
-              </button>
-              <input
-                type="number"
-                min="1"
-                value={cantidad}
-                onChange={(e) =>
-                  setCantidad(Math.max(1, parseInt(e.target.value, 10) || 1))
-                }
-                className="w-20 text-center text-lg font-bold border rounded-xl py-2.5 focus:outline-none"
-                style={inputStyle}
-              />
-              <button
-                onClick={() => setCantidad((n) => n + 1)}
-                className="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl border cursor-pointer"
-                style={{
-                  borderColor: "hsl(var(--border))",
-                  color: "hsl(var(--muted-foreground))",
-                  backgroundColor: "hsl(var(--card))",
-                }}
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label
-              className="block text-xs font-medium mb-1.5"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Motivo (opcional)
-            </label>
-            <textarea
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Describe el motivo de la devolución..."
-              rows={3}
-              className="w-full px-4 py-3 rounded-xl text-sm border focus:outline-none resize-none transition-all"
-              style={inputStyle}
-            />
-          </div>
-
-          {tipo === "cliente" && (
-            <div>
-              <label
-                className="block text-xs font-medium mb-1.5"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                ID de venta relacionada *
-              </label>
-              <input
-                type="text"
-                value={ventaId}
-                onChange={(e) => setVentaId(e.target.value)}
-                placeholder="UUID de la venta original"
-                className="w-full px-4 py-3 rounded-xl text-sm border focus:outline-none transition-all font-mono"
-                style={inputStyle}
-              />
-            </div>
-          )}
-        </div>
-      </SectionCard>
-
-      {/* Exito */}
-      {exito && (
-        <div
-          className="rounded-xl border px-4 py-3"
-          style={{
-            backgroundColor: "hsl(var(--success) / 0.06)",
-            borderColor: "hsl(var(--success) / 0.3)",
-          }}
-        >
-          <p
-            className="text-sm font-medium"
-            style={{ color: "hsl(var(--success))" }}
-          >
-            {exito}
-          </p>
-        </div>
-      )}
-
-      {/* Error */}
-      {error && (
-        <div
-          className="rounded-xl border px-4 py-3"
-          style={{
-            backgroundColor: "hsl(var(--destructive) / 0.05)",
-            borderColor: "hsl(var(--destructive) / 0.2)",
-          }}
-        >
-          <p className="text-sm" style={{ color: "hsl(var(--destructive))" }}>
-            {error}
-          </p>
-        </div>
-      )}
-
-      <button
-        onClick={registrar}
-        disabled={!productoSeleccionado || cantidad < 1 || guardando}
-        className="w-full py-4 rounded-xl font-semibold text-base transition-opacity disabled:opacity-40 cursor-pointer"
-        style={{
-          backgroundColor: "hsl(var(--primary))",
-          color: "hsl(var(--primary-foreground))",
-        }}
-      >
-        {guardando
-          ? "Registrando..."
-          : `Registrar devolución · ${cantidad} ud.`}
-      </button>
+      </div>
     </div>
   );
 }
 
-function SectionCard({ title, children }) {
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+function Step({ n, label, state }) {
   return (
-    <div
-      className="rounded-xl border overflow-hidden"
+    <div className={`step ${state}`}>
+      <div className="step-dot">
+        {state === "done" ? <Check className="h-3 w-3" strokeWidth={3} /> : n}
+      </div>
+      <div className="step-lbl">{label}</div>
+    </div>
+  );
+}
+
+function Line({ done }) {
+  return <div className={`step-line ${done ? "done" : ""}`} />;
+}
+
+function Field({ label, req, children }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="flbl">
+        {label}
+        {req && <span className="req">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function QtyBtn({ children, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="grid h-12 w-12 place-items-center rounded-xl border text-xl font-bold transition-colors"
       style={{
-        backgroundColor: "hsl(var(--card))",
-        borderColor: "hsl(var(--border))",
+        borderColor: "var(--n-150)",
+        color: "var(--n-700)",
+        backgroundColor: "var(--n-0)",
       }}
     >
-      <div
-        className="px-4 py-3 border-b"
-        style={{
-          borderColor: "hsl(var(--border))",
-          backgroundColor: "hsl(var(--muted) / 0.3)",
-        }}
-      >
-        <p
-          className="text-xs font-semibold uppercase tracking-wide"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          {title}
-        </p>
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
-      style={{ color: "hsl(var(--muted-foreground))" }}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-      />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      className="w-4 h-4 shrink-0"
-      style={{ color: "hsl(var(--muted-foreground))" }}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 4v16m8-8H4"
-      />
-    </svg>
-  );
-}
-
-function CheckCircleIcon() {
-  return (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
+      {children}
+    </button>
   );
 }

@@ -1,49 +1,43 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  ArrowRight,
+  Truck,
+  Package,
+  Shield,
+  Activity,
+  Check,
+  AlertTriangle,
+  PlayCircle,
+  Printer,
+  PackageCheck,
+  CheckCircle2,
+  Clock,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatDate, safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
-import StatusBadge from "../../components/ui/StatusBadge";
+import { formatDate, formatCOP, safeError } from "../../lib/utils";
+import {
+  sedeLabel,
+  traspasoEstadoPill,
+  traspasoBadge,
+} from "../../lib/traspasos-ui";
+import {
+  Avatar,
+  Pill,
+  TipoBadge,
+} from "../../components/traspasos/TraspasoBits";
 
-const SEDE_LABELS = {
-  "BOD-PRINCIPAL": "Bodega Principal",
-  "ALM-01": "Almacén 01",
-  "ALM-02": "Almacén 02",
-  "ALM-03": "Almacén 03",
+/* Estado real → kind del Pill de Lovable. */
+const PILL_KIND = {
+  borrador: "neut",
+  picking: "info",
+  verificado: "prog",
+  en_transito: "warn",
+  recibido: "succ",
+  con_diferencia: "dang",
 };
-
-function sedeLabel(id) {
-  return SEDE_LABELS[id] ?? id;
-}
-
-function SectionCard({ title, children }) {
-  return (
-    <div
-      className="rounded-xl border overflow-hidden"
-      style={{
-        backgroundColor: "hsl(var(--card))",
-        borderColor: "hsl(var(--border))",
-      }}
-    >
-      <div
-        className="px-4 py-3 border-b"
-        style={{
-          borderColor: "hsl(var(--border))",
-          backgroundColor: "hsl(var(--muted) / 0.3)",
-        }}
-      >
-        <p
-          className="text-xs font-semibold uppercase tracking-wide"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          {title}
-        </p>
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
-}
 
 export default function TraspasoDetalle() {
   const { id } = useParams();
@@ -58,7 +52,6 @@ export default function TraspasoDetalle() {
 
   const esAdmin = perfil?.rol === "Admin";
   const esBodeguero = perfil?.rol === "Bodeguero";
-
   const accionandoRef = useRef(false);
 
   const cargar = async () => {
@@ -80,13 +73,12 @@ export default function TraspasoDetalle() {
           supabase
             .from("detalle_traspaso")
             .select(
-              `*, producto:producto_id(nombre, referencia, unidad_medida),
+              `*, producto:producto_id(nombre, referencia, unidad_medida, precio_venta),
                ubicacion:ubicacion_origen_id(pasillo, estante, nivel, prioridad_picking)`,
             )
             .eq("traspaso_id", id)
             .order("created_at"),
         ]);
-      // El error de la cabecera es bloqueante; el del detalle solo degrada.
       if (errT) throw errT;
       setTraspaso(t);
       setItems(d ?? []);
@@ -155,536 +147,794 @@ export default function TraspasoDetalle() {
   const yoSoyDeSedeDestino =
     perfil?.sede_id === traspaso.sede_destino_id || esAdmin;
 
-  // Calcular progreso de picking
   const totalItems = items.length;
   const itemsCompletos = items.filter((i) => i.picking_completado).length;
   const pickingCompleto = totalItems > 0 && itemsCompletos === totalItems;
 
-  return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title={`Traspaso #${traspaso.numero}`}
-        description={`${sedeLabel(traspaso.sede_origen_id)} → ${sedeLabel(traspaso.sede_destino_id)}`}
-        actions={
-          <button
-            onClick={() => navigate("/ops/traspasos")}
-            className="h-9 px-3 rounded-lg border text-sm font-medium cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-              backgroundColor: "hsl(var(--card))",
-            }}
-          >
-            ← Volver
-          </button>
-        }
-      />
+  const estado = traspaso.estado;
+  const pill = traspasoEstadoPill(estado);
+  const pillKind = PILL_KIND[estado] ?? "neut";
+  const badge = traspasoBadge(traspaso.tipo);
 
-      {/* Error de acción */}
+  return (
+    <div className="flex h-full flex-col gap-4 px-4 pb-14 pt-5 sm:px-7 sm:pt-6 animate-fade-in">
+      <button
+        onClick={() => navigate("/ops/traspasos")}
+        className="inline-flex w-fit items-center gap-1.5 text-[12.5px] font-medium transition-colors"
+        style={{ color: "var(--n-500)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--n-700)")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--n-500)")}
+      >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} /> Volver a
+        Traspasos
+      </button>
+
+      {/* ── Cabecera ────────────────────────────────────────────────── */}
+      <div
+        className="flex items-start gap-5 border-b pb-4"
+        style={{ borderColor: "var(--n-100)" }}
+      >
+        <div className="flex-1">
+          <div
+            className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.14em]"
+            style={{ color: "var(--n-400)" }}
+          >
+            Traspaso entre sedes
+          </div>
+          <div
+            className="mb-2 flex items-center gap-2 font-mono text-[28px] font-medium leading-[1.05] tracking-[-0.01em]"
+            style={{ color: "var(--n-950)" }}
+          >
+            #{traspaso.numero}
+            <TipoBadge badge={badge} />
+          </div>
+          <div
+            className="flex flex-wrap items-center gap-2 text-[14px]"
+            style={{ color: "var(--n-500)" }}
+          >
+            <span>
+              Creado{" "}
+              <b
+                className="font-mono font-medium"
+                style={{ color: "var(--n-700)" }}
+              >
+                {formatDate(traspaso.fecha)}
+              </b>
+            </span>
+            {traspaso.fecha_recepcion && (
+              <>
+                <span>·</span>
+                <span>
+                  Recibido{" "}
+                  <b
+                    className="font-mono font-medium"
+                    style={{ color: "var(--n-700)" }}
+                  >
+                    {formatDate(traspaso.fecha_recepcion)}
+                  </b>
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-2.5">
+          <Pill kind={pillKind} label={pill.label} />
+          <button
+            onClick={() => window.print()}
+            className="btn btn-out"
+            style={{ height: 36 }}
+          >
+            <Printer className="h-3.5 w-3.5" strokeWidth={2} /> Imprimir guía
+          </button>
+        </div>
+      </div>
+
       {error && (
         <div
-          className="p-3 rounded-lg border text-sm font-medium"
+          role="alert"
+          className="rounded-[10px] border px-4 py-3 text-sm"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.3)",
-            color: "hsl(var(--destructive))",
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
+            color: "var(--dang-700)",
           }}
         >
           {error}
         </div>
       )}
 
-      {/* Estado + Flujo visual */}
-      <div
-        className="rounded-xl border p-4"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p
-              className="text-xs font-semibold uppercase tracking-wide mb-1"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Estado actual
-            </p>
-            <StatusBadge status={traspaso.estado} />
-          </div>
-          <FlujoBadges estado={traspaso.estado} />
-        </div>
-
-        {/* Metadatos */}
-        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <MetaDato label="Creado" valor={formatDate(traspaso.fecha)} />
-          <MetaDato
-            label="Solicitado por"
-            valor={traspaso.solicitante?.nombre ?? "—"}
-          />
-          <MetaDato
-            label="Picker"
-            valor={traspaso.picker?.nombre ?? "Sin asignar"}
-          />
-          <MetaDato
-            label="Verificado por"
-            valor={traspaso.verificador?.nombre ?? "—"}
-          />
-        </div>
-
-        {traspaso.fecha_recepcion && (
-          <div className="mt-3">
-            <MetaDato
-              label="Recepción"
-              valor={formatDate(traspaso.fecha_recepcion)}
-            />
-          </div>
-        )}
-
-        {traspaso.observaciones && (
-          <p
-            className="mt-3 text-sm"
-            style={{ color: "hsl(var(--muted-foreground))" }}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
+        {/* ── Columna izquierda ──────────────────────────────────── */}
+        <div className="flex min-w-0 flex-col gap-4">
+          {/* Ruta */}
+          <Block
+            icon={<Truck className="h-3.5 w-3.5" strokeWidth={2} />}
+            title="Ruta del traspaso"
           >
-            {traspaso.observaciones}
-          </p>
-        )}
-      </div>
-
-      {/* ── PANEL DE ACCIÓN según estado ──────────────────── */}
-
-      {/* borrador → iniciar picking */}
-      {traspaso.estado === "borrador" && (esAdmin || esBodeguero) && (
-        <ActionPanel
-          icon="📦"
-          title="Iniciar picking"
-          description="Asígnate como picker y comienza a recoger los productos de bodega."
-          buttonLabel={accionando ? "Iniciando…" : "Iniciar picking"}
-          buttonDisabled={accionando}
-          onAction={iniciarPicking}
-          color="primary"
-        />
-      )}
-
-      {/* picking: el picker continúa su trabajo (si aún falta) */}
-      {traspaso.estado === "picking" && yoSoyPicker && !pickingCompleto && (
-        <ActionPanel
-          icon="🏷️"
-          title="Continuar picking"
-          description={`${itemsCompletos} de ${totalItems} items completados.`}
-          buttonLabel="Ir al picking"
-          onAction={() => navigate(`/ops/traspasos/${id}/picking`)}
-          color="warning"
-          progress={totalItems > 0 ? (itemsCompletos / totalItems) * 100 : 0}
-        />
-      )}
-
-      {/* F12 fix UX: picking completo pero soy el picker → esperar verificador */}
-      {traspaso.estado === "picking" && yoSoyPicker && pickingCompleto && (
-        <ActionPanel
-          icon="⏳"
-          title="Picking completo — esperando verificación"
-          description="Terminaste de pickear todos los items. Por segregación de funciones, otra persona (Admin u otro Bodeguero) debe entrar a este traspaso y verificarlo. El estado cambiará cuando lo haga."
-          buttonLabel="Revisar mi picking"
-          onAction={() => navigate(`/ops/traspasos/${id}/picking`)}
-          color="info"
-        />
-      )}
-
-      {/* picking: otra persona puede verificar */}
-      {traspaso.estado === "picking" &&
-        !yoSoyPicker &&
-        (esAdmin || esBodeguero) && (
-          <ActionPanel
-            icon="✅"
-            title="Verificar traspaso"
-            description={
-              pickingCompleto
-                ? "Todos los items fueron pickeados. Puedes verificar el traspaso."
-                : `Picking en progreso: ${itemsCompletos}/${totalItems} items. Cuando estén todos listos podrás verificar.`
-            }
-            buttonLabel="Verificar cantidades"
-            buttonDisabled={!pickingCompleto}
-            onAction={() => navigate(`/ops/traspasos/${id}/verificar`)}
-            color="info"
-          />
-        )}
-
-      {/* verificado → enviar */}
-      {traspaso.estado === "verificado" && (esAdmin || esBodeguero) && (
-        <ActionPanel
-          icon="🚚"
-          title="Enviar traspaso"
-          description="El traspaso fue verificado. Al confirmar el envío el stock saldrá de la sede origen."
-          buttonLabel={accionando ? "Enviando…" : "Confirmar envío"}
-          buttonDisabled={accionando}
-          onAction={enviarTraspaso}
-          color="primary"
-        />
-      )}
-
-      {/* en_transito → recibir (solo sede destino) */}
-      {traspaso.estado === "en_transito" && yoSoyDeSedeDestino && (
-        <ActionPanel
-          icon="📥"
-          title="Confirmar recepción"
-          description="El traspaso está en camino. Confirma las cantidades recibidas en tu sede."
-          buttonLabel="Confirmar recepción"
-          onAction={() => navigate(`/ops/traspasos/${id}/recibir`)}
-          color="success"
-        />
-      )}
-
-      {/* Alerta de diferencias */}
-      {traspaso.estado === "con_diferencia" && (
-        <div
-          className="p-4 rounded-xl border"
-          style={{
-            backgroundColor: "hsl(var(--destructive) / 0.06)",
-            borderColor: "hsl(var(--destructive) / 0.3)",
-          }}
-        >
-          <p
-            className="text-sm font-semibold"
-            style={{ color: "hsl(var(--destructive))" }}
-          >
-            ⚠️ Traspaso recibido con diferencias
-          </p>
-          <p
-            className="text-xs mt-1"
-            style={{ color: "hsl(var(--destructive) / 0.8)" }}
-          >
-            Las cantidades recibidas no coinciden con las enviadas. Revisa el
-            detalle de items abajo.
-          </p>
-        </div>
-      )}
-
-      {/* ── Detalle de items ───────────────────────────────── */}
-      <SectionCard title={`Productos (${items.length})`}>
-        {items.length === 0 ? (
-          <p
-            className="text-sm"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Sin productos.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {items.map((item) => {
-              const hayDiff =
-                traspaso.estado === "recibido" ||
-                traspaso.estado === "con_diferencia";
-              const diferencia = hayDiff
-                ? item.cantidad_recibida - item.cantidad_enviada
-                : null;
-
-              return (
+            <div className="grid grid-cols-[1fr_60px_1fr] items-stretch gap-2.5">
+              <RouteBox
+                kind="origen"
+                wh={sedeLabel(traspaso.sede_origen_id)}
+                nombre={traspaso.solicitante?.nombre}
+                metaLabel="Solicitó"
+                time={formatDate(traspaso.fecha)}
+              />
+              <div className="relative flex items-center justify-center">
                 <div
-                  key={item.id}
-                  className="p-3 rounded-lg border"
+                  className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2"
                   style={{
-                    backgroundColor:
-                      diferencia !== null && diferencia !== 0
-                        ? "hsl(var(--destructive) / 0.05)"
-                        : "hsl(var(--muted) / 0.2)",
-                    borderColor:
-                      diferencia !== null && diferencia !== 0
-                        ? "hsl(var(--destructive) / 0.3)"
-                        : "hsl(var(--border))",
+                    background:
+                      "repeating-linear-gradient(90deg,var(--warn-border) 0 6px,transparent 6px 12px)",
+                  }}
+                />
+                <div
+                  className="relative z-[1] grid h-8 w-8 place-items-center rounded-full border-2"
+                  style={{
+                    borderColor: "var(--warn-border)",
+                    backgroundColor: "var(--warn-50)",
+                    color: "var(--warn-700)",
                   }}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className="text-sm font-medium truncate"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {item.producto?.nombre ?? "—"}
-                      </p>
-                      <p
-                        className="text-xs"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
-                      >
-                        {item.producto?.referencia}
-                        {item.ubicacion &&
-                          ` · ${item.ubicacion.pasillo}-${item.ubicacion.estante}-${item.ubicacion.nivel}`}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <CantidadesItem item={item} estado={traspaso.estado} />
-                    </div>
-                  </div>
-
-                  {/* Diferencia */}
-                  {diferencia !== null && diferencia !== 0 && (
-                    <p
-                      className="text-xs mt-1.5 font-semibold"
-                      style={{ color: "hsl(var(--destructive))" }}
-                    >
-                      Diferencia: {diferencia > 0 ? "+" : ""}
-                      {diferencia} unidades
-                    </p>
-                  )}
-
-                  {/* Estado picking */}
-                  {traspaso.estado === "picking" && (
-                    <div className="mt-1.5">
-                      <span
-                        className="text-xs px-2 py-0.5 rounded-full font-medium"
-                        style={
-                          item.picking_completado
-                            ? {
-                                backgroundColor: "hsl(var(--success) / 0.1)",
-                                color: "hsl(var(--success))",
-                              }
-                            : {
-                                backgroundColor: "hsl(var(--warning) / 0.1)",
-                                color: "hsl(var(--warning))",
-                              }
-                        }
-                      >
-                        {item.picking_completado ? "✓ Pickeado" : "Pendiente"}
-                      </span>
-                    </div>
-                  )}
+                  <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </SectionCard>
-    </div>
-  );
-}
+              </div>
+              <RouteBox
+                kind="destino"
+                wh={sedeLabel(traspaso.sede_destino_id)}
+                nombre={traspaso.receptor?.nombre}
+                metaLabel={traspaso.receptor?.nombre ? "Recibió" : null}
+                time={
+                  traspaso.fecha_recepcion
+                    ? formatDate(traspaso.fecha_recepcion)
+                    : "Pendiente de recepción"
+                }
+              />
+            </div>
+          </Block>
 
-function CantidadesItem({ item, estado }) {
-  return (
-    <div
-      className="text-xs space-y-0.5"
-      style={{ color: "hsl(var(--muted-foreground))" }}
-    >
-      <p>
-        Solicitado:{" "}
-        <strong style={{ color: "hsl(var(--foreground))" }}>
-          {item.cantidad_solicitada}
-        </strong>
-      </p>
-      {[
-        "picking",
-        "verificado",
-        "en_transito",
-        "recibido",
-        "con_diferencia",
-      ].includes(estado) && (
-        <p>
-          Enviado:{" "}
-          <strong style={{ color: "hsl(var(--foreground))" }}>
-            {item.cantidad_enviada ?? 0}
-          </strong>
-        </p>
-      )}
-      {["recibido", "con_diferencia"].includes(estado) && (
-        <p>
-          Recibido:{" "}
-          <strong
-            style={{
-              color:
-                item.cantidad_recibida !== item.cantidad_enviada
-                  ? "hsl(var(--destructive))"
-                  : "hsl(var(--success))",
-            }}
-          >
-            {item.cantidad_recibida ?? 0}
-          </strong>
-        </p>
-      )}
-    </div>
-  );
-}
-
-function FlujoBadges({ estado }) {
-  const pasos = [
-    { key: "borrador", label: "Pendiente" },
-    { key: "picking", label: "Picking" },
-    { key: "verificado", label: "Verificado" },
-    { key: "en_transito", label: "En Tránsito" },
-    { key: "recibido", label: "Recibido" },
-  ];
-
-  const orden = pasos.map((p) => p.key);
-  const idxActual = orden.indexOf(
-    estado === "con_diferencia" ? "recibido" : estado,
-  );
-
-  return (
-    <div className="flex items-center gap-1 flex-wrap">
-      {pasos.map((paso, idx) => {
-        const completado = idx < idxActual;
-        const activo = idx === idxActual;
-        return (
-          <div key={paso.key} className="flex items-center gap-1">
-            <span
-              className="text-xs px-2 py-0.5 rounded-full font-medium"
-              style={{
-                backgroundColor: activo
-                  ? "hsl(var(--primary))"
-                  : completado
-                    ? "hsl(var(--success) / 0.15)"
-                    : "hsl(var(--muted))",
-                color: activo
-                  ? "hsl(var(--primary-foreground))"
-                  : completado
-                    ? "hsl(var(--success))"
-                    : "hsl(var(--muted-foreground))",
-              }}
+          {/* Motivo */}
+          {traspaso.observaciones && (
+            <Block
+              icon={<Shield className="h-3.5 w-3.5" strokeWidth={2} />}
+              title="Motivo del traspaso"
             >
-              {completado ? "✓ " : ""}
-              {paso.label}
-            </span>
-            {idx < pasos.length - 1 && (
-              <span
-                className="text-xs"
-                style={{ color: "hsl(var(--muted-foreground))" }}
+              {badge && (
+                <div className="mb-2.5 flex items-center gap-2">
+                  <TipoBadge badge={badge} />
+                </div>
+              )}
+              <div
+                className="text-[13px] leading-[1.55]"
+                style={{ color: "var(--n-700)" }}
               >
-                →
-              </span>
+                {traspaso.observaciones}
+              </div>
+            </Block>
+          )}
+
+          {/* Productos */}
+          <Block
+            icon={<Package className="h-3.5 w-3.5" strokeWidth={2} />}
+            title={`Productos (${items.length})`}
+          >
+            {items.length === 0 ? (
+              <p className="text-sm" style={{ color: "var(--n-500)" }}>
+                Sin productos.
+              </p>
+            ) : (
+              <div className="flex flex-col">
+                {items.map((l, i) => (
+                  <ProductoRow
+                    key={l.id}
+                    item={l}
+                    estado={estado}
+                    last={i === items.length - 1}
+                  />
+                ))}
+              </div>
             )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+          </Block>
 
-function ActionPanel({
-  icon,
-  title,
-  description,
-  buttonLabel,
-  buttonDisabled,
-  onAction,
-  color,
-  progress,
-}) {
-  const colors = {
-    primary: {
-      bg: "hsl(var(--primary) / 0.06)",
-      border: "hsl(var(--primary) / 0.2)",
-      btn: "hsl(var(--primary))",
-      btnText: "hsl(var(--primary-foreground))",
-    },
-    warning: {
-      bg: "hsl(var(--warning) / 0.06)",
-      border: "hsl(var(--warning) / 0.2)",
-      btn: "hsl(var(--warning))",
-      btnText: "hsl(var(--primary-foreground))",
-    },
-    info: {
-      bg: "hsl(var(--info) / 0.06)",
-      border: "hsl(var(--info) / 0.2)",
-      btn: "hsl(var(--info))",
-      btnText: "hsl(var(--primary-foreground))",
-    },
-    success: {
-      bg: "hsl(var(--success) / 0.06)",
-      border: "hsl(var(--success) / 0.2)",
-      btn: "hsl(var(--success))",
-      btnText: "hsl(var(--primary-foreground))",
-    },
-  };
-
-  const c = colors[color] ?? colors.primary;
-
-  return (
-    <div
-      className="rounded-xl border p-4 space-y-3"
-      style={{ backgroundColor: c.bg, borderColor: c.border }}
-    >
-      <div className="flex items-start gap-3">
-        <span className="text-2xl">{icon}</span>
-        <div className="flex-1">
-          <p
-            className="text-sm font-semibold"
-            style={{ color: "hsl(var(--foreground))" }}
+          {/* Línea de tiempo */}
+          <Block
+            icon={<Activity className="h-3.5 w-3.5" strokeWidth={2} />}
+            title="Línea de tiempo"
           >
-            {title}
-          </p>
-          <p
-            className="text-xs mt-0.5"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            {description}
-          </p>
+            <Timeline traspaso={traspaso} />
+          </Block>
         </div>
-      </div>
 
-      {/* Barra de progreso picking */}
-      {progress !== undefined && (
-        <div
-          className="h-2 rounded-full overflow-hidden"
-          style={{ backgroundColor: "hsl(var(--muted))" }}
-        >
-          <div
-            className="h-full rounded-full transition-all"
-            style={{
-              width: `${progress}%`,
-              backgroundColor: "hsl(var(--warning))",
-            }}
+        {/* ── Columna derecha · panel de acción sticky ──────────────── */}
+        <div className="lg:sticky lg:top-5 lg:self-start">
+          <AccionPanel
+            estado={estado}
+            traspaso={traspaso}
+            itemsCompletos={itemsCompletos}
+            totalItems={totalItems}
+            pickingCompleto={pickingCompleto}
+            yoSoyPicker={yoSoyPicker}
+            yoSoyDeSedeDestino={yoSoyDeSedeDestino}
+            esAdmin={esAdmin}
+            esBodeguero={esBodeguero}
+            accionando={accionando}
+            onIniciarPicking={iniciarPicking}
+            onEnviar={enviarTraspaso}
+            onIrPicking={() => navigate(`/ops/traspasos/${id}/picking`)}
+            onVerificar={() => navigate(`/ops/traspasos/${id}/verificar`)}
+            onRecibir={() => navigate(`/ops/traspasos/${id}/recibir`)}
           />
         </div>
-      )}
-
-      <button
-        onClick={onAction}
-        disabled={buttonDisabled}
-        className="w-full h-10 rounded-lg text-sm font-semibold transition-opacity disabled:opacity-40 cursor-pointer"
-        style={{ backgroundColor: c.btn, color: c.btnText }}
-        onMouseEnter={(e) =>
-          !buttonDisabled && (e.currentTarget.style.opacity = "0.9")
-        }
-        onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-      >
-        {buttonLabel}
-      </button>
+      </div>
     </div>
   );
 }
 
-function MetaDato({ label, valor }) {
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+function Block({ icon, title, children }) {
   return (
-    <div>
-      <p
-        className="text-xs font-semibold uppercase tracking-wide"
-        style={{ color: "hsl(var(--muted-foreground))" }}
-      >
-        {label}
-      </p>
-      <p
-        className="text-sm font-medium mt-0.5"
-        style={{ color: "hsl(var(--foreground))" }}
-      >
-        {valor}
-      </p>
+    <div
+      className="rounded-[10px] border p-4"
+      style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+    >
+      <div className="mb-3.5 flex items-center gap-2.5">
+        <span
+          className="grid h-[26px] w-[26px] place-items-center rounded-md"
+          style={{ backgroundColor: "var(--n-50)", color: "var(--n-700)" }}
+        >
+          {icon}
+        </span>
+        <span
+          className="flex-1 text-[13.5px] font-medium"
+          style={{ color: "var(--n-950)" }}
+        >
+          {title}
+        </span>
+      </div>
+      {children}
     </div>
   );
+}
+
+function RouteBox({ kind, wh, nombre, metaLabel, time }) {
+  const esOrigen = kind === "origen";
+  return (
+    <div
+      className="flex flex-col gap-2 rounded-[10px] border p-3.5"
+      style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-25)" }}
+    >
+      <div
+        className="font-mono text-[10px] font-medium uppercase tracking-[0.08em]"
+        style={{ color: "var(--n-400)" }}
+      >
+        {esOrigen ? "Origen" : "Destino"}
+      </div>
+      <div
+        className="inline-flex items-center gap-1.5 font-mono text-[13px] font-medium"
+        style={{ color: "var(--n-950)" }}
+      >
+        <Truck
+          className="h-3.5 w-3.5"
+          strokeWidth={2}
+          style={{ color: esOrigen ? "var(--succ-600)" : "var(--info-600)" }}
+        />
+        {wh}
+      </div>
+      <div
+        className="flex items-center gap-1.5 text-[12px]"
+        style={{ color: "var(--n-700)" }}
+      >
+        <Avatar nombre={nombre} size={20} />
+        {metaLabel ? `${metaLabel} ${nombre ?? "—"}` : "Sin asignar"}
+      </div>
+      <div className="font-mono text-[11px]" style={{ color: "var(--n-500)" }}>
+        {time}
+      </div>
+    </div>
+  );
+}
+
+function ProductoRow({ item, estado, last }) {
+  const mostrarEnviado = [
+    "picking",
+    "verificado",
+    "en_transito",
+    "recibido",
+    "con_diferencia",
+  ].includes(estado);
+  const mostrarRecibido = ["recibido", "con_diferencia"].includes(estado);
+  const precio = item.producto?.precio_venta ?? 0;
+  const qty = item.cantidad_enviada ?? item.cantidad_solicitada ?? 0;
+  const recDiff =
+    mostrarRecibido &&
+    item.cantidad_recibida != null &&
+    item.cantidad_recibida !== (item.cantidad_enviada ?? 0);
+
+  return (
+    <div
+      className="grid grid-cols-[1fr_auto_auto] items-center gap-3.5 py-2.5"
+      style={{ borderBottom: last ? "none" : "1px solid var(--n-100)" }}
+    >
+      <div className="flex min-w-0 flex-col leading-[1.3]">
+        <span
+          className="truncate text-[13px] font-medium"
+          style={{ color: "var(--n-950)" }}
+        >
+          {item.producto?.nombre ?? "—"}
+        </span>
+        <span
+          className="font-mono text-[11px]"
+          style={{ color: "var(--n-500)" }}
+        >
+          {item.producto?.referencia ?? "—"}
+        </span>
+      </div>
+      <div className="text-right">
+        <span
+          className="font-mono text-[13px] font-medium"
+          style={{ color: "var(--n-950)" }}
+        >
+          ×{item.cantidad_solicitada}
+        </span>
+        {mostrarEnviado && (
+          <span
+            className="ml-2 font-mono text-[11px]"
+            style={{ color: "var(--n-500)" }}
+          >
+            env. {item.cantidad_enviada ?? 0}
+          </span>
+        )}
+        {mostrarRecibido && (
+          <span
+            className="ml-2 font-mono text-[11px] font-semibold"
+            style={{ color: recDiff ? "var(--dang-700)" : "var(--succ-700)" }}
+          >
+            rec. {item.cantidad_recibida ?? 0}
+          </span>
+        )}
+      </div>
+      <span
+        className="text-right font-mono text-[12.5px]"
+        style={{ color: "var(--n-700)" }}
+      >
+        {formatCOP(precio * qty)}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Línea de tiempo derivada de los timestamps reales del traspaso.
+ * Cada hito existe solo si su dato real está presente.
+ */
+function Timeline({ traspaso }) {
+  const eventos = [];
+  eventos.push({
+    dot: "neut",
+    act: "Traspaso creado",
+    meta: `${sedeLabel(traspaso.sede_origen_id)} · ${
+      traspaso.solicitante?.nombre ?? "—"
+    }`,
+    t: formatDate(traspaso.fecha),
+  });
+  if (traspaso.picker?.nombre) {
+    eventos.push({
+      dot: "info",
+      act: "Picking",
+      meta: `Picker: ${traspaso.picker.nombre}`,
+      t: null,
+    });
+  }
+  if (traspaso.verificador?.nombre) {
+    eventos.push({
+      dot: "prog",
+      act: "Verificado",
+      meta: `Verificó: ${traspaso.verificador.nombre}`,
+      t: null,
+    });
+  }
+  if (traspaso.estado === "en_transito") {
+    eventos.push({
+      dot: "warn",
+      act: `En tránsito hacia ${sedeLabel(traspaso.sede_destino_id)}`,
+      meta: "Esperando confirmación de recepción",
+      t: null,
+    });
+  }
+  if (traspaso.fecha_recepcion) {
+    eventos.push({
+      dot: traspaso.estado === "con_diferencia" ? "dang" : "succ",
+      act:
+        traspaso.estado === "con_diferencia"
+          ? "Recibido con diferencias"
+          : "Recibido",
+      meta: traspaso.receptor?.nombre
+        ? `Recibió: ${traspaso.receptor.nombre}`
+        : sedeLabel(traspaso.sede_destino_id),
+      t: formatDate(traspaso.fecha_recepcion),
+    });
+  }
+
+  const dotColor = {
+    neut: "var(--n-300)",
+    info: "var(--info-500)",
+    prog: "var(--prog-500)",
+    warn: "var(--warn-500)",
+    succ: "var(--succ-500)",
+    dang: "var(--dang-500)",
+  };
+
+  return (
+    <div className="flex flex-col pl-1.5">
+      {eventos.map((e, i) => (
+        <div
+          key={i}
+          className="relative grid grid-cols-[14px_1fr_auto] items-start gap-3 py-2"
+        >
+          {i < eventos.length - 1 && (
+            <span
+              className="absolute left-[6px] top-[18px] -bottom-1 w-px"
+              style={{ backgroundColor: "var(--n-150)" }}
+            />
+          )}
+          <span
+            className="mt-[3px] h-[13px] w-[13px] rounded-full border-[2.5px]"
+            style={{
+              borderColor: "var(--n-0)",
+              background: dotColor[e.dot],
+              boxShadow: "0 0 0 1px var(--n-150)",
+            }}
+          />
+          <div>
+            <div
+              className="text-[13px] font-medium"
+              style={{ color: "var(--n-950)" }}
+            >
+              {e.act}
+            </div>
+            <div
+              className="mt-0.5 font-mono text-[11px]"
+              style={{ color: "var(--n-500)" }}
+            >
+              {e.meta}
+            </div>
+          </div>
+          {e.t && (
+            <div
+              className="text-right font-mono text-[11px]"
+              style={{ color: "var(--n-500)" }}
+            >
+              {e.t}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Panel de acción sticky — reproduce el lenguaje visual del panel de recepción
+ * de Lovable (card con borde primario y header con gradiente), pero adapta su
+ * contenido a la máquina de estados REAL del backend.
+ */
+function AccionPanel(props) {
+  const {
+    estado,
+    traspaso,
+    itemsCompletos,
+    totalItems,
+    pickingCompleto,
+    yoSoyPicker,
+    yoSoyDeSedeDestino,
+    esAdmin,
+    esBodeguero,
+    accionando,
+    onIniciarPicking,
+    onEnviar,
+    onIrPicking,
+    onVerificar,
+    onRecibir,
+  } = props;
+
+  const config = construirConfig({
+    estado,
+    traspaso,
+    itemsCompletos,
+    totalItems,
+    pickingCompleto,
+    yoSoyPicker,
+    yoSoyDeSedeDestino,
+    esAdmin,
+    esBodeguero,
+    accionando,
+    onIniciarPicking,
+    onEnviar,
+    onIrPicking,
+    onVerificar,
+    onRecibir,
+  });
+
+  const headBg =
+    config.tone === "danger"
+      ? "linear-gradient(180deg,var(--dang-50),transparent)"
+      : config.tone === "success"
+        ? "linear-gradient(180deg,var(--succ-50),transparent)"
+        : "linear-gradient(180deg,var(--prog-50),transparent)";
+  const borderColor =
+    config.tone === "danger"
+      ? "var(--dang-border)"
+      : config.tone === "success"
+        ? "var(--succ-border)"
+        : "var(--p-cta)";
+  const iconBg =
+    config.tone === "danger"
+      ? "var(--dang-600)"
+      : config.tone === "success"
+        ? "var(--succ-600)"
+        : "var(--p-cta)";
+
+  return (
+    <div
+      className="flex flex-col overflow-hidden rounded-[14px] border-2"
+      style={{
+        borderColor,
+        backgroundColor: "var(--n-0)",
+        boxShadow: "0 4px 12px rgba(45,60,229,.10)",
+      }}
+    >
+      <header
+        className="flex items-center gap-3 border-b px-5 py-4"
+        style={{ borderColor: "var(--n-100)", background: headBg }}
+      >
+        <div
+          className="grid h-9 w-9 place-items-center rounded-[9px] text-white"
+          style={{ backgroundColor: iconBg }}
+        >
+          {config.icon}
+        </div>
+        <div className="flex-1">
+          <div
+            className="text-[14px] font-semibold"
+            style={{ color: "var(--n-950)" }}
+          >
+            {config.title}
+          </div>
+          <div
+            className="mt-0.5 text-[12px] leading-[1.4]"
+            style={{ color: "var(--n-500)" }}
+          >
+            {config.desc}
+          </div>
+        </div>
+      </header>
+
+      <div className="flex flex-col gap-3 px-5 py-4">
+        {config.progreso != null && (
+          <div className="flex flex-col gap-1.5">
+            <div
+              className="flex items-center justify-between font-mono text-[11.5px]"
+              style={{ color: "var(--n-500)" }}
+            >
+              <span>
+                {itemsCompletos} de {totalItems} pickeados
+              </span>
+              <span>{Math.round(config.progreso)}%</span>
+            </div>
+            <div
+              className="h-2 overflow-hidden rounded-full"
+              style={{ backgroundColor: "var(--n-100)" }}
+            >
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${config.progreso}%`,
+                  backgroundColor: "var(--p-cta)",
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {config.actions.length > 0 ? (
+          config.actions.map((a, i) => (
+            <button
+              key={i}
+              onClick={a.onClick}
+              disabled={a.disabled}
+              className="inline-flex items-center justify-center gap-1.5 rounded-[10px] text-[13.5px] font-medium transition-opacity disabled:opacity-40"
+              style={{
+                height: 48,
+                ...(a.variant === "primary"
+                  ? { backgroundColor: "var(--p-cta)", color: "#fff" }
+                  : {
+                      border: "1px solid var(--n-150)",
+                      backgroundColor: "var(--n-0)",
+                      color: "var(--n-700)",
+                    }),
+              }}
+              onMouseEnter={(e) => {
+                if (!a.disabled) e.currentTarget.style.opacity = "0.9";
+              }}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            >
+              {a.icon}
+              {a.label}
+            </button>
+          ))
+        ) : (
+          <p
+            className="text-center text-[12.5px]"
+            style={{ color: "var(--n-400)" }}
+          >
+            Sin acciones pendientes en este momento.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Construye la configuración del panel según estado real + permisos. */
+function construirConfig(p) {
+  const {
+    estado,
+    traspaso,
+    itemsCompletos,
+    totalItems,
+    pickingCompleto,
+    yoSoyPicker,
+    yoSoyDeSedeDestino,
+    esAdmin,
+    esBodeguero,
+    accionando,
+    onIniciarPicking,
+    onEnviar,
+    onIrPicking,
+    onVerificar,
+    onRecibir,
+  } = p;
+  const pctPicking = totalItems > 0 ? (itemsCompletos / totalItems) * 100 : 0;
+
+  if (estado === "borrador" && (esAdmin || esBodeguero)) {
+    return {
+      icon: <Package className="h-4 w-4" strokeWidth={2} />,
+      title: "Iniciar picking",
+      desc: "Asígnate como picker y comienza a recoger los productos de bodega.",
+      progreso: null,
+      actions: [
+        {
+          label: accionando ? "Iniciando…" : "Iniciar picking",
+          onClick: onIniciarPicking,
+          disabled: accionando,
+          variant: "primary",
+          icon: <PlayCircle className="h-3.5 w-3.5" strokeWidth={2} />,
+        },
+      ],
+    };
+  }
+  if (estado === "picking" && yoSoyPicker && !pickingCompleto) {
+    return {
+      icon: <Package className="h-4 w-4" strokeWidth={2} />,
+      title: "Continuar picking",
+      desc: `${itemsCompletos} de ${totalItems} ítems completados.`,
+      progreso: pctPicking,
+      actions: [
+        {
+          label: "Ir al picking",
+          onClick: onIrPicking,
+          variant: "primary",
+          icon: <PlayCircle className="h-3.5 w-3.5" strokeWidth={2} />,
+        },
+      ],
+    };
+  }
+  if (estado === "picking" && yoSoyPicker && pickingCompleto) {
+    return {
+      icon: <Clock className="h-4 w-4" strokeWidth={2} />,
+      title: "Picking completo",
+      desc: "Terminaste de pickear. Por segregación de funciones, otra persona (Admin u otro Bodeguero) debe verificarlo.",
+      progreso: 100,
+      actions: [
+        {
+          label: "Revisar mi picking",
+          onClick: onIrPicking,
+          variant: "outline",
+          icon: <PlayCircle className="h-3.5 w-3.5" strokeWidth={2} />,
+        },
+      ],
+    };
+  }
+  if (estado === "picking" && !yoSoyPicker && (esAdmin || esBodeguero)) {
+    return {
+      icon: <CheckCircle2 className="h-4 w-4" strokeWidth={2} />,
+      title: "Verificar traspaso",
+      desc: pickingCompleto
+        ? "Todos los ítems fueron pickeados. Puedes verificar el traspaso."
+        : `Picking en progreso: ${itemsCompletos}/${totalItems} ítems.`,
+      progreso: pctPicking,
+      actions: [
+        {
+          label: "Verificar cantidades",
+          onClick: onVerificar,
+          disabled: !pickingCompleto,
+          variant: "primary",
+          icon: <Check className="h-3.5 w-3.5" strokeWidth={2.5} />,
+        },
+      ],
+    };
+  }
+  if (estado === "verificado" && (esAdmin || esBodeguero)) {
+    return {
+      icon: <Truck className="h-4 w-4" strokeWidth={2} />,
+      title: "Enviar traspaso",
+      desc: "El traspaso fue verificado. Al confirmar el envío, el stock saldrá de la sede origen.",
+      progreso: null,
+      actions: [
+        {
+          label: accionando ? "Enviando…" : "Confirmar envío",
+          onClick: onEnviar,
+          disabled: accionando,
+          variant: "primary",
+          icon: <Truck className="h-3.5 w-3.5" strokeWidth={2} />,
+        },
+      ],
+    };
+  }
+  if (estado === "en_transito" && yoSoyDeSedeDestino) {
+    return {
+      icon: <PackageCheck className="h-4 w-4" strokeWidth={2} />,
+      title: `Recepción en ${sedeLabel(traspaso.sede_destino_id)}`,
+      desc: "El traspaso está en camino. Confirma las cantidades recibidas en tu sede.",
+      progreso: null,
+      actions: [
+        {
+          label: "Confirmar recepción",
+          onClick: onRecibir,
+          variant: "primary",
+          icon: <Check className="h-3.5 w-3.5" strokeWidth={2.5} />,
+        },
+      ],
+    };
+  }
+  if (estado === "con_diferencia") {
+    return {
+      icon: <AlertTriangle className="h-4 w-4" strokeWidth={2} />,
+      title: "Recibido con diferencias",
+      desc: "Las cantidades recibidas no coinciden con las enviadas. Revisa el detalle de productos.",
+      progreso: null,
+      tone: "danger",
+      actions: [],
+    };
+  }
+  if (estado === "recibido") {
+    return {
+      icon: <Check className="h-4 w-4" strokeWidth={2} />,
+      title: "Traspaso completado",
+      desc: "El stock fue recibido en la sede destino sin diferencias.",
+      progreso: null,
+      tone: "success",
+      actions: [],
+    };
+  }
+  return {
+    icon: <Clock className="h-4 w-4" strokeWidth={2} />,
+    title: "Sin acciones disponibles",
+    desc: "No tienes acciones pendientes para este traspaso en su estado actual.",
+    progreso: null,
+    actions: [],
+  };
 }
 
 function LoadingView() {
   return (
-    <div
-      className="p-4 sm:p-6 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
+    <div className="mx-auto w-full max-w-[1100px] px-4 py-5 sm:px-7 sm:py-6">
       <div className="space-y-4">
         {[...Array(3)].map((_, i) => (
           <div
             key={i}
-            className="h-24 rounded-xl animate-pulse"
-            style={{ backgroundColor: "hsl(var(--muted))" }}
+            className="h-24 animate-pulse rounded-[10px]"
+            style={{ backgroundColor: "var(--n-100)" }}
           />
         ))}
       </div>
@@ -694,23 +944,15 @@ function LoadingView() {
 
 function NotFoundView({ onBack }) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center">
-      <div className="text-5xl mb-4">🔄</div>
-      <p
-        className="font-semibold mb-4"
-        style={{ color: "hsl(var(--foreground))" }}
-      >
-        Traspaso no encontrado
-      </p>
+    <div className="mx-auto w-full max-w-[1100px] space-y-3 px-4 py-5 sm:px-7 sm:py-6">
+      <p style={{ color: "var(--dang-700)" }}>Traspaso no encontrado</p>
       <button
         onClick={onBack}
-        className="px-4 h-9 rounded-lg text-sm font-medium cursor-pointer"
-        style={{
-          backgroundColor: "hsl(var(--primary))",
-          color: "hsl(var(--primary-foreground))",
-        }}
+        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium"
+        style={{ color: "var(--n-500)" }}
       >
-        Volver a traspasos
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} /> Volver a
+        Traspasos
       </button>
     </div>
   );

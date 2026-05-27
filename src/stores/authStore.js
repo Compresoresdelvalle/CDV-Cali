@@ -31,14 +31,32 @@ export const useAuthStore = create((set, get) => ({
     // Escuchar cambios de sesión (token refresh, logout desde otra pestaña).
     // Se subscribe DESPUÉS de getSession para evitar el doble dispatch
     // INITIAL_SESSION + getSession-resolve que puede confundir el state.
+    //
+    // IMPORTANTE — NO usar `await` de otras funciones de Supabase dentro de
+    // este callback. Supabase lo ejecuta mientras mantiene su lock interno de
+    // auth (Web Locks API). Llamar aquí a `supabase.from(...)` o `supabase.auth.*`
+    // intenta re-adquirir ese mismo lock → DEADLOCK que congela la app al volver
+    // de otra pestaña (al re-enfocar se refresca el token → dispara este callback).
+    // Por eso el trabajo asíncrono (consulta del perfil) se difiere con
+    // setTimeout(0), para que corra FUERA del lock.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        const perfil = await get()._fetchPerfil(session.user.id);
-        set({ session, user: session.user, perfil });
-      } else {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) {
         set({ session: null, user: null, perfil: null });
+        return;
+      }
+      // Refrescamos siempre la referencia de sesión/usuario (token nuevo).
+      set({ session, user: session.user });
+
+      // El perfil (rol, sede) solo cambia con un login o una actualización de
+      // usuario. INITIAL_SESSION ya fue resuelto por init() y TOKEN_REFRESHED no
+      // cambia la identidad, así que evitamos un round-trip innecesario a la BD.
+      if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+        setTimeout(async () => {
+          const perfil = await get()._fetchPerfil(session.user.id);
+          set({ perfil });
+        }, 0);
       }
     });
 

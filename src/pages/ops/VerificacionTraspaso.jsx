@@ -1,20 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  CheckCircle2,
+  AlertTriangle,
+  Check,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
-
-const SEDE_LABELS = {
-  "BOD-PRINCIPAL": "Bodega Principal",
-  "ALM-01": "Almacén 01",
-  "ALM-02": "Almacén 02",
-  "ALM-03": "Almacén 03",
-};
-
-function sedeLabel(id) {
-  return SEDE_LABELS[id] ?? id;
-}
+import { sedeLabel } from "../../lib/traspasos-ui";
 
 export default function VerificacionTraspaso() {
   const { id } = useParams();
@@ -119,317 +114,284 @@ export default function VerificacionTraspaso() {
   const totalItems = items.length;
   const itemsCompletos = items.filter((i) => i.picking_completado).length;
   const pickingOk = totalItems > 0 && itemsCompletos === totalItems;
+  const esMiPropioPicking =
+    !!traspaso.picker_id && traspaso.picker_id === perfil?.id;
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in pb-36"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title={`Verificar #${traspaso.numero}`}
-        description={`${sedeLabel(traspaso.sede_origen_id)} → ${sedeLabel(traspaso.sede_destino_id)}`}
-        actions={
-          <button
-            onClick={() => navigate(`/ops/traspasos/${id}`)}
-            className="h-9 px-3 rounded-lg border text-sm font-medium cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-              backgroundColor: "hsl(var(--card))",
-            }}
+    <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-4 px-4 py-5 pb-36 sm:px-7 sm:py-6 animate-fade-in">
+      <button
+        onClick={() => navigate(`/ops/traspasos/${id}`)}
+        className="back-btn inline-flex items-center gap-1.5"
+      >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+        Volver al traspaso
+      </button>
+
+      {/* ── Cabecera ────────────────────────────────────────────────── */}
+      <div
+        className="flex flex-wrap items-end justify-between gap-3 border-b pb-4"
+        style={{ borderColor: "var(--n-100)" }}
+      >
+        <div>
+          <p
+            className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.14em]"
+            style={{ color: "var(--n-300)" }}
           >
-            ← Volver
-          </button>
-        }
-      />
+            Verificación de picking
+          </p>
+          <h1
+            className="font-mono text-[28px] font-medium leading-none tracking-[-0.01em]"
+            style={{ color: "var(--n-950)" }}
+          >
+            #{traspaso.numero}
+          </h1>
+          <p className="mt-2 text-[13px]" style={{ color: "var(--n-500)" }}>
+            {sedeLabel(traspaso.sede_origen_id)} →{" "}
+            {sedeLabel(traspaso.sede_destino_id)}
+          </p>
+        </div>
+        <span
+          className="font-mono text-[12px]"
+          style={{ color: "var(--n-500)" }}
+        >
+          {itemsCompletos}/{totalItems} pickeados
+        </span>
+      </div>
 
       {/* Banner de contexto */}
       <div
-        className="p-4 rounded-xl border"
+        className="flex items-start gap-3 rounded-[10px] border p-4"
         style={{
-          backgroundColor: "hsl(var(--info) / 0.06)",
-          borderColor: "hsl(var(--info) / 0.25)",
+          backgroundColor: "var(--info-50)",
+          borderColor: "var(--info-border)",
         }}
       >
-        <div className="flex items-start gap-3">
-          <span className="text-xl">✅</span>
-          <div>
-            <p
-              className="text-sm font-semibold"
-              style={{ color: "hsl(var(--foreground))" }}
-            >
-              Verificación de picking
-            </p>
-            <p
-              className="text-xs mt-0.5"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Pickeado por <strong>{traspaso.picker?.nombre ?? "—"}</strong>.
-              Revisa las cantidades y confirma si todo está correcto.
-            </p>
-          </div>
+        <CheckCircle2
+          className="mt-0.5 h-[18px] w-[18px] shrink-0"
+          strokeWidth={1.7}
+          style={{ color: "var(--info-700)" }}
+        />
+        <div>
+          <p
+            className="text-sm font-semibold"
+            style={{ color: "var(--n-950)" }}
+          >
+            Verificación de picking
+          </p>
+          <p
+            className="mt-0.5 text-xs leading-[1.5]"
+            style={{ color: "var(--n-500)" }}
+          >
+            Pickeado por <strong>{traspaso.picker?.nombre ?? "—"}</strong>.
+            Revisa las cantidades y confirma si todo está correcto.
+          </p>
         </div>
       </div>
 
-      {/* Estado del picking */}
+      {/* Picking incompleto */}
       {!pickingOk && (
         <div
-          className="p-3 rounded-lg border text-sm"
+          className="flex items-start gap-3 rounded-[10px] border p-3.5 text-sm"
           style={{
-            backgroundColor: "hsl(var(--warning) / 0.08)",
-            borderColor: "hsl(var(--warning) / 0.3)",
-            color: "hsl(var(--warning))",
+            backgroundColor: "var(--warn-50)",
+            borderColor: "var(--warn-border)",
+            color: "var(--warn-700)",
           }}
         >
-          ⚠️ El picking no está completo ({itemsCompletos}/{totalItems} items).
-          El picker debe terminar antes de verificar.
+          <AlertTriangle
+            className="mt-0.5 h-4 w-4 shrink-0"
+            strokeWidth={1.7}
+          />
+          El picking no está completo ({itemsCompletos}/{totalItems} items). El
+          picker debe terminar antes de verificar.
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div
-          className="p-3 rounded-lg border text-sm"
+          className="rounded-[10px] border px-4 py-3 text-sm"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.3)",
-            color: "hsl(var(--destructive))",
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
+            color: "var(--dang-700)",
           }}
         >
           {error}
         </div>
       )}
 
-      {/* Tabla de items — Desktop */}
+      {/* Desktop: tabla */}
       <div
-        className="hidden md:block overflow-x-auto rounded-xl border"
-        style={{ borderColor: "hsl(var(--border))" }}
+        className="hidden overflow-hidden rounded-[10px] border md:block"
+        style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
       >
-        <table className="w-full border-collapse">
-          <thead>
-            <tr
-              style={{
-                backgroundColor: "hsl(var(--muted) / 0.4)",
-                borderBottom: "1px solid hsl(var(--border))",
-              }}
-            >
-              {[
-                "Producto",
-                "Referencia",
-                "Ubicación",
-                "Solicitado",
-                "Enviado",
-                "Estado",
-              ].map((col) => (
-                <th
-                  key={col}
-                  className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-left whitespace-nowrap"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  {col}
+        <div className="overflow-x-auto">
+          <table className="prod-tbl w-full">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th style={{ width: 130 }}>Ubicación</th>
+                <th className="r" style={{ width: 100 }}>
+                  Solicitado
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, idx) => {
-              const loc = item.ubicacion;
-              const ubicCode = loc
-                ? `${loc.pasillo}-${loc.estante}-${loc.nivel}`
-                : "—";
-              const diferencia =
-                (item.cantidad_enviada ?? 0) - item.cantidad_solicitada;
-
-              return (
-                <tr
-                  key={item.id}
-                  style={{
-                    borderTop:
-                      idx === 0 ? "none" : "1px solid hsl(var(--border) / 0.5)",
-                    backgroundColor: item.picking_completado
-                      ? "transparent"
-                      : "hsl(var(--warning) / 0.04)",
-                  }}
-                >
-                  <td className="px-3 py-3.5">
-                    <p
-                      className="text-sm font-medium"
-                      style={{ color: "hsl(var(--foreground))" }}
-                    >
-                      {item.producto?.nombre ?? "—"}
-                    </p>
-                  </td>
-                  <td className="px-3 py-3.5">
-                    <span
-                      className="text-xs font-mono"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {item.producto?.referencia ?? "—"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3.5">
-                    <span
-                      className="text-xs font-mono font-bold px-1.5 py-0.5 rounded"
-                      style={{
-                        backgroundColor: "hsl(var(--primary) / 0.08)",
-                        color: "hsl(var(--primary))",
-                      }}
-                    >
-                      {ubicCode}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3.5 text-center">
-                    <span
-                      className="text-sm font-medium"
-                      style={{ color: "hsl(var(--foreground))" }}
-                    >
-                      {item.cantidad_solicitada}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3.5 text-center">
-                    <span
-                      className="text-sm font-bold"
-                      style={{
-                        color:
-                          diferencia !== 0
-                            ? "hsl(var(--warning))"
-                            : "hsl(var(--foreground))",
-                      }}
-                    >
-                      {item.cantidad_enviada ?? "—"}
-                    </span>
-                    {diferencia !== 0 && item.cantidad_enviada != null && (
-                      <span
-                        className="ml-1 text-xs"
-                        style={{ color: "hsl(var(--warning))" }}
+                <th className="r" style={{ width: 110 }}>
+                  Enviado
+                </th>
+                <th style={{ width: 130 }}>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const loc = item.ubicacion;
+                const ubicCode = loc
+                  ? `${loc.pasillo}-${loc.estante}-${loc.nivel}`
+                  : "—";
+                const diff =
+                  (item.cantidad_enviada ?? 0) - item.cantidad_solicitada;
+                return (
+                  <tr
+                    key={item.id}
+                    style={{
+                      backgroundColor: item.picking_completado
+                        ? "transparent"
+                        : "var(--warn-50)",
+                    }}
+                  >
+                    <td>
+                      <p
+                        className="text-[12.5px] font-medium leading-tight"
+                        style={{ color: "var(--n-950)" }}
                       >
-                        ({diferencia > 0 ? "+" : ""}
-                        {diferencia})
+                        {item.producto?.nombre ?? "—"}
+                      </p>
+                      <p
+                        className="font-mono text-[11px]"
+                        style={{ color: "var(--n-500)" }}
+                      >
+                        {item.producto?.referencia ?? "—"}
+                      </p>
+                    </td>
+                    <td>
+                      <span
+                        className="font-mono text-[11px] font-semibold"
+                        style={{ color: "var(--p-700)" }}
+                      >
+                        {ubicCode}
                       </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3.5">
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full font-medium"
-                      style={
-                        item.picking_completado
-                          ? {
-                              backgroundColor: "hsl(var(--success) / 0.12)",
-                              color: "hsl(var(--success))",
-                            }
-                          : {
-                              backgroundColor: "hsl(var(--warning) / 0.12)",
-                              color: "hsl(var(--warning))",
-                            }
-                      }
-                    >
-                      {item.picking_completado ? "✓ Pickeado" : "Pendiente"}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="r">
+                      <span
+                        className="font-mono text-[13px]"
+                        style={{ color: "var(--n-700)" }}
+                      >
+                        {item.cantidad_solicitada}
+                      </span>
+                    </td>
+                    <td className="r">
+                      <span
+                        className="font-mono text-[13px] font-semibold"
+                        style={{
+                          color:
+                            diff !== 0 ? "var(--warn-700)" : "var(--n-950)",
+                        }}
+                      >
+                        {item.cantidad_enviada ?? "—"}
+                        {diff !== 0 && item.cantidad_enviada != null && (
+                          <span>
+                            {" "}
+                            ({diff > 0 ? "+" : ""}
+                            {diff})
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                    <td>
+                      <EstadoPicking ok={item.picking_completado} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Cards de items — Mobile */}
+      {/* Mobile: cards */}
       <ul className="md:hidden space-y-2.5" role="list">
         {items.map((item) => {
           const loc = item.ubicacion;
           const ubicCode = loc
             ? `${loc.pasillo}-${loc.estante}-${loc.nivel}`
             : null;
-          const diferencia =
+          const diff =
             item.cantidad_enviada != null
               ? item.cantidad_enviada - item.cantidad_solicitada
               : null;
-
           return (
             <li key={item.id}>
               <div
-                className="rounded-xl px-4 py-4 border"
+                className="rounded-[10px] border px-4 py-3.5"
                 style={{
                   backgroundColor: item.picking_completado
-                    ? "hsl(var(--card))"
-                    : "hsl(var(--warning) / 0.05)",
+                    ? "var(--n-0)"
+                    : "var(--warn-50)",
                   borderColor: item.picking_completado
-                    ? "hsl(var(--border))"
-                    : "hsl(var(--warning) / 0.3)",
+                    ? "var(--n-150)"
+                    : "var(--warn-border)",
                 }}
               >
-                <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="mb-2 flex items-start justify-between gap-3">
                   <p
-                    className="text-sm font-semibold flex-1 min-w-0"
-                    style={{ color: "hsl(var(--foreground))" }}
+                    className="min-w-0 flex-1 text-sm font-medium"
+                    style={{ color: "var(--n-950)" }}
                   >
                     {item.producto?.nombre ?? "—"}
                   </p>
-                  <span
-                    className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0"
-                    style={
-                      item.picking_completado
-                        ? {
-                            backgroundColor: "hsl(var(--success) / 0.12)",
-                            color: "hsl(var(--success))",
-                          }
-                        : {
-                            backgroundColor: "hsl(var(--warning) / 0.12)",
-                            color: "hsl(var(--warning))",
-                          }
-                    }
-                  >
-                    {item.picking_completado ? "✓ Pickeado" : "Pendiente"}
-                  </span>
+                  <EstadoPicking ok={item.picking_completado} />
                 </div>
-
-                <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex flex-wrap items-center gap-2">
                   <span
-                    className="text-xs"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
+                    className="font-mono text-[11px]"
+                    style={{ color: "var(--n-500)" }}
                   >
                     {item.producto?.referencia}
                   </span>
                   {ubicCode && (
                     <span
-                      className="text-xs font-mono font-bold px-1.5 py-0.5 rounded"
-                      style={{
-                        backgroundColor: "hsl(var(--primary) / 0.08)",
-                        color: "hsl(var(--primary))",
-                      }}
+                      className="font-mono text-[11px] font-semibold"
+                      style={{ color: "var(--p-700)" }}
                     >
                       {ubicCode}
                     </span>
                   )}
                 </div>
-
                 <div
-                  className="mt-2 flex items-center gap-4 text-xs"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
+                  className="mt-2 flex items-center gap-4 font-mono text-[12px]"
+                  style={{ color: "var(--n-500)" }}
                 >
                   <span>
-                    Solicitado:{" "}
-                    <strong style={{ color: "hsl(var(--foreground))" }}>
+                    Sol.{" "}
+                    <strong style={{ color: "var(--n-950)" }}>
                       {item.cantidad_solicitada}
                     </strong>
                   </span>
                   <span>
-                    Enviado:{" "}
+                    Env.{" "}
                     <strong
                       style={{
                         color:
-                          diferencia !== null && diferencia !== 0
-                            ? "hsl(var(--warning))"
-                            : "hsl(var(--foreground))",
+                          diff !== null && diff !== 0
+                            ? "var(--warn-700)"
+                            : "var(--n-950)",
                       }}
                     >
                       {item.cantidad_enviada ?? "—"}
                     </strong>
-                    {diferencia !== null && diferencia !== 0 && (
-                      <span style={{ color: "hsl(var(--warning))" }}>
+                    {diff !== null && diff !== 0 && (
+                      <span style={{ color: "var(--warn-700)" }}>
                         {" "}
-                        ({diferencia > 0 ? "+" : ""}
-                        {diferencia})
+                        ({diff > 0 ? "+" : ""}
+                        {diff})
                       </span>
                     )}
                   </span>
@@ -442,54 +404,36 @@ export default function VerificacionTraspaso() {
 
       {/* Barra de acción fija */}
       <div
-        className="fixed bottom-0 left-0 right-0 p-4 border-t"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
+        className="fixed bottom-0 left-0 right-0 border-t p-4"
+        style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
       >
-        <div className="max-w-xl mx-auto space-y-2">
-          {pickingOk ? (
-            <p
-              className="text-xs text-center"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Todos los items fueron pickeados. Al verificar el traspaso pasará
-              a estado <strong>Verificado</strong>.
-            </p>
-          ) : (
-            <p
-              className="text-xs text-center"
-              style={{ color: "hsl(var(--warning))" }}
-            >
-              El picking no está completo. No es posible verificar aún.
-            </p>
-          )}
+        <div className="mx-auto max-w-xl space-y-2">
+          <p
+            className="text-center text-xs"
+            style={{ color: pickingOk ? "var(--n-500)" : "var(--warn-700)" }}
+          >
+            {pickingOk
+              ? "Todos los items fueron pickeados. Al verificar, el traspaso pasará a Verificado."
+              : "El picking no está completo. No es posible verificar aún."}
+          </p>
           <button
             onClick={verificar}
-            disabled={
-              !pickingOk ||
-              verificando ||
-              (traspaso?.picker_id && traspaso.picker_id === perfil?.id)
-            }
+            disabled={!pickingOk || verificando || esMiPropioPicking}
             title={
-              traspaso?.picker_id === perfil?.id
+              esMiPropioPicking
                 ? "No puedes verificar tu propio picking"
                 : undefined
             }
-            className="w-full h-12 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-40 cursor-pointer"
-            style={{
-              backgroundColor: "hsl(var(--primary))",
-              color: "hsl(var(--primary-foreground))",
+            className="flex w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-40"
+            style={{ height: 48, backgroundColor: "var(--p-600)" }}
+            onMouseEnter={(e) => {
+              if (pickingOk && !verificando && !esMiPropioPicking)
+                e.currentTarget.style.opacity = "0.9";
             }}
-            onMouseEnter={(e) =>
-              pickingOk &&
-              !verificando &&
-              (e.currentTarget.style.opacity = "0.9")
-            }
             onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
-            {verificando ? "Verificando…" : "✓ Confirmar verificación"}
+            <Check className="h-4 w-4" strokeWidth={2.5} />
+            {verificando ? "Verificando…" : "Confirmar verificación"}
           </button>
         </div>
       </div>
@@ -497,18 +441,26 @@ export default function VerificacionTraspaso() {
   );
 }
 
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+function EstadoPicking({ ok }) {
+  return (
+    <span className={"pill shrink-0 " + (ok ? "pill-success" : "pill-warn")}>
+      <span className="dot" />
+      {ok ? "Pickeado" : "Pendiente"}
+    </span>
+  );
+}
+
 function LoadingView() {
   return (
-    <div
-      className="p-4 sm:p-6 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
+    <div className="mx-auto w-full max-w-[1100px] px-4 py-5 sm:px-7 sm:py-6">
       <div className="space-y-3">
         {[...Array(5)].map((_, i) => (
           <div
             key={i}
-            className="h-20 rounded-xl animate-pulse"
-            style={{ backgroundColor: "hsl(var(--muted))" }}
+            className="h-20 animate-pulse rounded-[10px]"
+            style={{ backgroundColor: "var(--n-100)" }}
           />
         ))}
       </div>
@@ -518,22 +470,13 @@ function LoadingView() {
 
 function NotFoundView({ onBack }) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center">
-      <div className="text-5xl mb-4">🔄</div>
-      <p
-        className="font-semibold mb-4"
-        style={{ color: "hsl(var(--foreground))" }}
-      >
-        Traspaso no encontrado
-      </p>
+    <div className="mx-auto w-full max-w-[1100px] space-y-3 px-4 py-5 sm:px-7 sm:py-6">
+      <p style={{ color: "var(--dang-700)" }}>Traspaso no encontrado</p>
       <button
         onClick={onBack}
-        className="px-4 h-9 rounded-lg text-sm font-medium cursor-pointer"
-        style={{
-          backgroundColor: "hsl(var(--primary))",
-          color: "hsl(var(--primary-foreground))",
-        }}
+        className="back-btn inline-flex items-center gap-1.5"
       >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
         Volver
       </button>
     </div>

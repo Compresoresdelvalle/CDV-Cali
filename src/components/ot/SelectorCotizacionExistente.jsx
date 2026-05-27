@@ -1,8 +1,26 @@
 import { useState, useEffect, useRef } from "react";
+import { Search, X } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import FeedbackBanners from "../ui/FeedbackBanners";
+
+// Estado de cotización real → variante de `.s-pill`.
+function cotizacionPill(estado) {
+  switch (estado) {
+    case "aprobada":
+      return { cls: "s-pill s-apr", label: "Aprobada" };
+    case "enviada":
+      return { cls: "s-pill s-env", label: "Enviada" };
+    case "rechazada":
+      return { cls: "s-pill s-rec", label: "Rechazada" };
+    case "vencida":
+      return { cls: "s-pill s-borr", label: "Vencida" };
+    case "borrador":
+    default:
+      return { cls: "s-pill s-borr", label: estado ?? "Borrador" };
+  }
+}
 
 /**
  * Modal selector de cotizaciones disponibles para asociar a una OT.
@@ -93,127 +111,135 @@ export default function SelectorCotizacionExistente({
       onClick={onClose}
     >
       <div
-        className="rounded-xl border p-5 w-full max-w-2xl space-y-3 max-h-[80vh] overflow-hidden flex flex-col"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
+        className="flex max-h-[80vh] w-full max-w-2xl flex-col gap-3 overflow-hidden rounded-xl border p-5"
+        style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3">
           <h3
             className="text-lg font-semibold"
-            style={{ color: "hsl(var(--foreground))" }}
+            style={{ color: "var(--n-950)" }}
           >
             Asociar cotización existente
           </h3>
           <button
             onClick={onClose}
-            className="text-xs px-3 py-2 rounded-lg border cursor-pointer min-h-[44px]"
+            aria-label="Cerrar"
+            className="grid place-items-center rounded-lg border"
             style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
+              width: 44,
+              height: 44,
+              borderColor: "var(--n-200)",
+              color: "var(--n-500)",
             }}
           >
-            Cerrar
+            <X className="h-4 w-4" strokeWidth={1.8} />
           </button>
         </div>
 
-        <p
-          className="text-xs"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
+        <p className="text-xs" style={{ color: "var(--n-500)" }}>
           Solo cotizaciones de tu sede que aún no estén vinculadas a otra OT.
         </p>
 
-        <input
-          type="text"
-          value={busqueda}
-          onChange={(e) => {
-            setBusqueda(e.target.value);
-            buscarDebounced(e.target.value);
-          }}
-          placeholder="Buscar por número o nombre del cliente…"
-          className="w-full px-3 py-2 rounded-lg border text-sm min-h-[48px]"
-          style={{
-            backgroundColor: "hsl(var(--background))",
-            borderColor: "hsl(var(--border))",
-            color: "hsl(var(--foreground))",
-          }}
-          autoFocus
-        />
+        <div
+          className="flex h-12 items-center gap-2.5 rounded-lg border px-3.5"
+          style={{ borderColor: "var(--n-200)", backgroundColor: "var(--n-0)" }}
+        >
+          <Search
+            className="h-4 w-4 shrink-0"
+            strokeWidth={1.5}
+            style={{ color: "var(--n-500)" }}
+          />
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => {
+              setBusqueda(e.target.value);
+              buscarDebounced(e.target.value);
+            }}
+            placeholder="Buscar por número o nombre del cliente…"
+            className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
+            style={{ color: "var(--n-950)" }}
+            autoFocus
+          />
+        </div>
 
         <FeedbackBanners errorMsg={errorMsg} />
 
-        <div className="overflow-y-auto flex-1 min-h-0">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {loading ? (
             <p
-              className="text-center text-xs py-4"
-              style={{ color: "hsl(var(--muted-foreground))" }}
+              className="py-4 text-center text-xs"
+              style={{ color: "var(--n-500)" }}
             >
               Buscando…
             </p>
           ) : resultados.length === 0 ? (
             <p
-              className="text-center text-xs py-8"
-              style={{ color: "hsl(var(--muted-foreground))" }}
+              className="py-8 text-center text-xs"
+              style={{ color: "var(--n-500)" }}
             >
               Sin cotizaciones disponibles para asociar
             </p>
           ) : (
             <ul className="space-y-1.5" role="list">
-              {resultados.map((c) => (
-                <li key={c.id}>
-                  <button
-                    onClick={() => onSelect?.(c.id)}
-                    className="w-full text-left rounded-lg border px-3 py-2 cursor-pointer min-h-[56px]"
-                    style={{
-                      backgroundColor: "hsl(var(--background))",
-                      borderColor: "hsl(var(--border))",
-                    }}
-                  >
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
+              {resultados.map((c) => {
+                const pill = cotizacionPill(c.estado);
+                return (
+                  <li key={c.id}>
+                    <button
+                      onClick={() => onSelect?.(c.id)}
+                      className="w-full rounded-lg border px-3.5 py-3 text-left transition-colors"
+                      style={{
+                        minHeight: 56,
+                        backgroundColor: "var(--n-25)",
+                        borderColor: "var(--n-150)",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor = "var(--n-50)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "var(--n-25)")
+                      }
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="font-mono text-sm font-semibold"
+                              style={{ color: "var(--p-600)" }}
+                            >
+                              #{c.numero}
+                            </span>
+                            <span className={pill.cls}>
+                              <span className="dot" />
+                              {pill.label}
+                            </span>
+                          </div>
                           <p
-                            className="text-sm font-bold font-mono"
-                            style={{ color: "hsl(var(--primary))" }}
+                            className="mt-0.5 text-sm"
+                            style={{ color: "var(--n-950)" }}
                           >
-                            #{c.numero}
+                            {c.cliente_nombre ?? "Sin cliente"}
                           </p>
-                          <span
-                            className="px-2 py-0.5 rounded text-[10px] font-medium"
-                            style={{
-                              backgroundColor: "hsl(var(--muted) / 0.4)",
-                              color: "hsl(var(--muted-foreground))",
-                            }}
+                          <p
+                            className="font-mono text-[10.5px]"
+                            style={{ color: "var(--n-300)" }}
                           >
-                            {c.estado}
-                          </span>
+                            {formatDate(c.fecha)}
+                          </p>
                         </div>
                         <p
-                          className="text-sm"
-                          style={{ color: "hsl(var(--foreground))" }}
+                          className="font-mono text-sm font-medium tabular-nums"
+                          style={{ color: "var(--n-900)" }}
                         >
-                          {c.cliente_nombre ?? "Sin cliente"}
-                        </p>
-                        <p
-                          className="text-[10px] font-mono"
-                          style={{ color: "hsl(var(--muted-foreground))" }}
-                        >
-                          {formatDate(c.fecha)}
+                          {formatCOP(c.total)}
                         </p>
                       </div>
-                      <p
-                        className="text-sm font-bold tabular-nums"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {formatCOP(c.total)}
-                      </p>
-                    </div>
-                  </button>
-                </li>
-              ))}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

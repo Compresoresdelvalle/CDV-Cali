@@ -1,14 +1,30 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import PageHeader from "../../../components/layout/PageHeader";
+import { CreditCard, ClipboardList, Sliders } from "lucide-react";
+import { supabase } from "../../../lib/supabase";
 import CuentasBancarias from "./CuentasBancarias";
 import ChecklistOT from "./ChecklistOT";
 import Parametros from "./Parametros";
 
 const TABS = [
-  { id: "cuentas", label: "Cuentas Bancarias", icon: "🏦" },
-  { id: "checklist", label: "Checklist OT", icon: "📋" },
-  { id: "parametros", label: "Parámetros", icon: "⚙️" },
+  {
+    id: "cuentas",
+    label: "Cuentas bancarias",
+    icon: CreditCard,
+    desc: "Cuentas para recaudo y datos de pago en cotizaciones",
+  },
+  {
+    id: "checklist",
+    label: "Checklist OT",
+    icon: ClipboardList,
+    desc: "Catálogo oficial de recepción de equipos en Órdenes de Trabajo",
+  },
+  {
+    id: "parametros",
+    label: "Parámetros del sistema",
+    icon: Sliders,
+    desc: "Defaults globales que se propagan en tiempo real a documentos nuevos",
+  },
 ];
 const TAB_IDS = TABS.map((t) => t.id);
 
@@ -29,40 +45,109 @@ export default function Configuracion() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Configuración"
-        description="Cuentas bancarias, parámetros del sistema y catálogo de checklist OT"
-      />
+  // Conteos para los badges de cada tab (read-only, replican el diseño
+  // Lovable: "4", "24 ítems"). Usa COUNT en cabecera (head:true) — sin filas.
+  const [counts, setCounts] = useState({
+    cuentas: null,
+    checklist: null,
+  });
+  useEffect(() => {
+    let activo = true;
+    Promise.all([
+      supabase
+        .from("cuentas_bancarias")
+        .select("id", { count: "exact", head: true }),
+      supabase
+        .from("checklist_componentes")
+        .select("id", { count: "exact", head: true }),
+    ])
+      .then(([c, k]) => {
+        if (!activo) return;
+        setCounts({
+          cuentas: c.error ? null : (c.count ?? 0),
+          checklist: k.error ? null : (k.count ?? 0),
+        });
+      })
+      .catch(() => {
+        /* Badge es decorativo: si falla, simplemente no se muestra. */
+      });
+    return () => {
+      activo = false;
+    };
+  }, []);
 
-      <div className="flex gap-2 overflow-x-auto pb-1" role="tablist">
+  const badgeFor = (id) => {
+    if (id === "cuentas" && counts.cuentas != null)
+      return String(counts.cuentas);
+    if (id === "checklist" && counts.checklist != null)
+      return `${counts.checklist} ítems`;
+    return null;
+  };
+
+  const activa = TABS.find((t) => t.id === tab);
+
+  return (
+    <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7 animate-fade-in">
+      {/* Page head */}
+      <div>
+        <p
+          className="m-0 mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Admin · Configuración
+        </p>
+        <h1
+          className="m-0 text-[24px] font-semibold leading-tight tracking-[-0.018em]"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
+          Configuración del sistema
+        </h1>
+        <p
+          className="mt-1 text-[13px]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          {activa?.desc}
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div
+        className="flex gap-1 overflow-x-auto border-b"
+        role="tablist"
+        style={{ borderColor: "hsl(var(--border))" }}
+      >
         {TABS.map((t) => {
           const active = tab === t.id;
+          const Icon = t.icon;
+          const badge = badgeFor(t.id);
           return (
             <button
               key={t.id}
               role="tab"
               aria-selected={active}
               onClick={() => setTab(t.id)}
-              className="px-4 py-2.5 rounded-lg text-sm font-medium border cursor-pointer whitespace-nowrap min-h-[48px]"
+              className="inline-flex min-h-[48px] items-center gap-2 whitespace-nowrap border-b-2 px-3 pb-2.5 pt-1 text-[13px] transition-colors cursor-pointer"
               style={{
-                backgroundColor: active
-                  ? "hsl(var(--primary))"
-                  : "hsl(var(--card))",
+                borderColor: active ? "hsl(var(--primary))" : "transparent",
                 color: active
-                  ? "hsl(var(--primary-foreground))"
-                  : "hsl(var(--foreground))",
-                borderColor: active
-                  ? "hsl(var(--primary))"
-                  : "hsl(var(--border))",
+                  ? "hsl(var(--foreground))"
+                  : "hsl(var(--muted-foreground))",
+                fontWeight: active ? 600 : 500,
               }}
             >
-              <span className="mr-2">{t.icon}</span>
+              <Icon className="h-4 w-4" strokeWidth={1.75} />
               {t.label}
+              {badge && (
+                <span
+                  className="rounded-full px-1.5 py-0.5 font-mono text-[10.5px] font-medium tabular-nums"
+                  style={{
+                    backgroundColor: "hsl(var(--muted) / 0.5)",
+                    color: "hsl(var(--muted-foreground))",
+                  }}
+                >
+                  {badge}
+                </span>
+              )}
             </button>
           );
         })}

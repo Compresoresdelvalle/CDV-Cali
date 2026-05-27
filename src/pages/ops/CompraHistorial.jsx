@@ -1,12 +1,16 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { Plus, PackageOpen, Search } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, formatDate } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
-import StatusBadge from "../../components/ui/StatusBadge";
+import { formatCOP, formatDate, sanitizeSearch } from "../../lib/utils";
+import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
+import {
+  COMPRAS_TABS,
+  compraEstadoPill,
+  comprasHeaderStats,
+} from "../../lib/compras-ui";
 
-const FILTROS = ["Todas", "Registrada", "Recibida", "Garantía"];
 const PAGE_SIZE = 20;
 
 export default function CompraHistorial() {
@@ -18,6 +22,8 @@ export default function CompraHistorial() {
   const [compras, setCompras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState("Todas");
+  const [busqueda, setBusqueda] = useState("");
+  const [busquedaActiva, setBusquedaActiva] = useState("");
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [recibiendoId, setRecibiendoId] = useState(null);
@@ -26,52 +32,78 @@ export default function CompraHistorial() {
   // mientras hay una carga en vuelo) para no mezclar resultados.
   const reqIdRef = useRef(0);
 
-  const cargarCompras = async (reset = false) => {
-    const myReq = ++reqIdRef.current;
-    setLoading(true);
-    setErrorMsg(null);
-    const currentPage = reset ? 0 : page;
-    try {
-      let query = supabase
-        .from("compras")
-        .select(
-          `id, numero, fecha, proveedor, factura_proveedor, total, recibida, estado,
-           registrador:registrado_por(nombre)`,
-        )
-        .order("fecha", { ascending: false })
-        .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
+  const cargarCompras = useCallback(
+    async (reset = false) => {
+      const myReq = ++reqIdRef.current;
+      setLoading(true);
+      setErrorMsg(null);
+      const currentPage = reset ? 0 : page;
+      try {
+        let query = supabase
+          .from("compras")
+          .select(
+            `id, numero, fecha, fecha_recepcion, proveedor, factura_proveedor,
+             total, recibida, estado,
+             registrador:registrado_por(nombre)`,
+          )
+          .order("fecha", { ascending: false })
+          .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
-      if (perfil?.rol !== "Admin")
-        query = query.eq("sede_destino_id", perfil?.sede_id);
-      if (filtro === "Registrada") query = query.eq("recibida", false);
-      if (filtro === "Recibida") query = query.eq("recibida", true);
-      if (filtro === "Garantía")
-        query = query.eq("estado", "devolucion_garantia");
+        if (perfil?.rol !== "Admin")
+          query = query.eq("sede_destino_id", perfil?.sede_id);
+        if (filtro === "Registrada") query = query.eq("recibida", false);
+        if (filtro === "Recibida") query = query.eq("recibida", true);
+        if (filtro === "Garantía")
+          query = query.eq("estado", "devolucion_garantia");
 
-      const { data, error } = await query;
-      if (myReq !== reqIdRef.current) return; // respuesta obsoleta
-      if (error) throw error;
+        // Búsqueda server-side por número de factura o proveedor (ilike).
+        const needle = busquedaActiva.trim();
+        if (needle.length >= 2) {
+          const safe = sanitizeSearch(needle);
+          query = query.or(
+            `proveedor.ilike.%${safe}%,factura_proveedor.ilike.%${safe}%`,
+          );
+        }
 
-      if (reset) {
-        setCompras(data ?? []);
-        setPage(1);
-      } else {
-        setCompras((prev) => [...prev, ...(data ?? [])]);
-        setPage((p) => p + 1);
+        const { data, error } = await query;
+        if (myReq !== reqIdRef.current) return; // respuesta obsoleta
+        if (error) throw error;
+
+        if (reset) {
+          setCompras(data ?? []);
+          setPage(1);
+        } else {
+          setCompras((prev) => [...prev, ...(data ?? [])]);
+          setPage((p) => p + 1);
+        }
+        setHasMore((data ?? []).length === PAGE_SIZE);
+      } catch {
+        if (myReq === reqIdRef.current)
+          setErrorMsg("No se pudieron cargar las compras. Reintenta.");
+      } finally {
+        if (myReq === reqIdRef.current) setLoading(false);
       }
-      setHasMore((data ?? []).length === PAGE_SIZE);
-    } catch {
-      if (myReq === reqIdRef.current)
-        setErrorMsg("No se pudieron cargar las compras. Reintenta.");
-    } finally {
-      if (myReq === reqIdRef.current) setLoading(false);
-    }
-  };
+    },
+    // page se lee dentro pero la recarga siempre es reset salvo "Cargar más".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filtro, busquedaActiva, perfil?.rol, perfil?.sede_id],
+  );
 
   useEffect(() => {
     cargarCompras(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtro]);
+  }, [filtro, busquedaActiva]);
+
+  // Debounce 400ms (estándar UX de operarios — ver CLAUDE.md).
+  const aplicarBusqueda = useDebouncedCallback((val) => {
+    setBusquedaActiva(val);
+  }, 400);
+
+  const handleBusqueda = (e) => {
+    const val = e.target.value;
+    setBusqueda(val);
+    aplicarBusqueda(val);
+  };
 
   const marcarRecibida = async (compraId) => {
     setRecibiendoId(compraId);
@@ -90,7 +122,15 @@ export default function CompraHistorial() {
         setErrorMsg("Esa compra ya estaba recibida.");
       }
       setCompras((prev) =>
-        prev.map((c) => (c.id === compraId ? { ...c, recibida: true } : c)),
+        prev.map((c) =>
+          c.id === compraId
+            ? {
+                ...c,
+                recibida: true,
+                fecha_recepcion: new Date().toISOString(),
+              }
+            : c,
+        ),
       );
     } catch {
       setErrorMsg("No se pudo marcar la compra como recibida. Reintenta.");
@@ -99,318 +139,463 @@ export default function CompraHistorial() {
     }
   };
 
-  return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Compras"
-        description={
-          !loading
-            ? `${compras.length}${hasMore ? "+" : ""} registros`
-            : "Cargando…"
-        }
-        actions={
-          <button
-            onClick={() => navigate("/ops/compras/nueva")}
-            className="flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-medium transition-opacity cursor-pointer"
-            style={{
-              backgroundColor: "hsl(var(--primary))",
-              color: "hsl(var(--primary-foreground))",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-          >
-            <PlusIcon />
-            Nueva compra
-          </button>
-        }
-      />
+  const stats = comprasHeaderStats(compras);
 
-      {/* Filtros */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {FILTROS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFiltro(f)}
-            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer"
-            style={
-              filtro === f
-                ? {
-                    backgroundColor: "hsl(var(--primary))",
-                    color: "hsl(var(--primary-foreground))",
-                    borderColor: "hsl(var(--primary))",
-                  }
-                : {
-                    backgroundColor: "transparent",
-                    color: "hsl(var(--muted-foreground))",
-                    borderColor: "hsl(var(--border))",
-                  }
-            }
+  return (
+    <div className="flex h-full flex-col animate-fade-in">
+      {/* ── Encabezado con KPIs ─────────────────────────────────────── */}
+      <div
+        className="flex flex-wrap items-start gap-4 border-b px-4 pb-4 pt-5 sm:px-7 sm:pt-6"
+        style={{
+          borderColor: "var(--n-100)",
+          backgroundColor: "var(--n-0)",
+        }}
+      >
+        <div className="min-w-0 flex-1">
+          <h1
+            className="m-0 text-[22px] font-semibold tracking-[-0.01em]"
+            style={{ color: "var(--n-950)" }}
           >
-            {f}
-          </button>
-        ))}
+            Compras
+          </h1>
+          <p
+            className="mt-1.5 text-[13px] leading-[1.5]"
+            style={{ color: "var(--n-500)" }}
+          >
+            <b
+              className="font-mono font-medium"
+              style={{ color: "var(--n-700)" }}
+            >
+              {loading && compras.length === 0 ? "…" : stats.count}
+              {hasMore ? "+" : ""}
+            </b>{" "}
+            órdenes ·{" "}
+            <b
+              className="font-mono font-medium"
+              style={{ color: "var(--n-700)" }}
+            >
+              {formatCOP(stats.comprado)}
+            </b>{" "}
+            comprado ·{" "}
+            <b
+              className="font-mono font-medium"
+              style={{ color: "var(--n-700)" }}
+            >
+              {stats.pendientes}
+            </b>{" "}
+            pendientes de recepción
+          </p>
+        </div>
+        <button
+          onClick={() => navigate("/ops/compras/nueva")}
+          className="btn btn-pri shrink-0"
+          style={{ height: 48 }}
+        >
+          <Plus className="h-4 w-4" strokeWidth={2} />
+          Nueva compra
+        </button>
       </div>
 
-      {errorMsg && (
+      <div className="flex flex-col gap-4 px-4 pb-14 pt-4 sm:px-7">
+        {/* ── Tabs segmentadas (estilo Lovable) ─────────────────────── */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div
+            className="inline-flex items-center gap-0.5 rounded-lg p-[3px]"
+            style={{ backgroundColor: "var(--n-100)" }}
+          >
+            {COMPRAS_TABS.map((f) => {
+              const active = filtro === f;
+              return (
+                <button
+                  key={f}
+                  onClick={() => setFiltro(f)}
+                  className="rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors"
+                  style={{
+                    backgroundColor: active ? "var(--n-0)" : "transparent",
+                    color: active ? "var(--n-950)" : "var(--n-500)",
+                    boxShadow: active ? "0 1px 2px rgba(14,16,24,.06)" : "none",
+                  }}
+                >
+                  {f}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Búsqueda server-side ──────────────────────────────────── */}
         <div
-          role="alert"
-          className="rounded-lg border px-3 py-2 text-xs"
+          className="flex items-center gap-2.5 rounded-lg border px-3"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.4)",
-            color: "hsl(var(--destructive))",
+            height: 44,
+            borderColor: "var(--n-150)",
+            backgroundColor: "var(--n-0)",
           }}
         >
-          {errorMsg}
+          <Search
+            className="h-4 w-4 shrink-0"
+            strokeWidth={1.7}
+            style={{ color: "var(--n-300)" }}
+          />
+          <input
+            value={busqueda}
+            onChange={handleBusqueda}
+            placeholder="Buscar por proveedor o N° de factura…"
+            className="flex-1 border-none bg-transparent text-[13.5px] outline-none"
+            style={{ color: "var(--n-700)" }}
+          />
         </div>
-      )}
 
-      {/* Contenido */}
-      {loading && compras.length === 0 ? (
-        <SkeletonList />
-      ) : compras.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <>
-          {/* Desktop tabla */}
+        {errorMsg && (
           <div
-            className="hidden md:block overflow-x-auto rounded-xl border"
-            style={{ borderColor: "hsl(var(--border))" }}
+            role="alert"
+            className="rounded-[10px] border px-4 py-3 text-sm"
+            style={{
+              backgroundColor: "var(--dang-50)",
+              borderColor: "var(--dang-border)",
+              color: "var(--dang-700)",
+            }}
           >
-            <table className="w-full border-collapse">
-              <thead>
-                <tr
-                  style={{
-                    backgroundColor: "hsl(var(--muted) / 0.4)",
-                    borderBottom: "1px solid hsl(var(--border))",
-                  }}
-                >
-                  {[
-                    "#",
-                    "Fecha",
-                    "Proveedor",
-                    "Factura",
-                    "Total",
-                    "Estado",
-                    "",
-                  ].map((col) => (
-                    <th
-                      key={col}
-                      className="px-3 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-left"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {compras.map((c, idx) => (
-                  <tr
-                    key={c.id}
-                    onClick={() => navigate(`/ops/compras/${c.id}`)}
-                    className="cursor-pointer"
-                    style={{
-                      borderTop:
-                        idx === 0
-                          ? "none"
-                          : "1px solid hsl(var(--border) / 0.5)",
-                    }}
-                  >
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs font-bold font-mono"
-                        style={{ color: "hsl(var(--primary))" }}
-                      >
-                        #{c.numero}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
-                      >
-                        {formatDate(c.fecha)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-sm font-medium"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {c.proveedor}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
-                      >
-                        {c.factura_proveedor ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="font-bold tabular-nums"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {formatCOP(c.total)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <StatusBadge
-                          status={c.recibida ? "recibida" : "pendiente"}
-                        />
-                        {c.estado === "devolucion_garantia" && (
-                          <span
-                            className="px-2 py-0.5 rounded text-[10px] font-semibold"
-                            style={{
-                              backgroundColor: "hsl(var(--warning) / 0.15)",
-                              color: "hsl(var(--warning))",
-                            }}
-                            title="Devolución por garantía"
-                          >
-                            🛡️ Garantía
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      {!c.recibida && puedeRecibirCompra && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            marcarRecibida(c.id);
-                          }}
-                          disabled={recibiendoId === c.id}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all disabled:opacity-50 cursor-pointer whitespace-nowrap"
-                          style={{
-                            borderColor: "hsl(var(--success))",
-                            color: "hsl(var(--success))",
-                            backgroundColor: "hsl(var(--success) / 0.05)",
-                          }}
-                          onMouseEnter={(e) =>
-                            (e.currentTarget.style.backgroundColor =
-                              "hsl(var(--success) / 0.15)")
-                          }
-                          onMouseLeave={(e) =>
-                            (e.currentTarget.style.backgroundColor =
-                              "hsl(var(--success) / 0.05)")
-                          }
-                        >
-                          {recibiendoId === c.id ? "..." : "Marcar recibida"}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {errorMsg}
           </div>
+        )}
 
-          {/* Mobile cards */}
-          <ul className="md:hidden space-y-2.5" role="list">
-            {compras.map((c) => (
-              <li key={c.id}>
-                <div
-                  onClick={() => navigate(`/ops/compras/${c.id}`)}
-                  className="rounded-xl px-4 py-4 border cursor-pointer"
-                  style={{
-                    backgroundColor: "hsl(var(--card))",
-                    borderColor: "hsl(var(--border))",
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span
-                          className="text-xs font-bold font-mono"
-                          style={{ color: "hsl(var(--primary))" }}
-                        >
-                          #{c.numero}
-                        </span>
-                        <StatusBadge
-                          status={c.recibida ? "recibida" : "pendiente"}
-                        />
-                        {c.estado === "devolucion_garantia" && (
-                          <span
-                            className="px-2 py-0.5 rounded text-[10px] font-semibold"
-                            style={{
-                              backgroundColor: "hsl(var(--warning) / 0.15)",
-                              color: "hsl(var(--warning))",
-                            }}
-                          >
-                            🛡️ Garantía
-                          </span>
-                        )}
-                      </div>
-                      <p
-                        className="text-sm font-medium truncate"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {c.proveedor}
-                      </p>
-                      <p
-                        className="text-xs mt-0.5"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
-                      >
-                        {formatDate(c.fecha)}
-                        {c.factura_proveedor &&
-                          ` · Fact: ${c.factura_proveedor}`}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p
-                        className="font-bold text-base tabular-nums"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {formatCOP(c.total)}
-                      </p>
-                    </div>
-                  </div>
-                  {!c.recibida && puedeRecibirCompra && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        marcarRecibida(c.id);
-                      }}
-                      disabled={recibiendoId === c.id}
-                      className="w-full mt-1 py-2.5 rounded-lg text-sm font-medium border transition-all disabled:opacity-50 cursor-pointer"
-                      style={{
-                        borderColor: "hsl(var(--success))",
-                        color: "hsl(var(--success))",
-                        backgroundColor: "hsl(var(--success) / 0.05)",
-                      }}
-                    >
-                      {recibiendoId === c.id
-                        ? "Procesando..."
-                        : "Marcar como recibida"}
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+        {/* ── Contenido ───────────────────────────────────────────────── */}
+        {loading && compras.length === 0 ? (
+          <SkeletonList />
+        ) : compras.length === 0 ? (
+          <EmptyState filtrando={busquedaActiva.trim().length >= 2} />
+        ) : (
+          <>
+            {/* Móvil/Tablet: cards (< md) */}
+            <ul className="md:hidden space-y-2.5" role="list">
+              {compras.map((c) => (
+                <li key={c.id}>
+                  <CompraCard
+                    compra={c}
+                    puedeRecibir={puedeRecibirCompra}
+                    recibiendoId={recibiendoId}
+                    onMarcarRecibida={marcarRecibida}
+                    onClick={() => navigate(`/ops/compras/${c.id}`)}
+                  />
+                </li>
+              ))}
+            </ul>
 
-          {hasMore && (
-            <button
-              onClick={() => cargarCompras(false)}
-              disabled={loading}
-              className="w-full py-3 rounded-xl text-sm font-medium border transition-all disabled:opacity-50 cursor-pointer"
+            {/* Desktop: tabla (≥ md) */}
+            <div
+              className="hidden min-w-0 overflow-hidden rounded-[10px] border md:block"
               style={{
-                borderColor: "hsl(var(--border))",
-                color: "hsl(var(--muted-foreground))",
-                backgroundColor: "transparent",
+                borderColor: "var(--n-150)",
+                backgroundColor: "var(--n-0)",
               }}
             >
-              {loading ? "Cargando..." : "Cargar más"}
-            </button>
-          )}
-        </>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-[12.5px]">
+                  <thead>
+                    <tr>
+                      <Th width={92}>#</Th>
+                      <Th width={108}>Fecha orden</Th>
+                      <Th width={220}>Proveedor</Th>
+                      <Th width={150}>Factura</Th>
+                      <Th width={130} right>
+                        Total
+                      </Th>
+                      <Th width={156}>Estado</Th>
+                      <Th width={180}>Recepción</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {compras.map((c) => (
+                      <CompraFila
+                        key={c.id}
+                        compra={c}
+                        puedeRecibir={puedeRecibirCompra}
+                        recibiendoId={recibiendoId}
+                        onMarcarRecibida={marcarRecibida}
+                        onClick={() => navigate(`/ops/compras/${c.id}`)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div
+                className="flex items-center justify-between border-t px-4 py-3 text-[12px]"
+                style={{
+                  borderColor: "var(--n-100)",
+                  backgroundColor: "var(--n-25)",
+                  color: "var(--n-500)",
+                }}
+              >
+                <span>
+                  Mostrando{" "}
+                  <b className="font-mono" style={{ color: "var(--n-950)" }}>
+                    {compras.length}
+                  </b>{" "}
+                  {hasMore ? "+ " : ""}
+                  compra{compras.length === 1 ? "" : "s"}
+                </span>
+                {busquedaActiva.trim().length >= 2 && (
+                  <span className="font-mono">filtro: “{busquedaActiva}”</span>
+                )}
+              </div>
+            </div>
+
+            {/* Cargar más */}
+            {hasMore && (
+              <button
+                onClick={() => cargarCompras(false)}
+                disabled={loading}
+                className="w-full rounded-[10px] border py-3 text-sm font-medium transition-colors disabled:opacity-50"
+                style={{
+                  minHeight: 48,
+                  borderColor: "var(--n-150)",
+                  color: "var(--n-500)",
+                  backgroundColor: "var(--n-0)",
+                }}
+              >
+                {loading ? "Cargando…" : "Cargar más"}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+function Th({ children, width, right }) {
+  return (
+    <th
+      style={{ width, backgroundColor: "var(--n-25)", color: "var(--n-400)" }}
+      className={
+        "border-b px-3 py-2.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] " +
+        (right ? "text-right" : "text-left")
+      }
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({ children, right }) {
+  return (
+    <td
+      className={"border-b px-3 py-2.5 " + (right ? "text-right" : "")}
+      style={{ borderColor: "var(--n-75)" }}
+    >
+      {children}
+    </td>
+  );
+}
+
+/**
+ * Barra de recepción. El backend solo modela recepción TOTAL (booleano
+ * `recibida`), así que la barra es honesta: 100% si recibida, "Esperando"
+ * si pendiente. NO se inventa recepción parcial inexistente.
+ */
+function RecepcionCell({ compra: c }) {
+  if (c.estado === "devolucion_garantia") {
+    return (
+      <span
+        className="font-mono text-[11.5px]"
+        style={{ color: "var(--info-700)" }}
+      >
+        Con garantía
+      </span>
+    );
+  }
+  if (!c.recibida) {
+    return (
+      <span
+        className="font-mono text-[11.5px]"
+        style={{ color: "var(--n-300)" }}
+      >
+        Esperando
+      </span>
+    );
+  }
+  return (
+    <div className="font-mono text-[11.5px]" style={{ color: "var(--n-700)" }}>
+      <div className="mb-1">Completa</div>
+      <div
+        className="h-1 overflow-hidden rounded-full"
+        style={{ backgroundColor: "var(--n-100)" }}
+      >
+        <div
+          className="h-full rounded-full"
+          style={{ width: "100%", backgroundColor: "var(--succ-500)" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RecibirButton({ compra, recibiendoId, onMarcarRecibida, full }) {
+  const procesando = recibiendoId === compra.id;
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onMarcarRecibida(compra.id);
+      }}
+      disabled={procesando}
+      className={
+        "rounded-lg border text-[12.5px] font-medium transition-colors disabled:opacity-50 whitespace-nowrap " +
+        (full ? "w-full py-2.5" : "px-3 py-1.5")
+      }
+      style={{
+        minHeight: full ? 48 : undefined,
+        borderColor: "var(--succ-500)",
+        color: "var(--succ-700)",
+        backgroundColor: "var(--succ-50)",
+      }}
+      onMouseEnter={(e) =>
+        (e.currentTarget.style.backgroundColor = "var(--succ-100)")
+      }
+      onMouseLeave={(e) =>
+        (e.currentTarget.style.backgroundColor = "var(--succ-50)")
+      }
+    >
+      {procesando ? "Procesando…" : full ? "Marcar como recibida" : "Recibir"}
+    </button>
+  );
+}
+
+function CompraFila({
+  compra: c,
+  puedeRecibir,
+  recibiendoId,
+  onMarcarRecibida,
+  onClick,
+}) {
+  const pill = compraEstadoPill(c);
+  return (
+    <tr
+      onClick={onClick}
+      className="cursor-pointer transition-colors"
+      onMouseEnter={(e) =>
+        (e.currentTarget.style.backgroundColor = "var(--p-50)")
+      }
+      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
+    >
+      <Td>
+        <span
+          className="font-mono text-[12.5px] font-medium"
+          style={{ color: "var(--p-700)" }}
+        >
+          #{c.numero}
+        </span>
+      </Td>
+      <Td>
+        <span
+          className="font-mono text-[11.5px]"
+          style={{ color: "var(--n-500)" }}
+        >
+          {formatDate(c.fecha)}
+        </span>
+      </Td>
+      <Td>
+        <span className="font-medium" style={{ color: "var(--n-950)" }}>
+          {c.proveedor}
+        </span>
+      </Td>
+      <Td>
+        <span
+          className="font-mono text-[11.5px]"
+          style={{ color: "var(--n-500)" }}
+        >
+          {c.factura_proveedor ?? "—"}
+        </span>
+      </Td>
+      <Td right>
+        <span
+          className="font-mono font-medium tabular-nums"
+          style={{ color: "var(--n-950)" }}
+        >
+          {formatCOP(c.total)}
+        </span>
+      </Td>
+      <Td>
+        <span className={pill.cls}>
+          <span className="dot" />
+          {pill.label}
+        </span>
+      </Td>
+      <Td>
+        {!c.recibida && puedeRecibir ? (
+          <RecibirButton
+            compra={c}
+            recibiendoId={recibiendoId}
+            onMarcarRecibida={onMarcarRecibida}
+          />
+        ) : (
+          <RecepcionCell compra={c} />
+        )}
+      </Td>
+    </tr>
+  );
+}
+
+function CompraCard({
+  compra: c,
+  puedeRecibir,
+  recibiendoId,
+  onMarcarRecibida,
+  onClick,
+}) {
+  const pill = compraEstadoPill(c);
+  return (
+    <div
+      onClick={onClick}
+      className="w-full cursor-pointer rounded-[10px] border px-4 py-3.5 text-left shadow-sm transition-all duration-100 active:scale-[0.985] active:shadow-none"
+      style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-1.5">
+            <span
+              className="font-mono text-[12px] font-medium"
+              style={{ color: "var(--p-700)" }}
+            >
+              #{c.numero}
+            </span>
+            <span className={pill.cls}>
+              <span className="dot" />
+              {pill.label}
+            </span>
+          </div>
+          <p
+            className="truncate text-[14px] font-medium leading-tight"
+            style={{ color: "var(--n-950)" }}
+          >
+            {c.proveedor}
+          </p>
+          <p className="mt-0.5 text-[11.5px]" style={{ color: "var(--n-500)" }}>
+            {formatDate(c.fecha)}
+            {c.factura_proveedor && ` · Fact: ${c.factura_proveedor}`}
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p
+            className="font-mono text-[15px] font-semibold tabular-nums"
+            style={{ color: "var(--n-950)" }}
+          >
+            {formatCOP(c.total)}
+          </p>
+        </div>
+      </div>
+      {!c.recibida && puedeRecibir && (
+        <div className="mt-3">
+          <RecibirButton
+            compra={c}
+            recibiendoId={recibiendoId}
+            onMarcarRecibida={onMarcarRecibida}
+            full
+          />
+        </div>
       )}
     </div>
   );
@@ -418,30 +603,27 @@ export default function CompraHistorial() {
 
 function SkeletonList() {
   return (
-    <div className="space-y-3">
-      {[...Array(5)].map((_, i) => (
+    <div className="flex flex-col gap-3">
+      {[...Array(6)].map((_, i) => (
         <div
           key={i}
-          className="rounded-xl p-4 animate-pulse border"
-          style={{
-            backgroundColor: "hsl(var(--card))",
-            borderColor: "hsl(var(--border))",
-          }}
+          className="animate-pulse rounded-[10px] border p-4"
+          style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
         >
-          <div className="flex justify-between items-start gap-4">
+          <div className="flex justify-between">
             <div className="flex-1 space-y-2">
               <div
-                className="h-4 rounded w-1/4"
-                style={{ backgroundColor: "hsl(var(--muted))" }}
+                className="h-4 w-1/4 rounded"
+                style={{ backgroundColor: "var(--n-100)" }}
               />
               <div
-                className="h-3 rounded w-1/2"
-                style={{ backgroundColor: "hsl(var(--muted))" }}
+                className="h-3 w-1/2 rounded"
+                style={{ backgroundColor: "var(--n-100)" }}
               />
             </div>
             <div
-              className="w-24 h-6 rounded"
-              style={{ backgroundColor: "hsl(var(--muted))" }}
+              className="ml-3 h-6 w-24 rounded"
+              style={{ backgroundColor: "var(--n-100)" }}
             />
           </div>
         </div>
@@ -450,38 +632,23 @@ function SkeletonList() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ filtrando }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="text-5xl mb-4">📦</div>
-      <p className="font-semibold" style={{ color: "hsl(var(--foreground))" }}>
-        Sin compras registradas
-      </p>
-      <p
-        className="text-sm mt-1"
-        style={{ color: "hsl(var(--muted-foreground))" }}
+    <div className="flex flex-col items-center justify-center px-8 py-20 text-center">
+      <div
+        className="mb-4 grid h-14 w-14 place-items-center rounded-[12px]"
+        style={{ backgroundColor: "var(--p-50)", color: "var(--p-600)" }}
       >
-        Las órdenes de compra aparecerán aquí
+        <PackageOpen className="h-7 w-7" strokeWidth={1.5} />
+      </div>
+      <p className="font-semibold" style={{ color: "var(--n-950)" }}>
+        {filtrando ? "Sin resultados" : "Sin compras registradas"}
+      </p>
+      <p className="mt-1 text-sm" style={{ color: "var(--n-500)" }}>
+        {filtrando
+          ? "Ninguna compra coincide con tu búsqueda o filtro."
+          : "Las órdenes de compra aparecerán aquí una vez creadas"}
       </p>
     </div>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 4v16m8-8H4"
-      />
-    </svg>
   );
 }

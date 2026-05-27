@@ -1,13 +1,27 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { Plus, Search, Undo2, ArrowLeftCircle } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
-import StatusBadge from "../../components/ui/StatusBadge";
+import {
+  DEVOLUCIONES_SUBFILTROS,
+  subfiltroToEstado,
+  devolucionTipoPill,
+  devolucionSigno,
+  devolucionEstadoClass,
+  devolucionEstadoLabel,
+  devolucionPulse,
+} from "../../lib/devoluciones-ui";
 
-const FILTROS = ["Todas", "Cliente", "Proveedor"];
 const PAGE_SIZE = 20;
+
+// Pestañas de tipo. El diseño Lovable usa tabs duales cliente/proveedor; aquí
+// se mapean directamente a la columna real `reingresa_stock` (true=cliente).
+const TIPO_TABS = [
+  { id: "cliente", label: "Devoluciones de cliente", reingresa: true },
+  { id: "proveedor", label: "Devoluciones a proveedor", reingresa: false },
+];
 
 export default function DevolucionHistorial() {
   const navigate = useNavigate();
@@ -15,13 +29,17 @@ export default function DevolucionHistorial() {
 
   const [devoluciones, setDevoluciones] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState("Todas");
+  const [tab, setTab] = useState("cliente");
+  const [subfiltro, setSubfiltro] = useState("Todas");
+  const [busqueda, setBusqueda] = useState("");
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   // Token de secuencia: descarta respuestas obsoletas (cambio de filtro
   // mientras hay una carga en vuelo) para no mezclar resultados.
   const reqIdRef = useRef(0);
+
+  const reingresa = tab === "cliente";
 
   const cargarDevoluciones = async (reset = false) => {
     const myReq = ++reqIdRef.current;
@@ -32,17 +50,18 @@ export default function DevolucionHistorial() {
       let query = supabase
         .from("devoluciones")
         .select(
-          `id, numero, fecha, reingresa_stock, cantidad, motivo, estado,
+          `id, numero, fecha, reingresa_stock, cantidad, motivo, estado, venta_id,
            producto:producto_id(nombre, referencia),
-           registrador:registrado_por(nombre)`,
+           registrador:registrado_por(nombre),
+           venta:venta_id(numero)`,
         )
+        .eq("reingresa_stock", reingresa)
         .order("fecha", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (perfil?.rol !== "Admin") query = query.eq("sede_id", perfil?.sede_id);
-      // La tabla usa reingresa_stock BOOLEAN (true=cliente, false=proveedor)
-      if (filtro === "Cliente") query = query.eq("reingresa_stock", true);
-      if (filtro === "Proveedor") query = query.eq("reingresa_stock", false);
+      const estado = subfiltroToEstado(subfiltro);
+      if (estado) query = query.eq("estado", estado);
 
       const { data, error } = await query;
       if (myReq !== reqIdRef.current) return; // respuesta obsoleta
@@ -67,314 +86,516 @@ export default function DevolucionHistorial() {
   useEffect(() => {
     cargarDevoluciones(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtro]);
+  }, [tab, subfiltro]);
 
-  // reingresa_stock=true → devolución de cliente (suma stock)
-  // reingresa_stock=false → devolución a proveedor (resta stock)
-  const tipoLabel = (reingresa) => (reingresa ? "De cliente" : "A proveedor");
+  // Búsqueda client-side sobre lo ya cargado (número, producto, motivo).
+  // Se añade sin tocar la paginación server-side ni los filtros de tipo/estado.
+  const filtradas = useMemo(() => {
+    const needle = busqueda.trim().toLowerCase();
+    if (!needle) return devoluciones;
+    return devoluciones.filter((d) => {
+      const num = `#${d.numero}`.toLowerCase();
+      const prod = (d.producto?.nombre ?? "").toLowerCase();
+      const ref = (d.producto?.referencia ?? "").toLowerCase();
+      const mot = (d.motivo ?? "").toLowerCase();
+      return (
+        num.includes(needle) ||
+        prod.includes(needle) ||
+        ref.includes(needle) ||
+        mot.includes(needle)
+      );
+    });
+  }, [devoluciones, busqueda]);
+
+  // Métricas honestas derivadas de lo cargado en vista (no inventadas).
+  const enVista = devoluciones.length;
+  const pendientes = useMemo(
+    () => devoluciones.filter((d) => d.estado === "pendiente").length,
+    [devoluciones],
+  );
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Devoluciones"
-        description={
-          !loading
-            ? `${devoluciones.length}${hasMore ? "+" : ""} registros`
-            : "Cargando…"
-        }
-        actions={
+    <div className="flex h-full flex-col animate-fade-in">
+      {/* ── Encabezado ──────────────────────────────────────────────── */}
+      <div
+        className="flex flex-wrap items-start justify-between gap-4 border-b px-4 pb-4 pt-5 sm:px-7 sm:pt-6"
+        style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+      >
+        <div className="min-w-0 flex-1">
+          <p
+            className="mb-1 font-mono text-[11px] uppercase tracking-[0.08em]"
+            style={{ color: "var(--n-500)" }}
+          >
+            Operaciones · Post-venta
+          </p>
+          <h1
+            className="m-0 text-[22px] font-semibold tracking-[-0.01em]"
+            style={{ color: "var(--n-950)" }}
+          >
+            Devoluciones
+          </h1>
+          <p
+            className="mt-1.5 text-[13px] leading-[1.5]"
+            style={{ color: "var(--n-500)" }}
+          >
+            {loading && enVista === 0 ? (
+              "cargando…"
+            ) : (
+              <>
+                <b
+                  className="font-mono font-medium"
+                  style={{ color: "var(--n-700)" }}
+                >
+                  {enVista}
+                  {hasMore ? "+" : ""}
+                </b>{" "}
+                {reingresa ? "de cliente" : "a proveedor"} en vista ·{" "}
+                <b className="font-medium" style={{ color: "var(--warn-700)" }}>
+                  {pendientes} pendientes de validación
+                </b>
+              </>
+            )}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2.5">
           <button
             onClick={() => navigate("/ops/devoluciones/nueva")}
-            className="flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-medium transition-opacity cursor-pointer"
-            style={{
-              backgroundColor: "hsl(var(--primary))",
-              color: "hsl(var(--primary-foreground))",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            className="btn btn-pri"
+            style={{ height: 48 }}
           >
-            <PlusIcon />
+            <Plus className="h-4 w-4" strokeWidth={2} />
             Nueva devolución
           </button>
-        }
-      />
-
-      {/* Filtros */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {FILTROS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFiltro(f)}
-            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer"
-            style={
-              filtro === f
-                ? {
-                    backgroundColor: "hsl(var(--primary))",
-                    color: "hsl(var(--primary-foreground))",
-                    borderColor: "hsl(var(--primary))",
-                  }
-                : {
-                    backgroundColor: "transparent",
-                    color: "hsl(var(--muted-foreground))",
-                    borderColor: "hsl(var(--border))",
-                  }
-            }
-          >
-            {f}
-          </button>
-        ))}
+        </div>
       </div>
 
-      {errorMsg && (
+      {/* ── Tabs duales por tipo (mapeadas a reingresa_stock) ───────── */}
+      <div
+        className="border-b px-4 pt-3 sm:px-7"
+        style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+      >
         <div
-          role="alert"
-          className="rounded-lg border px-3 py-2 text-xs"
-          style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.4)",
-            color: "hsl(var(--destructive))",
-          }}
+          className="flex max-w-[520px] items-end border-b"
+          style={{ borderColor: "var(--n-150)" }}
         >
-          {errorMsg}
+          {TIPO_TABS.map((t) => {
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setTab(t.id);
+                  setSubfiltro("Todas");
+                }}
+                className="relative -mb-px flex flex-1 items-center justify-center gap-2 border-b-2 px-4 text-[13px] font-medium transition-colors"
+                style={{
+                  height: 48,
+                  borderColor: active ? "var(--p-600)" : "transparent",
+                  backgroundColor: active ? "var(--p-50)" : "transparent",
+                  color: active ? "var(--p-700)" : "var(--n-500)",
+                  fontWeight: active ? 600 : 500,
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) e.currentTarget.style.color = "var(--n-950)";
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) e.currentTarget.style.color = "var(--n-500)";
+                }}
+              >
+                <span
+                  style={{
+                    transform: t.id === "proveedor" ? "scaleX(-1)" : undefined,
+                  }}
+                >
+                  <ArrowLeftCircle className="h-4 w-4" strokeWidth={2} />
+                </span>
+                {t.label}
+              </button>
+            );
+          })}
         </div>
-      )}
+      </div>
 
-      {/* Contenido */}
-      {loading && devoluciones.length === 0 ? (
-        <SkeletonList />
-      ) : devoluciones.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <>
-          {/* Desktop tabla */}
-          <div
-            className="hidden md:block overflow-x-auto rounded-xl border"
-            style={{ borderColor: "hsl(var(--border))" }}
-          >
-            <table className="w-full border-collapse">
-              <thead>
-                <tr
-                  style={{
-                    backgroundColor: "hsl(var(--muted) / 0.4)",
-                    borderBottom: "1px solid hsl(var(--border))",
-                  }}
-                >
-                  {[
-                    "#",
-                    "Fecha",
-                    "Tipo",
-                    "Producto",
-                    "Cantidad",
-                    "Motivo",
-                    "Estado",
-                  ].map((col) => (
-                    <th
-                      key={col}
-                      className="px-3 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-left"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {devoluciones.map((d, idx) => (
-                  <tr
-                    key={d.id}
-                    style={{
-                      borderTop:
-                        idx === 0
-                          ? "none"
-                          : "1px solid hsl(var(--border) / 0.5)",
-                    }}
-                  >
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs font-bold font-mono"
-                        style={{ color: "hsl(var(--primary))" }}
-                      >
-                        #{d.numero}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
-                      >
-                        {formatDate(d.fecha)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs font-medium px-2 py-0.5 rounded-full"
-                        style={
-                          d.reingresa_stock === true
-                            ? {
-                                backgroundColor: "hsl(var(--info) / 0.1)",
-                                color: "hsl(var(--info))",
-                              }
-                            : {
-                                backgroundColor: "hsl(var(--warning) / 0.1)",
-                                color: "hsl(var(--warning))",
-                              }
-                        }
-                      >
-                        {tipoLabel(d.reingresa_stock)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <p
-                        className="text-sm font-medium"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {d.producto?.nombre ?? "—"}
-                      </p>
-                      <p
-                        className="text-xs"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
-                      >
-                        {d.producto?.referencia ?? ""}
-                      </p>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="font-semibold tabular-nums"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {d.reingresa_stock === true ? "+" : "−"}
-                        {d.cantidad}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
-                      >
-                        {d.motivo ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <StatusBadge status={d.estado} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile cards */}
-          <ul className="md:hidden space-y-2.5" role="list">
-            {devoluciones.map((d) => (
-              <li key={d.id}>
-                <div
-                  className="rounded-xl px-4 py-4 border"
-                  style={{
-                    backgroundColor: "hsl(var(--card))",
-                    borderColor: "hsl(var(--border))",
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-3 mb-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className="text-xs font-bold font-mono"
-                        style={{ color: "hsl(var(--primary))" }}
-                      >
-                        #{d.numero}
-                      </span>
-                      <span
-                        className="text-xs font-medium px-2 py-0.5 rounded-full"
-                        style={
-                          d.reingresa_stock === true
-                            ? {
-                                backgroundColor: "hsl(var(--info) / 0.1)",
-                                color: "hsl(var(--info))",
-                              }
-                            : {
-                                backgroundColor: "hsl(var(--warning) / 0.1)",
-                                color: "hsl(var(--warning))",
-                              }
-                        }
-                      >
-                        {tipoLabel(d.reingresa_stock)}
-                      </span>
-                      <StatusBadge status={d.estado} />
-                    </div>
-                    <span
-                      className="font-bold text-base tabular-nums shrink-0"
-                      style={{ color: "hsl(var(--foreground))" }}
-                    >
-                      {d.reingresa_stock === true ? "+" : "−"}
-                      {d.cantidad}
-                    </span>
-                  </div>
-                  <p
-                    className="text-sm font-medium"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {d.producto?.nombre ?? "—"}
-                  </p>
-                  <p
-                    className="text-xs mt-0.5"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {formatDate(d.fecha)}
-                    {d.motivo && ` · ${d.motivo}`}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          {hasMore && (
+      {/* ── Sub-filtros por estado ──────────────────────────────────── */}
+      <div
+        className="flex flex-wrap items-center gap-1.5 border-b px-4 py-3 sm:px-7"
+        style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+      >
+        {DEVOLUCIONES_SUBFILTROS.map((f) => {
+          const active = subfiltro === f;
+          return (
             <button
-              onClick={() => cargarDevoluciones(false)}
-              disabled={loading}
-              className="w-full py-3 rounded-xl text-sm font-medium border transition-all disabled:opacity-50 cursor-pointer"
+              key={f}
+              onClick={() => setSubfiltro(f)}
+              className="rounded-md border px-3 text-[12px] font-medium transition-colors"
               style={{
-                borderColor: "hsl(var(--border))",
-                color: "hsl(var(--muted-foreground))",
-                backgroundColor: "transparent",
+                minHeight: 36,
+                borderColor: active ? "var(--n-950)" : "var(--n-150)",
+                backgroundColor: active ? "var(--n-950)" : "var(--n-0)",
+                color: active ? "var(--n-0)" : "var(--n-700)",
+              }}
+              onMouseEnter={(e) => {
+                if (!active)
+                  e.currentTarget.style.backgroundColor = "var(--n-50)";
+              }}
+              onMouseLeave={(e) => {
+                if (!active)
+                  e.currentTarget.style.backgroundColor = "var(--n-0)";
               }}
             >
-              {loading ? "Cargando..." : "Cargar más"}
+              {f}
             </button>
+          );
+        })}
+      </div>
+
+      {/* ── Barra de búsqueda ───────────────────────────────────────── */}
+      <div
+        className="flex items-center gap-3 px-4 py-3 sm:px-7"
+        style={{ backgroundColor: "var(--n-25)" }}
+      >
+        <div
+          className="flex h-12 max-w-[560px] flex-1 items-center gap-2.5 rounded-lg border px-3.5"
+          style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+        >
+          <Search
+            className="h-4 w-4 shrink-0"
+            strokeWidth={1.5}
+            style={{ color: "var(--n-500)" }}
+          />
+          <input
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por número, producto o motivo…"
+            className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
+            style={{ color: "var(--n-950)" }}
+          />
+        </div>
+        <span
+          className="ml-auto font-mono text-[11px] uppercase tracking-wider"
+          style={{ color: "var(--n-500)" }}
+        >
+          <b className="font-medium" style={{ color: "var(--n-700)" }}>
+            {filtradas.length}
+          </b>{" "}
+          de{" "}
+          <b className="font-medium" style={{ color: "var(--n-700)" }}>
+            {enVista}
+            {hasMore ? "+" : ""}
+          </b>
+        </span>
+      </div>
+
+      {/* ── Contenido ───────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-auto px-4 pb-14 pt-3 sm:px-7">
+        {errorMsg && (
+          <div
+            role="alert"
+            className="mb-3 rounded-[10px] border px-4 py-3 text-sm"
+            style={{
+              backgroundColor: "var(--dang-50)",
+              borderColor: "var(--dang-border)",
+              color: "var(--dang-700)",
+            }}
+          >
+            {errorMsg}
+          </div>
+        )}
+
+        {loading && enVista === 0 ? (
+          <SkeletonList />
+        ) : filtradas.length === 0 ? (
+          <EmptyState
+            filtrando={busqueda.trim().length > 0}
+            tipo={reingresa ? "de cliente" : "a proveedor"}
+          />
+        ) : (
+          <>
+            {/* Móvil/Tablet: cards (< md) */}
+            <ul className="md:hidden space-y-2.5" role="list">
+              {filtradas.map((d) => (
+                <li key={d.id}>
+                  <DevolucionCard devolucion={d} />
+                </li>
+              ))}
+            </ul>
+
+            {/* Desktop: tabla (≥ md) */}
+            <div
+              className="hidden md:block min-w-0 overflow-hidden rounded-[10px] border"
+              style={{
+                borderColor: "var(--n-150)",
+                backgroundColor: "var(--n-0)",
+              }}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-[12.5px]">
+                  <thead>
+                    <tr>
+                      <Th width={92}>#</Th>
+                      <Th width={110}>Fecha</Th>
+                      <Th>Producto</Th>
+                      <Th width={120}>{reingresa ? "Venta origen" : "—"}</Th>
+                      <Th>Motivo</Th>
+                      <Th width={130}>Registró</Th>
+                      <Th width={100} right>
+                        Stock
+                      </Th>
+                      <Th width={150}>Estado</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtradas.map((d) => (
+                      <DevolucionFila key={d.id} devolucion={d} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div
+                className="flex items-center justify-between border-t px-5 py-3.5 text-xs"
+                style={{
+                  borderColor: "var(--n-150)",
+                  backgroundColor: "var(--muted, var(--n-25))",
+                  color: "var(--n-500)",
+                }}
+              >
+                <span>
+                  Mostrando{" "}
+                  <b className="font-mono" style={{ color: "var(--n-700)" }}>
+                    {filtradas.length}
+                  </b>{" "}
+                  de{" "}
+                  <b className="font-mono" style={{ color: "var(--n-700)" }}>
+                    {enVista}
+                    {hasMore ? "+" : ""}
+                  </b>{" "}
+                  devoluciones {reingresa ? "de cliente" : "a proveedor"}
+                </span>
+                {hasMore && (
+                  <span className="font-mono">
+                    Carga las siguientes con &ldquo;Cargar más&rdquo;
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Cargar más */}
+            {hasMore && !busqueda.trim() && (
+              <button
+                onClick={() => cargarDevoluciones(false)}
+                disabled={loading}
+                className="btn btn-out mt-4 w-full justify-center disabled:opacity-50"
+                style={{ height: 48 }}
+              >
+                {loading ? "Cargando…" : "Cargar más"}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+function Th({ children, width, right }) {
+  return (
+    <th
+      style={{ width, backgroundColor: "var(--n-50)", color: "var(--n-500)" }}
+      className={
+        "whitespace-nowrap border-b px-3 py-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.1em] " +
+        (right ? "text-right" : "text-left")
+      }
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({ children, right }) {
+  return (
+    <td
+      className={
+        "border-b px-3 py-2.5 align-top " + (right ? "text-right" : "")
+      }
+      style={{ borderColor: "var(--n-100)" }}
+    >
+      {children}
+    </td>
+  );
+}
+
+function DevolucionFila({ devolucion: d }) {
+  const tipo = devolucionTipoPill(d.reingresa_stock);
+  const signo = devolucionSigno(d.reingresa_stock);
+  return (
+    <tr className="h-14">
+      <Td>
+        <span
+          className="font-mono text-[12.5px] font-medium"
+          style={{ color: "var(--p-700)" }}
+        >
+          #{d.numero}
+        </span>
+      </Td>
+      <Td>
+        <span
+          className="font-mono text-[11.5px]"
+          style={{ color: "var(--n-500)" }}
+        >
+          {formatDate(d.fecha)}
+        </span>
+      </Td>
+      <Td>
+        <div className="flex min-w-0 flex-col leading-tight">
+          <span
+            className="flex items-center gap-1.5 text-[13px] font-medium"
+            style={{ color: "var(--n-950)" }}
+          >
+            {d.producto?.nombre ?? "—"}
+            <span className={tipo.cls}>
+              <span className="dot" />
+              {tipo.label}
+            </span>
+          </span>
+          <span
+            className="font-mono text-[11px]"
+            style={{ color: "var(--n-500)" }}
+          >
+            {d.producto?.referencia ?? ""}
+          </span>
+        </div>
+      </Td>
+      <Td>
+        {/* La tabla real solo vincula venta_id (devoluciones de cliente). Para
+            proveedor no existe OC ligada en el modelo actual → guion honesto. */}
+        {d.reingresa_stock && d.venta?.numero ? (
+          <span className="link-pill v">V-{d.venta.numero}</span>
+        ) : (
+          <span style={{ color: "var(--n-300)" }}>—</span>
+        )}
+      </Td>
+      <Td>
+        <span
+          className="block max-w-[260px] truncate text-[12.5px]"
+          style={{ color: "var(--n-700)" }}
+          title={d.motivo ?? undefined}
+        >
+          {d.motivo ?? "—"}
+        </span>
+      </Td>
+      <Td>
+        <span style={{ color: "var(--n-700)" }}>
+          {d.registrador?.nombre ?? "—"}
+        </span>
+      </Td>
+      <Td right>
+        <span
+          className="font-mono font-semibold tabular-nums"
+          style={{
+            color: d.reingresa_stock ? "var(--succ-700)" : "var(--warn-700)",
+          }}
+        >
+          {signo}
+          {d.cantidad}
+        </span>
+      </Td>
+      <Td>
+        <span className={devolucionEstadoClass(d.estado)}>
+          <span
+            className={`dot ${devolucionPulse(d.estado) ? "animate-pulse" : ""}`}
+          />
+          {devolucionEstadoLabel(d.estado)}
+        </span>
+      </Td>
+    </tr>
+  );
+}
+
+function DevolucionCard({ devolucion: d }) {
+  const tipo = devolucionTipoPill(d.reingresa_stock);
+  const signo = devolucionSigno(d.reingresa_stock);
+  return (
+    <div
+      className="w-full rounded-[10px] border px-4 py-3.5 text-left shadow-sm"
+      style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-1.5">
+            <span
+              className="font-mono text-[12px] font-medium"
+              style={{ color: "var(--p-700)" }}
+            >
+              #{d.numero}
+            </span>
+            <span className={tipo.cls}>
+              <span className="dot" />
+              {tipo.label}
+            </span>
+            <span className={devolucionEstadoClass(d.estado)}>
+              <span
+                className={`dot ${devolucionPulse(d.estado) ? "animate-pulse" : ""}`}
+              />
+              {devolucionEstadoLabel(d.estado)}
+            </span>
+          </div>
+          <p
+            className="truncate text-[14px] font-medium leading-tight"
+            style={{ color: "var(--n-950)" }}
+          >
+            {d.producto?.nombre ?? "—"}
+          </p>
+          {d.reingresa_stock && d.venta?.numero && (
+            <p className="mt-1">
+              <span className="link-pill v">V-{d.venta.numero}</span>
+            </p>
           )}
-        </>
-      )}
+          <p className="mt-0.5 text-[11.5px]" style={{ color: "var(--n-500)" }}>
+            {formatDate(d.fecha)}
+            {d.motivo && ` · ${d.motivo}`}
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <span
+            className="font-mono text-[18px] font-semibold tabular-nums"
+            style={{
+              color: d.reingresa_stock ? "var(--succ-700)" : "var(--warn-700)",
+            }}
+          >
+            {signo}
+            {d.cantidad}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
 
 function SkeletonList() {
   return (
-    <div className="space-y-3">
-      {[...Array(5)].map((_, i) => (
+    <div className="flex flex-col gap-3">
+      {[...Array(6)].map((_, i) => (
         <div
           key={i}
-          className="rounded-xl p-4 animate-pulse border"
-          style={{
-            backgroundColor: "hsl(var(--card))",
-            borderColor: "hsl(var(--border))",
-          }}
+          className="animate-pulse rounded-[10px] border p-4"
+          style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
         >
-          <div className="flex justify-between items-start gap-4">
+          <div className="flex justify-between">
             <div className="flex-1 space-y-2">
               <div
-                className="h-4 rounded w-1/4"
-                style={{ backgroundColor: "hsl(var(--muted))" }}
+                className="h-4 w-1/4 rounded"
+                style={{ backgroundColor: "var(--n-100)" }}
               />
               <div
-                className="h-3 rounded w-1/2"
-                style={{ backgroundColor: "hsl(var(--muted))" }}
+                className="h-3 w-1/2 rounded"
+                style={{ backgroundColor: "var(--n-100)" }}
               />
             </div>
             <div
-              className="w-16 h-6 rounded"
-              style={{ backgroundColor: "hsl(var(--muted))" }}
+              className="ml-3 h-6 w-16 rounded"
+              style={{ backgroundColor: "var(--n-100)" }}
             />
           </div>
         </div>
@@ -383,38 +604,25 @@ function SkeletonList() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ filtrando, tipo }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="text-5xl mb-4">↩️</div>
-      <p className="font-semibold" style={{ color: "hsl(var(--foreground))" }}>
-        Sin devoluciones registradas
-      </p>
-      <p
-        className="text-sm mt-1"
-        style={{ color: "hsl(var(--muted-foreground))" }}
+    <div className="flex flex-col items-center justify-center px-8 py-20 text-center">
+      <div
+        className="mb-4 grid h-14 w-14 place-items-center rounded-[12px]"
+        style={{ backgroundColor: "var(--p-50)", color: "var(--p-600)" }}
       >
-        Las devoluciones aparecerán aquí una vez registradas
+        <Undo2 className="h-7 w-7" strokeWidth={1.5} />
+      </div>
+      <p className="font-semibold" style={{ color: "var(--n-950)" }}>
+        {filtrando
+          ? "Sin devoluciones para la búsqueda"
+          : `Sin devoluciones ${tipo} registradas`}
+      </p>
+      <p className="mt-1 text-sm" style={{ color: "var(--n-500)" }}>
+        {filtrando
+          ? "Prueba con otro número, producto o motivo"
+          : "Las devoluciones aparecerán aquí una vez registradas"}
       </p>
     </div>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 4v16m8-8H4"
-      />
-    </svg>
   );
 }

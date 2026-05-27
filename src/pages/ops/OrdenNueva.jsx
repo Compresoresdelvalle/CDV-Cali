@@ -1,9 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  User,
+  Wrench,
+  ClipboardList,
+  FileText,
+  Link2,
+  X,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
 import SelectorCotizacionExistente from "../../components/ot/SelectorCotizacionExistente";
 
 export default function OrdenNueva() {
@@ -122,6 +130,7 @@ export default function OrdenNueva() {
           "No se pudo determinar la sede. Revisa que tu usuario o el técnico tenga sede asignada.",
         );
         setSaving(false);
+        savingRef.current = false;
         return;
       }
       const { data, error: e2 } = await supabase
@@ -165,51 +174,68 @@ export default function OrdenNueva() {
   };
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Nueva orden de servicio"
-        description="Registra el equipo y diagnóstico inicial"
-      />
+    <div className="mx-auto flex w-full max-w-[820px] flex-col gap-4 px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
+      <button
+        onClick={() => navigate("/ops/ordenes")}
+        className="back-btn inline-flex items-center gap-1.5"
+      >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+        Volver a Órdenes
+      </button>
+
+      <div className="border-b pb-4" style={{ borderColor: "var(--n-100)" }}>
+        <div className="ph-eyebrow">Nueva orden de servicio</div>
+        <h1 className="ph-client" style={{ marginBottom: 0 }}>
+          Registrar OT
+        </h1>
+        <p className="ph-sub mt-1.5">
+          Registra el equipo y diagnóstico inicial.
+        </p>
+      </div>
 
       {error && (
         <div
-          className="rounded-lg border px-3 py-2 text-xs"
+          role="alert"
+          className="rounded-[10px] border px-4 py-3 text-sm"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.4)",
-            color: "hsl(var(--destructive))",
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
+            color: "var(--dang-700)",
           }}
         >
           {error}
         </div>
       )}
 
-      <form onSubmit={guardar} className="space-y-5 max-w-2xl">
-        {/* Fase 10 §10.6: asociar cotización existente con reciclado de datos */}
-        <Section titulo="Cotización vinculada (opcional)">
+      <form onSubmit={guardar} className="flex flex-col gap-4">
+        {/* Cotización vinculada (opcional) */}
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico">
+              <Link2 className="h-3.5 w-3.5" strokeWidth={1.7} />
+            </div>
+            <div className="ib-title">Cotización vinculada (opcional)</div>
+          </div>
           {cotizacionVinculada ? (
             <div
-              className="rounded-lg border p-3 space-y-2"
+              className="space-y-2 rounded-lg border p-3.5"
               style={{
-                backgroundColor: "hsl(var(--info) / 0.05)",
-                borderColor: "hsl(var(--info))",
+                backgroundColor: "var(--info-50)",
+                borderColor: "var(--info-border)",
               }}
             >
-              <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p
-                    className="text-sm font-bold"
-                    style={{ color: "hsl(var(--info))" }}
+                    className="text-sm font-semibold"
+                    style={{ color: "var(--info-700)" }}
                   >
-                    🔗 Cotización #{cotizacionVinculada.numero} ·{" "}
+                    Cotización #{cotizacionVinculada.numero} ·{" "}
                     {formatCOP(cotizacionVinculada.total)}
                   </p>
                   <p
-                    className="text-xs mt-1"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
+                    className="mt-1 text-xs leading-[1.5]"
+                    style={{ color: "var(--n-500)" }}
                   >
                     {cotizacionVinculada.items.length} ítem(s) cotizado(s).
                     Quedará vinculada al guardar la OT. Los repuestos se agregan
@@ -220,25 +246,24 @@ export default function OrdenNueva() {
                 <button
                   type="button"
                   onClick={desvincularCotizacion}
-                  className="text-xs px-3 py-2 rounded-lg border cursor-pointer min-h-[44px]"
+                  className="inline-flex items-center gap-1.5 rounded-lg border px-3 text-xs font-medium"
                   style={{
-                    borderColor: "hsl(var(--destructive))",
-                    color: "hsl(var(--destructive))",
+                    height: 48,
+                    borderColor: "var(--dang-border)",
+                    color: "var(--dang-700)",
                   }}
                 >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
                   Desvincular
                 </button>
               </div>
               {cotizacionVinculada.items.length > 0 && (
                 <ul
-                  className="text-xs space-y-0.5 mt-2 pt-2 border-t"
-                  style={{ borderColor: "hsl(var(--border))" }}
+                  className="mt-2 space-y-0.5 border-t pt-2 text-xs"
+                  style={{ borderColor: "var(--n-150)" }}
                 >
                   {cotizacionVinculada.items.map((it, i) => (
-                    <li
-                      key={i}
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
+                    <li key={i} style={{ color: "var(--n-500)" }}>
                       • {it.producto?.nombre ?? "—"} (
                       {it.producto?.referencia ?? "?"}) × {it.cantidad} ={" "}
                       {formatCOP(it.subtotal)}
@@ -252,22 +277,31 @@ export default function OrdenNueva() {
               type="button"
               onClick={() => setShowSelector(true)}
               disabled={cargandoCotizacion}
-              className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[48px] disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border px-4 text-sm font-medium disabled:opacity-50"
               style={{
-                borderColor: "hsl(var(--primary))",
-                color: "hsl(var(--primary))",
-                backgroundColor: "hsl(var(--card))",
+                height: 48,
+                borderColor: "var(--p-200)",
+                color: "var(--p-700)",
+                backgroundColor: "var(--n-0)",
               }}
             >
+              <Link2 className="h-4 w-4" strokeWidth={1.7} />
               {cargandoCotizacion
                 ? "Cargando cotización…"
-                : "🔗 Asociar cotización existente (opcional)"}
+                : "Asociar cotización existente (opcional)"}
             </button>
           )}
-        </Section>
+        </div>
 
-        <Section titulo="Cliente">
-          <div className="grid sm:grid-cols-2 gap-3">
+        {/* Cliente */}
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico">
+              <User className="h-3.5 w-3.5" strokeWidth={1.7} />
+            </div>
+            <div className="ib-title">Cliente</div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Nombre *">
               <Input
                 value={clienteNombre}
@@ -284,10 +318,17 @@ export default function OrdenNueva() {
               />
             </Field>
           </div>
-        </Section>
+        </div>
 
-        <Section titulo="Equipo">
-          <div className="grid sm:grid-cols-2 gap-3">
+        {/* Equipo */}
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico">
+              <Wrench className="h-3.5 w-3.5" strokeWidth={1.7} />
+            </div>
+            <div className="ib-title">Equipo</div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Descripción *">
               <Input
                 value={equipoDescripcion}
@@ -304,27 +345,36 @@ export default function OrdenNueva() {
               />
             </Field>
           </div>
-          <Field label="Diagnóstico inicial">
-            <textarea
-              value={diagnostico}
-              onChange={(e) => setDiagnostico(e.target.value)}
-              rows={3}
-              className="w-full px-3 py-2 rounded-lg border text-sm"
-              style={textareaStyle}
-              placeholder="Descripción del problema reportado por el cliente"
-            />
-          </Field>
-        </Section>
+          <div className="mt-3">
+            <Field label="Diagnóstico inicial">
+              <textarea
+                value={diagnostico}
+                onChange={(e) => setDiagnostico(e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={fieldStyle}
+                placeholder="Descripción del problema reportado por el cliente"
+              />
+            </Field>
+          </div>
+        </div>
 
-        <Section titulo="Asignación">
-          <div className="grid sm:grid-cols-2 gap-3">
+        {/* Asignación */}
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico">
+              <ClipboardList className="h-3.5 w-3.5" strokeWidth={1.7} />
+            </div>
+            <div className="ib-title">Asignación</div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Técnico *">
               <select
                 value={tecnicoId}
                 onChange={(e) => setTecnicoId(e.target.value)}
                 required
-                className="w-full h-12 px-3 rounded-lg border text-sm"
-                style={textareaStyle}
+                className="w-full rounded-lg border px-3 text-sm outline-none"
+                style={{ ...fieldStyle, height: 48 }}
               >
                 <option value="">— Seleccionar —</option>
                 {tecnicos.map((t) => (
@@ -344,27 +394,30 @@ export default function OrdenNueva() {
               />
             </Field>
           </div>
-          <Field label="Observaciones">
-            <textarea
-              value={observaciones}
-              onChange={(e) => setObservaciones(e.target.value)}
-              rows={2}
-              className="w-full px-3 py-2 rounded-lg border text-sm"
-              style={textareaStyle}
-            />
-          </Field>
-        </Section>
+          <div className="mt-3">
+            <Field label="Observaciones">
+              <textarea
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                rows={2}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={fieldStyle}
+              />
+            </Field>
+          </div>
+        </div>
 
-        <div className="flex gap-2 pt-2">
+        <div className="flex gap-2.5">
           <button
             type="button"
             onClick={() => navigate("/ops/ordenes")}
             disabled={saving}
-            className="flex-1 h-12 rounded-lg text-sm font-medium border cursor-pointer disabled:opacity-50"
+            className="flex-1 rounded-lg border text-sm font-medium disabled:opacity-50"
             style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-              backgroundColor: "transparent",
+              height: 48,
+              borderColor: "var(--n-200)",
+              color: "var(--n-700)",
+              backgroundColor: "var(--n-0)",
             }}
           >
             Cancelar
@@ -372,11 +425,15 @@ export default function OrdenNueva() {
           <button
             type="submit"
             disabled={saving}
-            className="flex-1 h-12 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-50"
-            style={{
-              backgroundColor: "hsl(var(--primary))",
-              color: "hsl(var(--primary-foreground))",
+            className="flex-1 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+            style={{ height: 48, backgroundColor: "var(--p-600)" }}
+            onMouseEnter={(e) => {
+              if (!saving)
+                e.currentTarget.style.backgroundColor = "var(--p-700)";
             }}
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.backgroundColor = "var(--p-600)")
+            }
           >
             {saving ? "Creando…" : "Crear orden"}
           </button>
@@ -394,32 +451,18 @@ export default function OrdenNueva() {
   );
 }
 
-const textareaStyle = {
-  backgroundColor: "hsl(var(--card))",
-  borderColor: "hsl(var(--border))",
-  color: "hsl(var(--foreground))",
+const fieldStyle = {
+  backgroundColor: "var(--n-0)",
+  borderColor: "var(--n-200)",
+  color: "var(--n-950)",
 };
-
-function Section({ titulo, children }) {
-  return (
-    <div className="space-y-3">
-      <h3
-        className="text-xs font-semibold uppercase tracking-wide"
-        style={{ color: "hsl(var(--muted-foreground))" }}
-      >
-        {titulo}
-      </h3>
-      <div className="space-y-3">{children}</div>
-    </div>
-  );
-}
 
 function Field({ label, children }) {
   return (
     <label className="block">
       <span
-        className="block text-xs font-medium mb-1.5"
-        style={{ color: "hsl(var(--muted-foreground))" }}
+        className="mb-1.5 block font-mono text-[10px] font-medium uppercase tracking-[0.08em]"
+        style={{ color: "var(--n-500)" }}
       >
         {label}
       </span>
@@ -434,8 +477,8 @@ function Input({ value, onChange, type = "text", ...rest }) {
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full h-12 px-3 rounded-lg border text-sm"
-      style={textareaStyle}
+      className="w-full rounded-lg border px-3 text-sm outline-none"
+      style={{ ...fieldStyle, height: 48 }}
       {...rest}
     />
   );

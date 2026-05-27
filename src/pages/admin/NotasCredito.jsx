@@ -1,8 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Wallet,
+  FileText,
+  ExternalLink,
+  Receipt,
+  CheckCircle2,
+} from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
 
 /**
  * Listado de notas crédito de proveedor — F13.
@@ -45,42 +51,51 @@ export default function NotasCredito() {
     (acc, n) => acc + Number(n.saldo_restante),
     0,
   );
+  const totalMonto = notas.reduce((acc, n) => acc + Number(n.monto), 0);
+  const conSaldo = notas.filter((n) => Number(n.saldo_restante) > 0).length;
+  const agotadas = notas.filter((n) => Number(n.saldo_restante) === 0).length;
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Notas crédito de proveedores"
-        description="Saldos a favor pendientes de aplicar en próximas compras."
-      />
-
-      <div className="flex items-center gap-3 flex-wrap">
+    <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7 animate-fade-in">
+      {/* Page head */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p
+            className="m-0 mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Admin · Notas crédito
+          </p>
+          <h1
+            className="m-0 text-[24px] font-semibold leading-tight tracking-[-0.018em]"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            Notas crédito de proveedores
+          </h1>
+          <p
+            className="mt-1 text-[13px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Saldos a favor pendientes de aplicar en próximas compras.
+          </p>
+        </div>
         <button
           onClick={() => setFiltroSoloActivas((v) => !v)}
-          className="h-9 px-3 rounded-lg text-sm font-medium border cursor-pointer"
+          className="inline-flex h-12 items-center gap-1.5 rounded-md border px-4 text-[12.5px] font-medium transition-colors cursor-pointer"
           style={{
             backgroundColor: filtroSoloActivas
               ? "hsl(var(--primary))"
               : "hsl(var(--card))",
             color: filtroSoloActivas
               ? "hsl(var(--primary-foreground))"
-              : "hsl(var(--foreground))",
-            borderColor: "hsl(var(--border))",
+              : "hsl(var(--muted-foreground))",
+            borderColor: filtroSoloActivas
+              ? "hsl(var(--primary))"
+              : "hsl(var(--border))",
           }}
         >
           {filtroSoloActivas ? "Solo con saldo" : "Todas (con/sin saldo)"}
         </button>
-        <p
-          className="text-sm"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          Total saldo:{" "}
-          <strong style={{ color: "hsl(var(--success))" }}>
-            {formatCOP(totalSaldo)}
-          </strong>
-        </p>
       </div>
 
       {errorMsg && (
@@ -97,98 +112,313 @@ export default function NotasCredito() {
         </div>
       )}
 
-      {loading ? (
-        <div
-          className="h-12 rounded-lg animate-pulse"
-          style={{ backgroundColor: "hsl(var(--muted) / 0.4)" }}
+      {/* KPI cards (estilo cockpit admin) */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi
+          label="Saldo disponible total"
+          value={loading ? "…" : formatCOP(totalSaldo)}
+          sub="A favor con proveedores"
+          token="--success"
+          icon={Wallet}
         />
+        <Kpi
+          label="Notas con saldo activo"
+          value={loading ? "…" : conSaldo}
+          sub="Aplicables en compras"
+          icon={FileText}
+        />
+        <Kpi
+          label="Notas agotadas"
+          value={loading ? "…" : agotadas}
+          sub="Saldo consumido"
+          token={agotadas > 0 ? "--info" : "--muted-foreground"}
+          icon={CheckCircle2}
+        />
+        <Kpi
+          label="Monto emitido (vista)"
+          value={loading ? "…" : formatCOP(totalMonto)}
+          sub={`${notas.length} nota(s)`}
+          icon={Receipt}
+        />
+      </div>
+
+      {loading ? (
+        <SkeletonList />
       ) : notas.length === 0 ? (
-        <p
-          className="text-center py-8 text-sm"
+        <Empty icon="🧾">
+          Sin notas crédito{filtroSoloActivas ? " con saldo activo" : ""}.
+        </Empty>
+      ) : (
+        <section
+          className="overflow-hidden rounded-[10px] border"
+          style={{
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+          }}
+        >
+          {/* Desktop tabla */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr
+                  className="text-left"
+                  style={{
+                    backgroundColor: "hsl(var(--muted) / 0.3)",
+                    borderBottom: "1px solid hsl(var(--border))",
+                  }}
+                >
+                  {["NC", "Proveedor", "Fecha", "Monto", "Saldo", ""].map(
+                    (c, i) => (
+                      <th
+                        key={c || i}
+                        className={`px-3 py-2.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.06em] ${
+                          i === 3 || i === 4 ? "text-right" : "text-left"
+                        }`}
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        {c}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {notas.map((n) => {
+                  const tieneSaldo = Number(n.saldo_restante) > 0;
+                  return (
+                    <tr
+                      key={n.id}
+                      className="border-t"
+                      style={{ borderColor: "hsl(var(--border) / 0.6)" }}
+                    >
+                      <td
+                        className="px-3 py-3 font-mono text-[12px] font-semibold"
+                        style={{ color: "hsl(var(--primary))" }}
+                      >
+                        NC #{n.numero}
+                      </td>
+                      <td className="px-3 py-3">
+                        <p
+                          className="text-[13px] font-medium"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
+                          {n.proveedor}
+                        </p>
+                        {n.observaciones && (
+                          <p
+                            className="text-[11px] italic"
+                            style={{ color: "hsl(var(--muted-foreground))" }}
+                          >
+                            {n.observaciones}
+                          </p>
+                        )}
+                      </td>
+                      <td
+                        className="px-3 py-3 font-mono text-[11.5px]"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        {formatDate(n.fecha)}
+                      </td>
+                      <td
+                        className="px-3 py-3 text-right font-mono text-[12px] tabular-nums"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        {formatCOP(n.monto)}
+                      </td>
+                      <td
+                        className="px-3 py-3 text-right font-mono text-[13px] font-bold tabular-nums"
+                        style={{
+                          color: tieneSaldo
+                            ? "hsl(var(--success))"
+                            : "hsl(var(--muted-foreground))",
+                        }}
+                      >
+                        {formatCOP(n.saldo_restante)}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        {n.garantia_compra_id && (
+                          <button
+                            onClick={() =>
+                              navigate(
+                                `/ops/garantias/compra/${n.garantia_compra_id}`,
+                              )
+                            }
+                            className="inline-flex items-center gap-1 text-[12px] font-medium cursor-pointer hover:underline"
+                            style={{ color: "hsl(var(--primary))" }}
+                          >
+                            Garantía
+                            <ExternalLink
+                              className="h-3 w-3"
+                              strokeWidth={1.5}
+                            />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <ul className="divide-y md:hidden" role="list">
+            {notas.map((n) => {
+              const tieneSaldo = Number(n.saldo_restante) > 0;
+              return (
+                <li
+                  key={n.id}
+                  className="px-4 py-3.5"
+                  style={{ borderColor: "hsl(var(--border))" }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p
+                        className="font-mono text-sm font-bold"
+                        style={{ color: "hsl(var(--primary))" }}
+                      >
+                        NC #{n.numero}
+                      </p>
+                      <p
+                        className="text-sm font-medium"
+                        style={{ color: "hsl(var(--foreground))" }}
+                      >
+                        {n.proveedor}
+                      </p>
+                      <p
+                        className="text-xs"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        {formatDate(n.fecha)}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p
+                        className="text-xs"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        Monto: {formatCOP(n.monto)}
+                      </p>
+                      <p
+                        className="font-mono text-base font-bold tabular-nums"
+                        style={{
+                          color: tieneSaldo
+                            ? "hsl(var(--success))"
+                            : "hsl(var(--muted-foreground))",
+                        }}
+                      >
+                        {formatCOP(n.saldo_restante)}
+                      </p>
+                    </div>
+                  </div>
+                  {n.observaciones && (
+                    <p
+                      className="mt-1 text-xs italic"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      {n.observaciones}
+                    </p>
+                  )}
+                  {n.garantia_compra_id && (
+                    <button
+                      onClick={() =>
+                        navigate(
+                          `/ops/garantias/compra/${n.garantia_compra_id}`,
+                        )
+                      }
+                      className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium cursor-pointer"
+                      style={{
+                        borderColor: "hsl(var(--border))",
+                        color: "hsl(var(--primary))",
+                      }}
+                    >
+                      Ver garantía origen
+                      <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          <footer
+            className="border-t px-[18px] py-3 font-mono text-[10.5px] tracking-[0.06em]"
+            style={{
+              borderColor: "hsl(var(--border))",
+              backgroundColor: "hsl(var(--muted) / 0.3)",
+              color: "hsl(var(--muted-foreground))",
+            }}
+          >
+            {notas.length} nota(s) · saldo total{" "}
+            <span style={{ color: "hsl(var(--success))" }}>
+              {formatCOP(totalSaldo)}
+            </span>
+          </footer>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/* ── KPI card (estilo cockpit admin) ──────────────────────────────────── */
+function Kpi({ label, value, sub, token, icon: Icon }) {
+  return (
+    <div
+      className="rounded-[10px] border p-4"
+      style={{
+        backgroundColor: "hsl(var(--card))",
+        borderColor: "hsl(var(--border))",
+      }}
+    >
+      <div
+        className="flex items-center gap-1.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
+        {Icon && <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />}
+        {label}
+      </div>
+      <div
+        className="mt-2 truncate font-mono text-[20px] font-semibold leading-tight tracking-[-0.02em] tabular-nums"
+        style={{
+          color: token ? `hsl(var(${token}))` : "hsl(var(--foreground))",
+        }}
+      >
+        {value}
+      </div>
+      {sub && (
+        <div
+          className="mt-0.5 text-[11px]"
           style={{ color: "hsl(var(--muted-foreground))" }}
         >
-          Sin notas crédito{filtroSoloActivas ? " con saldo activo" : ""}.
-        </p>
-      ) : (
-        <ul className="space-y-1.5">
-          {notas.map((n) => (
-            <li
-              key={n.id}
-              className="rounded-lg border px-3 py-2.5"
-              style={{
-                backgroundColor: "hsl(var(--card))",
-                borderColor: "hsl(var(--border))",
-              }}
-            >
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="min-w-0">
-                  <p
-                    className="text-sm font-bold font-mono"
-                    style={{ color: "hsl(var(--primary))" }}
-                  >
-                    NC #{n.numero}
-                  </p>
-                  <p
-                    className="text-sm font-medium"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {n.proveedor}
-                  </p>
-                  <p
-                    className="text-xs"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {formatDate(n.fecha)}
-                    {n.garantia_compra_id && (
-                      <>
-                        {" · "}
-                        <button
-                          onClick={() =>
-                            navigate(
-                              `/ops/garantias/compra/${n.garantia_compra_id}`,
-                            )
-                          }
-                          className="underline cursor-pointer"
-                          style={{ color: "hsl(var(--primary))" }}
-                        >
-                          ver garantía origen
-                        </button>
-                      </>
-                    )}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p
-                    className="text-xs"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    Monto: {formatCOP(n.monto)}
-                  </p>
-                  <p
-                    className="text-base font-bold"
-                    style={{
-                      color:
-                        Number(n.saldo_restante) > 0
-                          ? "hsl(var(--success))"
-                          : "hsl(var(--muted-foreground))",
-                    }}
-                  >
-                    Saldo: {formatCOP(n.saldo_restante)}
-                  </p>
-                </div>
-              </div>
-              {n.observaciones && (
-                <p
-                  className="text-xs mt-1"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  {n.observaciones}
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
+          {sub}
+        </div>
       )}
+    </div>
+  );
+}
+
+function Empty({ icon, children }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="mb-3 text-5xl">{icon}</div>
+      <p style={{ color: "hsl(var(--muted-foreground))" }}>{children}</p>
+    </div>
+  );
+}
+
+function SkeletonList() {
+  return (
+    <div className="space-y-2">
+      {[...Array(5)].map((_, i) => (
+        <div
+          key={i}
+          className="h-16 animate-pulse rounded-xl border"
+          style={{
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+          }}
+        />
+      ))}
     </div>
   );
 }

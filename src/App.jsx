@@ -11,6 +11,7 @@ import RoleGuard from "./components/layout/RoleGuard";
 import AppShell from "./components/layout/AppShell";
 import AdminShell from "./components/layout/AdminShell";
 import Inventario from "./pages/ops/Inventario";
+import Productos from "./pages/ops/Productos";
 import ProductoDetalle from "./pages/ops/ProductoDetalle";
 import ProductoNuevo from "./pages/ops/ProductoNuevo";
 import VentaHistorial from "./pages/ops/VentaHistorial";
@@ -381,7 +382,14 @@ export default function App() {
               </RoleGuard>
             }
           />
-          <Route path="productos" element={<Placeholder name="Productos" />} />
+          <Route
+            path="productos"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
+                <Productos />
+              </RoleGuard>
+            }
+          />
         </Route>
 
         {/* ── Panel Admin ── */}
