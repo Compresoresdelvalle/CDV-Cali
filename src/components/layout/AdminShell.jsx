@@ -2,6 +2,7 @@ import { Outlet, Link, NavLink, useLocation } from "react-router-dom";
 import { ArrowLeftCircle, Bell, LogOut } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import ThemeToggle from "../ui/ThemeToggle";
+import Logo from "../ui/Logo";
 import {
   SECCIONES_ADMIN,
   MODULOS_ADMIN,
@@ -35,7 +36,7 @@ function SidebarAdmin() {
   return (
     <aside className="chv-sidebar-admin hidden lg:flex w-[240px] shrink-0 flex-col">
       <div className="flex h-14 items-center gap-2.5 border-b border-white/[0.04] px-4">
-        <span className="dot-pulse h-2 w-2 rounded-full bg-[--info-500]" />
+        <Logo className="h-7 w-7" />
         <div className="font-mono text-[11px] uppercase tracking-[0.1em] text-white/80">
           Panel administrativo
         </div>
@@ -128,7 +129,7 @@ function MobileHeaderAdmin({ perfil, initials, onLogout }) {
   return (
     <header className="chv-topbar chv-topbar-admin sticky top-0 z-30 flex lg:hidden h-14 items-center justify-between px-4">
       <div className="flex items-center gap-2.5">
-        <span className="dot-pulse h-2 w-2 rounded-full bg-[--info-500]" />
+        <Logo className="h-7 w-7" />
         <span className="font-mono text-[12px] font-semibold uppercase tracking-[0.1em] text-white">
           Panel Admin
         </span>
