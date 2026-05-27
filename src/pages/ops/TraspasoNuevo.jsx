@@ -5,9 +5,8 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { sanitizeSearch, safeError } from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
-import { SEDE_LABELS, sedeLabel } from "../../lib/traspasos-ui";
-
-const SEDES = Object.entries(SEDE_LABELS).map(([id, label]) => ({ id, label }));
+import { sedeLabel } from "../../lib/traspasos-ui";
+import { useSedes } from "../../hooks/useSedes";
 
 const TIPOS = [
   { v: "normal", label: "Normal" },
@@ -22,6 +21,9 @@ export default function TraspasoNuevo() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
   const esAdmin = perfil?.rol === "Admin";
+
+  // Sedes activas desde la BD (única fuente de verdad)
+  const { sedes: SEDES } = useSedes();
 
   // Sede origen: Admin puede elegir, el resto usa su sede
   const [sedeOrigen, setSedeOrigen] = useState(
@@ -236,7 +238,7 @@ export default function TraspasoNuevo() {
                     <option value="">Seleccionar sede…</option>
                     {SEDES.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.label}
+                        {s.nombre}
                       </option>
                     ))}
                   </select>
@@ -257,7 +259,7 @@ export default function TraspasoNuevo() {
                   <option value="">Seleccionar sede…</option>
                   {sedesDestino.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.label}
+                      {s.nombre}
                     </option>
                   ))}
                 </select>

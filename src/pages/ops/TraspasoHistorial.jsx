@@ -13,7 +13,6 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate } from "../../lib/utils";
 import {
-  SEDE_LABELS,
   estadoToKanban,
   traspasoBadge,
   KANBAN_COLS,
@@ -24,13 +23,9 @@ import {
   Pill,
   TipoBadge,
 } from "../../components/traspasos/TraspasoBits";
+import { useSedes } from "../../hooks/useSedes";
 
 const PAGE_SIZE = 60;
-
-const SEDE_OPTS = Object.entries(SEDE_LABELS).map(([id, label]) => ({
-  id,
-  label,
-}));
 
 /* Estado real → {pillKind, label} de Lovable para el matiz dentro de la columna. */
 const ESTADO_PILL_KIND = {
@@ -71,6 +66,9 @@ export default function TraspasoHistorial() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
   const esAdmin = perfil?.rol === "Admin";
+
+  // Sedes activas desde la BD (única fuente de verdad)
+  const { sedes: SEDE_OPTS } = useSedes();
 
   const [vista, setVista] = useState("board");
   const [sedeFiltro, setSedeFiltro] = useState("ALL");
@@ -239,7 +237,7 @@ export default function TraspasoHistorial() {
             <option value="ALL">Todas las sedes</option>
             {SEDE_OPTS.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.label}
+                {s.nombre}
               </option>
             ))}
           </select>
