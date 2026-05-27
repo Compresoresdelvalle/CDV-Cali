@@ -7,9 +7,9 @@ import { useAuthStore } from "../../stores/authStore";
 import StatusBadge from "../../components/ui/StatusBadge";
 import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
 import QRScanner from "../../components/forms/QRScanner";
-import { SEDES } from "../../lib/constants";
 import { formatCOP } from "../../lib/utils";
 import { categoriaClass, estadoStockClass } from "../../lib/inventario-ui";
+import { useSedes } from "../../hooks/useSedes";
 
 const ESTADOS = [
   { v: "OK", label: "Disponible", dot: "s" },
@@ -23,16 +23,11 @@ const TIPOS = [
   { v: "segunda_mano", label: "Segunda mano" },
 ];
 
-const SEDE_LABELS = {
-  [SEDES.BOD_PRINCIPAL]: "Bodega Principal",
-  [SEDES.ALM_01]: "Almacén 01",
-  [SEDES.ALM_02]: "Almacén 02",
-  [SEDES.ALM_03]: "Almacén 03",
-};
-
 export default function Inventario() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
+  // Sedes activas desde la BD (única fuente de verdad)
+  const { sedes } = useSedes();
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const {
@@ -84,7 +79,9 @@ export default function Inventario() {
   };
 
   const esVendedor = perfil?.rol === "Vendedor";
-  const sedeLabel = filtroSede ? SEDE_LABELS[filtroSede] : "Todas las sedes";
+  const sedeLabel = filtroSede
+    ? (sedes.find((s) => s.id === filtroSede)?.nombre ?? filtroSede)
+    : "Todas las sedes";
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-[18px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
@@ -173,6 +170,7 @@ export default function Inventario() {
         {/* Panel de filtros */}
         <FiltrosPanel
           esVendedor={esVendedor}
+          sedes={sedes}
           filtroSede={filtroSede}
           filtroEstado={filtroEstado}
           filtroTipo={filtroTipo}
@@ -344,6 +342,7 @@ function Th({ children, width, right }) {
 
 function FiltrosPanel({
   esVendedor,
+  sedes,
   filtroSede,
   filtroEstado,
   filtroTipo,
@@ -368,14 +367,14 @@ function FiltrosPanel({
             <Check on={!filtroSede} />
             Todas las sedes
           </FilterRow>
-          {Object.entries(SEDE_LABELS).map(([id, label]) => (
+          {sedes.map((s) => (
             <FilterRow
-              key={id}
-              on={filtroSede === id}
-              onClick={() => setFiltros({ filtroSede: id })}
+              key={s.id}
+              on={filtroSede === s.id}
+              onClick={() => setFiltros({ filtroSede: s.id })}
             >
-              <Check on={filtroSede === id} />
-              {label}
+              <Check on={filtroSede === s.id} />
+              {s.nombre}
             </FilterRow>
           ))}
         </FilterBlock>
