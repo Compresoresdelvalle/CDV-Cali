@@ -16,12 +16,12 @@ export const ROLES = {
 
 // Mapa de nombre → email en Supabase Auth
 export const EMAIL_MAP = {
-  "Carlos Dueño": "carlos@compresores.local",
-  "Pedro Bodeguero": "pedro@compresores.local",
-  "María Vendedora": "maria@compresores.local",
-  "Juan Vendedor": "juan@compresores.local",
-  "Ana Vendedora": "ana@compresores.local",
-  "Luis Técnico": "luis@compresores.local",
+  Sofía: "compresoresdelvalle1@hotmail.com",
+  Deyanira: "compresoresdelvallesas@gmail.com",
+  Bladimir: "compresoresdelvallesas@hotmail.com",
+  Edna: "compresorescv@hotmail.com",
+  Bodega: "ventascompresoresdelvalle@hotmail.com",
+  Admin: "compresorescvsas@gmail.com",
 };
 
 // Módulos visibles por rol (orden importa para el menú)
