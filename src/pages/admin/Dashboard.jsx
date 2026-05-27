@@ -1,14 +1,44 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
+import {
+  Triangle,
+  Clock,
+  ArrowRight,
+  RefreshCw,
+  Package,
+  Wrench,
+  FileText,
+} from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, formatDate, safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
+import { formatCOP, safeError } from "../../lib/utils";
+import StatusBadge from "../../components/ui/StatusBadge";
+import {
+  periodoVentas,
+  PERIODOS,
+  formatHora,
+  severidadStock,
+  antiguedadOT,
+  diasRestantesCotizacion,
+  vencimientoCotizacion,
+  COT_DIAS_POR_VENCER,
+} from "../../lib/dashboard-admin-ui";
 
+/* Estados de OT considerados "en proceso" para el bloque estratégico. */
+const OT_EN_PROCESO = ["en_proceso", "esperando_repuesto"];
+/* Estados de cotización aún vigentes (susceptibles de vencer). */
+const COT_VIGENTES = ["enviada", "aprobada", "borrador"];
+/* Cuántas filas de detalle se muestran por bloque estratégico. */
+const FILAS_BLOQUE = 3;
+
+/* ── Dashboard Admin ──────────────────────────────────────────────────── */
 export default function Dashboard() {
   const navigate = useNavigate();
   const [kpis, setKpis] = useState(null);
+  // Detalle de los bloques estratégicos (SELECT de solo lectura, presentación).
+  const [bloques, setBloques] = useState({ alertas: [], ot: [], cotz: [] });
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [periodo, setPeriodo] = useState("Hoy");
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -40,21 +70,92 @@ export default function Dashboard() {
       if (!mountedRef.current) return;
       setErrorMsg(safeError(err, "Error al cargar dashboard"));
     } finally {
-      clearTimeout(timer); // evita un timer colgado si la RPC resolvió antes
+      clearTimeout(timer);
       if (mountedRef.current) setLoading(false);
     }
   };
 
-  // Refs para evitar closures stale en setInterval
+  /**
+   * Detalle de los bloques estratégicos 2x2 — SELECT de SOLO LECTURA sobre
+   * tablas que ya existen (igual que otras páginas admin). NO toca escrituras
+   * ni `fn_dashboard_kpis`. Si una consulta falla, su bloque queda vacío sin
+   * romper el dashboard (los KPIs principales son la fuente autoritativa).
+   */
+  const cargarBloques = async () => {
+    try {
+      const [alertasRes, otRes, cotzRes] = await Promise.all([
+        supabase
+          .from("inventario")
+          .select(
+            `id, cantidad, estado_stock,
+             sede:sede_id(nombre),
+             producto:producto_id(referencia, nombre, stock_minimo, categoria)`,
+          )
+          .in("estado_stock", ["Agotado", "Bajo"])
+          .order("estado_stock", { ascending: false })
+          .limit(FILAS_BLOQUE),
+        supabase
+          .from("ordenes_servicio")
+          .select(
+            `id, numero, fecha, cliente_nombre, equipo_descripcion, estado,
+             tecnico:tecnico_id(nombre)`,
+          )
+          .in("estado", OT_EN_PROCESO)
+          .order("fecha", { ascending: true })
+          .limit(FILAS_BLOQUE),
+        supabase
+          .from("cotizaciones")
+          .select(
+            `id, numero, fecha, cliente_nombre, estado, total, vigencia_dias,
+             vendedor:vendedor_id(nombre)`,
+          )
+          .in("estado", COT_VIGENTES)
+          .order("fecha", { ascending: true })
+          .limit(40),
+      ]);
+      if (!mountedRef.current) return;
+
+      // Cotizaciones por vencer: filtra a las que vencen dentro del umbral.
+      const cotzPorVencer = (cotzRes.data ?? [])
+        .map((c) => ({
+          ...c,
+          _dias: diasRestantesCotizacion(c.fecha, c.vigencia_dias),
+        }))
+        .filter((c) => c._dias != null && c._dias <= COT_DIAS_POR_VENCER)
+        .sort((a, b) => a._dias - b._dias)
+        .slice(0, FILAS_BLOQUE);
+
+      setBloques({
+        alertas: alertasRes.error ? [] : (alertasRes.data ?? []),
+        ot: otRes.error ? [] : (otRes.data ?? []),
+        cotz: cotzPorVencer,
+      });
+    } catch {
+      // Fallo silencioso: los bloques quedan en estado vacío honesto.
+      if (mountedRef.current) setBloques({ alertas: [], ot: [], cotz: [] });
+    }
+  };
+
   const cargarRef = useRef(cargar);
   cargarRef.current = cargar;
+  const cargarBloquesRef = useRef(cargarBloques);
+  cargarBloquesRef.current = cargarBloques;
+
+  const refrescar = () => {
+    cargarRef.current();
+    cargarBloquesRef.current();
+  };
 
   useEffect(() => {
     cargarRef.current();
+    cargarBloquesRef.current();
     let interval = null;
     const start = () => {
       if (interval) return;
-      interval = setInterval(() => cargarRef.current(), 60_000);
+      interval = setInterval(() => {
+        cargarRef.current();
+        cargarBloquesRef.current();
+      }, 60_000);
     };
     const stop = () => {
       if (interval) {
@@ -62,11 +163,11 @@ export default function Dashboard() {
         interval = null;
       }
     };
-    // Solo refrescar si la pestaña está visible (ahorra recursos)
     const onVisibility = () => {
       if (document.hidden) stop();
       else {
         cargarRef.current();
+        cargarBloquesRef.current();
         start();
       }
     };
@@ -80,24 +181,37 @@ export default function Dashboard() {
 
   if (loading && !kpis) {
     return (
-      <div className="p-4 sm:p-6 space-y-4">
-        <PageHeader title="Dashboard" description="Cargando…" />
-        <SkeletonGrid />
+      <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7">
+        <PageHead
+          onRefresh={refrescar}
+          periodo={periodo}
+          setPeriodo={setPeriodo}
+        />
+        <SkeletonStrip />
       </div>
     );
   }
 
   if (errorMsg && !kpis) {
     return (
-      <div className="p-4 sm:p-6 space-y-4">
-        <PageHeader title="Dashboard" />
-        <ErrorBox msg={errorMsg} onRetry={cargar} />
+      <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7">
+        <PageHead
+          onRefresh={refrescar}
+          periodo={periodo}
+          setPeriodo={setPeriodo}
+        />
+        <ErrorBox msg={errorMsg} onRetry={refrescar} />
       </div>
     );
   }
 
   const k = kpis ?? {};
-  // Solo calcular delta si ayer hubo ventas (evita Infinity / NaN)
+
+  const ingresosProductos = Number(k.ventas_mes ?? 0);
+  const ingresosServicios = Number(k.ingresos_servicios_mes ?? 0);
+  const egresosMes = Number(k.compras_mes ?? 0);
+  const margenMes = ingresosProductos + ingresosServicios - egresosMes;
+
   const ventasDelta =
     Number(k.ventas_ayer) > 0
       ? ((Number(k.ventas_hoy) - Number(k.ventas_ayer)) /
@@ -105,128 +219,318 @@ export default function Dashboard() {
         100
       : null;
 
-  // Ingresos por categoría (mes en curso) — base caja.
-  const ingresosProductos = Number(k.ventas_mes ?? 0);
-  const ingresosServicios = Number(k.ingresos_servicios_mes ?? 0);
-  const egresosMes = Number(k.compras_mes ?? 0);
-  const margenMes = ingresosProductos + ingresosServicios - egresosMes;
+  const ventasPeriodo = periodoVentas(k, periodo);
+  const alertas = k.alertas ?? [];
+  const actividad = k.actividad_reciente ?? [];
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-5 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Dashboard Admin"
-        description="Métricas en tiempo real · refresco automático cada 60s"
-        actions={
-          <button
-            onClick={cargar}
-            className="h-9 px-4 rounded-lg text-sm font-medium border cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-            }}
-          >
-            ↻ Refrescar
-          </button>
-        }
+    <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7 animate-fade-in">
+      <PageHead
+        onRefresh={refrescar}
+        periodo={periodo}
+        setPeriodo={setPeriodo}
       />
 
-      {errorMsg && <ErrorBox msg={errorMsg} onRetry={cargar} small />}
+      {errorMsg && <ErrorBox msg={errorMsg} onRetry={refrescar} small />}
 
-      {/* KPIs principales */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        <KpiCard
-          label="Ventas hoy"
-          value={formatCOP(k.ventas_hoy ?? 0)}
-          delta={ventasDelta}
-          highlight
+      {/* KPI strip */}
+      <div
+        className="grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:grid-cols-4 md:gap-y-0"
+        style={{ borderColor: "hsl(var(--border))" }}
+      >
+        <Kpi
+          label={`Ventas · ${periodo}`}
+          value={formatCOP(ventasPeriodo)}
+          sub={
+            ventasDelta !== null ? (
+              <DeltaPill delta={ventasDelta} />
+            ) : (
+              <span style={{ color: "hsl(var(--muted-foreground))" }}>
+                sin referencia
+              </span>
+            )
+          }
         />
-        <KpiCard label="Esta semana" value={formatCOP(k.ventas_semana ?? 0)} />
-        <KpiCard label="Este mes" value={formatCOP(k.ventas_mes ?? 0)} />
-        <KpiCard
-          label="Ticket promedio"
-          value={formatCOP(k.ticket_promedio_mes ?? 0)}
+        <Kpi
+          label="Egresos del mes"
+          value={formatCOP(egresosMes)}
+          sub={
+            <span style={{ color: "hsl(var(--muted-foreground))" }}>
+              compras del mes
+            </span>
+          }
         />
-        <KpiCard
-          label="Compras del mes"
-          value={formatCOP(k.compras_mes ?? 0)}
+        <Kpi
+          label="Margen del mes"
+          value={formatCOP(margenMes)}
+          danger={margenMes < 0}
+          sub={
+            <span style={{ color: "hsl(var(--muted-foreground))" }}>
+              prod. + serv. − egresos
+            </span>
+          }
         />
-        <KpiCard
+        <Kpi
+          last
           label="Valor inventario"
           value={formatCOP(k.valor_inventario ?? 0)}
-        />
-        <KpiCard
-          label="Productos activos"
-          value={(k.total_productos_activos ?? 0).toLocaleString("es-CO")}
-        />
-        <KpiCard
-          label="Alertas stock"
-          value={k.alertas_count ?? 0}
-          danger={k.alertas_count > 0}
-          onClick={() => navigate("/admin/alertas")}
+          sub={
+            <span style={{ color: "hsl(var(--muted-foreground))" }}>
+              {(k.total_productos_activos ?? 0).toLocaleString("es-CO")}{" "}
+              productos
+            </span>
+          }
         />
       </div>
 
-      {/* Ingresos por categoría */}
-      <div>
-        <p
-          className="text-xs font-semibold uppercase tracking-wide mb-2"
-          style={{ color: "hsl(var(--muted-foreground))" }}
+      {/* Atención requerida (alertas de stock reales) */}
+      <SectionCard>
+        <header
+          className="flex items-center justify-between border-b px-[18px] py-3"
+          style={{ borderColor: "hsl(var(--border))" }}
         >
-          Ingresos por categoría — mes en curso
-        </p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiCard
-            label="Ingresos productos"
-            value={formatCOP(ingresosProductos)}
-          />
-          <KpiCard
-            label="Ingresos servicios"
-            value={formatCOP(ingresosServicios)}
-          />
-          <KpiCard label="Egresos" value={formatCOP(egresosMes)} />
-          <KpiCard
-            label="Margen"
-            value={formatCOP(margenMes)}
-            highlight
-            danger={margenMes < 0}
-          />
-        </div>
-      </div>
+          <div className="flex items-center gap-2.5">
+            <span
+              className="grid h-6 w-6 place-items-center rounded-md"
+              style={{
+                backgroundColor: "hsl(var(--destructive) / 0.1)",
+                color: "hsl(var(--destructive))",
+              }}
+            >
+              <Triangle
+                className="h-3.5 w-3.5"
+                fill="currentColor"
+                strokeWidth={1.5}
+              />
+            </span>
+            <span
+              className="text-[13.5px] font-semibold"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
+              Atención requerida
+            </span>
+            {Number(k.stock_agotado_count) > 0 && (
+              <span
+                className="rounded-[3px] border px-1.5 py-px font-mono text-[11px] font-semibold"
+                style={{
+                  backgroundColor: "hsl(var(--destructive) / 0.1)",
+                  borderColor: "hsl(var(--destructive) / 0.4)",
+                  color: "hsl(var(--destructive))",
+                }}
+              >
+                {k.stock_agotado_count} agotado
+                {Number(k.stock_agotado_count) !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+          <span
+            className="font-mono text-[10.5px] tracking-[0.06em]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Top {Math.min(alertas.length, 5)} de {k.alertas_count ?? 0} alertas
+          </span>
+        </header>
 
-      {/* KPIs operacionales */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <SmallKpi
-          label="Órdenes abiertas"
-          value={k.ordenes_abiertas ?? 0}
-          onClick={() => navigate("/ops/ordenes")}
-        />
-        <SmallKpi
-          label="Cotizaciones vigentes"
-          value={k.cotizaciones_vigentes ?? 0}
-          onClick={() => navigate("/ops/cotizaciones")}
-        />
-        <SmallKpi
-          label="Traspasos en tránsito"
-          value={k.traspasos_en_transito ?? 0}
-          onClick={() => navigate("/ops/traspasos")}
-        />
-        <SmallKpi
-          label="Herramientas prestadas"
-          value={k.herramientas_prestadas ?? 0}
-          onClick={() => navigate("/ops/herramientas")}
-        />
-        <SmallKpi
-          label="Ensambles pendientes"
-          value={k.ensambles_pendientes ?? 0}
-          onClick={() => navigate("/ops/ensambles")}
-        />
-      </div>
+        {alertas.length === 0 ? (
+          <p
+            className="px-[18px] py-6 text-center text-[13px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Sin alertas de stock activas ✓
+          </p>
+        ) : (
+          alertas
+            .slice(0, 5)
+            .map((a, i) => <AttRow key={a.inventario_id ?? i} alert={a} />)
+        )}
 
-      {/* Charts */}
-      <div className="grid lg:grid-cols-2 gap-4">
+        <footer
+          className="flex items-center justify-between border-t px-[18px] py-3 text-[12px]"
+          style={{
+            borderColor: "hsl(var(--border))",
+            backgroundColor: "hsl(var(--muted) / 0.3)",
+          }}
+        >
+          <span
+            className="font-mono text-[10.5px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            {Math.max(0, (k.alertas_count ?? 0) - 5)} alertas adicionales
+          </span>
+          <Link
+            to="/admin/alertas"
+            className="inline-flex items-center gap-1.5 font-medium"
+            style={{ color: "hsl(var(--primary))" }}
+          >
+            Ver todas las alertas ({k.alertas_count ?? 0})
+            <ArrowRight className="h-3 w-3" strokeWidth={1.5} />
+          </Link>
+        </footer>
+      </SectionCard>
+
+      {/* Bloques estratégicos 2x2 + Actividad reciente */}
+      <section className="grid grid-cols-1 gap-[18px] lg:grid-cols-2">
+        {/* Productos en alerta — detalle real (inventario + productos) */}
+        <StrategicBlock
+          icon={Package}
+          iconTone="--warning"
+          title="Productos en alerta"
+          count={k.alertas_count ?? 0}
+          countTone="--warning"
+          footer={{ label: "Ver módulo Reorden", to: "/admin/reorden" }}
+          emptyText="Sin productos bajo mínimo ✓"
+          items={bloques.alertas}
+          renderItem={(it) => {
+            const sev = severidadStock(it.estado_stock);
+            return (
+              <SbRow
+                key={it.id}
+                keyText={it.producto?.referencia ?? "—"}
+                keyTone={sev.token}
+                title={it.producto?.nombre ?? "Producto"}
+                sub={`${it.sede?.nombre ?? "—"} · ${it.producto?.categoria ?? "sin categoría"}`}
+                onClick={() => navigate("/admin/reorden")}
+                right={
+                  <RightStock
+                    current={it.cantidad}
+                    min={it.producto?.stock_minimo ?? 0}
+                    status={sev.label}
+                    token={sev.token}
+                  />
+                }
+              />
+            );
+          }}
+        />
+
+        {/* OTs en proceso — detalle real (ordenes_servicio) */}
+        <StrategicBlock
+          icon={Wrench}
+          iconTone="--info"
+          title="OTs en proceso"
+          count={k.ordenes_abiertas ?? 0}
+          countTone="--info"
+          footer={{ label: "Ver Órdenes de Servicio", to: "/ops/ordenes" }}
+          emptyText="Sin órdenes en proceso"
+          items={bloques.ot}
+          renderItem={(it) => {
+            const age = antiguedadOT(it.fecha);
+            const estadoLabel =
+              it.estado === "esperando_repuesto"
+                ? "esperando rep."
+                : "en proceso";
+            return (
+              <SbRow
+                key={it.id}
+                keyText={`OT-${it.numero}`}
+                keyTone="--info"
+                title={`${it.equipo_descripcion ?? "Equipo"} · ${it.cliente_nombre ?? "—"}`}
+                sub={`Téc. ${it.tecnico?.nombre ?? "Sin asignar"} · ${estadoLabel}`}
+                onClick={() => navigate(`/ops/ordenes/${it.id}`)}
+                right={
+                  <RightAge
+                    value={age.label}
+                    status={age.status}
+                    token={age.token}
+                  />
+                }
+              />
+            );
+          }}
+        />
+
+        {/* Cotizaciones por vencer — detalle real (cotizaciones) */}
+        <StrategicBlock
+          icon={FileText}
+          iconTone="--warning"
+          title="Cotizaciones por vencer"
+          count={bloques.cotz.length}
+          countTone="--warning"
+          footer={{ label: "Ver Cotizaciones", to: "/ops/cotizaciones" }}
+          emptyText={`Ninguna vence en ${COT_DIAS_POR_VENCER} días`}
+          items={bloques.cotz}
+          renderItem={(it) => {
+            const venc = vencimientoCotizacion(it._dias);
+            return (
+              <SbRow
+                key={it.id}
+                keyText={`COT-${it.numero}`}
+                keyTone="--warning"
+                title={it.cliente_nombre ?? "Cliente"}
+                sub={`Vendedor ${it.vendedor?.nombre ?? "—"}`}
+                onClick={() => navigate(`/ops/cotizaciones/${it.id}`)}
+                right={
+                  <RightQuote
+                    total={formatCOP(it.total ?? 0)}
+                    label={venc.label}
+                    token={venc.token}
+                  />
+                }
+              />
+            );
+          }}
+        />
+
+        {/* Actividad reciente (real, de la RPC) */}
+        <SectionCard className="flex flex-col">
+          <header className="flex items-center gap-2.5 px-[18px] pb-2.5 pt-3.5">
+            <span
+              className="grid h-6 w-6 place-items-center rounded-md"
+              style={{
+                backgroundColor: "hsl(var(--muted))",
+                color: "hsl(var(--muted-foreground))",
+              }}
+            >
+              <Clock className="h-3.5 w-3.5" strokeWidth={1.5} />
+            </span>
+            <span
+              className="text-[13px] font-semibold"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
+              Actividad reciente
+            </span>
+          </header>
+          <div className="flex flex-col px-[18px] pt-1">
+            {actividad.length === 0 ? (
+              <p
+                className="py-6 text-center text-[12.5px]"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                Sin movimientos recientes
+              </p>
+            ) : (
+              actividad
+                .slice(0, 6)
+                .map((a, i, arr) => (
+                  <TlRow
+                    key={a.id ?? `${a.created_at}-${a.type}`}
+                    activity={a}
+                    last={i === arr.length - 1}
+                  />
+                ))
+            )}
+          </div>
+          <footer
+            className="mt-auto border-t px-[18px] py-3 text-[12px]"
+            style={{
+              borderColor: "hsl(var(--border))",
+              backgroundColor: "hsl(var(--muted) / 0.3)",
+            }}
+          >
+            <Link
+              to="/admin/auditoria"
+              className="inline-flex items-center gap-1.5 font-medium"
+              style={{ color: "hsl(var(--primary))" }}
+            >
+              Ver Auditoría
+              <ArrowRight className="h-3 w-3" strokeWidth={1.5} />
+            </Link>
+          </footer>
+        </SectionCard>
+      </section>
+
+      {/* Charts reales */}
+      <section className="grid gap-[18px] lg:grid-cols-2">
         <ChartCard
           title="Tendencia ventas — últimos 7 días"
           empty={(k.tendencia_7d ?? []).every((d) => Number(d.total) === 0)}
@@ -240,24 +544,40 @@ export default function Dashboard() {
         >
           <BarChart data={k.ventas_por_sede ?? []} />
         </ChartCard>
-      </div>
+      </section>
 
-      {/* Top productos + actividad reciente */}
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Section title="Top 5 productos del mes">
+      {/* Top 5 productos del mes */}
+      <SectionCard>
+        <header
+          className="border-b px-[18px] py-3"
+          style={{ borderColor: "hsl(var(--border))" }}
+        >
+          <span
+            className="text-[13px] font-semibold"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            Top 5 productos del mes
+          </span>
+        </header>
+        <div className="p-[18px]">
           {(k.top5_productos_mes ?? []).length === 0 ? (
-            <Empty>Sin ventas este mes</Empty>
+            <p
+              className="py-4 text-center text-[12.5px] italic"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              Sin ventas este mes
+            </p>
           ) : (
             <ul className="space-y-2" role="list">
               {(k.top5_productos_mes ?? []).map((p, i) => (
                 <li
-                  key={p.referencia}
-                  className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg"
+                  key={p.referencia ?? i}
+                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2"
                   style={{ backgroundColor: "hsl(var(--muted) / 0.3)" }}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex min-w-0 items-center gap-3">
                     <span
-                      className="text-xs font-bold w-6 h-6 rounded flex items-center justify-center shrink-0"
+                      className="grid h-6 w-6 shrink-0 place-items-center rounded font-mono text-xs font-bold"
                       style={{
                         backgroundColor: "hsl(var(--primary))",
                         color: "hsl(var(--primary-foreground))",
@@ -267,20 +587,20 @@ export default function Dashboard() {
                     </span>
                     <div className="min-w-0">
                       <p
-                        className="text-sm font-medium truncate"
+                        className="truncate text-sm font-medium"
                         style={{ color: "hsl(var(--foreground))" }}
                       >
                         {p.nombre}
                       </p>
                       <p
-                        className="text-xs font-mono"
+                        className="font-mono text-xs"
                         style={{ color: "hsl(var(--muted-foreground))" }}
                       >
                         {p.referencia}
                       </p>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
+                  <div className="shrink-0 text-right">
                     <p
                       className="text-sm font-bold tabular-nums"
                       style={{ color: "hsl(var(--foreground))" }}
@@ -298,67 +618,100 @@ export default function Dashboard() {
               ))}
             </ul>
           )}
-        </Section>
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
 
-        <Section title="Actividad reciente">
-          {(k.actividad_reciente ?? []).length === 0 ? (
-            <Empty>Sin movimientos recientes</Empty>
-          ) : (
-            <ul
-              className="space-y-1.5 max-h-[400px] overflow-y-auto"
-              role="list"
-            >
-              {k.actividad_reciente.map((a) => (
-                <li
-                  key={a.id ?? `${a.created_at}-${a.type}`}
-                  className="flex items-start justify-between gap-2 px-2 py-1.5 rounded text-xs border-b"
-                  style={{ borderColor: "hsl(var(--border) / 0.5)" }}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className="truncate"
-                      style={{ color: "hsl(var(--foreground))" }}
-                    >
-                      {a.action}
-                    </p>
-                    <p style={{ color: "hsl(var(--muted-foreground))" }}>
-                      {a.user} · {formatDate(a.created_at)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+/* ── Page head con controles ──────────────────────────────────────────── */
+function PageHead({ onRefresh, periodo, setPeriodo }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <p
+          className="m-0 mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Admin · Visión general
+        </p>
+        <h1
+          className="m-0 text-[24px] font-semibold leading-tight tracking-[-0.018em]"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
+          Dashboard
+        </h1>
+      </div>
+      <div className="flex items-center gap-2">
+        <Seg options={PERIODOS} value={periodo} onChange={setPeriodo} />
+        <button
+          onClick={onRefresh}
+          className="inline-flex h-12 items-center gap-1.5 rounded-md border px-3 text-[12.5px] font-medium transition-colors cursor-pointer"
+          style={{
+            borderColor: "hsl(var(--border))",
+            backgroundColor: "hsl(var(--card))",
+            color: "hsl(var(--muted-foreground))",
+          }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.color = "hsl(var(--foreground))")
+          }
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.color = "hsl(var(--muted-foreground))")
+          }
+        >
+          <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.5} />
+          Refrescar
+        </button>
       </div>
     </div>
   );
 }
 
-/* ── Components ──────────────────────────────────────────────────────── */
-
-function KpiCard({ label, value, delta, danger, highlight, onClick }) {
-  const interactive = !!onClick;
+/* ── Segmented control ────────────────────────────────────────────────── */
+function Seg({ options, value, onChange }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={!interactive}
-      className={`text-left rounded-xl border p-4 transition-all ${
-        interactive ? "cursor-pointer hover:opacity-95" : "cursor-default"
-      }`}
+    <div
+      className="inline-flex gap-px rounded-[7px] border p-0.5"
       style={{
-        backgroundColor: danger
-          ? "hsl(var(--destructive) / 0.08)"
-          : "hsl(var(--card))",
-        borderColor: danger
-          ? "hsl(var(--destructive) / 0.4)"
-          : highlight
-            ? "hsl(var(--primary))"
-            : "hsl(var(--border))",
+        borderColor: "hsl(var(--border))",
+        backgroundColor: "hsl(var(--muted) / 0.4)",
       }}
     >
-      <p
-        className="text-xs font-medium uppercase tracking-wide mb-1"
+      {options.map((opt) => {
+        const on = opt === value;
+        return (
+          <button
+            key={opt}
+            onClick={() => onChange(opt)}
+            className="rounded-[5px] px-2.5 py-1.5 text-[12px] font-medium transition-colors cursor-pointer"
+            style={{
+              backgroundColor: on ? "hsl(var(--card))" : "transparent",
+              color: on
+                ? "hsl(var(--foreground))"
+                : "hsl(var(--muted-foreground))",
+              fontWeight: on ? 600 : 500,
+              boxShadow: on ? "0 1px 2px rgba(16,24,40,0.06)" : "none",
+            }}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── KPI con separadores punteados ────────────────────────────────────── */
+function Kpi({ label, value, sub, last, danger }) {
+  return (
+    <div
+      className={`flex flex-col gap-1.5 pr-7 md:pl-7 md:first:pl-0 ${
+        last ? "" : "md:border-r md:border-dashed"
+      }`}
+      style={last ? undefined : { borderColor: "hsl(var(--border))" }}
+    >
+      <div
+        className="font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
         style={{
           color: danger
             ? "hsl(var(--destructive))"
@@ -366,89 +719,344 @@ function KpiCard({ label, value, delta, danger, highlight, onClick }) {
         }}
       >
         {label}
-      </p>
-      <p
-        className="text-xl font-bold tabular-nums truncate"
+      </div>
+      <div
+        className="font-mono text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums"
         style={{
           color: danger ? "hsl(var(--destructive))" : "hsl(var(--foreground))",
         }}
       >
         {value}
-      </p>
-      {delta !== null && delta !== undefined && (
-        <p
-          className="text-xs mt-1 tabular-nums"
-          style={{
-            color:
-              delta > 0
-                ? "hsl(var(--success))"
-                : delta < 0
-                  ? "hsl(var(--destructive))"
-                  : "hsl(var(--muted-foreground))",
-          }}
-        >
-          {delta > 0 ? "↑" : delta < 0 ? "↓" : "→"} {Math.abs(delta).toFixed(1)}
-          % vs ayer
-        </p>
-      )}
-    </button>
-  );
-}
-
-function SmallKpi({ label, value, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className="text-left rounded-lg border p-3 transition-all cursor-pointer hover:opacity-90"
-      style={{
-        backgroundColor: "hsl(var(--card))",
-        borderColor: "hsl(var(--border))",
-      }}
-    >
-      <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
-        {label}
-      </p>
-      <p
-        className="text-2xl font-bold tabular-nums"
-        style={{ color: "hsl(var(--foreground))" }}
-      >
-        {value}
-      </p>
-    </button>
-  );
-}
-
-function ChartCard({ title, children, empty }) {
-  return (
-    <div
-      className="rounded-xl border p-4"
-      style={{
-        backgroundColor: "hsl(var(--card))",
-        borderColor: "hsl(var(--border))",
-      }}
-    >
-      <h3
-        className="text-xs font-semibold uppercase tracking-wide mb-3"
-        style={{ color: "hsl(var(--muted-foreground))" }}
-      >
-        {title}
-      </h3>
-      {empty ? (
-        <p
-          className="text-xs italic text-center py-8"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          Sin datos para mostrar
-        </p>
-      ) : (
-        children
-      )}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 text-[11.5px]">
+        {sub}
+      </div>
     </div>
   );
 }
 
+function DeltaPill({ delta }) {
+  const positive = delta >= 0;
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[11.5px] font-medium"
+      style={{
+        color: positive ? "hsl(var(--success))" : "hsl(var(--destructive))",
+      }}
+    >
+      {positive ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}% vs ayer
+    </span>
+  );
+}
+
+/* ── Fila de atención (alerta) ────────────────────────────────────────── */
+function AttRow({ alert }) {
+  const isDanger = alert.severity === "danger";
+  return (
+    <div
+      className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b px-[18px] py-3 text-[12.5px] last:border-b-0"
+      style={{ borderColor: "hsl(var(--border))" }}
+    >
+      <span
+        className="h-2 w-2 rounded-full"
+        style={{
+          backgroundColor: isDanger
+            ? "hsl(var(--destructive))"
+            : "hsl(var(--warning))",
+        }}
+      />
+      <div
+        className="min-w-0 truncate font-medium"
+        style={{ color: "hsl(var(--foreground))" }}
+      >
+        {alert.message}
+      </div>
+      <StatusBadge status={isDanger ? "danger" : "warning"}>
+        {isDanger ? "Agotado" : "Stock bajo"}
+      </StatusBadge>
+    </div>
+  );
+}
+
+/* ── Bloque estratégico (cabecera + filas de detalle + footer) ─────────── */
+function StrategicBlock({
+  icon,
+  iconTone,
+  title,
+  count,
+  countTone,
+  items,
+  renderItem,
+  footer,
+  emptyText,
+}) {
+  const Icon = icon;
+  return (
+    <SectionCard className="flex flex-col">
+      <header className="flex items-center justify-between px-[18px] pb-2.5 pt-3.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span
+            className="grid h-6 w-6 place-items-center rounded-md"
+            style={{
+              backgroundColor: `hsl(var(${iconTone}) / 0.12)`,
+              color: `hsl(var(${iconTone}))`,
+            }}
+          >
+            <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />
+          </span>
+          <span
+            className="text-[13px] font-semibold"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            {title}
+          </span>
+        </div>
+        <span
+          className="rounded-[3px] border px-1.5 py-px font-mono text-[10.5px] font-semibold leading-[1.4] tabular-nums"
+          style={{
+            backgroundColor: `hsl(var(${countTone}) / 0.12)`,
+            borderColor: `hsl(var(${countTone}) / 0.4)`,
+            color: `hsl(var(${countTone}))`,
+          }}
+        >
+          {count}
+        </span>
+      </header>
+
+      <div className="flex flex-1 flex-col">
+        {items.length === 0 ? (
+          <p
+            className="px-[18px] py-6 text-center text-[12.5px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            {emptyText}
+          </p>
+        ) : (
+          items.map(renderItem)
+        )}
+      </div>
+
+      <footer
+        className="mt-auto border-t px-[18px] py-3 text-[12px]"
+        style={{
+          borderColor: "hsl(var(--border))",
+          backgroundColor: "hsl(var(--muted) / 0.3)",
+        }}
+      >
+        <Link
+          to={footer.to}
+          className="inline-flex items-center gap-1.5 font-medium"
+          style={{ color: "hsl(var(--primary))" }}
+        >
+          {footer.label}
+          <ArrowRight className="h-3 w-3" strokeWidth={1.5} />
+        </Link>
+      </footer>
+    </SectionCard>
+  );
+}
+
+/* ── Fila de detalle de un bloque estratégico ─────────────────────────── */
+function SbRow({ keyText, keyTone, title, sub, right, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-t px-[18px] py-2.5 text-left transition-colors cursor-pointer"
+      style={{ borderColor: "hsl(var(--border))" }}
+      onMouseEnter={(e) =>
+        (e.currentTarget.style.backgroundColor = "hsl(var(--muted) / 0.4)")
+      }
+      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
+    >
+      <span
+        className="mt-[1px] shrink-0 self-start rounded-[3px] border px-1.5 py-0.5 font-mono text-[11px] font-medium leading-[1.4]"
+        style={{
+          backgroundColor: `hsl(var(${keyTone}) / 0.1)`,
+          borderColor: `hsl(var(${keyTone}) / 0.4)`,
+          color: `hsl(var(${keyTone}))`,
+        }}
+      >
+        {keyText}
+      </span>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <div
+          className="truncate text-[12.5px] font-medium leading-[1.3]"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
+          {title}
+        </div>
+        <div
+          className="truncate font-mono text-[10.5px] tracking-[0.04em]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          {sub}
+        </div>
+      </div>
+      <div className="whitespace-nowrap text-right font-mono text-[11px] font-medium leading-[1.3]">
+        {right}
+      </div>
+    </button>
+  );
+}
+
+/* Columna derecha — stock actual / mínimo + estado. */
+function RightStock({ current, min, status, token }) {
+  return (
+    <>
+      <span style={{ color: "hsl(var(--muted-foreground))" }}>
+        <span className="font-semibold" style={{ color: `hsl(var(${token}))` }}>
+          {current}
+        </span>{" "}
+        / {min} mín.
+      </span>
+      <div
+        className="text-[10px] font-normal"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
+        {status}
+      </div>
+    </>
+  );
+}
+
+/* Columna derecha — antigüedad de OT. */
+function RightAge({ value, status, token }) {
+  return (
+    <>
+      <span className="font-semibold" style={{ color: `hsl(var(${token}))` }}>
+        {value}
+      </span>
+      <div
+        className="text-[10px] font-normal"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
+        {status}
+      </div>
+    </>
+  );
+}
+
+/* Columna derecha — monto de cotización + días para vencer. */
+function RightQuote({ total, label, token }) {
+  return (
+    <>
+      <span
+        className="font-semibold"
+        style={{ color: "hsl(var(--foreground))" }}
+      >
+        {total}
+      </span>
+      <div
+        className="text-[10px] font-medium"
+        style={{ color: `hsl(var(${token}))` }}
+      >
+        {label}
+      </div>
+    </>
+  );
+}
+
+/* ── Fila timeline de actividad ───────────────────────────────────────── */
+function TlRow({ activity, last }) {
+  return (
+    <div
+      className={`grid grid-cols-[18px_1fr_auto] items-start gap-2.5 py-2.5 ${
+        last ? "" : "border-b"
+      }`}
+      style={last ? undefined : { borderColor: "hsl(var(--border))" }}
+    >
+      <span
+        className="mt-1.5 h-2 w-2 rounded-full"
+        style={{ backgroundColor: activityColor(activity.type) }}
+      />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <div
+          className="truncate text-[12.5px] leading-[1.3]"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
+          {activity.action}
+        </div>
+        <div
+          className="font-mono text-[10.5px] tracking-[0.04em]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          {activity.user}
+        </div>
+      </div>
+      <div
+        className="font-mono text-[10.5px]"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
+        {formatHora(activity.created_at)}
+      </div>
+    </div>
+  );
+}
+
+function activityColor(type) {
+  switch (type) {
+    case "venta":
+      return "hsl(var(--success))";
+    case "traspaso_entrada":
+    case "traspaso_salida":
+      return "hsl(var(--info))";
+    case "ajuste":
+    case "conteo_ajuste":
+      return "hsl(var(--warning))";
+    case "compra":
+      return "hsl(var(--primary))";
+    default:
+      return "hsl(var(--muted-foreground))";
+  }
+}
+
+/* ── SectionCard (superficie estilo cockpit) ──────────────────────────── */
+function SectionCard({ children, className = "" }) {
+  return (
+    <section
+      className={`overflow-hidden rounded-[10px] border ${className}`}
+      style={{
+        backgroundColor: "hsl(var(--card))",
+        borderColor: "hsl(var(--border))",
+      }}
+    >
+      {children}
+    </section>
+  );
+}
+
+/* ── Charts reales (SVG sin librería) ─────────────────────────────────── */
+function ChartCard({ title, children, empty }) {
+  return (
+    <SectionCard>
+      <header
+        className="border-b px-[18px] py-3"
+        style={{ borderColor: "hsl(var(--border))" }}
+      >
+        <h3
+          className="text-[13px] font-semibold"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
+          {title}
+        </h3>
+      </header>
+      <div className="p-[18px]">
+        {empty ? (
+          <p
+            className="py-8 text-center text-xs italic"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Sin datos para mostrar
+          </p>
+        ) : (
+          children
+        )}
+      </div>
+    </SectionCard>
+  );
+}
+
 function LineChart({ data }) {
-  // SVG minimalist line chart for daily trend
   const W = 320;
   const H = 120;
   const PAD = 24;
@@ -468,11 +1076,10 @@ function LineChart({ data }) {
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
-      className="w-full h-auto"
+      className="h-auto w-full"
       role="img"
       aria-label="Tendencia de ventas últimos 7 días"
     >
-      {/* grid */}
       <line
         x1={PAD}
         y1={H - PAD}
@@ -481,20 +1088,15 @@ function LineChart({ data }) {
         stroke="hsl(var(--border))"
         strokeWidth="1"
       />
-      {/* área bajo la línea */}
       <path
         d={`${path} L ${points[points.length - 1]?.x ?? PAD} ${H - PAD} L ${PAD} ${H - PAD} Z`}
         fill="hsl(var(--primary) / 0.15)"
       />
-      {/* línea */}
       <path d={path} fill="none" stroke="hsl(var(--primary))" strokeWidth="2" />
-      {/* puntos */}
       {points.map((p, i) => (
         <g key={i}>
           <circle cx={p.x} cy={p.y} r="3" fill="hsl(var(--primary))" />
           <title>
-            {/* Ancla a mediodía local: `new Date("YYYY-MM-DD")` se parsea como
-                UTC y, en zona Colombia (UTC-5), mostraría el día anterior. */}
             {new Date(`${p.fecha}T12:00:00`).toLocaleDateString("es-CO", {
               weekday: "short",
               day: "numeric",
@@ -510,22 +1112,22 @@ function LineChart({ data }) {
 function BarChart({ data }) {
   const max = Math.max(1, ...data.map((d) => Number(d.total)));
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       {data.map((d) => {
         const pct = (Number(d.total) / max) * 100;
         return (
           <div key={d.sede}>
-            <div className="flex items-center justify-between text-xs mb-1">
+            <div className="mb-1 flex items-center justify-between text-xs">
               <span style={{ color: "hsl(var(--foreground))" }}>{d.sede}</span>
               <span
-                className="tabular-nums font-medium"
+                className="font-medium tabular-nums"
                 style={{ color: "hsl(var(--muted-foreground))" }}
               >
                 {formatCOP(d.total)}
               </span>
             </div>
             <div
-              className="h-2 rounded-full overflow-hidden"
+              className="h-2 overflow-hidden rounded-full"
               style={{ backgroundColor: "hsl(var(--muted) / 0.4)" }}
             >
               <div
@@ -543,41 +1145,11 @@ function BarChart({ data }) {
   );
 }
 
-function Section({ title, children }) {
-  return (
-    <div
-      className="rounded-xl border p-4"
-      style={{
-        backgroundColor: "hsl(var(--card))",
-        borderColor: "hsl(var(--border))",
-      }}
-    >
-      <h3
-        className="text-xs font-semibold uppercase tracking-wide mb-3"
-        style={{ color: "hsl(var(--muted-foreground))" }}
-      >
-        {title}
-      </h3>
-      {children}
-    </div>
-  );
-}
-
-function Empty({ children }) {
-  return (
-    <p
-      className="text-xs italic text-center py-6"
-      style={{ color: "hsl(var(--muted-foreground))" }}
-    >
-      {children}
-    </p>
-  );
-}
-
+/* ── Estados auxiliares ───────────────────────────────────────────────── */
 function ErrorBox({ msg, onRetry, small }) {
   return (
     <div
-      className={`rounded-lg border ${small ? "px-3 py-2" : "p-4"} flex items-center justify-between gap-3`}
+      className={`flex items-center justify-between gap-3 rounded-lg border ${small ? "px-3 py-2" : "p-4"}`}
       style={{
         backgroundColor: "hsl(var(--destructive) / 0.08)",
         borderColor: "hsl(var(--destructive) / 0.4)",
@@ -588,7 +1160,7 @@ function ErrorBox({ msg, onRetry, small }) {
       {onRetry && (
         <button
           onClick={onRetry}
-          className="text-xs px-3 py-1.5 rounded border cursor-pointer"
+          className="rounded border px-3 py-1.5 text-xs cursor-pointer"
           style={{
             borderColor: "hsl(var(--destructive))",
             color: "hsl(var(--destructive))",
@@ -601,13 +1173,13 @@ function ErrorBox({ msg, onRetry, small }) {
   );
 }
 
-function SkeletonGrid() {
+function SkeletonStrip() {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      {[...Array(8)].map((_, i) => (
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      {[...Array(4)].map((_, i) => (
         <div
           key={i}
-          className="rounded-xl p-4 animate-pulse border h-24"
+          className="h-20 animate-pulse rounded-lg border"
           style={{
             backgroundColor: "hsl(var(--card))",
             borderColor: "hsl(var(--border))",

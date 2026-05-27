@@ -1,5 +1,14 @@
 // Utilidades globales — se completan según necesidad
 
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+// Combina clases condicionales (clsx) y resuelve conflictos de Tailwind
+// (tailwind-merge). Requerido por los componentes shadcn/ui.
+export function cn(...inputs) {
+  return twMerge(clsx(inputs));
+}
+
 export const formatCOP = (amount) =>
   new Intl.NumberFormat("es-CO", {
     style: "currency",

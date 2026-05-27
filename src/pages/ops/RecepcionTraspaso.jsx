@@ -1,20 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  PackageCheck,
+  AlertTriangle,
+  Check,
+  TriangleAlert,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
-
-const SEDE_LABELS = {
-  "BOD-PRINCIPAL": "Bodega Principal",
-  "ALM-01": "Almacén 01",
-  "ALM-02": "Almacén 02",
-  "ALM-03": "Almacén 03",
-};
-
-function sedeLabel(id) {
-  return SEDE_LABELS[id] ?? id;
-}
+import { sedeLabel } from "../../lib/traspasos-ui";
 
 export default function RecepcionTraspaso() {
   const { id } = useParams();
@@ -105,6 +101,12 @@ export default function RecepcionTraspaso() {
     return acc + Math.abs(recv - env);
   }, 0);
 
+  const completos = items.filter((item) => {
+    const recv = recibidas[item.id] ?? 0;
+    return recv === (item.cantidad_enviada ?? 0);
+  }).length;
+  const conDiferencia = items.length - completos;
+
   /* ── Acción: recibir ──────────────────────────────────────── */
   const confirmarRecepcion = async () => {
     if (recibiendoRef.current) return;
@@ -153,94 +155,138 @@ export default function RecepcionTraspaso() {
   if (!traspaso)
     return <NotFoundView onBack={() => navigate(`/ops/traspasos/${id}`)} />;
 
+  const recibidosTotal = items.length;
+  const pct =
+    recibidosTotal > 0 ? Math.round((completos / recibidosTotal) * 100) : 0;
+
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in pb-40"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title={`Recepción #${traspaso.numero}`}
-        description={`${sedeLabel(traspaso.sede_origen_id)} → ${sedeLabel(traspaso.sede_destino_id)}`}
-        actions={
-          <button
-            onClick={() => navigate(`/ops/traspasos/${id}`)}
-            className="h-9 px-3 rounded-lg border text-sm font-medium cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-              backgroundColor: "hsl(var(--card))",
-            }}
+    <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-4 px-4 py-5 pb-40 sm:px-7 sm:py-6 animate-fade-in">
+      <button
+        onClick={() => navigate(`/ops/traspasos/${id}`)}
+        className="back-btn inline-flex items-center gap-1.5"
+      >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+        Volver al traspaso
+      </button>
+
+      {/* ── Cabecera ────────────────────────────────────────────────── */}
+      <div
+        className="flex flex-wrap items-end justify-between gap-4 border-b pb-4"
+        style={{ borderColor: "var(--n-100)" }}
+      >
+        <div>
+          <p
+            className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.14em]"
+            style={{ color: "var(--n-300)" }}
           >
-            ← Volver
-          </button>
-        }
-      />
+            Recepción de traspaso
+          </p>
+          <h1
+            className="font-mono text-[28px] font-medium leading-none tracking-[-0.01em]"
+            style={{ color: "var(--n-950)" }}
+          >
+            #{traspaso.numero}
+          </h1>
+          <p className="mt-2 text-[13px]" style={{ color: "var(--n-500)" }}>
+            {sedeLabel(traspaso.sede_origen_id)} →{" "}
+            {sedeLabel(traspaso.sede_destino_id)}
+          </p>
+        </div>
+        <div className="flex min-w-[220px] flex-col items-end gap-1.5">
+          <span
+            className="font-mono text-[11px] uppercase tracking-[0.1em]"
+            style={{ color: "var(--n-500)" }}
+          >
+            Sin diferencia
+          </span>
+          <div
+            className="font-mono text-[22px] font-medium"
+            style={{ color: "var(--n-950)" }}
+          >
+            <strong style={{ color: "var(--succ-700)" }}>{completos}</strong> /{" "}
+            {recibidosTotal} items
+          </div>
+          <div
+            className="h-1.5 w-[220px] overflow-hidden rounded-full"
+            style={{ backgroundColor: "var(--n-100)" }}
+          >
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${pct}%`, backgroundColor: "var(--succ-500)" }}
+            />
+          </div>
+        </div>
+      </div>
 
       {/* Banner de contexto */}
       <div
-        className="p-4 rounded-xl border"
+        className="flex items-start gap-3 rounded-[10px] border p-4"
         style={{
-          backgroundColor: "hsl(var(--success) / 0.06)",
-          borderColor: "hsl(var(--success) / 0.25)",
+          backgroundColor: "var(--succ-50)",
+          borderColor: "var(--succ-border)",
         }}
       >
-        <div className="flex items-start gap-3">
-          <span className="text-xl">📥</span>
-          <div>
-            <p
-              className="text-sm font-semibold"
-              style={{ color: "hsl(var(--foreground))" }}
-            >
-              Confirmar cantidades recibidas
-            </p>
-            <p
-              className="text-xs mt-0.5"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Ingresa las cantidades realmente recibidas. Si difieren de lo
-              enviado, el traspaso quedará marcado como{" "}
-              <strong>Con Diferencia</strong>.
-            </p>
-          </div>
+        <PackageCheck
+          className="mt-0.5 h-[18px] w-[18px] shrink-0"
+          strokeWidth={1.7}
+          style={{ color: "var(--succ-700)" }}
+        />
+        <div>
+          <p
+            className="text-sm font-semibold"
+            style={{ color: "var(--n-950)" }}
+          >
+            Confirmar cantidades recibidas
+          </p>
+          <p
+            className="mt-0.5 text-xs leading-[1.5]"
+            style={{ color: "var(--n-500)" }}
+          >
+            Ingresa las cantidades realmente recibidas. Si difieren de lo
+            enviado, el traspaso quedará marcado como{" "}
+            <strong>Con Diferencia</strong>.
+          </p>
         </div>
       </div>
 
       {/* Alerta de diferencias detectadas */}
       {hayDiferencias && (
         <div
-          className="p-3 rounded-xl border flex items-start gap-3"
+          className="flex items-start gap-3 rounded-[10px] border p-3.5"
           style={{
-            backgroundColor: "hsl(var(--warning) / 0.08)",
-            borderColor: "hsl(var(--warning) / 0.3)",
+            backgroundColor: "var(--warn-50)",
+            borderColor: "var(--warn-border)",
           }}
         >
-          <span className="text-lg">⚠️</span>
+          <AlertTriangle
+            className="mt-0.5 h-[18px] w-[18px] shrink-0"
+            strokeWidth={1.7}
+            style={{ color: "var(--warn-600)" }}
+          />
           <div>
             <p
               className="text-sm font-semibold"
-              style={{ color: "hsl(var(--warning))" }}
+              style={{ color: "var(--warn-700)" }}
             >
               Se detectaron diferencias
             </p>
-            <p
-              className="text-xs mt-0.5"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
+            <p className="mt-0.5 text-xs" style={{ color: "var(--n-500)" }}>
               {totalDiff} unidad{totalDiff !== 1 ? "es" : ""} con diferencia
-              respecto a lo enviado.
+              respecto a lo enviado · {conDiferencia} item
+              {conDiferencia !== 1 ? "s" : ""} afectado
+              {conDiferencia !== 1 ? "s" : ""}.
             </p>
           </div>
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div
-          className="p-3 rounded-lg border text-sm"
+          className="rounded-[10px] border px-4 py-3 text-sm"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.3)",
-            color: "hsl(var(--destructive))",
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
+            color: "var(--dang-700)",
           }}
         >
           {error}
@@ -254,140 +300,108 @@ export default function RecepcionTraspaso() {
           const recibido = recibidas[item.id] ?? enviado;
           const diff = recibido - enviado;
           const hasDiff = diff !== 0;
-
           return (
             <div
               key={item.id}
-              className="rounded-xl border p-4 transition-all"
+              className="rounded-[10px] border p-4 transition-colors"
               style={{
-                backgroundColor: hasDiff
-                  ? "hsl(var(--destructive) / 0.04)"
-                  : "hsl(var(--card))",
-                borderColor: hasDiff
-                  ? "hsl(var(--destructive) / 0.25)"
-                  : "hsl(var(--border))",
+                backgroundColor: hasDiff ? "var(--dang-50)" : "var(--n-0)",
+                borderColor: hasDiff ? "var(--dang-border)" : "var(--n-150)",
               }}
             >
               <div className="flex items-center gap-4">
-                {/* Info */}
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   <p
-                    className="text-sm font-semibold truncate"
-                    style={{ color: "hsl(var(--foreground))" }}
+                    className="truncate text-sm font-semibold"
+                    style={{ color: "var(--n-950)" }}
                   >
                     {item.producto?.nombre ?? "—"}
                   </p>
                   <p
-                    className="text-xs mt-0.5"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
+                    className="mt-0.5 font-mono text-[11px]"
+                    style={{ color: "var(--n-500)" }}
                   >
                     {item.producto?.referencia}
                   </p>
                 </div>
 
                 {/* Enviado (referencia) */}
-                <div className="shrink-0 text-center hidden sm:block">
+                <div className="hidden shrink-0 text-center sm:block">
                   <p
-                    className="text-xs"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
+                    className="font-mono text-[10px] uppercase tracking-[0.08em]"
+                    style={{ color: "var(--n-400)" }}
                   >
                     Enviado
                   </p>
                   <p
-                    className="text-sm font-bold mt-0.5"
-                    style={{ color: "hsl(var(--foreground))" }}
+                    className="mt-0.5 font-mono text-sm font-semibold"
+                    style={{ color: "var(--n-950)" }}
                   >
                     {enviado}
                   </p>
                 </div>
 
-                {/* Input de cantidad recibida */}
-                <div className="shrink-0 flex flex-col items-center gap-1">
+                {/* Cantidad recibida */}
+                <div className="flex shrink-0 flex-col items-center gap-1">
                   <p
-                    className="text-xs"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
+                    className="font-mono text-[10px] uppercase tracking-[0.08em]"
+                    style={{ color: "var(--p-700)" }}
                   >
                     Recibido
                   </p>
                   <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setCantidad(item.id, recibido - 1)}
-                      className="rounded-lg border font-bold cursor-pointer"
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderColor: "hsl(var(--border))",
-                        backgroundColor: "hsl(var(--muted) / 0.4)",
-                        color: "hsl(var(--foreground))",
-                        fontSize: 18,
-                      }}
-                    >
+                    <QtyBtn onClick={() => setCantidad(item.id, recibido - 1)}>
                       −
-                    </button>
+                    </QtyBtn>
                     <input
                       type="number"
                       value={recibido}
                       onChange={(e) => setCantidad(item.id, e.target.value)}
-                      className="text-center text-sm font-bold rounded-lg border"
+                      min={0}
+                      className="rounded-lg border text-center font-mono text-sm font-bold outline-none"
                       style={{
                         width: 56,
-                        height: 36,
+                        height: 40,
                         borderColor: hasDiff
-                          ? "hsl(var(--destructive) / 0.5)"
-                          : "hsl(var(--border))",
-                        backgroundColor: "hsl(var(--background))",
-                        color: hasDiff
-                          ? "hsl(var(--destructive))"
-                          : "hsl(var(--foreground))",
+                          ? "var(--dang-border)"
+                          : "var(--n-150)",
+                        backgroundColor: "var(--n-0)",
+                        color: hasDiff ? "var(--dang-700)" : "var(--n-950)",
                       }}
-                      min={0}
                     />
-                    <button
-                      onClick={() => setCantidad(item.id, recibido + 1)}
-                      className="rounded-lg border font-bold cursor-pointer"
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderColor: "hsl(var(--border))",
-                        backgroundColor: "hsl(var(--muted) / 0.4)",
-                        color: "hsl(var(--foreground))",
-                        fontSize: 18,
-                      }}
-                    >
+                    <QtyBtn onClick={() => setCantidad(item.id, recibido + 1)}>
                       +
-                    </button>
+                    </QtyBtn>
                   </div>
                 </div>
               </div>
 
               {/* Enviado (mobile) + diferencia */}
-              <div className="mt-2 flex items-center gap-4 flex-wrap">
+              <div className="mt-2 flex flex-wrap items-center gap-4">
                 <span
-                  className="text-xs sm:hidden"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
+                  className="font-mono text-[12px] sm:hidden"
+                  style={{ color: "var(--n-500)" }}
                 >
                   Enviado:{" "}
-                  <strong style={{ color: "hsl(var(--foreground))" }}>
-                    {enviado}
-                  </strong>
+                  <strong style={{ color: "var(--n-950)" }}>{enviado}</strong>
                   {item.producto?.unidad_medida &&
                     ` ${item.producto.unidad_medida}`}
                 </span>
-                {hasDiff && (
+                {hasDiff ? (
                   <span
-                    className="text-xs font-semibold"
-                    style={{ color: "hsl(var(--destructive))" }}
+                    className="font-mono text-[12px] font-semibold"
+                    style={{ color: "var(--dang-700)" }}
                   >
                     Diferencia: {diff > 0 ? "+" : ""}
                     {diff} unidades
                   </span>
-                )}
-                {!hasDiff && (
+                ) : (
                   <span
-                    className="text-xs"
-                    style={{ color: "hsl(var(--success))" }}
+                    className="inline-flex items-center gap-1 text-[12px]"
+                    style={{ color: "var(--succ-700)" }}
                   >
-                    ✓ Sin diferencia
+                    <Check className="h-3 w-3" strokeWidth={2.5} />
+                    Sin diferencia
                   </span>
                 )}
               </div>
@@ -398,7 +412,7 @@ export default function RecepcionTraspaso() {
 
       {/* Modal de confirmación con diferencias */}
       {confirmarDiff && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
           <div
             className="absolute inset-0"
             style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
@@ -407,19 +421,26 @@ export default function RecepcionTraspaso() {
           <div
             className="relative w-full max-w-md rounded-2xl p-6 shadow-xl"
             style={{
-              backgroundColor: "hsl(var(--card))",
-              borderTop: "4px solid hsl(var(--destructive))",
+              backgroundColor: "var(--n-0)",
+              borderTop: "4px solid var(--dang-500)",
             }}
           >
+            <div className="mb-2 flex items-center gap-2">
+              <TriangleAlert
+                className="h-5 w-5 shrink-0"
+                strokeWidth={1.8}
+                style={{ color: "var(--dang-600)" }}
+              />
+              <p
+                className="text-base font-bold"
+                style={{ color: "var(--n-950)" }}
+              >
+                Confirmar recepción con diferencias
+              </p>
+            </div>
             <p
-              className="text-base font-bold mb-2"
-              style={{ color: "hsl(var(--foreground))" }}
-            >
-              ⚠️ Confirmar recepción con diferencias
-            </p>
-            <p
-              className="text-sm mb-4"
-              style={{ color: "hsl(var(--muted-foreground))" }}
+              className="mb-4 text-sm leading-[1.5]"
+              style={{ color: "var(--n-500)" }}
             >
               Las cantidades recibidas no coinciden con las enviadas. El
               traspaso quedará marcado como <strong>Con Diferencia</strong> y
@@ -428,23 +449,16 @@ export default function RecepcionTraspaso() {
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmarDiff(false)}
-                className="flex-1 h-11 rounded-xl border text-sm font-medium cursor-pointer"
-                style={{
-                  borderColor: "hsl(var(--border))",
-                  color: "hsl(var(--foreground))",
-                  backgroundColor: "transparent",
-                }}
+                className="btn btn-out flex-1 justify-center"
+                style={{ height: 48 }}
               >
                 Revisar
               </button>
               <button
                 onClick={confirmarRecepcion}
                 disabled={recibiendo}
-                className="flex-1 h-11 rounded-xl text-sm font-semibold cursor-pointer disabled:opacity-60"
-                style={{
-                  backgroundColor: "hsl(var(--destructive))",
-                  color: "#fff",
-                }}
+                className="flex flex-1 items-center justify-center rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+                style={{ height: 48, backgroundColor: "var(--dang-600)" }}
               >
                 {recibiendo ? "Guardando…" : "Confirmar de todas formas"}
               </button>
@@ -455,33 +469,35 @@ export default function RecepcionTraspaso() {
 
       {/* Barra de acción fija */}
       <div
-        className="fixed bottom-0 left-0 right-0 p-4 border-t"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
+        className="fixed bottom-0 left-0 right-0 border-t p-4"
+        style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
       >
-        <div className="max-w-xl mx-auto">
+        <div className="mx-auto max-w-xl">
           <button
             onClick={handleSubmit}
             disabled={recibiendo}
-            className="w-full h-12 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-50 cursor-pointer"
+            className="flex w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-opacity disabled:opacity-50"
             style={{
+              height: 48,
               backgroundColor: hayDiferencias
-                ? "hsl(var(--warning))"
-                : "hsl(var(--success))",
-              color: "#fff",
+                ? "var(--warn-600)"
+                : "var(--succ-600)",
             }}
-            onMouseEnter={(e) =>
-              !recibiendo && (e.currentTarget.style.opacity = "0.9")
-            }
+            onMouseEnter={(e) => {
+              if (!recibiendo) e.currentTarget.style.opacity = "0.9";
+            }}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
+            {hayDiferencias ? (
+              <TriangleAlert className="h-4 w-4" strokeWidth={1.8} />
+            ) : (
+              <Check className="h-4 w-4" strokeWidth={2.5} />
+            )}
             {recibiendo
               ? "Registrando…"
               : hayDiferencias
-                ? "⚠️ Confirmar recepción con diferencias"
-                : "✓ Confirmar recepción"}
+                ? "Confirmar recepción con diferencias"
+                : "Confirmar recepción"}
           </button>
         </div>
       </div>
@@ -489,18 +505,36 @@ export default function RecepcionTraspaso() {
   );
 }
 
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+function QtyBtn({ children, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center justify-center rounded-lg border font-bold"
+      style={{
+        width: 40,
+        height: 40,
+        fontSize: 18,
+        borderColor: "var(--n-150)",
+        backgroundColor: "var(--n-50)",
+        color: "var(--n-700)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function LoadingView() {
   return (
-    <div
-      className="p-4 sm:p-6 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
+    <div className="mx-auto w-full max-w-[1100px] px-4 py-5 sm:px-7 sm:py-6">
       <div className="space-y-3">
         {[...Array(5)].map((_, i) => (
           <div
             key={i}
-            className="h-24 rounded-xl animate-pulse"
-            style={{ backgroundColor: "hsl(var(--muted))" }}
+            className="h-24 animate-pulse rounded-[10px]"
+            style={{ backgroundColor: "var(--n-100)" }}
           />
         ))}
       </div>
@@ -510,22 +544,13 @@ function LoadingView() {
 
 function NotFoundView({ onBack }) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center">
-      <div className="text-5xl mb-4">📦</div>
-      <p
-        className="font-semibold mb-4"
-        style={{ color: "hsl(var(--foreground))" }}
-      >
-        Traspaso no encontrado
-      </p>
+    <div className="mx-auto w-full max-w-[1100px] space-y-3 px-4 py-5 sm:px-7 sm:py-6">
+      <p style={{ color: "var(--dang-700)" }}>Traspaso no encontrado</p>
       <button
         onClick={onBack}
-        className="px-4 h-9 rounded-lg text-sm font-medium cursor-pointer"
-        style={{
-          backgroundColor: "hsl(var(--primary))",
-          color: "hsl(var(--primary-foreground))",
-        }}
+        className="back-btn inline-flex items-center gap-1.5"
       >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
         Volver
       </button>
     </div>

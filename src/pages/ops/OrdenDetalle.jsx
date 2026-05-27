@@ -1,5 +1,24 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  Printer,
+  ShieldCheck,
+  Wallet,
+  ClipboardCheck,
+  FileText,
+  Wrench,
+  Search,
+  X,
+  Trash2,
+  User,
+  Phone,
+  Hash,
+  Package,
+  Save,
+  Activity,
+  Info,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import {
@@ -8,8 +27,14 @@ import {
   sanitizeSearch,
   safeError,
 } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
-import StatusBadge from "../../components/ui/StatusBadge";
+import {
+  ordenEstadoPill,
+  autorizacionPill,
+  tecnicoAvatar,
+  OT_ESTADO_LABELS,
+  diasEnEstado,
+  construirHistorialOT,
+} from "../../lib/ordenes-ui";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
 import AbonosPanel from "../../components/ot/AbonosPanel";
@@ -26,14 +51,6 @@ const ESTADOS = [
   "pendiente_recogida",
   "entregada",
 ];
-const ESTADO_LABEL = {
-  abierta: "Abierta",
-  en_proceso: "En proceso",
-  esperando_repuesto: "Esperando repuesto",
-  completada: "Completada",
-  pendiente_recogida: "Pendiente de recogida",
-  entregada: "Entregada",
-};
 
 // Transiciones permitidas (debe coincidir con trg_orden_validar_transicion en BD)
 const TRANSICIONES_VALIDAS = {
@@ -53,6 +70,11 @@ export default function OrdenDetalle() {
 
   const [orden, setOrden] = useState(null);
   const [detalles, setDetalles] = useState([]);
+  const [abonado, setAbonado] = useState(0);
+  // Cotizaciones vinculadas — alimenta el banner de "cierre de ciclo" y las
+  // vinculaciones del aside. CotizacionesAsociadasOT mantiene su propia lista
+  // editable; aquí solo guardamos un resumen para presentación.
+  const [vinculos, setVinculos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [trabajoRealizado, setTrabajoRealizado] = useState("");
@@ -115,6 +137,21 @@ export default function OrdenDetalle() {
         .order("created_at", { ascending: true });
       if (e2) throw e2;
       setDetalles(d ?? []);
+
+      // Suma de abonos para el saldo del header (solo presentación).
+      const { data: ab } = await supabase
+        .from("abonos")
+        .select("monto")
+        .eq("orden_id", id);
+      setAbonado((ab ?? []).reduce((s, a) => s + (Number(a.monto) || 0), 0));
+
+      // Resumen de cotizaciones vinculadas (para banner de ciclo + vínculos).
+      const { data: cots } = await supabase
+        .from("cotizaciones")
+        .select("id, numero, estado")
+        .eq("ot_id", id)
+        .order("fecha", { ascending: false });
+      setVinculos(cots ?? []);
     } catch (err) {
       console.error("[OrdenDetalle]", err);
       setErrorMsg(safeError(err, "Error al cargar"));
@@ -310,22 +347,38 @@ export default function OrdenDetalle() {
 
   if (loading)
     return (
-      <div className="p-6">
-        <p style={{ color: "hsl(var(--muted-foreground))" }}>Cargando…</p>
+      <div className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-7 sm:py-6">
+        <div
+          className="h-8 w-1/3 animate-pulse rounded-lg"
+          style={{ backgroundColor: "var(--n-100)" }}
+        />
+        <div
+          className="mt-4 space-y-3 rounded-[10px] border p-5"
+          style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
+        >
+          {[...Array(4)].map((_, i) => (
+            <div
+              key={i}
+              className="h-4 w-3/4 animate-pulse rounded"
+              style={{ backgroundColor: "var(--n-100)" }}
+            />
+          ))}
+        </div>
       </div>
     );
+
   if (!orden)
     return (
-      <div className="p-6">
-        <p style={{ color: "hsl(var(--destructive))" }}>
+      <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-7">
+        <p className="text-sm" style={{ color: "var(--dang-700)" }}>
           {errorMsg || "No encontrada"}
         </p>
         <button
           onClick={() => navigate("/ops/ordenes")}
-          className="mt-4 px-4 py-2 rounded-lg text-sm font-medium border cursor-pointer"
-          style={{ borderColor: "hsl(var(--border))" }}
+          className="back-btn mt-4 inline-flex items-center gap-1.5"
         >
-          ← Volver
+          <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+          Volver a Órdenes
         </button>
       </div>
     );
@@ -336,470 +389,663 @@ export default function OrdenDetalle() {
   // Otros técnicos solo ven (la RLS también lo refuerza).
   const puedeEditar = isAdmin || orden.tecnico_id === perfil?.id;
 
+  const pill = ordenEstadoPill(orden.estado);
+  const aPill = autorizacionPill(orden.estado_autorizacion);
+  const tec = tecnicoAvatar(orden.tecnico?.nombre);
+  const totalOT = Number(orden.total ?? 0) + Number(orden.valor_revision ?? 0);
+  const saldo = Math.max(0, totalOT - abonado);
+  // Días en taller (derivado de la recepción real) y línea de tiempo de eventos.
+  const diasTaller = diasEnEstado(orden);
+  const historial = construirHistorialOT(orden, formatDate);
+  // "Cierre de ciclo": la OT cierra una cadena cotización → OT cuando tiene
+  // cotizaciones vinculadas (dato real). Honra el banner del diseño Lovable
+  // adaptándolo a las vinculaciones que SÍ existen en el backend.
+  const tieneCiclo = vinculos.length > 0;
+
   return (
-    <div
-      className="p-4 sm:p-6 space-y-5 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title={`Orden #${orden.numero}`}
-        description={`${orden.cliente_nombre} · ${formatDate(orden.fecha)}`}
-        actions={
+    <div className="mx-auto w-full max-w-[1200px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
+      <button
+        onClick={() => navigate("/ops/ordenes")}
+        className="back-btn inline-flex items-center gap-1.5"
+      >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+        Volver a Órdenes
+      </button>
+
+      {/* ── Banner de cierre de ciclo (si hay cotización vinculada) ──── */}
+      {tieneCiclo && (
+        <div className="banner-info mt-4">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+          <div className="body">
+            Esta orden cierra un ciclo comercial. Vinculada a{" "}
+            {vinculos.map((v, i) => (
+              <span key={v.id}>
+                {i > 0 && " · "}
+                <button
+                  onClick={() => navigate(`/ops/cotizaciones/${v.id}`)}
+                  className="font-medium underline underline-offset-2"
+                  style={{ color: "var(--p-700)" }}
+                >
+                  Cot-{v.numero}
+                </button>
+              </span>
+            ))}{" "}
+            → <b>OT-{orden.numero}</b>.
+          </div>
+        </div>
+      )}
+
+      {/* ── Header ─────────────────────────────────────────────────── */}
+      <div
+        className="mt-4 flex flex-col items-start gap-4 border-b pb-4 md:flex-row md:gap-6"
+        style={{ borderColor: "var(--n-150)" }}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="ph-eyebrow">Orden de servicio</div>
+          <div className="ph-num">#{orden.numero}</div>
+          <div className="ph-client">{orden.cliente_nombre}</div>
+          <div className="ph-sub">
+            {orden.equipo_descripcion}
+            {orden.equipo_serie && (
+              <>
+                {" "}
+                · Serie{" "}
+                <span
+                  className="font-mono font-medium"
+                  style={{ color: "var(--n-900)" }}
+                >
+                  {orden.equipo_serie}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col items-start gap-3 md:items-end">
+          <div className="flex flex-wrap items-center gap-2">
+            {diasTaller.vencida && <span className="bdg-vencida">VENCIDA</span>}
+            <span className={pill.cls}>
+              <span className="dot" />
+              {pill.label}
+            </span>
+            {orden.tipo === "garantia" && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                style={{
+                  backgroundColor: "var(--warn-50)",
+                  color: "var(--warn-700)",
+                }}
+              >
+                <ShieldCheck className="h-3 w-3" strokeWidth={1.8} />
+                Garantía
+              </span>
+            )}
+          </div>
+          <div className="saldo-box md:items-end">
+            <span className="lbl">Saldo</span>
+            <span className="val">{formatCOP(saldo)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Action bar ─────────────────────────────────────────────── */}
+      <div className="action-bar mt-4">
+        <button
+          onClick={imprimirOT}
+          disabled={imprimiendo}
+          className="btn btn-out disabled:opacity-50"
+          style={{ height: 48 }}
+        >
+          <Printer className="h-3.5 w-3.5" strokeWidth={1.7} />
+          {imprimiendo ? "Generando…" : "Imprimir OT"}
+        </button>
+        {orden.estado === "entregada" && orden.tipo !== "garantia" && (
           <button
-            onClick={imprimirOT}
-            disabled={imprimiendo}
-            className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer disabled:opacity-50"
+            onClick={() => setModalGarantia(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium"
             style={{
-              borderColor: "hsl(var(--primary))",
-              color: "hsl(var(--primary))",
-              backgroundColor: "hsl(var(--primary) / 0.08)",
+              height: 48,
+              borderColor: "var(--warn-500)",
+              color: "var(--warn-700)",
+              backgroundColor: "var(--warn-50)",
             }}
-            title="Imprimir orden de trabajo"
           >
-            🖨️ Imprimir OT
+            <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.7} />
+            Cliente reclama garantía
           </button>
-        }
-      />
+        )}
+      </div>
+
+      {modalGarantia && (
+        <ModalAbrirGarantiaVenta
+          origen={{
+            tipo: "ot",
+            id: orden.id,
+            cliente_nombre: orden.cliente_nombre,
+            sede_id: orden.sede_id,
+          }}
+          onClose={() => setModalGarantia(false)}
+          onCreated={(gid) => {
+            setModalGarantia(false);
+            navigate(`/ops/garantias/venta/${gid}`);
+          }}
+        />
+      )}
 
       {errorMsg && (
         <div
-          className="rounded-lg border px-3 py-2 text-xs"
+          role="alert"
+          className="mt-4 rounded-[10px] border px-4 py-3 text-sm"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.4)",
-            color: "hsl(var(--destructive))",
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
+            color: "var(--dang-700)",
           }}
         >
           {errorMsg}
         </div>
       )}
 
-      {/* Info card */}
-      <div
-        className="rounded-xl border p-4 space-y-3"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
-      >
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <StatusBadge status={orden.estado} />
-            {orden.tipo === "garantia" && (
-              <span
-                className="px-2 py-0.5 rounded text-[10px] font-semibold"
-                style={{
-                  backgroundColor: "hsl(var(--warning) / 0.15)",
-                  color: "hsl(var(--warning))",
-                }}
-              >
-                🛡️ Garantía
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {orden.estado === "entregada" && orden.tipo !== "garantia" && (
-              <button
-                onClick={() => setModalGarantia(true)}
-                className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer"
-                style={{
-                  borderColor: "hsl(var(--warning))",
-                  color: "hsl(var(--warning))",
-                  backgroundColor: "hsl(var(--warning) / 0.08)",
-                }}
-              >
-                🛡️ Cliente reclama garantía
-              </button>
-            )}
-            <p
-              className="text-xs"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Técnico: {orden.tecnico?.nombre ?? "—"}
-            </p>
-          </div>
-        </div>
-
-        {modalGarantia && (
-          <ModalAbrirGarantiaVenta
-            origen={{
-              tipo: "ot",
-              id: orden.id,
-              cliente_nombre: orden.cliente_nombre,
-              sede_id: orden.sede_id,
-            }}
-            onClose={() => setModalGarantia(false)}
-            onCreated={(gid) => {
-              setModalGarantia(false);
-              navigate(`/ops/garantias/venta/${gid}`);
-            }}
-          />
-        )}
-        <div className="grid sm:grid-cols-2 gap-3 text-sm">
-          <Info label="Equipo" value={orden.equipo_descripcion} />
-          <Info label="Serie" value={orden.equipo_serie || "—"} />
-          <Info label="Teléfono" value={orden.cliente_telefono || "—"} />
-          <Info
-            label="Mano de obra"
-            value={formatCOP(orden.costo_mano_obra ?? 0)}
-          />
-        </div>
-        {orden.diagnostico && (
-          <Info label="Diagnóstico" value={orden.diagnostico} block />
-        )}
-      </div>
-
-      {/* Cambiar estado */}
-      {puedeEditar && editable && (
-        <div className="space-y-2">
-          <p
-            className="text-xs font-semibold uppercase tracking-wide"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Cambiar estado
-          </p>
-          <div className="flex gap-2 flex-wrap">
-            {ESTADOS.map((e) => {
-              const esActual = orden.estado === e;
-              // Excepción: no_autorizado puede saltar abierta → completada
-              // (debe coincidir con trg_orden_validar_transicion en BD)
-              const excepcionNoAutorizado =
-                orden.estado === "abierta" &&
-                e === "completada" &&
-                orden.estado_autorizacion === "no_autorizado";
-              const permitido =
-                esActual ||
-                TRANSICIONES_VALIDAS[orden.estado]?.includes(e) ||
-                excepcionNoAutorizado;
-              return (
-                <button
-                  key={e}
-                  onClick={() => permitido && !esActual && cambiarEstado(e)}
-                  disabled={cambiandoEstado || esActual || !permitido}
-                  title={
-                    !permitido && !esActual
-                      ? `Transición ${orden.estado} → ${e} no permitida`
-                      : undefined
-                  }
-                  className="px-3 py-2 rounded-lg text-xs font-medium border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={
-                    esActual
-                      ? {
-                          backgroundColor: "hsl(var(--primary))",
-                          color: "hsl(var(--primary-foreground))",
-                          borderColor: "hsl(var(--primary))",
-                        }
-                      : {
-                          backgroundColor: "transparent",
-                          color: "hsl(var(--foreground))",
-                          borderColor: "hsl(var(--border))",
-                        }
-                  }
-                >
-                  {ESTADO_LABEL[e]}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Repuestos */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3
-            className="text-sm font-semibold"
-            style={{ color: "hsl(var(--foreground))" }}
-          >
-            Repuestos consumidos
-          </h3>
-          <p
-            className="text-sm font-bold tabular-nums"
-            style={{ color: "hsl(var(--primary))" }}
-          >
-            {formatCOP(orden.costo_repuestos ?? 0)}
-          </p>
-        </div>
-
-        {detalles.length === 0 && (
-          <p
-            className="text-xs italic"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Aún no hay repuestos
-          </p>
-        )}
-
-        <ul className="space-y-2" role="list">
-          {detalles.map((d) => (
-            <li
-              key={d.id}
-              className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5"
-              style={{
-                backgroundColor: "hsl(var(--card))",
-                borderColor: "hsl(var(--border))",
-              }}
-            >
-              <div className="flex-1 min-w-0">
-                <p
-                  className="text-sm font-medium truncate"
-                  style={{ color: "hsl(var(--foreground))" }}
-                >
-                  {d.producto?.nombre ?? "—"}
-                </p>
-                <p
-                  className="text-xs font-mono"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  {d.producto?.referencia} · ×{d.cantidad} ·{" "}
-                  {formatCOP(d.costo_unitario)}
-                </p>
+      {/* ── Grid principal ─────────────────────────────────────────── */}
+      <div className="mt-4 grid items-start gap-3 lg:grid-cols-[1fr_340px]">
+        <div className="flex flex-col gap-3">
+          {/* Estado / máquina de estados */}
+          {puedeEditar && editable && (
+            <div className="iblock">
+              <div className="ib-head">
+                <div className="ib-ico">
+                  <Wrench className="h-3.5 w-3.5" strokeWidth={1.7} />
+                </div>
+                <div className="ib-title">Cambiar estado</div>
               </div>
-              <p
-                className="text-sm font-bold tabular-nums shrink-0"
-                style={{ color: "hsl(var(--foreground))" }}
-              >
-                {formatCOP(d.subtotal)}
-              </p>
-              {puedeEditar && editable && (
-                <button
-                  onClick={() => quitarRepuesto(d.id)}
-                  className="text-xs px-2 py-1 rounded cursor-pointer"
-                  style={{ color: "hsl(var(--destructive))" }}
-                  aria-label="Quitar"
-                >
-                  ✕
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-
-        {puedeEditar && editable && (
-          <div className="space-y-2 pt-2">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar repuesto por nombre o referencia (mín 2 letras)…"
-              className="w-full h-12 px-3 rounded-lg border text-sm"
-              style={{
-                backgroundColor: "hsl(var(--card))",
-                borderColor: "hsl(var(--border))",
-                color: "hsl(var(--foreground))",
-              }}
-            />
-            {buscando && (
-              <p
-                className="text-xs"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                Buscando…
-              </p>
-            )}
-            {resultados.length > 0 && (
-              <ul
-                className="space-y-1 max-h-64 overflow-y-auto rounded-lg border"
-                style={{ borderColor: "hsl(var(--border))" }}
-              >
-                {resultados.map((p) => {
-                  const stock = p.inventario?.[0]?.cantidad ?? 0;
-                  const sinStock = stock < 1;
+              <div className="flex flex-wrap gap-2">
+                {ESTADOS.map((e) => {
+                  const esActual = orden.estado === e;
+                  // Excepción: no_autorizado puede saltar abierta → completada
+                  // (debe coincidir con trg_orden_validar_transicion en BD)
+                  const excepcionNoAutorizado =
+                    orden.estado === "abierta" &&
+                    e === "completada" &&
+                    orden.estado_autorizacion === "no_autorizado";
+                  const permitido =
+                    esActual ||
+                    TRANSICIONES_VALIDAS[orden.estado]?.includes(e) ||
+                    excepcionNoAutorizado;
                   return (
-                    <li key={p.id}>
-                      <button
-                        onClick={() => !sinStock && agregarRepuesto(p)}
-                        disabled={agregando || sinStock}
-                        className="w-full text-left px-3 py-2.5 flex items-center justify-between gap-3 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                          backgroundColor: "hsl(var(--card))",
-                          borderBottom: "1px solid hsl(var(--border) / 0.5)",
-                        }}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p
-                            className="text-sm font-medium truncate"
-                            style={{ color: "hsl(var(--foreground))" }}
-                          >
-                            {p.nombre}
-                          </p>
-                          <p
-                            className="text-xs font-mono"
-                            style={{ color: "hsl(var(--muted-foreground))" }}
-                          >
-                            {p.referencia} ·{" "}
-                            <span
-                              style={{
-                                color: sinStock
-                                  ? "hsl(var(--destructive))"
-                                  : "hsl(var(--success))",
-                              }}
-                            >
-                              Stock: {stock}
-                            </span>
-                          </p>
-                        </div>
-                        <p
-                          className="text-sm font-bold tabular-nums shrink-0"
-                          style={{ color: "hsl(var(--foreground))" }}
-                        >
-                          {formatCOP(p.precio_venta)}
-                        </p>
-                      </button>
-                    </li>
+                    <button
+                      key={e}
+                      onClick={() => permitido && !esActual && cambiarEstado(e)}
+                      disabled={cambiandoEstado || esActual || !permitido}
+                      title={
+                        !permitido && !esActual
+                          ? `Transición ${orden.estado} → ${e} no permitida`
+                          : undefined
+                      }
+                      className="rounded-lg border px-3 text-[12.5px] font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40"
+                      style={
+                        esActual
+                          ? {
+                              minHeight: 48,
+                              backgroundColor: "var(--p-600)",
+                              color: "#fff",
+                              borderColor: "var(--p-600)",
+                            }
+                          : {
+                              minHeight: 48,
+                              backgroundColor: "var(--n-0)",
+                              color: "var(--n-700)",
+                              borderColor: "var(--n-200)",
+                            }
+                      }
+                    >
+                      {OT_ESTADO_LABELS[e]}
+                    </button>
                   );
                 })}
-              </ul>
+              </div>
+            </div>
+          )}
+
+          {/* Diagnóstico */}
+          {orden.diagnostico && (
+            <div className="iblock">
+              <div className="ib-head">
+                <div className="ib-ico">
+                  <FileText className="h-3.5 w-3.5" strokeWidth={1.7} />
+                </div>
+                <div className="ib-title">Diagnóstico</div>
+              </div>
+              <p
+                className="text-[13px] leading-[1.55]"
+                style={{ color: "var(--n-800)" }}
+              >
+                {orden.diagnostico}
+              </p>
+            </div>
+          )}
+
+          {/* Autorización del cliente */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico succ">
+                <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.7} />
+              </div>
+              <div className="ib-title">Autorización del cliente</div>
+              <span className={aPill.cls}>
+                <span className="dot" />
+                {aPill.label}
+              </span>
+            </div>
+            <AutorizacionPanel
+              ordenId={orden.id}
+              estadoAutorizacion={orden.estado_autorizacion}
+              valorRevision={orden.valor_revision}
+              readOnly={!editable || !puedeEditar}
+              onChange={cargar}
+            />
+          </div>
+
+          {/* Abonos / anticipos */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <Wallet className="h-3.5 w-3.5" strokeWidth={1.7} />
+              </div>
+              <div className="ib-title">Abonos y anticipos</div>
+            </div>
+            <AbonosPanel
+              ordenId={orden.id}
+              readOnly={!editable}
+              onChange={cargar}
+              totalOT={totalOT}
+            />
+          </div>
+
+          {/* Repuestos consumidos */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <Package className="h-3.5 w-3.5" strokeWidth={1.7} />
+              </div>
+              <div className="ib-title">Repuestos consumidos</div>
+              <div className="ib-aux">
+                {formatCOP(orden.costo_repuestos ?? 0)}
+              </div>
+            </div>
+
+            {detalles.length === 0 ? (
+              <p className="text-xs italic" style={{ color: "var(--n-500)" }}>
+                Aún no hay repuestos
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="prod-tbl">
+                  <tbody>
+                    {detalles.map((d) => (
+                      <tr key={d.id}>
+                        <td style={{ width: 140 }}>
+                          <span className="p-sku">
+                            {d.producto?.referencia ?? "—"}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="p-nm">
+                            {d.producto?.nombre ?? "—"}
+                          </div>
+                        </td>
+                        <td className="p-pr" style={{ width: 160 }}>
+                          ×{d.cantidad} · {formatCOP(d.costo_unitario)}
+                        </td>
+                        <td className="p-sub" style={{ width: 120 }}>
+                          {formatCOP(d.subtotal)}
+                        </td>
+                        {puedeEditar && editable && (
+                          <td style={{ width: 48 }}>
+                            <button
+                              onClick={() => quitarRepuesto(d.id)}
+                              aria-label="Quitar repuesto"
+                              className="grid place-items-center rounded-lg"
+                              style={{
+                                width: 36,
+                                height: 36,
+                                color: "var(--dang-700)",
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={1.7} />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Picker de repuestos */}
+            {puedeEditar && editable && (
+              <div className="mt-3 space-y-2">
+                <div
+                  className="flex h-12 items-center gap-2.5 rounded-lg border px-3.5"
+                  style={{
+                    borderColor: "var(--n-200)",
+                    backgroundColor: "var(--n-0)",
+                  }}
+                >
+                  <Search
+                    className="h-4 w-4 shrink-0"
+                    strokeWidth={1.5}
+                    style={{ color: "var(--n-500)" }}
+                  />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Buscar repuesto por nombre o referencia (mín 2)…"
+                    className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
+                    style={{ color: "var(--n-950)" }}
+                  />
+                  {search && (
+                    <button
+                      onClick={() => setSearch("")}
+                      aria-label="Limpiar"
+                      className="grid h-6 w-6 place-items-center rounded"
+                      style={{ color: "var(--n-500)" }}
+                    >
+                      <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    </button>
+                  )}
+                </div>
+                {buscando && (
+                  <p className="text-xs" style={{ color: "var(--n-500)" }}>
+                    Buscando…
+                  </p>
+                )}
+                {resultados.length > 0 && (
+                  <ul
+                    className="max-h-64 divide-y overflow-y-auto rounded-lg border"
+                    style={{ borderColor: "var(--n-150)" }}
+                  >
+                    {resultados.map((p) => {
+                      const stock = p.inventario?.[0]?.cantidad ?? 0;
+                      const sinStock = stock < 1;
+                      return (
+                        <li key={p.id}>
+                          <button
+                            onClick={() => !sinStock && agregarRepuesto(p)}
+                            disabled={agregando || sinStock}
+                            className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                            style={{ backgroundColor: "var(--n-0)" }}
+                            onMouseEnter={(e) => {
+                              if (!sinStock)
+                                e.currentTarget.style.backgroundColor =
+                                  "var(--n-50)";
+                            }}
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.backgroundColor =
+                                "var(--n-0)")
+                            }
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p
+                                className="truncate text-sm font-medium"
+                                style={{ color: "var(--n-950)" }}
+                              >
+                                {p.nombre}
+                              </p>
+                              <p
+                                className="font-mono text-xs"
+                                style={{ color: "var(--n-500)" }}
+                              >
+                                {p.referencia} ·{" "}
+                                <span
+                                  style={{
+                                    color: sinStock
+                                      ? "var(--dang-700)"
+                                      : "var(--succ-700)",
+                                  }}
+                                >
+                                  Stock: {stock}
+                                </span>
+                              </p>
+                            </div>
+                            <p
+                              className="shrink-0 font-mono text-sm font-medium tabular-nums"
+                              style={{ color: "var(--n-900)" }}
+                            >
+                              {formatCOP(p.precio_venta)}
+                            </p>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Trabajo realizado */}
-      {puedeEditar && editable && (
-        <div className="space-y-2">
-          <h3
-            className="text-sm font-semibold"
-            style={{ color: "hsl(var(--foreground))" }}
-          >
-            Trabajo realizado
-          </h3>
-          <textarea
-            value={trabajoRealizado}
-            onChange={(e) => setTrabajoRealizado(e.target.value)}
-            rows={3}
-            className="w-full px-3 py-2 rounded-lg border text-sm"
-            style={{
-              backgroundColor: "hsl(var(--card))",
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--foreground))",
-            }}
-          />
-          <button
-            onClick={guardarTrabajo}
-            disabled={savingTrabajo}
-            className="px-4 h-10 rounded-lg text-sm font-medium border cursor-pointer disabled:opacity-50"
-            style={{
-              borderColor: "hsl(var(--primary))",
-              color: "hsl(var(--primary))",
-              backgroundColor: "hsl(var(--primary) / 0.05)",
-            }}
-          >
-            {savingTrabajo ? "Guardando…" : "Guardar trabajo"}
-          </button>
+          {/* Trabajo realizado */}
+          {puedeEditar && editable && (
+            <div className="iblock">
+              <div className="ib-head">
+                <div className="ib-ico">
+                  <FileText className="h-3.5 w-3.5" strokeWidth={1.7} />
+                </div>
+                <div className="ib-title">Trabajo realizado</div>
+              </div>
+              <textarea
+                value={trabajoRealizado}
+                onChange={(e) => setTrabajoRealizado(e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{
+                  backgroundColor: "var(--n-0)",
+                  borderColor: "var(--n-200)",
+                  color: "var(--n-950)",
+                }}
+              />
+              <button
+                onClick={guardarTrabajo}
+                disabled={savingTrabajo}
+                className="btn btn-out mt-2.5 disabled:opacity-50"
+                style={{ height: 48 }}
+              >
+                <Save className="h-3.5 w-3.5" strokeWidth={1.7} />
+                {savingTrabajo ? "Guardando…" : "Guardar trabajo"}
+              </button>
+            </div>
+          )}
+
+          {/* Checklist de recepción */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <ClipboardCheck className="h-3.5 w-3.5" strokeWidth={1.7} />
+              </div>
+              <div className="ib-title">Checklist de recepción</div>
+            </div>
+            <ChecklistRecepcion
+              ordenId={orden.id}
+              readOnly={!editable || !puedeEditar}
+            />
+          </div>
+
+          {/* Cotizaciones asociadas */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <FileText className="h-3.5 w-3.5" strokeWidth={1.7} />
+              </div>
+              <div className="ib-title">Cotizaciones asociadas</div>
+            </div>
+            <CotizacionesAsociadasOT
+              ordenId={orden.id}
+              readOnly={!editable || !puedeEditar}
+              sedeId={orden.sede_id}
+              onChange={cargar}
+            />
+          </div>
+
+          {/* Historial de eventos (derivado de timestamps reales de la OT) */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <Activity className="h-3.5 w-3.5" strokeWidth={1.7} />
+              </div>
+              <div className="ib-title">Historial de eventos</div>
+            </div>
+            {historial.length === 0 ? (
+              <p className="text-xs italic" style={{ color: "var(--n-500)" }}>
+                Sin eventos registrados
+              </p>
+            ) : (
+              <div className="timeline">
+                {historial.map((h, i) => (
+                  <div className="tl-row" key={i}>
+                    <span className={`tl-dot ${h.tone}`} />
+                    <div>
+                      <div className="tl-act">{h.act}</div>
+                      {h.meta && <div className="tl-meta">{h.meta}</div>}
+                    </div>
+                    {h.time && <span className="tl-time">{h.time}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      )}
 
-      {/* Fase 10 — Autorización del cliente */}
-      <div className="space-y-2">
-        <h3
-          className="text-sm font-semibold"
-          style={{ color: "hsl(var(--foreground))" }}
-        >
-          Autorización del cliente
-        </h3>
-        <AutorizacionPanel
-          ordenId={orden.id}
-          estadoAutorizacion={orden.estado_autorizacion}
-          valorRevision={orden.valor_revision}
-          readOnly={!editable || !puedeEditar}
-          onChange={cargar}
-        />
+        {/* ── Side column ──────────────────────────────────────────── */}
+        <aside className="iblock sticky top-4 self-start !p-5">
+          <div className="side-block">
+            <div className="eyebrow">
+              <User className="h-3 w-3" strokeWidth={1.8} />
+              Cliente
+            </div>
+            <div className="name">{orden.cliente_nombre}</div>
+            {orden.cliente_telefono && (
+              <div className="row mono">
+                <Phone className="h-3 w-3" strokeWidth={1.8} />
+                {orden.cliente_telefono}
+              </div>
+            )}
+          </div>
+
+          <div className="side-block">
+            <div className="eyebrow">
+              <Wrench className="h-3 w-3" strokeWidth={1.8} />
+              Equipo
+            </div>
+            <div className="name">{orden.equipo_descripcion}</div>
+            {orden.equipo_serie && (
+              <div className="row mono">
+                <Hash className="h-3 w-3" strokeWidth={1.8} />
+                <span className="val">{orden.equipo_serie}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="side-block">
+            <div className="eyebrow">Asignación</div>
+            <div className="row" style={{ gap: 8 }}>
+              <span className={`av-tec ${tec.variant}`}>{tec.ini}</span>
+              <span className="val text-[13px]">
+                {orden.tecnico?.nombre ?? "Sin asignar"}
+              </span>
+            </div>
+            <div className="row mono">
+              Recepción: <span className="val">{formatDate(orden.fecha)}</span>
+            </div>
+            {orden.fecha_entrega ? (
+              <div className="row mono">
+                Entrega:{" "}
+                <span className="val">{formatDate(orden.fecha_entrega)}</span>
+              </div>
+            ) : (
+              diasTaller.dias != null && (
+                <div className="row mono">
+                  En taller:{" "}
+                  <span
+                    className={
+                      "val " +
+                      (diasTaller.tone === "warn"
+                        ? "days-warn"
+                        : diasTaller.tone === "dang"
+                          ? "days-dang"
+                          : "")
+                    }
+                  >
+                    {diasTaller.label}
+                  </span>
+                </div>
+              )
+            )}
+          </div>
+
+          {/* Vinculaciones (cadena comercial — solo si existen) */}
+          {tieneCiclo && (
+            <div className="side-block">
+              <div className="eyebrow">Vinculaciones</div>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {vinculos.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => navigate(`/ops/cotizaciones/${v.id}`)}
+                    className="link-pill cot"
+                    style={{ cursor: "pointer" }}
+                  >
+                    Cot-{v.numero}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isAdmin && (
+            <div className="side-block">
+              <div className="eyebrow">
+                <span
+                  className="inline-block h-1.5 w-1.5 rounded-full"
+                  style={{ background: "var(--p-500)" }}
+                />
+                Costos · Solo Admin
+              </div>
+              <div className="cost-row">
+                <span>Mano de obra</span>
+                <span className="v">
+                  {formatCOP(orden.costo_mano_obra ?? 0)}
+                </span>
+              </div>
+              <div className="cost-row">
+                <span>Repuestos</span>
+                <span className="v">
+                  {formatCOP(orden.costo_repuestos ?? 0)}
+                </span>
+              </div>
+              {Number(orden.valor_revision ?? 0) > 0 && (
+                <div className="cost-row">
+                  <span>Valor por revisión</span>
+                  <span className="v">{formatCOP(orden.valor_revision)}</span>
+                </div>
+              )}
+              <div className="cost-row tot">
+                <span>Total</span>
+                <span className="v">{formatCOP(totalOT)}</span>
+              </div>
+              <div className="cost-row">
+                <span>Abonado</span>
+                <span className="v">{formatCOP(abonado)}</span>
+              </div>
+              <div className="cost-row saldo">
+                <span>Saldo</span>
+                <span className="v">{formatCOP(saldo)}</span>
+              </div>
+            </div>
+          )}
+        </aside>
       </div>
-
-      {/* Fase 10 — Abonos */}
-      <div className="space-y-2">
-        <h3
-          className="text-sm font-semibold"
-          style={{ color: "hsl(var(--foreground))" }}
-        >
-          Abonos / Anticipos
-        </h3>
-        <AbonosPanel
-          ordenId={orden.id}
-          readOnly={!editable}
-          onChange={cargar}
-          totalOT={Number(orden.total ?? 0) + Number(orden.valor_revision ?? 0)}
-        />
-      </div>
-
-      {/* Fase 10 — Checklist de recepción */}
-      <div className="space-y-2">
-        <h3
-          className="text-sm font-semibold"
-          style={{ color: "hsl(var(--foreground))" }}
-        >
-          Checklist de recepción
-        </h3>
-        <ChecklistRecepcion
-          ordenId={orden.id}
-          readOnly={!editable || !puedeEditar}
-        />
-      </div>
-
-      {/* Fase 10 §10.6 — Cotizaciones asociadas a esta OT */}
-      <div className="space-y-2">
-        <h3
-          className="text-sm font-semibold"
-          style={{ color: "hsl(var(--foreground))" }}
-        >
-          Cotizaciones asociadas
-        </h3>
-        <CotizacionesAsociadasOT
-          ordenId={orden.id}
-          readOnly={!editable || !puedeEditar}
-          sedeId={orden.sede_id}
-          onChange={cargar}
-        />
-      </div>
-
-      {/* Total */}
-      <div
-        className="rounded-xl border p-4 flex items-center justify-between"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--primary))",
-        }}
-      >
-        <p
-          className="text-sm font-semibold"
-          style={{ color: "hsl(var(--foreground))" }}
-        >
-          Total
-        </p>
-        <p
-          className="text-xl font-bold tabular-nums"
-          style={{ color: "hsl(var(--primary))" }}
-        >
-          {formatCOP(orden.total ?? 0)}
-        </p>
-      </div>
-
-      <button
-        onClick={() => navigate("/ops/ordenes")}
-        className="px-4 h-10 rounded-lg text-sm font-medium border cursor-pointer"
-        style={{
-          borderColor: "hsl(var(--border))",
-          color: "hsl(var(--muted-foreground))",
-        }}
-      >
-        ← Volver al historial
-      </button>
 
       <ConfirmDialog />
-    </div>
-  );
-}
-
-function Info({ label, value, block }) {
-  return (
-    <div className={block ? "col-span-full" : ""}>
-      <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
-        {label}
-      </p>
-      <p className="text-sm" style={{ color: "hsl(var(--foreground))" }}>
-        {value}
-      </p>
     </div>
   );
 }

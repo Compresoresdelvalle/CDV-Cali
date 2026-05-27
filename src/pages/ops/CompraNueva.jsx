@@ -1,16 +1,19 @@
 import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  ArrowRight,
+  Check,
+  Search,
+  Trash2,
+  Truck,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 
-const inputStyle = {
-  backgroundColor: "hsl(var(--card))",
-  borderColor: "hsl(var(--border))",
-  color: "hsl(var(--foreground))",
-};
+const IVA_PCT = 19;
 
 export default function CompraNueva() {
   const navigate = useNavigate();
@@ -129,8 +132,15 @@ export default function CompraNueva() {
     (s, i) => s + i.cantidad * i.costo_unitario,
     0,
   );
-  const iva = subtotal * 0.19;
+  const iva = subtotal * (IVA_PCT / 100);
   const total = subtotal + iva;
+  const totalItems = carrito.reduce((s, i) => s + i.cantidad, 0);
+
+  // Pasos del wizard: el paso "Proveedor" se considera completo cuando hay
+  // nombre; "Productos" activo cuando hay al menos un item; el envío final
+  // (registrar) hace las veces del paso "Confirmación".
+  const pasoProveedor = proveedor.trim().length > 0;
+  const pasoProductos = carrito.length > 0;
 
   const guardarCompra = async () => {
     if (!proveedor.trim()) {
@@ -173,234 +183,395 @@ export default function CompraNueva() {
   };
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Nueva Compra"
-        description={perfil?.sede_id}
-        actions={
-          <button
-            onClick={() => navigate("/ops/compras")}
-            className="h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-              backgroundColor: "hsl(var(--card))",
-            }}
+    <div className="flex h-full flex-col gap-4 px-4 pb-14 pt-5 sm:px-7 animate-fade-in">
+      <button
+        onClick={() => navigate("/ops/compras")}
+        className="back-btn inline-flex w-fit items-center gap-1.5"
+      >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+        Volver a Compras
+      </button>
+
+      {/* ── Encabezado ──────────────────────────────────────────────── */}
+      <div
+        className="flex flex-wrap items-end justify-between gap-4 border-b pb-3.5"
+        style={{ borderColor: "var(--n-100)" }}
+      >
+        <div>
+          <h1
+            className="m-0 text-[22px] font-semibold tracking-[-0.01em]"
+            style={{ color: "var(--n-950)" }}
           >
-            Cancelar
-          </button>
-        }
-      />
-
-      {/* Proveedor */}
-      <SectionCard title="Proveedor">
-        <div className="space-y-3">
-          <input
-            type="text"
-            value={proveedor}
-            onChange={(e) => setProveedor(e.target.value)}
-            placeholder="Nombre del proveedor *"
-            className="w-full px-4 py-3 rounded-xl text-sm border focus:outline-none transition-all"
-            style={inputStyle}
-          />
-          <input
-            type="text"
-            value={facturaProveedor}
-            onChange={(e) => setFacturaProveedor(e.target.value)}
-            placeholder="N° factura del proveedor (opcional)"
-            className="w-full px-4 py-3 rounded-xl text-sm border focus:outline-none transition-all"
-            style={inputStyle}
-          />
+            Nueva compra
+          </h1>
+          <div className="mt-1 text-[13px]" style={{ color: "var(--n-500)" }}>
+            Sede destino{" "}
+            <b className="font-medium" style={{ color: "var(--n-700)" }}>
+              {perfil?.sede_id ?? "—"}
+            </b>{" "}
+            · IVA {IVA_PCT}%
+          </div>
         </div>
-      </SectionCard>
+        <button
+          onClick={() => navigate("/ops/compras")}
+          className="btn btn-out"
+          style={{ height: 48 }}
+        >
+          Cancelar
+        </button>
+      </div>
 
-      {/* Productos */}
-      <SectionCard title="Productos">
-        <div className="space-y-3">
-          {/* Buscador */}
-          <div className="relative">
-            <SearchIcon />
-            <input
-              type="text"
-              value={busqueda}
-              onChange={handleBusquedaChange}
-              placeholder="Buscar producto por nombre o referencia..."
-              className="w-full pl-9 pr-4 py-3 rounded-xl text-sm border focus:outline-none transition-all"
-              style={inputStyle}
-            />
+      {/* ── Stepper ─────────────────────────────────────────────────── */}
+      <div className="stepper overflow-x-auto">
+        <Step
+          n={1}
+          label="Proveedor"
+          state={pasoProveedor ? "done" : "active"}
+        />
+        <Line done={pasoProveedor} />
+        <Step
+          n={2}
+          label="Productos"
+          state={pasoProductos ? "done" : pasoProveedor ? "active" : "todo"}
+        />
+        <Line done={pasoProductos} />
+        <Step
+          n={3}
+          label="Confirmación"
+          state={pasoProveedor && pasoProductos ? "active" : "todo"}
+        />
+      </div>
+
+      {/* ── Wizard grid ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_340px]">
+        {/* ── Columna principal ─────────────────────────────────────── */}
+        <div className="flex flex-col gap-3.5">
+          {/* Proveedor */}
+          <div className="iblock flex flex-col gap-3.5">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <Truck className="h-3.5 w-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Datos del proveedor</div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 gap-x-3.5 sm:grid-cols-2">
+              <Field label="Proveedor" req>
+                <input
+                  type="text"
+                  value={proveedor}
+                  onChange={(e) => setProveedor(e.target.value)}
+                  placeholder="Nombre del proveedor"
+                  className="finput sans"
+                />
+              </Field>
+              <Field label="N° factura del proveedor">
+                <input
+                  type="text"
+                  value={facturaProveedor}
+                  onChange={(e) => setFacturaProveedor(e.target.value)}
+                  placeholder="Opcional"
+                  className="finput sans"
+                />
+              </Field>
+            </div>
           </div>
 
-          {buscando && (
-            <p
-              className="text-xs"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Buscando...
-            </p>
-          )}
+          {/* Productos */}
+          <div className="iblock flex flex-col gap-3.5">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <Search className="h-3.5 w-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Productos a ordenar</div>
+              <div className="ib-aux">{carrito.length} en la orden</div>
+            </div>
 
-          {resultados.length > 0 && (
+            {/* Búsqueda */}
             <div
-              className="border rounded-xl overflow-hidden"
-              style={{ borderColor: "hsl(var(--border))" }}
+              className="flex h-11 items-center gap-2.5 rounded-[10px] border px-3.5"
+              style={{
+                borderColor: "var(--n-150)",
+                backgroundColor: "var(--n-0)",
+              }}
             >
-              {resultados.map((r, idx) => (
-                <button
-                  key={r.id}
-                  onClick={() => agregarAlCarrito(r)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-left transition-all cursor-pointer"
-                  style={{
-                    borderTop:
-                      idx === 0 ? "none" : `1px solid hsl(var(--border) / 0.5)`,
-                    backgroundColor: "hsl(var(--card))",
-                  }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.backgroundColor =
-                      "hsl(var(--muted) / 0.5)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.backgroundColor = "hsl(var(--card))")
-                  }
-                >
-                  <div>
-                    <p
-                      className="text-sm font-medium"
-                      style={{ color: "hsl(var(--foreground))" }}
-                    >
-                      {r.nombre}
-                    </p>
-                    <p
-                      className="text-xs"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {r.referencia} · {r.unidad_medida}
-                    </p>
-                  </div>
-                  <span
-                    className="text-xs"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    + Agregar
-                  </span>
-                </button>
-              ))}
+              <Search
+                className="h-4 w-4 shrink-0"
+                strokeWidth={1.5}
+                style={{ color: "var(--n-300)" }}
+              />
+              <input
+                type="text"
+                value={busqueda}
+                onChange={handleBusquedaChange}
+                placeholder="Buscar por nombre o referencia del catálogo…"
+                className="flex-1 border-none bg-transparent text-[14px] outline-none"
+                style={{ color: "var(--n-700)" }}
+              />
             </div>
-          )}
 
-          {/* Carrito */}
-          {carrito.length === 0 ? (
-            <div className="py-8 text-center">
-              <p
-                className="text-sm"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                Agrega productos a la orden de compra
+            {buscando && (
+              <p className="text-xs" style={{ color: "var(--n-500)" }}>
+                Buscando…
               </p>
-            </div>
-          ) : (
-            <>
-              {/* Desktop tabla */}
+            )}
+
+            {resultados.length > 0 && (
               <div
-                className="hidden md:block overflow-x-auto rounded-xl border"
-                style={{ borderColor: "hsl(var(--border))" }}
+                className="overflow-hidden rounded-lg border"
+                style={{ borderColor: "var(--n-150)" }}
               >
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr
-                      style={{
-                        backgroundColor: "hsl(var(--muted) / 0.4)",
-                        borderBottom: "1px solid hsl(var(--border))",
-                      }}
-                    >
-                      {[
-                        "Producto",
-                        "Cantidad",
-                        "Costo unitario",
-                        "Subtotal",
-                        "",
-                      ].map((col) => (
-                        <th
-                          key={col}
-                          className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-left whitespace-nowrap"
-                          style={{ color: "hsl(var(--muted-foreground))" }}
-                        >
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {carrito.map((item, idx) => (
-                      <tr
-                        key={item.producto_id}
-                        style={{
-                          borderTop:
-                            idx === 0
-                              ? "none"
-                              : "1px solid hsl(var(--border) / 0.5)",
-                        }}
+                {resultados.map((r, idx) => (
+                  <button
+                    key={r.id}
+                    onClick={() => agregarAlCarrito(r)}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
+                    style={{
+                      borderTop: idx === 0 ? "none" : "1px solid var(--n-100)",
+                      backgroundColor: "var(--n-0)",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.backgroundColor = "var(--n-50)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.backgroundColor = "var(--n-0)")
+                    }
+                  >
+                    <div>
+                      <p
+                        className="text-sm font-medium"
+                        style={{ color: "var(--n-950)" }}
                       >
-                        <td className="px-3 py-3">
-                          <p
-                            className="text-sm font-medium"
-                            style={{ color: "hsl(var(--foreground))" }}
-                          >
-                            {item.nombre}
-                          </p>
-                          <p
-                            className="text-xs"
-                            style={{ color: "hsl(var(--muted-foreground))" }}
-                          >
-                            {item.referencia}
-                          </p>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() =>
-                                actualizarCantidad(item.producto_id, -1)
-                              }
-                              className="w-8 h-8 rounded-lg flex items-center justify-center font-bold border transition-all cursor-pointer"
-                              style={{
-                                borderColor: "hsl(var(--border))",
-                                color: "hsl(var(--muted-foreground))",
-                                backgroundColor: "hsl(var(--card))",
-                              }}
+                        {r.nombre}
+                      </p>
+                      <p
+                        className="font-mono text-[11px]"
+                        style={{ color: "var(--n-500)" }}
+                      >
+                        {r.referencia} · {r.unidad_medida}
+                      </p>
+                    </div>
+                    <span className="text-xs" style={{ color: "var(--p-600)" }}>
+                      + Agregar
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Carrito */}
+            {carrito.length === 0 ? (
+              <p
+                className="rounded-[10px] border border-dashed py-10 text-center text-sm"
+                style={{
+                  borderColor: "var(--n-200)",
+                  backgroundColor: "var(--n-25)",
+                  color: "var(--n-500)",
+                }}
+              >
+                Busca y agrega productos a la orden de compra
+              </p>
+            ) : (
+              <>
+                {/* Desktop: tabla */}
+                <div
+                  className="hidden overflow-hidden rounded-[10px] border md:block"
+                  style={{ borderColor: "var(--n-150)" }}
+                >
+                  <table className="prod-tbl w-full">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th className="r" style={{ width: 130 }}>
+                          Cantidad
+                        </th>
+                        <th className="r" style={{ width: 140 }}>
+                          Costo unit
+                        </th>
+                        <th className="r" style={{ width: 120 }}>
+                          Subtotal
+                        </th>
+                        <th style={{ width: 42 }} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {carrito.map((item) => (
+                        <tr key={item.producto_id}>
+                          <td>
+                            <p
+                              className="text-[12.5px] font-medium leading-tight"
+                              style={{ color: "var(--n-950)" }}
                             >
-                              −
-                            </button>
+                              {item.nombre}
+                            </p>
+                            <p
+                              className="font-mono text-[11px]"
+                              style={{ color: "var(--n-500)" }}
+                            >
+                              {item.referencia}
+                            </p>
+                          </td>
+                          <td className="text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <QtyBtn
+                                onClick={() =>
+                                  actualizarCantidad(item.producto_id, -1)
+                                }
+                              >
+                                −
+                              </QtyBtn>
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.cantidad}
+                                onChange={(e) =>
+                                  setCantidadDirecta(
+                                    item.producto_id,
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-12 rounded-lg border py-1 text-center font-mono text-sm font-semibold outline-none"
+                                style={{
+                                  borderColor: "var(--n-150)",
+                                  color: "var(--n-950)",
+                                  backgroundColor: "var(--n-0)",
+                                }}
+                              />
+                              <QtyBtn
+                                onClick={() =>
+                                  actualizarCantidad(item.producto_id, 1)
+                                }
+                              >
+                                +
+                              </QtyBtn>
+                            </div>
+                          </td>
+                          <td className="text-right">
                             <input
                               type="number"
-                              min="1"
-                              value={item.cantidad}
+                              min="0"
+                              step="100"
+                              value={item.costo_unitario}
                               onChange={(e) =>
-                                setCantidadDirecta(
+                                setCostoDirecto(
                                   item.producto_id,
                                   e.target.value,
                                 )
                               }
-                              className="w-14 text-center text-sm font-semibold border rounded-lg py-1 focus:outline-none"
-                              style={inputStyle}
-                            />
-                            <button
-                              onClick={() =>
-                                actualizarCantidad(item.producto_id, 1)
-                              }
-                              className="w-8 h-8 rounded-lg flex items-center justify-center font-bold border transition-all cursor-pointer"
+                              className="w-32 rounded-lg border px-3 py-1.5 text-right font-mono text-sm outline-none"
                               style={{
-                                borderColor: "hsl(var(--border))",
-                                color: "hsl(var(--muted-foreground))",
-                                backgroundColor: "hsl(var(--card))",
+                                borderColor: "var(--n-150)",
+                                color: "var(--n-950)",
+                                backgroundColor: "var(--n-0)",
                               }}
+                            />
+                          </td>
+                          <td className="text-right">
+                            <span
+                              className="font-mono text-sm font-semibold tabular-nums"
+                              style={{ color: "var(--n-950)" }}
                             >
-                              +
+                              {formatCOP(item.cantidad * item.costo_unitario)}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              onClick={() => eliminarItem(item.producto_id)}
+                              className="grid h-8 w-8 place-items-center rounded-lg transition-colors"
+                              style={{ color: "var(--n-500)" }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.color =
+                                  "var(--dang-600)")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.color = "var(--n-500)")
+                              }
+                              aria-label="Eliminar producto"
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={1.7} />
                             </button>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3">
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile: cards */}
+                <div className="space-y-2.5 md:hidden">
+                  {carrito.map((item) => (
+                    <div
+                      key={item.producto_id}
+                      className="space-y-2 rounded-[10px] border p-3"
+                      style={{
+                        backgroundColor: "var(--n-0)",
+                        borderColor: "var(--n-150)",
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="truncate text-sm font-medium"
+                            style={{ color: "var(--n-950)" }}
+                          >
+                            {item.nombre}
+                          </p>
+                          <p
+                            className="font-mono text-[11px]"
+                            style={{ color: "var(--n-500)" }}
+                          >
+                            {item.referencia}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => eliminarItem(item.producto_id)}
+                          className="shrink-0"
+                          style={{ color: "var(--n-500)" }}
+                          aria-label="Eliminar producto"
+                        >
+                          <Trash2 className="h-4 w-4" strokeWidth={1.7} />
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          <QtyBtn
+                            onClick={() =>
+                              actualizarCantidad(item.producto_id, -1)
+                            }
+                          >
+                            −
+                          </QtyBtn>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.cantidad}
+                            onChange={(e) =>
+                              setCantidadDirecta(
+                                item.producto_id,
+                                e.target.value,
+                              )
+                            }
+                            className="w-14 rounded-lg border py-1.5 text-center font-mono text-sm font-semibold outline-none"
+                            style={{
+                              borderColor: "var(--n-150)",
+                              color: "var(--n-950)",
+                              backgroundColor: "var(--n-0)",
+                            }}
+                          />
+                          <QtyBtn
+                            onClick={() =>
+                              actualizarCantidad(item.producto_id, 1)
+                            }
+                          >
+                            +
+                          </QtyBtn>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="text-xs"
+                            style={{ color: "var(--n-500)" }}
+                          >
+                            $
+                          </span>
                           <input
                             type="number"
                             min="0"
@@ -409,326 +580,171 @@ export default function CompraNueva() {
                             onChange={(e) =>
                               setCostoDirecto(item.producto_id, e.target.value)
                             }
-                            className="w-32 px-3 py-1.5 text-sm border rounded-lg focus:outline-none"
-                            style={inputStyle}
+                            className="w-28 rounded-lg border px-2 py-1.5 font-mono text-sm outline-none"
+                            style={{
+                              borderColor: "var(--n-150)",
+                              color: "var(--n-950)",
+                              backgroundColor: "var(--n-0)",
+                            }}
                           />
-                        </td>
-                        <td className="px-3 py-3">
-                          <span
-                            className="text-sm font-semibold tabular-nums"
-                            style={{ color: "hsl(var(--foreground))" }}
-                          >
-                            {formatCOP(item.cantidad * item.costo_unitario)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3">
-                          <button
-                            onClick={() => eliminarItem(item.producto_id)}
-                            className="transition-colors cursor-pointer"
-                            style={{ color: "hsl(var(--muted-foreground))" }}
-                            onMouseEnter={(e) =>
-                              (e.currentTarget.style.color =
-                                "hsl(var(--destructive))")
-                            }
-                            onMouseLeave={(e) =>
-                              (e.currentTarget.style.color =
-                                "hsl(var(--muted-foreground))")
-                            }
-                          >
-                            <XIcon />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile cards */}
-              <div className="md:hidden space-y-2.5">
-                {carrito.map((item) => (
-                  <div
-                    key={item.producto_id}
-                    className="rounded-xl border p-3 space-y-2"
-                    style={{
-                      backgroundColor: "hsl(var(--card))",
-                      borderColor: "hsl(var(--border))",
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className="text-sm font-medium truncate"
-                          style={{ color: "hsl(var(--foreground))" }}
-                        >
-                          {item.nombre}
-                        </p>
-                        <p
-                          className="text-xs"
-                          style={{ color: "hsl(var(--muted-foreground))" }}
-                        >
-                          {item.referencia}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => eliminarItem(item.producto_id)}
-                        className="shrink-0 cursor-pointer"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
-                      >
-                        <XIcon />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() =>
-                            actualizarCantidad(item.producto_id, -1)
-                          }
-                          className="w-9 h-9 rounded-lg flex items-center justify-center font-bold border cursor-pointer"
-                          style={{
-                            borderColor: "hsl(var(--border))",
-                            color: "hsl(var(--muted-foreground))",
-                            backgroundColor: "hsl(var(--background))",
-                          }}
-                        >
-                          −
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.cantidad}
-                          onChange={(e) =>
-                            setCantidadDirecta(item.producto_id, e.target.value)
-                          }
-                          className="w-14 text-center text-sm font-semibold border rounded-lg py-1.5 focus:outline-none"
-                          style={inputStyle}
-                        />
-                        <button
-                          onClick={() =>
-                            actualizarCantidad(item.producto_id, 1)
-                          }
-                          className="w-9 h-9 rounded-lg flex items-center justify-center font-bold border cursor-pointer"
-                          style={{
-                            borderColor: "hsl(var(--border))",
-                            color: "hsl(var(--muted-foreground))",
-                            backgroundColor: "hsl(var(--background))",
-                          }}
-                        >
-                          +
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-1.5">
+                        </div>
                         <span
-                          className="text-xs"
-                          style={{ color: "hsl(var(--muted-foreground))" }}
+                          className="ml-auto font-mono text-sm font-bold tabular-nums"
+                          style={{ color: "var(--n-950)" }}
                         >
-                          $
+                          {formatCOP(item.cantidad * item.costo_unitario)}
                         </span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="100"
-                          value={item.costo_unitario}
-                          onChange={(e) =>
-                            setCostoDirecto(item.producto_id, e.target.value)
-                          }
-                          className="w-28 px-2 py-1.5 text-sm border rounded-lg focus:outline-none"
-                          style={inputStyle}
-                        />
                       </div>
-                      <span
-                        className="ml-auto text-sm font-bold tabular-nums"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {formatCOP(item.cantidad * item.costo_unitario)}
-                      </span>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </SectionCard>
-
-      {/* Observaciones */}
-      <SectionCard title="Observaciones">
-        <textarea
-          value={observaciones}
-          onChange={(e) => setObservaciones(e.target.value)}
-          placeholder="Observaciones internas (opcional)"
-          rows={2}
-          className="w-full px-4 py-3 rounded-xl text-sm border focus:outline-none resize-none transition-all"
-          style={inputStyle}
-        />
-      </SectionCard>
-
-      {/* Totales */}
-      {carrito.length > 0 && (
-        <div
-          className="rounded-xl border p-4 space-y-2"
-          style={{
-            backgroundColor: "hsl(var(--card))",
-            borderColor: "hsl(var(--border))",
-          }}
-        >
-          <div
-            className="flex justify-between text-sm"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            <span>Subtotal</span>
-            <span className="tabular-nums">{formatCOP(subtotal)}</span>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
-          <div
-            className="flex justify-between text-sm"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            <span>IVA 19%</span>
-            <span className="tabular-nums">{formatCOP(iva)}</span>
+
+          {/* Observaciones */}
+          <div className="iblock flex flex-col gap-3">
+            <div className="ib-head">
+              <div className="ib-title">Observaciones</div>
+            </div>
+            <textarea
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              placeholder="Observaciones internas (opcional)"
+              rows={2}
+              className="ftextarea"
+            />
           </div>
-          <div
-            className="flex justify-between font-bold text-base pt-2 border-t"
+
+          {/* Recibir ahora */}
+          <label
+            className="flex cursor-pointer select-none items-center gap-3 rounded-[10px] border p-4"
             style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--foreground))",
+              backgroundColor: "var(--n-0)",
+              borderColor: recibirAhora ? "var(--p-500)" : "var(--n-150)",
             }}
           >
-            <span>Total</span>
-            <span className="tabular-nums">{formatCOP(total)}</span>
+            <input
+              type="checkbox"
+              checked={recibirAhora}
+              onChange={(e) => setRecibirAhora(e.target.checked)}
+              className="h-5 w-5 cursor-pointer rounded"
+              style={{ accentColor: "var(--p-600)" }}
+            />
+            <div>
+              <p
+                className="text-sm font-semibold"
+                style={{ color: "var(--n-950)" }}
+              >
+                Marcar como recibida ahora
+              </p>
+              <p className="text-xs" style={{ color: "var(--n-500)" }}>
+                El stock se sumará automáticamente al confirmar
+              </p>
+            </div>
+          </label>
+
+          {error && (
+            <div
+              className="rounded-[10px] border px-4 py-3"
+              style={{
+                backgroundColor: "var(--dang-50)",
+                borderColor: "var(--dang-border)",
+              }}
+            >
+              <p className="text-sm" style={{ color: "var(--dang-700)" }}>
+                {error}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* ── Resumen (sticky) ──────────────────────────────────────── */}
+        <aside className="cart">
+          <span className="cart-eyebrow">Resumen de la compra</span>
+          <div className="text-[12px]" style={{ color: "var(--n-500)" }}>
+            {totalItems} items · {carrito.length} productos
           </div>
-        </div>
-      )}
-
-      {/* Recibir ahora */}
-      <label
-        className="flex items-center gap-3 p-4 rounded-xl border cursor-pointer select-none"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: recibirAhora
-            ? "hsl(var(--primary))"
-            : "hsl(var(--border))",
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={recibirAhora}
-          onChange={(e) => setRecibirAhora(e.target.checked)}
-          className="w-5 h-5 rounded accent-primary cursor-pointer"
-        />
-        <div>
-          <p
-            className="text-sm font-semibold"
-            style={{ color: "hsl(var(--foreground))" }}
+          <div className="cart-line">
+            <span>Subtotal</span>
+            <span className="v">{formatCOP(subtotal)}</span>
+          </div>
+          <div className="cart-line">
+            <span>IVA {IVA_PCT}%</span>
+            <span className="v">{formatCOP(iva)}</span>
+          </div>
+          <div className="cart-line tot">
+            <span>Total estimado</span>
+            <span className="v">{formatCOP(total)}</span>
+          </div>
+          <button
+            onClick={guardarCompra}
+            disabled={carrito.length === 0 || !proveedor.trim() || guardando}
+            className="btn btn-pri mt-2 w-full justify-center disabled:opacity-40"
+            style={{ height: 48 }}
           >
-            Marcar como recibida ahora
-          </p>
-          <p
-            className="text-xs"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            El stock se sumará automáticamente al confirmar
-          </p>
-        </div>
-      </label>
-
-      {/* Error */}
-      {error && (
-        <div
-          className="rounded-xl border px-4 py-3"
-          style={{
-            backgroundColor: "hsl(var(--destructive) / 0.05)",
-            borderColor: "hsl(var(--destructive) / 0.2)",
-          }}
-        >
-          <p className="text-sm" style={{ color: "hsl(var(--destructive))" }}>
-            {error}
-          </p>
-        </div>
-      )}
-
-      {/* Botón guardar */}
-      <button
-        onClick={guardarCompra}
-        disabled={carrito.length === 0 || !proveedor.trim() || guardando}
-        className="w-full py-4 rounded-xl font-semibold text-base transition-opacity disabled:opacity-40 cursor-pointer"
-        style={{
-          backgroundColor: "hsl(var(--primary))",
-          color: "hsl(var(--primary-foreground))",
-        }}
-      >
-        {guardando
-          ? "Guardando..."
-          : recibirAhora
-            ? `Registrar y recibir · ${formatCOP(total)}`
-            : `Registrar compra · ${formatCOP(total)}`}
-      </button>
+            {guardando ? (
+              "Guardando…"
+            ) : recibirAhora ? (
+              <>
+                <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                Registrar y recibir
+              </>
+            ) : (
+              <>
+                Registrar compra
+                <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />
+              </>
+            )}
+          </button>
+        </aside>
+      </div>
     </div>
   );
 }
 
-function SectionCard({ title, children }) {
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+function Step({ n, label, state }) {
   return (
-    <div
-      className="rounded-xl border overflow-hidden"
+    <div className={`step ${state}`}>
+      <div className="step-dot">
+        {state === "done" ? <Check className="h-3 w-3" strokeWidth={3} /> : n}
+      </div>
+      <div className="step-lbl">{label}</div>
+    </div>
+  );
+}
+
+function Line({ done }) {
+  return <div className={`step-line ${done ? "done" : ""}`} />;
+}
+
+function Field({ label, req, children }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="flbl">
+        {label}
+        {req && <span className="req">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function QtyBtn({ children, onClick, disabled }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="grid h-8 w-8 place-items-center rounded-lg border text-lg font-bold transition-colors disabled:opacity-40"
       style={{
-        backgroundColor: "hsl(var(--card))",
-        borderColor: "hsl(var(--border))",
+        borderColor: "var(--n-150)",
+        color: "var(--n-700)",
+        backgroundColor: "var(--n-0)",
       }}
     >
-      <div
-        className="px-4 py-3 border-b"
-        style={{
-          borderColor: "hsl(var(--border))",
-          backgroundColor: "hsl(var(--muted) / 0.3)",
-        }}
-      >
-        <p
-          className="text-xs font-semibold uppercase tracking-wide"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          {title}
-        </p>
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
-      style={{ color: "hsl(var(--muted-foreground))" }}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-      />
-    </svg>
-  );
-}
-
-function XIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M6 18L18 6M6 6l12 12"
-      />
-    </svg>
+      {children}
+    </button>
   );
 }

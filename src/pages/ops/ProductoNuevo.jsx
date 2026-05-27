@@ -1,15 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowLeftCircle } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
 import ProductoForm from "../../components/forms/ProductoForm";
 
 /**
- * Página de creación de producto (Fase 12).
+ * Página de creación de producto (Fase 12 · re-vestido Lovable F4c).
  *
- * Reemplaza el `<Placeholder name="Nuevo Producto" />` que existía desde
- * Fase 3. Llama a la RPC `fn_crear_producto` que valida rol Admin/Bodeguero,
+ * Llama a la RPC `fn_crear_producto` que valida rol Admin/Bodeguero,
  * crea el producto e inserta filas de inventario en todas las sedes
  * activas con cantidad 0.
  */
@@ -35,34 +34,51 @@ export default function ProductoNuevo() {
   };
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Nuevo producto"
-        description="Crear ítem en el catálogo. Stock inicial: 0 en todas las sedes."
-        actions={
-          <button
-            onClick={() => navigate("/ops/inventario")}
-            className="h-9 px-3 rounded-lg border text-sm font-medium cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-              backgroundColor: "hsl(var(--card))",
-            }}
+    <div className="mx-auto w-full max-w-[860px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
+      <button
+        onClick={() => navigate("/ops/inventario")}
+        className="back-btn mb-3 inline-flex items-center gap-1.5"
+      >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+        Volver a Inventario
+      </button>
+
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p
+            className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em]"
+            style={{ color: "var(--n-300)" }}
           >
-            ← Volver
-          </button>
-        }
-      />
-      <ProductoForm
-        onSubmit={onSubmit}
-        onCancel={() => navigate("/ops/inventario")}
-        submitting={submitting}
-        errorMsg={errorMsg}
-        submitLabel="Crear producto"
-      />
+            Operaciones · Catálogo
+          </p>
+          <h1
+            className="text-[22px] sm:text-[24px] font-semibold tracking-[-0.018em]"
+            style={{ color: "var(--n-950)" }}
+          >
+            Nuevo producto
+          </h1>
+          <p className="mt-1.5 text-[13px]" style={{ color: "var(--n-500)" }}>
+            Crear ítem en el catálogo. Stock inicial: 0 en todas las sedes.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate("/ops/inventario")}
+          className="btn btn-out"
+          style={{ height: 48 }}
+        >
+          Cancelar
+        </button>
+      </div>
+
+      <div className="mt-[18px]">
+        <ProductoForm
+          onSubmit={onSubmit}
+          onCancel={() => navigate("/ops/inventario")}
+          submitting={submitting}
+          errorMsg={errorMsg}
+          submitLabel="Crear producto"
+        />
+      </div>
     </div>
   );
 }

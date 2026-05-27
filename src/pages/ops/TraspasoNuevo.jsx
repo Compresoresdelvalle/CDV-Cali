@@ -1,51 +1,22 @@
 import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowLeftCircle, Search, Trash2, ArrowRight } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { sanitizeSearch, safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
+import { SEDE_LABELS, sedeLabel } from "../../lib/traspasos-ui";
 
-const SEDES = [
-  { id: "BOD-PRINCIPAL", label: "Bodega Principal" },
-  { id: "ALM-01", label: "Almacén 01" },
-  { id: "ALM-02", label: "Almacén 02" },
-  { id: "ALM-03", label: "Almacén 03" },
+const SEDES = Object.entries(SEDE_LABELS).map(([id, label]) => ({ id, label }));
+
+const TIPOS = [
+  { v: "normal", label: "Normal" },
+  {
+    v: "mercancia_abandonada",
+    label: "Mercancía abandonada (retroceso a bodega)",
+  },
+  { v: "devolucion_garantia", label: "Devolución interna por garantía" },
 ];
-
-const inputStyle = {
-  backgroundColor: "hsl(var(--card))",
-  borderColor: "hsl(var(--border))",
-  color: "hsl(var(--foreground))",
-};
-
-function SectionCard({ title, children }) {
-  return (
-    <div
-      className="rounded-xl border overflow-hidden"
-      style={{
-        backgroundColor: "hsl(var(--card))",
-        borderColor: "hsl(var(--border))",
-      }}
-    >
-      <div
-        className="px-4 py-3 border-b"
-        style={{
-          borderColor: "hsl(var(--border))",
-          backgroundColor: "hsl(var(--muted) / 0.3)",
-        }}
-      >
-        <p
-          className="text-xs font-semibold uppercase tracking-wide"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          {title}
-        </p>
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
-}
 
 export default function TraspasoNuevo() {
   const navigate = useNavigate();
@@ -204,385 +175,458 @@ export default function TraspasoNuevo() {
   };
 
   const sedesDestino = SEDES.filter((s) => s.id !== sedeOrigen);
+  const totalUnidades = items.reduce((s, i) => s + i.cantidad_solicitada, 0);
+  const puedeGuardar =
+    sedeOrigen && sedeDestino && sedeOrigen !== sedeDestino && items.length > 0;
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Nuevo Traspaso"
-        description="Solicitud de movimiento entre sedes"
-        actions={
-          <button
-            onClick={() => navigate("/ops/traspasos")}
-            className="h-9 px-3 rounded-lg border text-sm font-medium cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-              backgroundColor: "hsl(var(--card))",
-            }}
+    <div className="mx-auto w-full max-w-[1100px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
+      <button
+        onClick={() => navigate("/ops/traspasos")}
+        className="back-btn mb-3 inline-flex items-center gap-1.5"
+      >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+        Volver a Traspasos
+      </button>
+
+      {/* ── Encabezado ──────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p
+            className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em]"
+            style={{ color: "var(--n-300)" }}
           >
-            Cancelar
-          </button>
-        }
-      />
-
-      {/* Error global */}
-      {error && (
-        <div
-          className="p-3 rounded-lg border text-sm font-medium"
-          style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.3)",
-            color: "hsl(var(--destructive))",
-          }}
-        >
-          {error}
+            Operaciones · Movimiento entre sedes
+          </p>
+          <h1
+            className="text-[22px] sm:text-[24px] font-semibold tracking-[-0.018em]"
+            style={{ color: "var(--n-950)" }}
+          >
+            Nuevo traspaso
+          </h1>
         </div>
-      )}
+        <button
+          onClick={() => navigate("/ops/traspasos")}
+          className="btn btn-out"
+          style={{ height: 48 }}
+        >
+          Cancelar
+        </button>
+      </div>
 
-      {/* Sedes */}
-      <SectionCard title="Sedes">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label
-              className="text-xs font-semibold uppercase tracking-wide"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Sede origen
-            </label>
-            {esAdmin ? (
-              <select
-                value={sedeOrigen}
-                onChange={(e) => {
-                  setSedeOrigen(e.target.value);
-                  setItems([]);
-                  setBusqueda("");
-                  setResultados([]);
-                }}
-                className="w-full h-10 px-3 rounded-lg border text-sm focus:outline-none"
-                style={inputStyle}
-              >
-                <option value="">Seleccionar sede…</option>
-                {SEDES.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div
-                className="h-10 px-3 flex items-center rounded-lg border text-sm font-medium"
-                style={{
-                  ...inputStyle,
-                  backgroundColor: "hsl(var(--muted) / 0.3)",
-                }}
-              >
-                {SEDES.find((s) => s.id === sedeOrigen)?.label ?? sedeOrigen}
+      <div className="mt-[18px] grid items-start gap-[18px] lg:grid-cols-[1fr_360px]">
+        {/* ── Columna principal ─────────────────────────────────────── */}
+        <div className="flex flex-col gap-[18px]">
+          {/* Sedes */}
+          <SectionCard title="Sedes">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Sede origen</Label>
+                {esAdmin ? (
+                  <select
+                    value={sedeOrigen}
+                    onChange={(e) => {
+                      setSedeOrigen(e.target.value);
+                      setItems([]);
+                      setBusqueda("");
+                      setResultados([]);
+                    }}
+                    className="finput sans"
+                  >
+                    <option value="">Seleccionar sede…</option>
+                    {SEDES.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="finput sans locked">
+                    {sedeLabel(sedeOrigen)}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div className="space-y-1.5">
-            <label
-              className="text-xs font-semibold uppercase tracking-wide"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Sede destino
-            </label>
+              <div className="space-y-1.5">
+                <Label>Sede destino</Label>
+                <select
+                  value={sedeDestino}
+                  onChange={(e) => setSedeDestino(e.target.value)}
+                  className="finput sans"
+                >
+                  <option value="">Seleccionar sede…</option>
+                  {sedesDestino.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* Productos */}
+          <SectionCard title="Agregar productos">
+            {!sedeOrigen ? (
+              <p className="text-sm" style={{ color: "var(--n-500)" }}>
+                Selecciona la sede de origen para buscar productos disponibles.
+              </p>
+            ) : (
+              <>
+                <div
+                  className="flex h-12 items-center gap-2.5 rounded-lg border px-3.5"
+                  style={{
+                    borderColor: "var(--n-200)",
+                    backgroundColor: "var(--n-0)",
+                  }}
+                >
+                  <Search
+                    className="h-4 w-4 shrink-0"
+                    strokeWidth={1.5}
+                    style={{ color: "var(--n-500)" }}
+                  />
+                  <input
+                    type="text"
+                    value={busqueda}
+                    onChange={(e) => {
+                      setBusqueda(e.target.value);
+                      buscarDebounced(e.target.value);
+                    }}
+                    placeholder="Buscar por nombre o referencia…"
+                    className="flex-1 border-none bg-transparent text-[14px] outline-none"
+                    style={{ color: "var(--n-950)" }}
+                  />
+                </div>
+
+                {buscando && (
+                  <p className="mt-2 text-xs" style={{ color: "var(--n-500)" }}>
+                    Buscando…
+                  </p>
+                )}
+
+                {resultados.length > 0 && (
+                  <div
+                    className="mt-2 overflow-hidden rounded-lg border"
+                    style={{ borderColor: "var(--n-150)" }}
+                  >
+                    {resultados.map((p, idx) => (
+                      <button
+                        key={p.id}
+                        onClick={() => agregarItem(p)}
+                        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
+                        style={{
+                          borderTop:
+                            idx === 0 ? "none" : "1px solid var(--n-100)",
+                          backgroundColor: "var(--n-0)",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.backgroundColor =
+                            "var(--n-50)")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.backgroundColor = "var(--n-0)")
+                        }
+                      >
+                        <div>
+                          <p
+                            className="text-sm font-medium"
+                            style={{ color: "var(--n-950)" }}
+                          >
+                            {p.nombre}
+                          </p>
+                          <p
+                            className="font-mono text-[11px]"
+                            style={{ color: "var(--n-500)" }}
+                          >
+                            {p.referencia} · {p.unidad_medida}
+                          </p>
+                        </div>
+                        <span className="stk-pill s">{p.stock} disp.</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Carrito de items */}
+                {items.length === 0 ? (
+                  <p
+                    className="py-8 text-center text-sm"
+                    style={{ color: "var(--n-500)" }}
+                  >
+                    Agrega productos al traspaso
+                  </p>
+                ) : (
+                  <div className="mt-3">
+                    {/* Desktop: tabla */}
+                    <div
+                      className="hidden overflow-hidden rounded-[10px] border md:block"
+                      style={{ borderColor: "var(--n-150)" }}
+                    >
+                      <table className="prod-tbl w-full">
+                        <thead>
+                          <tr>
+                            <th>Producto</th>
+                            <th className="r" style={{ width: 120 }}>
+                              Disponible
+                            </th>
+                            <th className="r" style={{ width: 150 }}>
+                              Cantidad
+                            </th>
+                            <th style={{ width: 42 }} />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((item) => (
+                            <tr key={item.producto_id}>
+                              <td>
+                                <p
+                                  className="text-[12.5px] font-medium leading-tight"
+                                  style={{ color: "var(--n-950)" }}
+                                >
+                                  {item.nombre}
+                                </p>
+                                <p
+                                  className="font-mono text-[11px]"
+                                  style={{ color: "var(--n-500)" }}
+                                >
+                                  {item.referencia}
+                                </p>
+                              </td>
+                              <td className="r">
+                                <span
+                                  className="font-mono text-[12.5px]"
+                                  style={{ color: "var(--n-700)" }}
+                                >
+                                  {item.stock_disponible} {item.unidad}
+                                </span>
+                              </td>
+                              <td className="text-right">
+                                <CantidadCtrl
+                                  item={item}
+                                  onChange={actualizarCantidad}
+                                />
+                              </td>
+                              <td>
+                                <BotonEliminar
+                                  onClick={() => eliminarItem(item.producto_id)}
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile: cards */}
+                    <div className="space-y-2.5 md:hidden">
+                      {items.map((item) => (
+                        <div
+                          key={item.producto_id}
+                          className="space-y-2 rounded-[10px] border p-3"
+                          style={{
+                            backgroundColor: "var(--n-0)",
+                            borderColor: "var(--n-150)",
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p
+                                className="truncate text-sm font-medium"
+                                style={{ color: "var(--n-950)" }}
+                              >
+                                {item.nombre}
+                              </p>
+                              <p
+                                className="font-mono text-[11px]"
+                                style={{ color: "var(--n-500)" }}
+                              >
+                                {item.referencia} · Stock:{" "}
+                                {item.stock_disponible} {item.unidad}
+                              </p>
+                            </div>
+                            <BotonEliminar
+                              onClick={() => eliminarItem(item.producto_id)}
+                            />
+                          </div>
+                          <CantidadCtrl
+                            item={item}
+                            onChange={actualizarCantidad}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </SectionCard>
+
+          {/* Tipo de traspaso */}
+          <SectionCard title="Tipo de traspaso">
             <select
-              value={sedeDestino}
-              onChange={(e) => setSedeDestino(e.target.value)}
-              className="w-full h-10 px-3 rounded-lg border text-sm focus:outline-none cursor-pointer"
-              style={inputStyle}
+              value={tipoTraspaso}
+              onChange={(e) => setTipoTraspaso(e.target.value)}
+              className="finput sans"
+              aria-label="Tipo de traspaso"
             >
-              <option value="">Seleccionar sede…</option>
-              {sedesDestino.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
+              {TIPOS.map((t) => (
+                <option key={t.v} value={t.v}>
+                  {t.label}
                 </option>
               ))}
             </select>
-          </div>
-        </div>
-      </SectionCard>
+          </SectionCard>
 
-      {/* Buscar productos */}
-      <SectionCard title="Agregar productos">
-        <div className="space-y-3">
-          {!sedeOrigen && (
-            <p
-              className="text-sm"
-              style={{ color: "hsl(var(--muted-foreground))" }}
+          {/* Observaciones */}
+          <SectionCard title="Observaciones">
+            <textarea
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              placeholder="Instrucciones especiales, referencia interna… (opcional)"
+              rows={2}
+              className="ftextarea"
+            />
+          </SectionCard>
+
+          {error && (
+            <div
+              className="rounded-[10px] border px-4 py-3"
+              style={{
+                backgroundColor: "var(--dang-50)",
+                borderColor: "var(--dang-border)",
+              }}
             >
-              Selecciona la sede de origen para buscar productos disponibles.
-            </p>
-          )}
-          {sedeOrigen && (
-            <>
-              <div className="relative">
-                <SearchIcon />
-                <input
-                  type="text"
-                  placeholder="Buscar por nombre o referencia…"
-                  value={busqueda}
-                  onChange={(e) => {
-                    setBusqueda(e.target.value);
-                    buscarDebounced(e.target.value);
-                  }}
-                  className="w-full pl-9 pr-4 h-10 rounded-lg border text-sm focus:outline-none"
-                  style={inputStyle}
-                />
-              </div>
-
-              {/* Resultados de búsqueda */}
-              {(buscando || resultados.length > 0) && (
-                <div
-                  className="rounded-lg border overflow-hidden"
-                  style={{ borderColor: "hsl(var(--border))" }}
-                >
-                  {buscando && (
-                    <div
-                      className="px-4 py-3 text-sm"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      Buscando…
-                    </div>
-                  )}
-                  {resultados.map((p, idx) => (
-                    <button
-                      key={p.id}
-                      onClick={() => agregarItem(p)}
-                      className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors cursor-pointer"
-                      style={{
-                        borderTop:
-                          idx > 0
-                            ? "1px solid hsl(var(--border) / 0.5)"
-                            : "none",
-                        backgroundColor: "hsl(var(--card))",
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.backgroundColor =
-                          "hsl(var(--muted) / 0.4)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.backgroundColor =
-                          "hsl(var(--card))")
-                      }
-                    >
-                      <div>
-                        <p
-                          className="text-sm font-medium"
-                          style={{ color: "hsl(var(--foreground))" }}
-                        >
-                          {p.nombre}
-                        </p>
-                        <p
-                          className="text-xs"
-                          style={{ color: "hsl(var(--muted-foreground))" }}
-                        >
-                          {p.referencia}
-                        </p>
-                      </div>
-                      <span
-                        className="text-xs font-semibold tabular-nums"
-                        style={{ color: "hsl(var(--success))" }}
-                      >
-                        {p.stock} disp.
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
+              <p className="text-sm" style={{ color: "var(--dang-700)" }}>
+                {error}
+              </p>
+            </div>
           )}
         </div>
-      </SectionCard>
 
-      {/* Tabla de items */}
-      {items.length > 0 && (
-        <SectionCard title={`Productos (${items.length})`}>
-          <div className="space-y-2">
-            {items.map((item) => (
-              <div
-                key={item.producto_id}
-                className="flex items-center gap-3 p-3 rounded-lg border"
-                style={{
-                  backgroundColor: "hsl(var(--muted) / 0.2)",
-                  borderColor: "hsl(var(--border))",
-                }}
-              >
-                <div className="flex-1 min-w-0">
-                  <p
-                    className="text-sm font-medium truncate"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {item.nombre}
-                  </p>
-                  <p
-                    className="text-xs"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {item.referencia} · Stock: {item.stock_disponible}{" "}
-                    {item.unidad}
-                  </p>
-                </div>
-
-                {/* Cantidad */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    onClick={() =>
-                      actualizarCantidad(
-                        item.producto_id,
-                        item.cantidad_solicitada - 1,
-                      )
-                    }
-                    className="w-8 h-8 rounded-lg border flex items-center justify-center text-sm font-bold cursor-pointer"
-                    style={{
-                      borderColor: "hsl(var(--border))",
-                      color: "hsl(var(--foreground))",
-                      backgroundColor: "hsl(var(--card))",
-                    }}
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    min={1}
-                    max={item.stock_disponible}
-                    value={item.cantidad_solicitada}
-                    onChange={(e) =>
-                      actualizarCantidad(item.producto_id, e.target.value)
-                    }
-                    className="w-14 h-8 text-center rounded-lg border text-sm font-semibold focus:outline-none tabular-nums"
-                    style={inputStyle}
-                  />
-                  <button
-                    onClick={() =>
-                      actualizarCantidad(
-                        item.producto_id,
-                        item.cantidad_solicitada + 1,
-                      )
-                    }
-                    className="w-8 h-8 rounded-lg border flex items-center justify-center text-sm font-bold cursor-pointer"
-                    style={{
-                      borderColor: "hsl(var(--border))",
-                      color: "hsl(var(--foreground))",
-                      backgroundColor: "hsl(var(--card))",
-                    }}
-                  >
-                    +
-                  </button>
-                </div>
-
-                {/* Eliminar */}
-                <button
-                  onClick={() => eliminarItem(item.producto_id)}
-                  className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
-                  style={{ color: "hsl(var(--destructive))" }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.backgroundColor =
-                      "hsl(var(--destructive) / 0.1)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.backgroundColor = "")
-                  }
-                >
-                  <TrashIcon />
-                </button>
-              </div>
-            ))}
+        {/* ── Resumen (sticky) ──────────────────────────────────────── */}
+        <aside className="cart">
+          <span className="cart-eyebrow">Resumen del traspaso</span>
+          <div
+            className="flex items-center gap-2 text-[13.5px] font-medium"
+            style={{ color: "var(--n-950)" }}
+          >
+            <span>{sedeOrigen ? sedeLabel(sedeOrigen) : "Origen"}</span>
+            <ArrowRight
+              className="h-3.5 w-3.5 shrink-0"
+              strokeWidth={1.7}
+              style={{ color: "var(--n-400)" }}
+            />
+            <span>{sedeDestino ? sedeLabel(sedeDestino) : "Destino"}</span>
           </div>
-        </SectionCard>
-      )}
-
-      {/* F12: Tipo de traspaso */}
-      <SectionCard title="Tipo de traspaso">
-        <select
-          value={tipoTraspaso}
-          onChange={(e) => setTipoTraspaso(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border text-sm cursor-pointer focus:outline-none"
-          style={inputStyle}
-          aria-label="Tipo de traspaso"
-        >
-          <option value="normal">Normal</option>
-          <option value="mercancia_abandonada">
-            Mercancía abandonada (retroceso a bodega)
-          </option>
-          <option value="devolucion_garantia">
-            Devolución interna por garantía
-          </option>
-        </select>
-      </SectionCard>
-
-      {/* Observaciones */}
-      <SectionCard title="Observaciones (opcional)">
-        <textarea
-          value={observaciones}
-          onChange={(e) => setObservaciones(e.target.value)}
-          rows={3}
-          placeholder="Instrucciones especiales, referencia interna…"
-          className="w-full px-3 py-2 rounded-lg border text-sm resize-none focus:outline-none"
-          style={inputStyle}
-        />
-      </SectionCard>
-
-      {/* Crear */}
-      <button
-        onClick={guardar}
-        disabled={guardando || items.length === 0 || !sedeDestino}
-        className="w-full h-12 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-40 cursor-pointer"
-        style={{
-          backgroundColor: "hsl(var(--primary))",
-          color: "hsl(var(--primary-foreground))",
-        }}
-        onMouseEnter={(e) =>
-          !guardando && (e.currentTarget.style.opacity = "0.9")
-        }
-        onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-      >
-        {guardando ? "Creando traspaso…" : "Crear traspaso"}
-      </button>
+          <div className="text-[12px]" style={{ color: "var(--n-500)" }}>
+            {totalUnidades} unidades · {items.length} productos
+          </div>
+          <button
+            onClick={guardar}
+            disabled={!puedeGuardar || guardando}
+            className="btn btn-pri mt-2 w-full justify-center disabled:opacity-40"
+            style={{ height: 48 }}
+          >
+            {guardando ? "Creando traspaso…" : "Crear traspaso"}
+          </button>
+        </aside>
+      </div>
     </div>
   );
 }
 
-function SearchIcon() {
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+function SectionCard({ title, children }) {
   return (
-    <svg
-      className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      style={{ color: "hsl(var(--muted-foreground))" }}
+    <div
+      className="overflow-hidden rounded-[10px] border"
+      style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
     >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-      />
-    </svg>
+      <div
+        className="border-b px-4 py-3"
+        style={{ borderColor: "var(--n-100)", backgroundColor: "var(--n-50)" }}
+      >
+        <p
+          className="font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
+          style={{ color: "var(--n-500)" }}
+        >
+          {title}
+        </p>
+      </div>
+      <div className="p-4">{children}</div>
+    </div>
   );
 }
 
-function TrashIcon() {
+function Label({ children }) {
   return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
+    <label
+      className="font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
+      style={{ color: "var(--n-500)" }}
     >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+      {children}
+    </label>
+  );
+}
+
+function CantidadCtrl({ item, onChange }) {
+  return (
+    <div className="inline-flex items-center gap-1">
+      <QtyBtn
+        onClick={() => onChange(item.producto_id, item.cantidad_solicitada - 1)}
+      >
+        −
+      </QtyBtn>
+      <input
+        type="number"
+        min={1}
+        max={item.stock_disponible}
+        value={item.cantidad_solicitada}
+        onChange={(e) => onChange(item.producto_id, e.target.value)}
+        className="w-14 rounded-lg border py-1.5 text-center font-mono text-sm font-semibold outline-none"
+        style={{
+          borderColor: "var(--n-150)",
+          color: "var(--n-950)",
+          backgroundColor: "var(--n-0)",
+        }}
       />
-    </svg>
+      <QtyBtn
+        onClick={() => onChange(item.producto_id, item.cantidad_solicitada + 1)}
+      >
+        +
+      </QtyBtn>
+    </div>
+  );
+}
+
+function QtyBtn({ children, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="grid h-8 w-8 place-items-center rounded-lg border text-lg font-bold transition-colors"
+      style={{
+        borderColor: "var(--n-150)",
+        color: "var(--n-700)",
+        backgroundColor: "var(--n-0)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function BotonEliminar({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="grid h-8 w-8 place-items-center rounded-lg transition-colors"
+      style={{ color: "var(--n-500)" }}
+      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--dang-600)")}
+      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--n-500)")}
+      aria-label="Eliminar producto"
+    >
+      <Trash2 className="h-4 w-4" strokeWidth={1.7} />
+    </button>
   );
 }

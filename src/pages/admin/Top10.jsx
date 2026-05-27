@@ -1,17 +1,39 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Trophy,
+  TrendingUp,
+  ChevronRight,
+  Package,
+  Users,
+  Building2,
+  BarChart3,
+  CalendarDays,
+} from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
+import {
+  PERIODOS_RANKING,
+  labelPeriodoRanking,
+  medallaRanking,
+  variacionPct,
+  variacionToken,
+} from "../../lib/admin-analytics-ui";
 
-const PERIODOS = [
-  { dias: 7, label: "7 días" },
-  { dias: 30, label: "30 días" },
-  { dias: 90, label: "90 días" },
-  { dias: 365, label: "1 año" },
+/* Pestañas de ranking. `productos` usa la RPC real; las demás derivan de
+ * SELECT de SOLO LECTURA (RLS por sede ya aplica). NUNCA se inventan números. */
+const RANK_TABS = [
+  { key: "productos", label: "Productos", icon: Package },
+  { key: "clientes", label: "Clientes", icon: Users },
+  { key: "categorias", label: "Categorías", icon: BarChart3 },
+  { key: "proveedores", label: "Proveedores", icon: Building2 },
 ];
 
+const LIMITE_RANKING = 10;
+
+/* ── Top 10 — rankings de ventas (datos reales / derivados) ────────────── */
 export default function Top10() {
   const [periodo, setPeriodo] = useState(30);
+  const [tab, setTab] = useState("productos");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -24,183 +46,619 @@ export default function Top10() {
     };
   }, []);
 
-  const cargar = async () => {
+  const cargar = useCallback(async () => {
     setLoading(true);
     setErrorMsg("");
     try {
-      const { data, error } = await supabase.rpc("fn_top_productos", {
-        p_dias: periodo,
-        p_limit: 10,
-      });
+      const rows = await cargarRanking(tab, periodo);
       if (!mountedRef.current) return;
-      if (error) throw error;
-      setItems(data ?? []);
+      setItems(rows);
     } catch (err) {
       if (!mountedRef.current) return;
-      setErrorMsg(safeError(err, "Error al cargar top productos"));
+      setErrorMsg(safeError(err, "Error al cargar el ranking"));
+      setItems([]);
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  };
+  }, [tab, periodo]);
 
   useEffect(() => {
     cargar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodo]);
+  }, [cargar]);
 
-  const maxUnidades = Math.max(
-    1,
-    ...items.map((i) => Number(i.unidades_vendidas)),
-  );
+  const maxValor = Math.max(1, ...items.map((i) => Number(i.valor)));
+  const totalVendido = items.reduce((s, i) => s + Number(i.valor || 0), 0);
+  const totalUnidades = items.reduce((s, i) => s + Number(i.unidades || 0), 0);
+  const totalTx = items.reduce((s, i) => s + Number(i.transacciones || 0), 0);
+  const ticketPromedio = totalUnidades > 0 ? totalVendido / totalUnidades : 0;
+  const tabActual = RANK_TABS.find((t) => t.key === tab);
+  const esCompras = tab === "proveedores";
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Top 10 productos"
-        description={`Productos más vendidos · ${PERIODOS.find((p) => p.dias === periodo)?.label}`}
-      />
+    <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7 animate-fade-in">
+      {/* Page head */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p
+            className="m-0 mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Admin · Rankings de ventas
+          </p>
+          <h1
+            className="m-0 flex items-center gap-2.5 text-[24px] font-semibold leading-tight tracking-[-0.018em]"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            <Trophy
+              className="h-5 w-5"
+              strokeWidth={1.75}
+              style={{ color: "hsl(var(--primary))" }}
+            />
+            Top 10
+          </h1>
+        </div>
+        <Seg
+          options={PERIODOS_RANKING.map((p) => p.label)}
+          value={labelPeriodoRanking(periodo)}
+          onChange={(label) =>
+            setPeriodo(
+              PERIODOS_RANKING.find((p) => p.label === label)?.dias ?? 30,
+            )
+          }
+        />
+      </div>
 
-      {errorMsg && (
+      {errorMsg && <ErrorBox msg={errorMsg} onRetry={cargar} />}
+
+      {/* Tabs de ranking */}
+      <div
+        className="flex flex-wrap items-center gap-1.5 border-b"
+        style={{ borderColor: "hsl(var(--border))" }}
+      >
+        {RANK_TABS.map((t) => {
+          const Icon = t.icon;
+          const on = t.key === tab;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className="inline-flex items-center gap-2 border-b-2 px-3 pb-2.5 pt-1 text-[12.5px] font-medium transition-colors cursor-pointer"
+              style={{
+                borderColor: on ? "hsl(var(--primary))" : "transparent",
+                color: on
+                  ? "hsl(var(--foreground))"
+                  : "hsl(var(--muted-foreground))",
+              }}
+            >
+              <Icon
+                className="h-3.5 w-3.5"
+                strokeWidth={1.5}
+                style={{
+                  color: on
+                    ? "hsl(var(--primary))"
+                    : "hsl(var(--muted-foreground))",
+                }}
+              />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* KPI strip */}
+      <div
+        className="grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:grid-cols-4 md:gap-y-0"
+        style={{ borderColor: "hsl(var(--border))" }}
+      >
+        <Kpi
+          label={`${esCompras ? "Compras" : "Ventas"} · ${labelPeriodoRanking(periodo)}`}
+          value={formatCOP(totalVendido)}
+          sub={`Total Top ${LIMITE_RANKING}`}
+        />
+        <Kpi
+          label="Unidades"
+          value={totalUnidades.toLocaleString("es-CO")}
+          sub="Suma del ranking"
+        />
+        <Kpi
+          label="Ticket promedio"
+          value={formatCOP(Math.round(ticketPromedio))}
+          sub={esCompras ? "Costo por unidad" : "Ingreso por unidad"}
+        />
+        <Kpi
+          last
+          label={esCompras ? "Órdenes de compra" : "Transacciones"}
+          value={totalTx.toLocaleString("es-CO")}
+          sub={esCompras ? "Compras del periodo" : "Ventas del periodo"}
+        />
+      </div>
+
+      {/* Ranking */}
+      <section className="space-y-2.5">
+        <h2
+          className="flex items-center gap-2 text-[13px] font-semibold"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
+          <TrendingUp
+            className="h-4 w-4"
+            strokeWidth={1.75}
+            style={{ color: "hsl(var(--primary))" }}
+          />
+          Ranking — {tabActual?.label}
+        </h2>
+
+        {loading ? (
+          <SkeletonList />
+        ) : items.length === 0 ? (
+          <Empty icon="📊">Sin datos para este período</Empty>
+        ) : (
+          <ul className="space-y-2" role="list">
+            {items.map((it, i) => (
+              <RankRow
+                key={it.id ?? i}
+                item={it}
+                pos={i + 1}
+                maxValor={maxValor}
+                esCompras={esCompras}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Summary bar */}
+      {!loading && items.length > 0 && (
         <div
-          className="rounded-lg border px-3 py-2 text-xs"
+          className="flex flex-col gap-3 rounded-[10px] border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.4)",
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+          }}
+        >
+          <div
+            className="flex items-center gap-2 text-[12.5px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            <CalendarDays className="h-4 w-4" strokeWidth={1.5} />
+            <span>
+              Periodo: {labelPeriodoRanking(periodo).toLowerCase()} · variación
+              comparada con el periodo previo equivalente
+            </span>
+          </div>
+          <span
+            className="font-mono text-[10.5px] tracking-[0.06em]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            {items.length} de {LIMITE_RANKING} · orden descendente por{" "}
+            {esCompras ? "compras" : "ventas"}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Carga de cada ranking ────────────────────────────────────────────────
+ * Devuelve filas normalizadas { id, nombre, sub, valor, unidades,
+ * transacciones, variacion } para que el render sea uniforme. La variación se
+ * calcula contra el periodo previo equivalente; es `null` cuando no hay base
+ * de comparación (nunca se inventa). */
+async function cargarRanking(tab, dias) {
+  if (tab === "productos") return cargarProductos(dias);
+  if (tab === "clientes") return cargarClientes(dias);
+  if (tab === "categorias") return cargarCategorias(dias);
+  if (tab === "proveedores") return cargarProveedores(dias);
+  return [];
+}
+
+function rangoFechas(dias) {
+  const ahora = new Date();
+  const inicio = new Date(ahora.getTime() - dias * 86_400_000);
+  const inicioPrev = new Date(ahora.getTime() - 2 * dias * 86_400_000);
+  return {
+    inicioISO: inicio.toISOString(),
+    inicioPrevISO: inicioPrev.toISOString(),
+  };
+}
+
+async function cargarProductos(dias) {
+  const [actual, previo] = await Promise.all([
+    supabase.rpc("fn_top_productos", { p_dias: dias, p_limit: LIMITE_RANKING }),
+    supabase.rpc("fn_top_productos", { p_dias: dias * 2, p_limit: 100 }),
+  ]);
+  if (actual.error) throw actual.error;
+  // El periodo previo se aproxima con (total 2·días − actual): solo lectura.
+  const prevMap = new Map();
+  if (!previo.error) {
+    const actualMap = new Map(
+      (actual.data ?? []).map((r) => [
+        r.producto_id,
+        Number(r.unidades_vendidas),
+      ]),
+    );
+    (previo.data ?? []).forEach((r) => {
+      const prevUnidades =
+        Number(r.unidades_vendidas) - (actualMap.get(r.producto_id) ?? 0);
+      prevMap.set(r.producto_id, Math.max(0, prevUnidades));
+    });
+  }
+  return (actual.data ?? []).map((r) => ({
+    id: r.producto_id,
+    nombre: r.nombre,
+    sub: r.referencia,
+    valor: Number(r.total_vendido),
+    unidades: Number(r.unidades_vendidas),
+    transacciones: Number(r.num_ventas),
+    variacion: variacionPct(
+      Number(r.unidades_vendidas),
+      prevMap.get(r.producto_id) ?? 0,
+    ),
+  }));
+}
+
+async function cargarClientes(dias) {
+  const { inicioISO, inicioPrevISO } = rangoFechas(dias);
+  const { data, error } = await supabase
+    .from("ventas")
+    .select("cliente_nombre, total, fecha")
+    .eq("anulada", false)
+    .gte("fecha", inicioPrevISO)
+    .limit(5000);
+  if (error) throw error;
+  return agruparPorClave(
+    data ?? [],
+    (v) => (v.cliente_nombre || "").trim() || "Consumidor final",
+    inicioISO,
+  );
+}
+
+async function cargarCategorias(dias) {
+  const { inicioISO, inicioPrevISO } = rangoFechas(dias);
+  const { data, error } = await supabase
+    .from("detalle_venta")
+    .select(
+      "cantidad, subtotal, venta:venta_id!inner(fecha, anulada), producto:producto_id(categoria)",
+    )
+    .eq("venta.anulada", false)
+    .gte("venta.fecha", inicioPrevISO)
+    .limit(8000);
+  if (error) throw error;
+  const norm = (data ?? []).map((d) => ({
+    clave: d.producto?.categoria || "Sin categoría",
+    total: Number(d.subtotal),
+    cantidad: Number(d.cantidad),
+    fecha: d.venta?.fecha,
+  }));
+  return agruparDetalle(norm, inicioISO);
+}
+
+async function cargarProveedores(dias) {
+  const { inicioISO, inicioPrevISO } = rangoFechas(dias);
+  const { data, error } = await supabase
+    .from("compras")
+    .select("proveedor, total, fecha")
+    .gte("fecha", inicioPrevISO)
+    .limit(5000);
+  if (error) throw error;
+  // Proveedores se mide por volumen de COMPRAS (no hay venta por proveedor).
+  return agruparPorClave(
+    data ?? [],
+    (c) => (c.proveedor || "").trim() || "Sin proveedor",
+    inicioISO,
+  );
+}
+
+/* Agrupa filas tipo cabecera (ventas/compras) por una clave de texto. */
+function agruparPorClave(filas, claveFn, inicioISO) {
+  const acc = new Map();
+  for (const f of filas) {
+    const clave = claveFn(f);
+    const enPeriodo = f.fecha >= inicioISO;
+    const cur = acc.get(clave) ?? {
+      nombre: clave,
+      valor: 0,
+      unidades: 0,
+      transacciones: 0,
+      valorPrev: 0,
+    };
+    if (enPeriodo) {
+      cur.valor += Number(f.total || 0);
+      cur.transacciones += 1;
+    } else {
+      cur.valorPrev += Number(f.total || 0);
+    }
+    acc.set(clave, cur);
+  }
+  return finalizarRanking(acc);
+}
+
+/* Agrupa filas de detalle (con cantidad) por clave de texto. */
+function agruparDetalle(filas, inicioISO) {
+  const acc = new Map();
+  for (const f of filas) {
+    const enPeriodo = f.fecha >= inicioISO;
+    const cur = acc.get(f.clave) ?? {
+      nombre: f.clave,
+      valor: 0,
+      unidades: 0,
+      transacciones: 0,
+      valorPrev: 0,
+    };
+    if (enPeriodo) {
+      cur.valor += f.total;
+      cur.unidades += f.cantidad;
+      cur.transacciones += 1;
+    } else {
+      cur.valorPrev += f.total;
+    }
+    acc.set(f.clave, cur);
+  }
+  return finalizarRanking(acc);
+}
+
+function finalizarRanking(acc) {
+  return [...acc.values()]
+    .filter((r) => r.valor > 0)
+    .sort((a, b) => b.valor - a.valor)
+    .slice(0, LIMITE_RANKING)
+    .map((r, i) => ({
+      id: `${r.nombre}-${i}`,
+      nombre: r.nombre,
+      sub: null,
+      valor: r.valor,
+      unidades: r.unidades,
+      transacciones: r.transacciones,
+      variacion: variacionPct(r.valor, r.valorPrev),
+    }));
+}
+
+/* ── Fila de ranking ──────────────────────────────────────────────────── */
+function RankRow({ item, pos, maxValor, esCompras }) {
+  const medal = medallaRanking(pos);
+  const pct = (Number(item.valor) / maxValor) * 100;
+  const top3 = pos <= 3;
+  const varToken = variacionToken(item.variacion);
+
+  return (
+    <li
+      className="group rounded-[10px] border p-3 transition-colors"
+      style={{
+        backgroundColor: "hsl(var(--card))",
+        borderColor: "hsl(var(--border))",
+      }}
+      onMouseEnter={(e) =>
+        (e.currentTarget.style.borderColor = "hsl(var(--primary) / 0.5)")
+      }
+      onMouseLeave={(e) =>
+        (e.currentTarget.style.borderColor = "hsl(var(--border))")
+      }
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full font-mono text-sm font-bold tabular-nums"
+          style={{
+            backgroundColor: top3
+              ? "hsl(var(--primary))"
+              : "hsl(var(--muted) / 0.6)",
+            color: top3
+              ? "hsl(var(--primary-foreground))"
+              : "hsl(var(--muted-foreground))",
+          }}
+        >
+          {pos}
+        </span>
+        {medal && (
+          <span className="shrink-0 text-lg" aria-hidden>
+            {medal}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p
+            className="truncate text-sm font-medium"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            {item.nombre}
+          </p>
+          {item.sub && (
+            <p
+              className="truncate font-mono text-xs"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              {item.sub}
+            </p>
+          )}
+        </div>
+
+        {/* Métricas desktop */}
+        <div className="hidden shrink-0 items-center gap-6 sm:flex">
+          <Metric
+            label={esCompras ? "Compras" : "Ventas"}
+            value={formatCOP(item.valor)}
+            valueColor="hsl(var(--primary))"
+          />
+          {item.unidades > 0 && (
+            <Metric
+              label="Unidades"
+              value={item.unidades.toLocaleString("es-CO")}
+            />
+          )}
+          <Metric
+            label="Var. vs ant."
+            value={
+              item.variacion == null
+                ? "—"
+                : `${item.variacion >= 0 ? "+" : ""}${item.variacion.toFixed(0)}%`
+            }
+            valueColor={`hsl(var(${varToken}))`}
+          />
+        </div>
+
+        {/* Métricas mobile */}
+        <div className="flex shrink-0 flex-col items-end gap-1 sm:hidden">
+          <span
+            className="text-sm font-bold tabular-nums"
+            style={{ color: "hsl(var(--primary))" }}
+          >
+            {formatCOP(item.valor)}
+          </span>
+          <span
+            className="text-xs font-medium tabular-nums"
+            style={{ color: `hsl(var(${varToken}))` }}
+          >
+            {item.variacion == null
+              ? "—"
+              : `${item.variacion >= 0 ? "+" : ""}${item.variacion.toFixed(0)}%`}
+          </span>
+        </div>
+
+        <ChevronRight
+          className="hidden h-4 w-4 shrink-0 sm:block"
+          strokeWidth={1.5}
+          style={{ color: "hsl(var(--muted-foreground) / 0.5)" }}
+        />
+      </div>
+      <div
+        className="mt-2 h-1.5 overflow-hidden rounded-full"
+        style={{ backgroundColor: "hsl(var(--muted) / 0.4)" }}
+      >
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, backgroundColor: "hsl(var(--primary))" }}
+        />
+      </div>
+    </li>
+  );
+}
+
+function Metric({ label, value, valueColor }) {
+  return (
+    <div className="text-right">
+      <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+        {label}
+      </p>
+      <p
+        className="text-sm font-bold tabular-nums"
+        style={{ color: valueColor ?? "hsl(var(--foreground))" }}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+/* ── Segmented control (estilo Dashboard admin) ───────────────────────── */
+function Seg({ options, value, onChange }) {
+  return (
+    <div
+      className="inline-flex gap-px rounded-[7px] border p-0.5"
+      style={{
+        borderColor: "hsl(var(--border))",
+        backgroundColor: "hsl(var(--muted) / 0.4)",
+      }}
+    >
+      {options.map((opt) => {
+        const on = opt === value;
+        return (
+          <button
+            key={opt}
+            onClick={() => onChange(opt)}
+            className="rounded-[5px] px-2.5 py-1.5 text-[12px] transition-colors cursor-pointer"
+            style={{
+              backgroundColor: on ? "hsl(var(--card))" : "transparent",
+              color: on
+                ? "hsl(var(--foreground))"
+                : "hsl(var(--muted-foreground))",
+              fontWeight: on ? 600 : 500,
+              boxShadow: on ? "0 1px 2px rgba(16,24,40,0.06)" : "none",
+            }}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── KPI con separadores punteados ────────────────────────────────────── */
+function Kpi({ label, value, sub, last }) {
+  return (
+    <div
+      className={`flex flex-col gap-1.5 pr-7 md:pl-7 md:first:pl-0 ${
+        last ? "" : "md:border-r md:border-dashed"
+      }`}
+      style={last ? undefined : { borderColor: "hsl(var(--border))" }}
+    >
+      <div
+        className="font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
+        {label}
+      </div>
+      <div
+        className="font-mono text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums"
+        style={{ color: "hsl(var(--foreground))" }}
+      >
+        {value}
+      </div>
+      <div
+        className="text-[11.5px]"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
+        {sub}
+      </div>
+    </div>
+  );
+}
+
+function Empty({ icon, children }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="text-5xl mb-3">{icon}</div>
+      <p style={{ color: "hsl(var(--muted-foreground))" }}>{children}</p>
+    </div>
+  );
+}
+
+function SkeletonList() {
+  return (
+    <div className="space-y-2">
+      {[...Array(5)].map((_, i) => (
+        <div
+          key={i}
+          className="h-16 animate-pulse rounded-xl border"
+          style={{
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ErrorBox({ msg, onRetry }) {
+  return (
+    <div
+      className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2"
+      style={{
+        backgroundColor: "hsl(var(--destructive) / 0.08)",
+        borderColor: "hsl(var(--destructive) / 0.4)",
+        color: "hsl(var(--destructive))",
+      }}
+    >
+      <p className="text-xs">{msg}</p>
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          className="rounded border px-3 py-1.5 text-xs cursor-pointer"
+          style={{
+            borderColor: "hsl(var(--destructive))",
             color: "hsl(var(--destructive))",
           }}
         >
-          {errorMsg}
-        </div>
-      )}
-
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {PERIODOS.map((p) => (
-          <button
-            key={p.dias}
-            onClick={() => setPeriodo(p.dias)}
-            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer"
-            style={
-              periodo === p.dias
-                ? {
-                    backgroundColor: "hsl(var(--primary))",
-                    color: "hsl(var(--primary-foreground))",
-                    borderColor: "hsl(var(--primary))",
-                  }
-                : {
-                    backgroundColor: "transparent",
-                    color: "hsl(var(--muted-foreground))",
-                    borderColor: "hsl(var(--border))",
-                  }
-            }
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => (
-            <div
-              key={i}
-              className="rounded-xl p-4 animate-pulse border h-16"
-              style={{
-                backgroundColor: "hsl(var(--card))",
-                borderColor: "hsl(var(--border))",
-              }}
-            />
-          ))}
-        </div>
-      ) : items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="text-5xl mb-3">📊</div>
-          <p style={{ color: "hsl(var(--muted-foreground))" }}>
-            Sin ventas en este período
-          </p>
-        </div>
-      ) : (
-        <ul className="space-y-2" role="list">
-          {items.map((p, i) => {
-            const pct = (Number(p.unidades_vendidas) / maxUnidades) * 100;
-            return (
-              <li
-                key={p.producto_id}
-                className="rounded-xl border p-3"
-                style={{
-                  backgroundColor: "hsl(var(--card))",
-                  borderColor: "hsl(var(--border))",
-                }}
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <span
-                    className="text-sm font-bold w-7 h-7 rounded flex items-center justify-center shrink-0"
-                    style={{
-                      backgroundColor:
-                        i < 3 ? "hsl(var(--primary))" : "hsl(var(--muted))",
-                      color:
-                        i < 3
-                          ? "hsl(var(--primary-foreground))"
-                          : "hsl(var(--muted-foreground))",
-                    }}
-                  >
-                    {i + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className="text-sm font-medium"
-                      style={{ color: "hsl(var(--foreground))" }}
-                    >
-                      {p.nombre}
-                    </p>
-                    <p
-                      className="text-xs font-mono"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {p.referencia}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p
-                      className="text-base font-bold tabular-nums"
-                      style={{ color: "hsl(var(--foreground))" }}
-                    >
-                      {p.unidades_vendidas}
-                    </p>
-                    <p
-                      className="text-xs"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      uds · {p.num_ventas} ventas
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0 hidden sm:block">
-                    <p
-                      className="text-sm font-bold tabular-nums"
-                      style={{ color: "hsl(var(--primary))" }}
-                    >
-                      {formatCOP(p.total_vendido)}
-                    </p>
-                  </div>
-                </div>
-                <div
-                  className="h-1.5 rounded-full overflow-hidden"
-                  style={{ backgroundColor: "hsl(var(--muted) / 0.4)" }}
-                >
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${pct}%`,
-                      backgroundColor: "hsl(var(--primary))",
-                    }}
-                  />
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+          Reintentar
+        </button>
       )}
     </div>
   );

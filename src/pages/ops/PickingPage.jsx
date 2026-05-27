@@ -1,10 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { X, Check, RotateCcw } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
 
+/**
+ * Picking · Modo tarea pantalla completa (diseño Lovable `pk-*`).
+ *
+ * Recorre los items uno a uno, optimizado para uso en bodega con guantes
+ * (botones de 64px). Conserva la lógica real:
+ *   - Solo el picker asignado (o Admin) accede; estado debe ser 'picking'.
+ *   - Orden por prioridad_picking ASC.
+ *   - Autosave debounce 1500ms vía RPC fn_procesar_traspaso (actualizar_items).
+ *   - Finalizar NO cambia estado: la transición picking→verificado la hace
+ *     otra persona (segregación de funciones).
+ */
 export default function PickingPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -13,10 +24,10 @@ export default function PickingPage() {
   const [traspaso, setTraspaso] = useState(null);
   const [items, setItems] = useState([]);
   const [local, setLocal] = useState({});
+  const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
-  const [ultimoGuardado, setUltimoGuardado] = useState(null);
   const autoSaveRef = useRef(null);
 
   /* ── Cargar datos ─────────────────────────────────────────── */
@@ -50,9 +61,7 @@ export default function PickingPage() {
           return;
         }
 
-        // Solo tiene sentido pickear un traspaso En Picking; si ya avanzó de
-        // estado, volver al detalle (evita togglear items sobre un traspaso
-        // verificado/enviado/recibido).
+        // Solo tiene sentido pickear un traspaso En Picking.
         if (t.estado !== "picking") {
           navigate(`/ops/traspasos/${id}`, { replace: true });
           return;
@@ -78,6 +87,10 @@ export default function PickingPage() {
           };
         }
         setLocal(init);
+
+        // Empezar en el primer item NO pickeado (continuar donde quedó)
+        const firstPending = sorted.findIndex((i) => !i.picking_completado);
+        setIndex(firstPending === -1 ? sorted.length : firstPending);
       } catch (e) {
         setError(safeError(e, "Error en picking"));
       } finally {
@@ -113,7 +126,6 @@ export default function PickingPage() {
           p_items,
         });
         if (rpcErr) throw new Error(rpcErr.message);
-        setUltimoGuardado(new Date());
       } catch (e) {
         setError(safeError(e, "Error en picking"));
       } finally {
@@ -131,20 +143,20 @@ export default function PickingPage() {
     [guardarProgreso],
   );
 
-  /* ── Handlers de interacción ──────────────────────────────── */
-  const toggleItem = (itemId) => {
+  /* ── Handlers ─────────────────────────────────────────────── */
+  const marcarRecogido = (itemId) => {
     setLocal((prev) => {
       const next = {
         ...prev,
-        [itemId]: {
-          ...prev[itemId],
-          picking_completado: !prev[itemId]?.picking_completado,
-        },
+        [itemId]: { ...prev[itemId], picking_completado: true },
       };
       scheduleAutoSave(next);
       return next;
     });
+    setIndex((i) => Math.min(i + 1, items.length));
   };
+
+  const saltar = () => setIndex((i) => Math.min(i + 1, items.length));
 
   const setCantidad = (itemId, value) => {
     const num = Math.min(100000, Math.max(1, parseInt(value, 10) || 1));
@@ -161,10 +173,9 @@ export default function PickingPage() {
   const handleFinalizar = async () => {
     clearTimeout(autoSaveRef.current);
     await guardarProgreso(local);
-    // F12 fix UX: el picking no cambia estado por sí solo. La transición
-    // picking→verificado la hace OTRA persona (Admin u otro Bodeguero) por
-    // segregación de funciones (regla en fn_procesar_traspaso).
-    // Avisamos al picker para que no piense que el flujo está roto.
+    // El picking no cambia estado por sí solo. La transición picking→verificado
+    // la hace OTRA persona (Admin u otro Bodeguero) por segregación de
+    // funciones (regla en fn_procesar_traspaso).
     alert(
       "Picking guardado. Lo siguiente:\n\n" +
         'Una persona DISTINTA al picker (Admin u otro Bodeguero) entra a este traspaso y le da "Verificar".\n\n' +
@@ -173,363 +184,299 @@ export default function PickingPage() {
     navigate(`/ops/traspasos/${id}`);
   };
 
-  /* ── Cálculos de progreso ─────────────────────────────────── */
-  const totalItems = items.length;
-  const itemsCompletos = items.filter(
+  /* ── Cálculos ─────────────────────────────────────────────── */
+  const total = items.length;
+  const pickedCount = items.filter(
     (i) => local[i.id]?.picking_completado,
   ).length;
-  const pickingCompleto = totalItems > 0 && itemsCompletos === totalItems;
-  const progreso = totalItems > 0 ? (itemsCompletos / totalItems) * 100 : 0;
+  const done = index >= total && total > 0;
+  const pct = total > 0 ? (pickedCount / total) * 100 : 0;
+  const item = done || total === 0 ? null : items[index];
+  const estadoItem = item ? local[item.id] : null;
+  const loc = item?.ubicacion;
+  const ubicCode = loc ? `${loc.pasillo}-${loc.estante}-${loc.nivel}` : "—";
 
   if (loading) return <LoadingView />;
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in pb-40"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title={`Picking #${traspaso?.numero ?? "—"}`}
-        description={`${itemsCompletos} de ${totalItems} items completados`}
-        actions={
-          <button
-            onClick={() => navigate(`/ops/traspasos/${id}`)}
-            className="h-9 px-3 rounded-lg border text-sm font-medium cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-              backgroundColor: "hsl(var(--card))",
-            }}
-          >
-            ← Volver
-          </button>
-        }
-      />
+    <div className="pk min-h-screen">
+      {/* Header sin chrome */}
+      <header className="pk-header">
+        <button
+          className="pk-close"
+          aria-label="Salir del picking"
+          onClick={() => navigate(`/ops/traspasos/${id}`)}
+        >
+          <X className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+        <span className="pk-ctx">
+          Picking · Traspaso #{traspaso?.numero ?? "—"}
+        </span>
+        {item && <span className="pk-loc hidden sm:inline">{ubicCode}</span>}
+      </header>
 
       {/* Barra de progreso */}
-      <div
-        className="rounded-xl border p-4"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
-      >
-        <div className="flex items-center justify-between mb-2">
-          <p
-            className="text-sm font-medium"
-            style={{ color: "hsl(var(--foreground))" }}
-          >
-            Progreso
-          </p>
-          <p
-            className="text-sm font-bold"
-            style={{
-              color: pickingCompleto
-                ? "hsl(var(--success))"
-                : "hsl(var(--warning))",
-            }}
-          >
-            {Math.round(progreso)}%
-          </p>
+      <div className="pk-prog">
+        <div className="pk-prog-bar">
+          <div className="pk-prog-fill" style={{ width: `${pct}%` }} />
         </div>
-        <div
-          className="h-3 rounded-full overflow-hidden"
-          style={{ backgroundColor: "hsl(var(--muted))" }}
-        >
-          <div
-            className="h-full rounded-full transition-all duration-300"
-            style={{
-              width: `${progreso}%`,
-              backgroundColor: pickingCompleto
-                ? "hsl(var(--success))"
-                : "hsl(var(--warning))",
-            }}
-          />
-        </div>
-        {ultimoGuardado && (
-          <p
-            className="text-xs mt-2"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            ✓ Guardado{" "}
-            {ultimoGuardado.toLocaleTimeString("es-CO", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </p>
-        )}
-        {guardando && (
-          <p
-            className="text-xs mt-2"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Guardando…
-          </p>
-        )}
+        <span className="pk-prog-count">
+          {pickedCount} de {total}
+        </span>
       </div>
 
-      {/* Error */}
       {error && (
         <div
-          className="p-3 rounded-lg border text-sm"
+          className="mx-5 mt-3 rounded-lg border px-3.5 py-2.5 text-[13px]"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.3)",
-            color: "hsl(var(--destructive))",
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
+            color: "var(--dang-700)",
           }}
         >
           {error}
         </div>
       )}
 
-      {/* Lista de items */}
-      <div className="space-y-2">
-        {items.map((item, idx) => {
-          const estado = local[item.id] ?? {
-            picking_completado: false,
-            cantidad_enviada: item.cantidad_solicitada,
-          };
-          const completado = estado.picking_completado;
-          const loc = item.ubicacion;
-          const ubicCode = loc
-            ? `${loc.pasillo}-${loc.estante}-${loc.nivel}`
-            : null;
-
-          return (
-            <div
-              key={item.id}
-              className="rounded-xl border transition-all"
-              style={{
-                backgroundColor: completado
-                  ? "hsl(var(--success) / 0.06)"
-                  : "hsl(var(--card))",
-                borderColor: completado
-                  ? "hsl(var(--success) / 0.3)"
-                  : "hsl(var(--border))",
-              }}
-            >
-              <div className="p-4 flex items-center gap-3">
-                {/* Número de ruta */}
-                <span
-                  className="text-xs font-bold font-mono w-5 text-center shrink-0"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  {idx + 1}
-                </span>
-
-                {/* Checkbox 48 × 48 px (uso industrial) */}
-                <button
-                  onClick={() => toggleItem(item.id)}
-                  aria-label={
-                    completado ? "Desmarcar item" : "Marcar como pickeado"
-                  }
-                  className="shrink-0 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-center"
-                  style={{
-                    width: 48,
-                    height: 48,
-                    minWidth: 48,
-                    borderColor: completado
-                      ? "hsl(var(--success))"
-                      : "hsl(var(--border))",
-                    backgroundColor: completado
-                      ? "hsl(var(--success))"
-                      : "transparent",
-                  }}
-                >
-                  {completado && (
-                    <svg
-                      className="w-6 h-6"
-                      fill="none"
-                      stroke="#fff"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={3}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  )}
-                </button>
-
-                {/* Nombre + ubicación */}
-                <div className="flex-1 min-w-0">
-                  <p
-                    className="text-sm font-semibold truncate"
-                    style={{
-                      color: "hsl(var(--foreground))",
-                      textDecoration: completado ? "line-through" : "none",
-                      opacity: completado ? 0.6 : 1,
-                    }}
-                  >
-                    {item.producto?.nombre ?? "—"}
-                  </p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span
-                      className="text-xs"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {item.producto?.referencia}
-                    </span>
-                    {ubicCode && (
-                      <span
-                        className="text-xs font-mono font-bold px-1.5 py-0.5 rounded"
-                        style={{
-                          backgroundColor: "hsl(var(--primary) / 0.1)",
-                          color: "hsl(var(--primary))",
-                        }}
-                      >
-                        {ubicCode}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Control de cantidad */}
-                <div className="shrink-0 flex items-center gap-1.5">
-                  <button
-                    onClick={() =>
-                      setCantidad(item.id, estado.cantidad_enviada - 1)
-                    }
-                    className="rounded-lg border font-bold cursor-pointer"
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderColor: "hsl(var(--border))",
-                      backgroundColor: "hsl(var(--muted) / 0.4)",
-                      color: "hsl(var(--foreground))",
-                      fontSize: 18,
-                    }}
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    value={estado.cantidad_enviada}
-                    onChange={(e) => setCantidad(item.id, e.target.value)}
-                    className="text-center text-sm font-bold rounded-lg border"
-                    style={{
-                      width: 52,
-                      height: 36,
-                      borderColor: "hsl(var(--border))",
-                      backgroundColor: "hsl(var(--background))",
-                      color: "hsl(var(--foreground))",
-                    }}
-                    min={1}
-                  />
-                  <button
-                    onClick={() =>
-                      setCantidad(item.id, estado.cantidad_enviada + 1)
-                    }
-                    className="rounded-lg border font-bold cursor-pointer"
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderColor: "hsl(var(--border))",
-                      backgroundColor: "hsl(var(--muted) / 0.4)",
-                      color: "hsl(var(--foreground))",
-                      fontSize: 18,
-                    }}
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-
-              {/* Subtítulo: solicitado */}
-              <div className="px-4 pb-3 flex items-center gap-3">
-                <span className="w-5 shrink-0" />
-                <span className="w-12 shrink-0" />
-                <p
-                  className="text-xs"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  Solicitado:{" "}
-                  <strong style={{ color: "hsl(var(--foreground))" }}>
-                    {item.cantidad_solicitada}
-                  </strong>
-                  {item.producto?.unidad_medida &&
-                    ` ${item.producto.unidad_medida}`}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Barra de acciones fija al fondo */}
-      <div
-        className="fixed bottom-0 left-0 right-0 p-4 border-t"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
-      >
-        {!pickingCompleto && (
-          <p
-            className="text-xs text-center mb-2"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            {totalItems - itemsCompletos} item
-            {totalItems - itemsCompletos !== 1 ? "s" : ""} pendiente
-            {totalItems - itemsCompletos !== 1 ? "s" : ""} — márcalos para
-            finalizar
+      {done ? (
+        <div className="pk-done">
+          <div className="pk-done-check">
+            <Check className="h-8 w-8" strokeWidth={2.5} />
+          </div>
+          <h2 className="pk-done-title">
+            {pickedCount} de {total} completados
+          </h2>
+          <p className="pk-done-sub">
+            {pickedCount === total
+              ? `Traspaso #${traspaso?.numero ?? ""} listo para verificación`
+              : `${total - pickedCount} item(s) sin recoger — puedes revisarlos antes de finalizar`}
           </p>
-        )}
-        <div className="flex gap-3 max-w-xl mx-auto">
-          <button
-            onClick={() => guardarProgreso(local)}
-            disabled={guardando}
-            className="flex-1 h-12 rounded-xl border text-sm font-medium transition-opacity disabled:opacity-50 cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              backgroundColor: "hsl(var(--muted) / 0.3)",
-              color: "hsl(var(--foreground))",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-          >
-            {guardando ? "Guardando…" : "Guardar progreso"}
-          </button>
           <button
             onClick={handleFinalizar}
-            disabled={!pickingCompleto || guardando}
-            className="flex-1 h-12 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-40 cursor-pointer"
-            style={{
-              backgroundColor: "hsl(var(--primary))",
-              color: "hsl(var(--primary-foreground))",
-            }}
-            onMouseEnter={(e) =>
-              !guardando &&
-              pickingCompleto &&
-              (e.currentTarget.style.opacity = "0.9")
-            }
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            disabled={guardando}
+            className="pk-done-btn disabled:opacity-60"
+            style={{ lineHeight: "64px" }}
           >
-            ✓ Finalizar picking
+            {guardando ? "Guardando…" : "Finalizar picking"}
+          </button>
+          {index > 0 && (
+            <button
+              onClick={() => setIndex(0)}
+              className="text-[13px] font-medium underline underline-offset-4"
+              style={{ color: "var(--n-500)" }}
+            >
+              Volver a revisar items
+            </button>
+          )}
+        </div>
+      ) : total === 0 ? (
+        <div className="pk-done">
+          <p className="pk-done-sub">Este traspaso no tiene productos.</p>
+          <button
+            onClick={() => navigate(`/ops/traspasos/${id}`)}
+            className="pk-done-btn"
+            style={{ lineHeight: "64px" }}
+          >
+            Volver al detalle
           </button>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="pk-desktop-wrap">
+            <div className="pk-desktop-center">
+              <span className="pk-step">
+                Producto {index + 1} de {total}
+              </span>
+              <span className="pk-sku">{item.producto?.referencia ?? "—"}</span>
+              <h1 className="pk-name">{item.producto?.nombre ?? "—"}</h1>
+              {item.producto?.unidad_medida && (
+                <p className="pk-model">{item.producto.unidad_medida}</p>
+              )}
+
+              {/* Cantidad a recoger (editable — guantes) */}
+              <div className="pk-qty" style={{ width: 260 }}>
+                <span className="pk-qty-lbl">Cantidad a recoger</span>
+                <div className="flex items-center gap-3">
+                  <QtyBtn
+                    onClick={() =>
+                      setCantidad(item.id, estadoItem.cantidad_enviada - 1)
+                    }
+                  >
+                    −
+                  </QtyBtn>
+                  <input
+                    type="number"
+                    value={estadoItem.cantidad_enviada}
+                    onChange={(e) => setCantidad(item.id, e.target.value)}
+                    min={1}
+                    className="pk-qty-num w-24 border-none bg-transparent text-center outline-none"
+                    aria-label="Cantidad a recoger"
+                  />
+                  <QtyBtn
+                    onClick={() =>
+                      setCantidad(item.id, estadoItem.cantidad_enviada + 1)
+                    }
+                  >
+                    +
+                  </QtyBtn>
+                </div>
+                <span
+                  className="font-mono text-[11px]"
+                  style={{ color: "var(--n-500)" }}
+                >
+                  Solicitado: {item.cantidad_solicitada}
+                </span>
+              </div>
+
+              <p className="pk-loc-inline">
+                Ubicación:<span className="code">{ubicCode}</span>
+              </p>
+              {estadoItem.picking_completado && (
+                <span className="pill pill-success">
+                  <span className="dot" />
+                  Ya marcado como recogido
+                </span>
+              )}
+            </div>
+
+            {/* Panel QR del producto (desktop ancho) — fiel a Lovable */}
+            <div className="pk-qr hidden lg:flex">
+              <div className="pk-qr-img">
+                <QrGlyph />
+              </div>
+              <span className="pk-qr-lbl">QR del producto</span>
+            </div>
+          </div>
+
+          {/* Acciones — botones de 64px */}
+          <div className="pk-actions mx-auto w-full max-w-[600px]">
+            <button className="pk-btn pk-btn-skip" onClick={saltar}>
+              <RotateCcw className="h-[18px] w-[18px]" strokeWidth={1.7} />
+              Saltar
+            </button>
+            <button
+              className="pk-btn pk-btn-pick"
+              onClick={() => marcarRecogido(item.id)}
+            >
+              <Check className="h-[18px] w-[18px]" strokeWidth={2.5} />
+              Recogido
+            </button>
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+/** Glifo QR decorativo (idéntico al de Lovable `picking.$id`). */
+function QrGlyph() {
+  return (
+    <svg
+      viewBox="0 0 21 21"
+      shapeRendering="crispEdges"
+      className="h-full w-full"
+      aria-hidden="true"
+    >
+      <rect width="21" height="21" fill="#fff" />
+      <g fill="#101828">
+        <rect x="0" y="0" width="7" height="1" />
+        <rect x="0" y="6" width="7" height="1" />
+        <rect x="0" y="0" width="1" height="7" />
+        <rect x="6" y="0" width="1" height="7" />
+        <rect x="2" y="2" width="3" height="3" />
+        <rect x="14" y="0" width="7" height="1" />
+        <rect x="14" y="6" width="7" height="1" />
+        <rect x="14" y="0" width="1" height="7" />
+        <rect x="20" y="0" width="1" height="7" />
+        <rect x="16" y="2" width="3" height="3" />
+        <rect x="0" y="14" width="7" height="1" />
+        <rect x="0" y="20" width="7" height="1" />
+        <rect x="0" y="14" width="1" height="7" />
+        <rect x="6" y="14" width="1" height="7" />
+        <rect x="2" y="16" width="3" height="3" />
+        <rect x="8" y="0" width="1" height="2" />
+        <rect x="10" y="1" width="2" height="1" />
+        <rect x="9" y="3" width="1" height="2" />
+        <rect x="11" y="3" width="2" height="1" />
+        <rect x="8" y="5" width="2" height="1" />
+        <rect x="0" y="8" width="2" height="1" />
+        <rect x="3" y="8" width="1" height="2" />
+        <rect x="5" y="9" width="2" height="1" />
+        <rect x="8" y="8" width="1" height="2" />
+        <rect x="10" y="8" width="2" height="1" />
+        <rect x="13" y="9" width="3" height="1" />
+        <rect x="17" y="8" width="1" height="2" />
+        <rect x="19" y="9" width="2" height="1" />
+        <rect x="2" y="10" width="2" height="1" />
+        <rect x="5" y="11" width="1" height="2" />
+        <rect x="8" y="11" width="3" height="1" />
+        <rect x="12" y="10" width="1" height="3" />
+        <rect x="14" y="11" width="2" height="1" />
+        <rect x="17" y="10" width="2" height="1" />
+        <rect x="20" y="11" width="1" height="2" />
+        <rect x="9" y="13" width="2" height="1" />
+        <rect x="13" y="14" width="1" height="2" />
+        <rect x="15" y="14" width="2" height="1" />
+        <rect x="18" y="13" width="1" height="3" />
+        <rect x="8" y="15" width="1" height="2" />
+        <rect x="11" y="16" width="3" height="1" />
+        <rect x="15" y="17" width="1" height="2" />
+        <rect x="17" y="16" width="2" height="1" />
+        <rect x="20" y="17" width="1" height="2" />
+        <rect x="9" y="18" width="2" height="1" />
+        <rect x="12" y="19" width="1" height="2" />
+        <rect x="14" y="20" width="3" height="1" />
+        <rect x="19" y="20" width="2" height="1" />
+      </g>
+    </svg>
+  );
+}
+
+function QtyBtn({ children, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center justify-center rounded-lg border font-bold"
+      style={{
+        width: 48,
+        height: 48,
+        fontSize: 22,
+        borderColor: "var(--n-200)",
+        backgroundColor: "var(--n-0)",
+        color: "var(--n-700)",
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
 function LoadingView() {
   return (
-    <div
-      className="p-4 sm:p-6 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <div className="space-y-3">
-        {[...Array(6)].map((_, i) => (
+    <div className="pk min-h-screen">
+      <header className="pk-header">
+        <div
+          className="h-8 w-8 animate-pulse rounded-full"
+          style={{ backgroundColor: "var(--n-100)" }}
+        />
+        <div
+          className="h-3 w-40 animate-pulse rounded"
+          style={{ backgroundColor: "var(--n-100)" }}
+        />
+      </header>
+      <div className="pk-desktop-wrap">
+        <div className="pk-desktop-center w-full">
           <div
-            key={i}
-            className="h-24 rounded-xl animate-pulse"
-            style={{ backgroundColor: "hsl(var(--muted))" }}
+            className="h-8 w-3/4 animate-pulse rounded"
+            style={{ backgroundColor: "var(--n-100)" }}
           />
-        ))}
+          <div
+            className="mt-4 h-32 w-64 animate-pulse rounded-lg"
+            style={{ backgroundColor: "var(--n-100)" }}
+          />
+        </div>
       </div>
     </div>
   );

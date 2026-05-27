@@ -1,0 +1,157 @@
+/* ════════════════════════════════════════════════════════════════════════
+ * Utilidades heredadas de la app original (pre-integración con Lovable).
+ * Mantienen funcionando las páginas existentes mientras se re-visten.
+ * Se importa desde src/index.css.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tokens que Lovable no define pero la app usa ───────────────────────── */
+:root {
+  --success: 142 64% 38%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 0% 10%;
+  --info: 200 80% 44%;
+  --info-foreground: 0 0% 100%;
+
+  --sidebar-background: 215 28% 17%;
+  --sidebar-foreground: 210 20% 80%;
+  --sidebar-primary: 210 50% 65%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 215 25% 22%;
+  --sidebar-accent-foreground: 210 20% 92%;
+  --sidebar-border: 215 20% 25%;
+  --sidebar-ring: 210 50% 65%;
+  --sidebar-muted: 215 15% 40%;
+}
+
+/* ── Admin Shell ──────────────────────────────────────────────────────────
+   El Panel Admin usa por defecto el MISMO tema claro que Operaciones (tokens
+   de :root). El modo oscuro NO se fuerza aquí: vive en la clase `.dark` del
+   sistema de diseño (src/index.css), lista para un futuro botón de dark mode
+   que la active globalmente. `.admin-shell` queda solo como marcador de layout. */
+
+/* ── Status badges ──────────────────────────────────────────────────────── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.status-success {
+  background-color: hsl(var(--success) / 0.12);
+  color: hsl(var(--success));
+}
+.status-warning {
+  background-color: hsl(var(--warning) / 0.12);
+  color: hsl(var(--warning));
+}
+.status-danger {
+  background-color: hsl(var(--destructive) / 0.12);
+  color: hsl(var(--destructive));
+}
+.status-info {
+  background-color: hsl(var(--info) / 0.12);
+  color: hsl(var(--info));
+}
+.status-neutral {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+/* ── Module header ──────────────────────────────────────────────────────── */
+.module-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid hsl(var(--border));
+  margin-bottom: 1.5rem;
+}
+
+/* ── KPI card ───────────────────────────────────────────────────────────── */
+.kpi-card {
+  background-color: hsl(var(--card));
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--border));
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* ── Grid decorativo (login background overlay) ─────────────────────────── */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* ── Texto de marca ─────────────────────────────────────────────────────── */
+.font-brand {
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-weight: 700;
+}
+
+/* ── Animaciones ────────────────────────────────────────────────────────── */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes slide-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-8px);
+  }
+  40% {
+    transform: translateX(8px);
+  }
+  60% {
+    transform: translateX(-5px);
+  }
+  80% {
+    transform: translateX(5px);
+  }
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+.animate-fade-up {
+  animation: fade-up 0.3s ease-out;
+}

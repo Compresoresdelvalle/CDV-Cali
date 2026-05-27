@@ -19,6 +19,22 @@
     />
   </head>
   <body>
+    <!-- Aplica el tema (claro/oscuro) antes de pintar para evitar parpadeo. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("cdv-theme");
+          if (t !== "light" && t !== "dark") {
+            t = window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          }
+          if (t === "dark") document.documentElement.classList.add("dark");
+        } catch (e) {
+          /* sin acceso a localStorage: arranca en claro */
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

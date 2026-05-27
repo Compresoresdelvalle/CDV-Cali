@@ -1,19 +1,30 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  Search,
+  ScanLine,
+  Trash2,
+  Minus,
+  Plus,
+  Star,
+  AlertTriangle,
+  ChevronRight,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
+import {
+  formatCOP,
+  formatDate,
+  sanitizeSearch,
+  safeError,
+} from "../../lib/utils";
 import QRScanner from "../../components/forms/QRScanner";
-import PageHeader from "../../components/layout/PageHeader";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
+import { metodoPagoClass } from "../../lib/ventas-ui";
 
 const METODOS_PAGO = ["Efectivo", "Transferencia", "Tarjeta", "Crédito"];
-
-const inputStyle = {
-  backgroundColor: "hsl(var(--card))",
-  borderColor: "hsl(var(--border))",
-  color: "hsl(var(--foreground))",
-};
+const IVA_PCT = 19;
 
 export default function VentaNueva() {
   const navigate = useNavigate();
@@ -31,6 +42,7 @@ export default function VentaNueva() {
   const [observaciones, setObservaciones] = useState("");
   const [confirmando, setConfirmando] = useState(false);
   const [error, setError] = useState(null);
+  const [historialCliente, setHistorialCliente] = useState(null);
 
   const buscarProductos = useCallback(
     async (q) => {
@@ -85,6 +97,43 @@ export default function VentaNueva() {
     const val = e.target.value;
     setBusqueda(val);
     buscarDebounced(val);
+  };
+
+  // Lookup read-only del historial del cliente (banner "cliente recurrente").
+  // Cuenta ventas previas no anuladas con ese nombre exacto. NO escribe nada.
+  const buscarHistorialCliente = useDebouncedCallback(async (nombre) => {
+    const n = (nombre || "").trim();
+    if (n.length < 3) {
+      setHistorialCliente(null);
+      return;
+    }
+    try {
+      const { data, error: e } = await supabase
+        .from("ventas")
+        .select("total, fecha")
+        .eq("cliente_nombre", n)
+        .eq("anulada", false)
+        .order("fecha", { ascending: false })
+        .limit(50);
+      if (e) throw e;
+      if (!data || data.length === 0) {
+        setHistorialCliente(null);
+        return;
+      }
+      setHistorialCliente({
+        compras: data.length,
+        ultimaFecha: data[0]?.fecha ?? null,
+        ultimoTotal: Number(data[0]?.total ?? 0),
+      });
+    } catch {
+      setHistorialCliente(null);
+    }
+  }, 500);
+
+  const handleClienteNombreChange = (e) => {
+    const val = e.target.value;
+    setClienteNombre(val);
+    buscarHistorialCliente(val);
   };
 
   const handleQRFound = useCallback(
@@ -179,7 +228,6 @@ export default function VentaNueva() {
   // Misma fórmula que el trigger trg_recalcular_total_venta del servidor:
   // total = subtotal * (1 - desc/100) * (1 + iva/100)
   // Esto evita drifts de 1-2 COP por orden de operaciones distinto.
-  const IVA_PCT = 19;
   const subtotal = carrito.reduce(
     (s, i) => s + i.cantidad * i.precio_unitario,
     0,
@@ -188,6 +236,13 @@ export default function VentaNueva() {
   const baseIva = subtotal - descuento;
   const iva = baseIva * (IVA_PCT / 100);
   const total = subtotal * (1 - descuentoPct / 100) * (1 + IVA_PCT / 100);
+
+  // Paso activo del stepper, derivado del estado real de la venta en curso.
+  const pasoActivo = useMemo(() => {
+    if (confirmando) return 3;
+    if (carrito.length === 0) return 1;
+    return 2;
+  }, [carrito.length, confirmando]);
 
   const confirmarVenta = async () => {
     if (carrito.length === 0) return;
@@ -217,113 +272,230 @@ export default function VentaNueva() {
   };
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      {/* ── PageHeader ── */}
-      <PageHeader
-        title="Nueva Venta"
-        description={perfil.sede_id}
-        actions={
-          <button
-            onClick={() => navigate("/ops/ventas")}
-            className="h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-              backgroundColor: "hsl(var(--card))",
-            }}
-          >
-            Cancelar
-          </button>
-        }
-      />
+    <div className="px-4 pb-16 pt-5 sm:px-7 animate-fade-in">
+      <button
+        onClick={() => navigate("/ops/ventas")}
+        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium transition-colors"
+        style={{ color: "var(--n-500)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--n-700)")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--n-500)")}
+      >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+        Volver a Ventas
+      </button>
 
-      {/* ── Búsqueda de productos ── */}
-      <SectionCard title="Agregar productos">
-        <div className="space-y-3">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <SearchIcon />
+      {/* ── Encabezado ──────────────────────────────────────────────── */}
+      <div
+        className="mt-4 flex flex-wrap items-end justify-between gap-4 border-b pb-4"
+        style={{ borderColor: "var(--n-150)" }}
+      >
+        <div>
+          <h1
+            className="m-0 text-[22px] font-semibold tracking-[-0.01em]"
+            style={{ color: "var(--n-950)" }}
+          >
+            Nueva venta
+          </h1>
+          <p className="mt-1.5 text-[13px]" style={{ color: "var(--n-500)" }}>
+            Vendedor ·{" "}
+            <b
+              className="font-mono font-medium"
+              style={{ color: "var(--n-700)" }}
+            >
+              {perfil?.nombre ?? "—"}
+            </b>{" "}
+            · Sede{" "}
+            <b
+              className="font-mono font-medium"
+              style={{ color: "var(--n-700)" }}
+            >
+              {perfil?.sede_id ?? "—"}
+            </b>
+          </p>
+        </div>
+        <button
+          onClick={() => navigate("/ops/ventas")}
+          className="btn btn-out"
+          style={{ height: 48 }}
+        >
+          Cancelar
+        </button>
+      </div>
+
+      {/* ── Stepper ─────────────────────────────────────────────────── */}
+      <div className="stepper mt-5">
+        <Step n={1} label="Cliente y productos" estado={pasoActivo} />
+        <div className={`step-line ${pasoActivo > 1 ? "done" : ""}`} />
+        <Step n={2} label="Pago" estado={pasoActivo} />
+        <div className={`step-line ${pasoActivo > 2 ? "done" : ""}`} />
+        <Step n={3} label="Confirmar" estado={pasoActivo} />
+      </div>
+
+      {/* ── Banner cliente recurrente (derivado real, solo si existe) ── */}
+      {historialCliente && historialCliente.compras > 0 && (
+        <div className="banner-info mt-4">
+          <Star className="size-4 shrink-0" strokeWidth={2} />
+          <div className="body">
+            <b>{clienteNombre.trim()}</b> tiene{" "}
+            <b>{historialCliente.compras}</b> compra
+            {historialCliente.compras !== 1 ? "s" : ""} previa
+            {historialCliente.compras !== 1 ? "s" : ""}
+            {historialCliente.ultimaFecha && (
+              <>
+                . Última compra el{" "}
+                <b>{formatDate(historialCliente.ultimaFecha)}</b> por{" "}
+                <b>{formatCOP(historialCliente.ultimoTotal)}</b>
+              </>
+            )}
+            .<sub>Cliente recurrente en esta sede</sub>
+          </div>
+        </div>
+      )}
+
+      {/* ── Grid ────────────────────────────────────────────────────── */}
+      <div className="mt-4 grid items-start gap-5 lg:grid-cols-[1fr_340px]">
+        {/* ── Columna principal ─────────────────────────────────────── */}
+        <div className="iblock space-y-4">
+          <div>
+            <div
+              className="font-mono text-[11px] uppercase tracking-[0.1em]"
+              style={{ color: "var(--n-500)" }}
+            >
+              Datos del cliente
+            </div>
+            <h2
+              className="mt-1 text-[17px] font-medium"
+              style={{ color: "var(--n-950)" }}
+            >
+              Cliente y productos
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Cliente (opcional)" full>
+              <input
+                value={clienteNombre}
+                onChange={handleClienteNombreChange}
+                placeholder="Nombre del cliente"
+                className="finput sans"
+              />
+            </Field>
+            <Field label="NIT o Cédula">
+              <input
+                value={clienteNit}
+                onChange={(e) => setClienteNit(e.target.value)}
+                placeholder="NIT o Cédula"
+                className="finput"
+              />
+            </Field>
+            <Field label="Notas">
+              <input
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                placeholder="Observaciones (opcional)"
+                className="finput sans"
+              />
+            </Field>
+          </div>
+
+          <div className="h-px" style={{ backgroundColor: "var(--n-150)" }} />
+
+          <div
+            className="font-mono text-[11px] uppercase tracking-[0.1em]"
+            style={{ color: "var(--n-500)" }}
+          >
+            Productos a vender
+          </div>
+
+          {/* Buscador de productos + QR */}
+          <div className="flex items-stretch">
+            <div
+              className="flex h-12 flex-1 items-center gap-2.5 rounded-l-[10px] border border-r-0 px-3.5"
+              style={{
+                borderColor: "var(--n-200)",
+                backgroundColor: "var(--n-0)",
+              }}
+            >
+              <Search
+                className="h-4 w-4 shrink-0"
+                strokeWidth={1.5}
+                style={{ color: "var(--n-500)" }}
+              />
               <input
                 type="text"
                 value={busqueda}
                 onChange={handleBusquedaChange}
-                placeholder="Nombre o referencia..."
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm border focus:outline-none transition-all"
-                style={inputStyle}
+                placeholder="Buscar nombre, referencia o escanea QR…"
+                className="min-w-0 flex-1 border-none bg-transparent text-[14px] outline-none"
+                style={{ color: "var(--n-950)" }}
               />
             </div>
             <button
               onClick={() => setScannerOpen(true)}
-              className="flex items-center justify-center w-11 h-11 rounded-xl flex-shrink-0 transition-all cursor-pointer"
-              style={{
-                backgroundColor: "hsl(var(--primary))",
-                color: "hsl(var(--primary-foreground))",
-              }}
+              className="inline-flex h-12 shrink-0 items-center gap-1.5 rounded-l-none rounded-r-[10px] px-4 text-white"
+              style={{ backgroundColor: "var(--p-600)" }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.backgroundColor = "var(--p-700)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.backgroundColor = "var(--p-600)")
+              }
+              aria-label="Escanear QR"
             >
-              <QRIcon />
+              <ScanLine className="h-4 w-4" strokeWidth={1.7} />
+              <span className="hidden sm:inline">Escanear QR</span>
             </button>
           </div>
 
           {buscando && (
-            <p
-              className="text-xs"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Buscando...
+            <p className="text-xs" style={{ color: "var(--n-500)" }}>
+              Buscando…
             </p>
           )}
 
           {resultados.length > 0 && (
             <div
-              className="border rounded-xl overflow-hidden"
-              style={{ borderColor: "hsl(var(--border))" }}
+              className="overflow-hidden rounded-lg border"
+              style={{ borderColor: "var(--n-150)" }}
             >
               {resultados.map((r, idx) => (
                 <button
                   key={r.id}
                   onClick={() => agregarAlCarrito(r)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-left transition-all cursor-pointer"
+                  className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
                   style={{
-                    borderTop:
-                      idx === 0 ? "none" : `1px solid hsl(var(--border) / 0.5)`,
-                    backgroundColor: "hsl(var(--card))",
+                    borderTop: idx === 0 ? "none" : "1px solid var(--n-100)",
+                    backgroundColor: "var(--n-0)",
                   }}
                   onMouseEnter={(e) =>
-                    (e.currentTarget.style.backgroundColor =
-                      "hsl(var(--muted) / 0.5)")
+                    (e.currentTarget.style.backgroundColor = "var(--n-50)")
                   }
                   onMouseLeave={(e) =>
-                    (e.currentTarget.style.backgroundColor = "hsl(var(--card))")
+                    (e.currentTarget.style.backgroundColor = "var(--n-0)")
                   }
                 >
                   <div>
                     <p
                       className="text-sm font-medium"
-                      style={{ color: "hsl(var(--foreground))" }}
+                      style={{ color: "var(--n-950)" }}
                     >
                       {r.nombre}
                     </p>
                     <p
-                      className="text-xs"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
+                      className="font-mono text-[11px]"
+                      style={{ color: "var(--n-500)" }}
                     >
                       {r.referencia} · Stock: {r.stock_disponible}
                     </p>
                   </div>
                   <div className="text-right">
                     <p
-                      className="text-sm font-semibold"
-                      style={{ color: "hsl(var(--foreground))" }}
+                      className="font-mono text-sm font-semibold"
+                      style={{ color: "var(--n-950)" }}
                     >
                       {formatCOP(r.precio_venta)}
                     </p>
-                    <p
-                      className="text-xs"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
+                    <p className="text-xs" style={{ color: "var(--n-500)" }}>
                       {r.unidad_medida}
                     </p>
                   </div>
@@ -331,161 +503,141 @@ export default function VentaNueva() {
               ))}
             </div>
           )}
-        </div>
 
-        {/* Ítems del carrito */}
-        {carrito.length === 0 ? (
-          <div className="py-8 text-center">
-            <p
-              className="text-sm"
-              style={{ color: "hsl(var(--muted-foreground))" }}
+          {/* Tabla de productos del carrito (estilo Lovable prod-tbl) */}
+          {carrito.length === 0 ? (
+            <div
+              className="rounded-[10px] border border-dashed px-4 py-10 text-center text-sm"
+              style={{ borderColor: "var(--n-200)", color: "var(--n-500)" }}
             >
-              Agrega productos al carrito
-            </p>
+              Busca o escanea productos para agregarlos a la venta
+            </div>
+          ) : (
+            <div
+              className="overflow-hidden rounded-[10px] border"
+              style={{ borderColor: "var(--n-150)" }}
+            >
+              <table className="prod-tbl">
+                <thead>
+                  <tr>
+                    <th style={{ width: 130 }}>Ref.</th>
+                    <th>Producto</th>
+                    <th className="r" style={{ width: 132 }}>
+                      Cant
+                    </th>
+                    <th className="r" style={{ width: 110 }}>
+                      Unit
+                    </th>
+                    <th className="r" style={{ width: 120 }}>
+                      Subtotal
+                    </th>
+                    <th style={{ width: 42 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {carrito.map((item) => {
+                    const topeStock = item.cantidad >= item.stock_disponible;
+                    return (
+                      <tr key={item.producto_id}>
+                        <td>
+                          <span className="p-sku">
+                            {item.referencia ?? "—"}
+                          </span>
+                          <div className="p-meta">{item.unidad ?? ""}</div>
+                        </td>
+                        <td>
+                          <div className="p-nm">{item.nombre}</div>
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <QtyControl
+                            value={item.cantidad}
+                            danger={topeStock}
+                            onDec={() =>
+                              actualizarCantidad(item.producto_id, -1)
+                            }
+                            onInc={() =>
+                              actualizarCantidad(item.producto_id, 1)
+                            }
+                            onSet={(v) =>
+                              setCantidadDirecta(item.producto_id, v)
+                            }
+                            max={item.stock_disponible}
+                            incDisabled={topeStock}
+                          />
+                          {topeStock && (
+                            <div
+                              className="mt-1 inline-flex items-center gap-1 font-mono text-[10.5px]"
+                              style={{ color: "var(--warn-700)" }}
+                            >
+                              <AlertTriangle className="size-3" /> Máx.{" "}
+                              {item.stock_disponible} en stock
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-pr">
+                          {formatCOP(item.precio_unitario)}
+                        </td>
+                        <td className="p-sub">
+                          {formatCOP(item.cantidad * item.precio_unitario)}
+                        </td>
+                        <td>
+                          <button
+                            onClick={() => eliminarItem(item.producto_id)}
+                            className="flex size-7 items-center justify-center rounded-md transition-colors"
+                            style={{ color: "var(--n-500)" }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.color = "var(--dang-600)")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.color = "var(--n-500)")
+                            }
+                            aria-label="Eliminar producto"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pago — método y descuento */}
+          <div className="h-px" style={{ backgroundColor: "var(--n-150)" }} />
+          <div
+            className="font-mono text-[11px] uppercase tracking-[0.1em]"
+            style={{ color: "var(--n-500)" }}
+          >
+            Pago
           </div>
-        ) : (
-          <div className="mt-3 space-y-0">
-            {carrito.map((item, idx) => (
-              <div
-                key={item.producto_id}
-                className="flex items-center gap-3 px-0 py-3"
-                style={{
-                  borderTop:
-                    idx === 0 ? "none" : `1px solid hsl(var(--border) / 0.5)`,
-                }}
-              >
-                <div className="flex-1 min-w-0">
-                  <p
-                    className="text-sm font-medium truncate"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {item.nombre}
-                  </p>
-                  <p
-                    className="text-xs"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {formatCOP(item.precio_unitario)} c/u
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => actualizarCantidad(item.producto_id, -1)}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg border transition-all cursor-pointer"
-                    style={{
-                      borderColor: "hsl(var(--border))",
-                      color: "hsl(var(--muted-foreground))",
-                      backgroundColor: "hsl(var(--card))",
-                    }}
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    min="1"
-                    max={item.stock_disponible}
-                    value={item.cantidad}
-                    onChange={(e) =>
-                      setCantidadDirecta(item.producto_id, e.target.value)
-                    }
-                    className="w-12 text-center text-sm font-semibold border rounded-lg py-1 focus:outline-none"
-                    style={inputStyle}
-                  />
-                  <button
-                    onClick={() => actualizarCantidad(item.producto_id, 1)}
-                    disabled={item.cantidad >= item.stock_disponible}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg border transition-all disabled:opacity-40 cursor-pointer"
-                    style={{
-                      borderColor: "hsl(var(--border))",
-                      color: "hsl(var(--muted-foreground))",
-                      backgroundColor: "hsl(var(--card))",
-                    }}
-                  >
-                    +
-                  </button>
-                </div>
-                <div className="text-right w-20">
-                  <p
-                    className="text-sm font-semibold tabular-nums"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {formatCOP(item.cantidad * item.precio_unitario)}
-                  </p>
-                </div>
+          <div className="flex flex-wrap gap-2">
+            {METODOS_PAGO.map((m) => {
+              const on = metodoPago === m;
+              return (
                 <button
-                  onClick={() => eliminarItem(item.producto_id)}
-                  className="transition-colors cursor-pointer"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.color = "hsl(var(--destructive))")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.color =
-                      "hsl(var(--muted-foreground))")
-                  }
+                  key={m}
+                  onClick={() => setMetodoPago(m)}
+                  className={`pay-pill ${metodoPagoClass(m)}`}
+                  style={{
+                    minHeight: 36,
+                    cursor: "pointer",
+                    opacity: on ? 1 : 0.55,
+                    outline: on
+                      ? "2px solid var(--p-400)"
+                      : "1px solid transparent",
+                    outlineOffset: on ? 1 : 0,
+                  }}
                 >
-                  <XIcon />
+                  <span className="dot" />
+                  {m}
                 </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
-      {/* ── Cliente (opcional) ── */}
-      <SectionCard title="Cliente (opcional)">
-        <div className="space-y-3">
-          <input
-            type="text"
-            value={clienteNombre}
-            onChange={(e) => setClienteNombre(e.target.value)}
-            placeholder="Nombre del cliente"
-            className="w-full px-4 py-2.5 rounded-xl text-sm border focus:outline-none transition-all"
-            style={inputStyle}
-          />
-          <input
-            type="text"
-            value={clienteNit}
-            onChange={(e) => setClienteNit(e.target.value)}
-            placeholder="NIT o Cédula"
-            className="w-full px-4 py-2.5 rounded-xl text-sm border focus:outline-none transition-all"
-            style={inputStyle}
-          />
-        </div>
-      </SectionCard>
-
-      {/* ── Pago ── */}
-      <SectionCard title="Pago">
-        <div className="space-y-3">
-          <div className="flex gap-2 flex-wrap">
-            {METODOS_PAGO.map((m) => (
-              <button
-                key={m}
-                onClick={() => setMetodoPago(m)}
-                className="px-3 py-2 rounded-xl text-sm border font-medium transition-all cursor-pointer"
-                style={
-                  metodoPago === m
-                    ? {
-                        backgroundColor: "hsl(var(--primary))",
-                        color: "hsl(var(--primary-foreground))",
-                        borderColor: "hsl(var(--primary))",
-                      }
-                    : {
-                        backgroundColor: "hsl(var(--card))",
-                        color: "hsl(var(--muted-foreground))",
-                        borderColor: "hsl(var(--border))",
-                      }
-                }
-              >
-                {m}
-              </button>
-            ))}
+              );
+            })}
           </div>
           <div className="flex items-center gap-3">
-            <label
-              className="text-sm"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
+            <label className="text-sm" style={{ color: "var(--n-500)" }}>
               Descuento %
             </label>
             <input
@@ -498,97 +650,69 @@ export default function VentaNueva() {
                   Math.min(100, Math.max(0, Number(e.target.value))),
                 )
               }
-              className="w-20 px-3 py-2 rounded-xl text-sm border text-center focus:outline-none"
-              style={inputStyle}
+              className="finput"
+              style={{ width: 80, textAlign: "center" }}
             />
           </div>
-          <textarea
-            value={observaciones}
-            onChange={(e) => setObservaciones(e.target.value)}
-            placeholder="Observaciones (opcional)"
-            rows={2}
-            className="w-full px-4 py-2.5 rounded-xl text-sm border focus:outline-none resize-none transition-all"
-            style={inputStyle}
-          />
-        </div>
-      </SectionCard>
 
-      {/* ── Totales ── */}
-      {carrito.length > 0 && (
-        <div
-          className="rounded-xl border p-4 space-y-2"
-          style={{
-            backgroundColor: "hsl(var(--card))",
-            borderColor: "hsl(var(--border))",
-          }}
-        >
-          <div
-            className="flex justify-between text-sm"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            <span>Subtotal</span>
-            <span className="tabular-nums">{formatCOP(subtotal)}</span>
-          </div>
-          {descuentoPct > 0 && (
+          {error && (
             <div
-              className="flex justify-between text-sm"
-              style={{ color: "hsl(var(--warning))" }}
+              className="rounded-[10px] border px-4 py-3"
+              style={{
+                backgroundColor: "var(--dang-50)",
+                borderColor: "var(--dang-border)",
+              }}
             >
-              <span>Descuento ({descuentoPct}%)</span>
-              <span className="tabular-nums">−{formatCOP(descuento)}</span>
+              <p className="text-sm" style={{ color: "var(--dang-700)" }}>
+                {error}
+              </p>
             </div>
           )}
-          <div
-            className="flex justify-between text-sm"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            <span>IVA 19%</span>
-            <span className="tabular-nums">{formatCOP(iva)}</span>
+        </div>
+
+        {/* ── Resumen (cart sticky) ─────────────────────────────────── */}
+        <aside className="cart">
+          <span className="cart-eyebrow">Resumen</span>
+          <div className="text-[12px]" style={{ color: "var(--n-500)" }}>
+            {carrito.length} producto{carrito.length !== 1 ? "s" : ""}
           </div>
-          <div
-            className="flex justify-between font-bold text-base pt-2 border-t"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--foreground))",
-            }}
-          >
+          <div className="cart-line">
+            <span>Subtotal</span>
+            <span className="v">{formatCOP(subtotal)}</span>
+          </div>
+          {descuentoPct > 0 && (
+            <div className="cart-line" style={{ color: "var(--warn-700)" }}>
+              <span>Descuento ({descuentoPct}%)</span>
+              <span className="v" style={{ color: "var(--warn-700)" }}>
+                −{formatCOP(descuento)}
+              </span>
+            </div>
+          )}
+          <div className="cart-line">
+            <span>IVA {IVA_PCT}%</span>
+            <span className="v">{formatCOP(iva)}</span>
+          </div>
+          <div className="cart-line tot">
             <span>Total</span>
-            <span className="tabular-nums">{formatCOP(total)}</span>
+            <span className="v">{formatCOP(total)}</span>
           </div>
-        </div>
-      )}
+          <button
+            onClick={confirmarVenta}
+            disabled={carrito.length === 0 || confirmando}
+            className="btn btn-pri mt-1 w-full justify-center disabled:opacity-40"
+            style={{ height: 48 }}
+          >
+            {confirmando ? (
+              "Registrando…"
+            ) : (
+              <>
+                Confirmar venta <ChevronRight className="size-3.5" />
+              </>
+            )}
+          </button>
+        </aside>
+      </div>
 
-      {/* ── Error ── */}
-      {error && (
-        <div
-          className="rounded-xl border px-4 py-3"
-          style={{
-            backgroundColor: "hsl(var(--destructive) / 0.05)",
-            borderColor: "hsl(var(--destructive) / 0.2)",
-          }}
-        >
-          <p className="text-sm" style={{ color: "hsl(var(--destructive))" }}>
-            {error}
-          </p>
-        </div>
-      )}
-
-      {/* ── Botón confirmar ── */}
-      <button
-        onClick={confirmarVenta}
-        disabled={carrito.length === 0 || confirmando}
-        className="w-full py-4 rounded-xl font-semibold text-base transition-opacity disabled:opacity-40 cursor-pointer"
-        style={{
-          backgroundColor: "hsl(var(--primary))",
-          color: "hsl(var(--primary-foreground))",
-        }}
-      >
-        {confirmando
-          ? "Registrando..."
-          : `Confirmar venta · ${formatCOP(total)}`}
-      </button>
-
-      {/* QR Scanner modal */}
       {scannerOpen && (
         <QRScanner
           onFound={handleQRFound}
@@ -599,88 +723,71 @@ export default function VentaNueva() {
   );
 }
 
-function SectionCard({ title, children }) {
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+function Step({ n, label, estado }) {
+  const cls = estado > n ? "done" : estado === n ? "active" : "todo";
   return (
-    <div
-      className="rounded-xl border overflow-hidden"
-      style={{
-        backgroundColor: "hsl(var(--card))",
-        borderColor: "hsl(var(--border))",
-      }}
-    >
-      <div
-        className="px-4 py-3 border-b"
-        style={{
-          borderColor: "hsl(var(--border))",
-          backgroundColor: "hsl(var(--muted) / 0.3)",
-        }}
-      >
-        <p
-          className="text-xs font-semibold uppercase tracking-wide"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          {title}
-        </p>
-      </div>
-      <div className="p-4">{children}</div>
+    <div className={`step ${cls}`}>
+      <div className="step-dot">{n}</div>
+      <div className="step-lbl">{label}</div>
     </div>
   );
 }
 
-function SearchIcon() {
+function Field({ label, full, children }) {
   return (
-    <svg
-      className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
-      style={{ color: "hsl(var(--muted-foreground))" }}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-      />
-    </svg>
+    <div className={`flex flex-col gap-1.5 ${full ? "sm:col-span-2" : ""}`}>
+      <label
+        className="font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
+        style={{ color: "var(--n-500)" }}
+      >
+        {label}
+      </label>
+      {children}
+    </div>
   );
 }
 
-function QRIcon() {
+function QtyControl({ value, danger, onDec, onInc, onSet, max, incDisabled }) {
   return (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
+    <div
+      className="inline-flex h-9 items-center overflow-hidden rounded-md border"
+      style={
+        danger
+          ? {
+              borderColor: "var(--dang-border)",
+              backgroundColor: "var(--dang-50)",
+            }
+          : { borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }
+      }
     >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
+      <button
+        onClick={onDec}
+        className="grid h-full w-8 place-items-center transition-colors"
+        style={{ color: "var(--n-700)" }}
+        aria-label="Disminuir cantidad"
+      >
+        <Minus className="size-3.5" />
+      </button>
+      <input
+        type="number"
+        min="1"
+        max={max}
+        value={value}
+        onChange={(e) => onSet(e.target.value)}
+        className="w-10 border-0 bg-transparent text-center font-mono text-[13px] font-medium outline-none"
+        style={{ color: danger ? "var(--dang-700)" : "var(--n-950)" }}
       />
-    </svg>
-  );
-}
-
-function XIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M6 18L18 6M6 6l12 12"
-      />
-    </svg>
+      <button
+        onClick={onInc}
+        disabled={incDisabled}
+        className="grid h-full w-8 place-items-center transition-colors disabled:opacity-40"
+        style={{ color: "var(--n-700)" }}
+        aria-label="Aumentar cantidad"
+      >
+        <Plus className="size-3.5" />
+      </button>
+    </div>
   );
 }

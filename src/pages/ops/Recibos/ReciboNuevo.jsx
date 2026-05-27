@@ -1,24 +1,31 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  Search,
+  Sparkles,
+  Link2,
+  Info,
+  Check,
+  Wallet,
+  Zap,
+} from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { formatCOP, safeError } from "../../../lib/utils";
 import { useAuthStore } from "../../../stores/authStore";
-import PageHeader from "../../../components/layout/PageHeader";
+import {
+  RECIBO_MODOS,
+  RECIBO_METODOS_PAGO,
+  metodoPagoLabel,
+  cuentaBancariaLabel,
+} from "../../../lib/recibos-ui";
 
 /**
- * Crear recibo de pago — Fase 14.
- * Dos modos: desde cero / desde cotización (pre-llena).
- * Vínculo opcional a OT → muestra abonos previos y puede registrar el pago
- * como abono de esa OT.
+ * Crear recibo de pago — Fase 14 (re-vestido con diseño Lovable).
+ * Lógica intacta: dos modos (desde cero / desde cotización pre-llena),
+ * vínculo opcional a OT con abonos previos, server-authoritative vía
+ * fn_registrar_recibo, guard síncrono anti doble-submit.
  */
-const inputCls =
-  "w-full px-3 py-2 rounded-lg border text-sm min-h-[44px] focus:outline-none";
-const inputStyle = {
-  backgroundColor: "hsl(var(--card))",
-  borderColor: "hsl(var(--border))",
-  color: "hsl(var(--foreground))",
-};
-
 export default function ReciboNuevo() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
@@ -180,373 +187,428 @@ export default function ReciboNuevo() {
   };
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Nuevo recibo"
-        description="Recibo de pago. Crea desde cero o desde una cotización."
-        actions={
-          <button
-            onClick={() => navigate("/ops/recibos")}
-            className="h-9 px-3 rounded-lg border text-sm font-medium cursor-pointer"
-            style={{
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-              backgroundColor: "hsl(var(--card))",
-            }}
+    <div className="mx-auto w-full max-w-[1100px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
+      <button onClick={() => navigate("/ops/recibos")} className="back-btn">
+        <ArrowLeftCircle className="size-3.5" />
+        Volver a Recibos
+      </button>
+
+      {/* ── Encabezado + subtabs de modo ───────────────────────────── */}
+      <div
+        className="mt-4 flex flex-col items-start gap-3 border-b pb-4 md:flex-row md:items-end md:justify-between"
+        style={{ borderColor: "var(--n-150)" }}
+      >
+        <div className="min-w-0">
+          <div className="ph-eyebrow">Nuevo</div>
+          <h1
+            className="m-0 text-[22px] font-semibold tracking-[-0.01em]"
+            style={{ color: "var(--n-900)" }}
           >
-            ← Volver
-          </button>
-        }
-      />
+            {modo === "cotizacion"
+              ? "Recibo desde cotización"
+              : "Recibo manual"}
+          </h1>
+          <p className="mt-1.5 text-[13px]" style={{ color: "var(--n-500)" }}>
+            {modo === "cotizacion"
+              ? "Busca una cotización para pre-cargar cliente, montos y detalle."
+              : "Para anticipos, pagos sin venta asociada o ajustes contables."}
+          </p>
+        </div>
+        <div className="subtabs">
+          {RECIBO_MODOS.map((m) => (
+            <button
+              key={m.v}
+              className={`stab ${modo === m.v ? "active" : ""}`}
+              onClick={() => setModo(m.v)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {errorMsg && (
         <div
           role="alert"
-          className="rounded-lg border px-3 py-2 text-xs"
+          className="mt-4 rounded-[10px] border px-4 py-3 text-sm"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.4)",
-            color: "hsl(var(--destructive))",
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
+            color: "var(--dang-700)",
           }}
         >
           {errorMsg}
         </div>
       )}
 
-      {/* Modo */}
-      <div className="flex gap-2 flex-wrap">
-        {[
-          { v: "cero", label: "Desde cero" },
-          { v: "cotizacion", label: "Desde cotización" },
-        ].map((m) => (
-          <button
-            key={m.v}
-            onClick={() => setModo(m.v)}
-            className="h-9 px-4 rounded-lg text-sm font-medium border cursor-pointer"
-            style={{
-              backgroundColor:
-                modo === m.v ? "hsl(var(--primary))" : "hsl(var(--card))",
-              color:
-                modo === m.v
-                  ? "hsl(var(--primary-foreground))"
-                  : "hsl(var(--foreground))",
-              borderColor: "hsl(var(--border))",
-            }}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
-
-      <Section title="Datos del recibo">
-        {modo === "cotizacion" && (
-          <Row>
-            <Field label="N° de cotización">
+      {/* ── Layout: formulario + resumen sticky ────────────────────── */}
+      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[1fr_360px]">
+        <div className="flex flex-col gap-4">
+          {/* Buscar cotización (solo modo cotización) */}
+          {modo === "cotizacion" && (
+            <div className="iblock">
+              <div className="ib-head">
+                <div className="ib-ico">
+                  <Search className="size-3.5" strokeWidth={2} />
+                </div>
+                <div className="ib-title">Cotización</div>
+              </div>
               <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={cotizacionNum}
-                  onChange={(e) => setCotizacionNum(e.target.value)}
-                  className={inputCls}
-                  style={inputStyle}
-                  placeholder="Ej. 57"
-                />
+                <div
+                  className="flex h-12 flex-1 items-center gap-2.5 rounded-lg border px-3.5"
+                  style={{
+                    borderColor: "var(--n-200)",
+                    backgroundColor: "var(--n-0)",
+                  }}
+                >
+                  <Search
+                    className="size-4 shrink-0"
+                    strokeWidth={1.5}
+                    style={{ color: "var(--n-500)" }}
+                  />
+                  <input
+                    type="number"
+                    value={cotizacionNum}
+                    onChange={(e) => setCotizacionNum(e.target.value)}
+                    placeholder="N° de cotización (ej. 57)"
+                    className="min-w-0 flex-1 border-none bg-transparent text-[14px] outline-none"
+                    style={{ color: "var(--n-900)" }}
+                  />
+                </div>
                 <button
                   onClick={buscarCotizacion}
-                  className="px-3 rounded-lg text-sm font-medium cursor-pointer shrink-0"
-                  style={{
-                    backgroundColor: "hsl(var(--primary))",
-                    color: "hsl(var(--primary-foreground))",
-                  }}
+                  className="btn btn-pri shrink-0"
+                  style={{ height: 48 }}
                 >
                   Buscar
                 </button>
               </div>
-            </Field>
-            {cotizacion && (
-              <Field label=" ">
-                <p
-                  className="text-xs pt-2"
-                  style={{ color: "hsl(var(--success))" }}
+              {cotizacion && (
+                <div
+                  className="cot-result sel mt-3"
+                  style={{ cursor: "default" }}
                 >
-                  ✓ Cotización #{cotizacion.numero} cargada ({items.length}{" "}
-                  ítems)
-                </p>
-              </Field>
-            )}
-          </Row>
-        )}
-
-        <Row>
-          <Field label="Cliente *">
-            <input
-              type="text"
-              value={clienteNombre}
-              onChange={(e) => setClienteNombre(e.target.value)}
-              className={inputCls}
-              style={inputStyle}
-              placeholder="Nombre del cliente"
-            />
-          </Field>
-          <Field label="NIT / Cédula">
-            <input
-              type="text"
-              value={clienteNit}
-              onChange={(e) => setClienteNit(e.target.value)}
-              className={inputCls}
-              style={inputStyle}
-            />
-          </Field>
-        </Row>
-
-        <Field label="Concepto *">
-          <textarea
-            value={concepto}
-            onChange={(e) => setConcepto(e.target.value)}
-            className={inputCls + " min-h-[70px]"}
-            style={inputStyle}
-            placeholder="Ej. Pago por reparación de compresor / abono a OT #12"
-            maxLength={500}
-          />
-        </Field>
-      </Section>
-
-      <Section title="Vínculo con OT (opcional)">
-        <Row>
-          <Field label="N° de OT">
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={ordenNum}
-                onChange={(e) => setOrdenNum(e.target.value)}
-                onBlur={buscarOrden}
-                className={inputCls}
-                style={inputStyle}
-                placeholder="Ej. 12"
-              />
+                  <span className="cnum">#{cotizacion.numero}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="ccli">{cotizacion.cliente_nombre}</div>
+                    <div className="cmeta">
+                      {items.length} ítem{items.length === 1 ? "" : "s"}{" "}
+                      cargados
+                    </div>
+                  </div>
+                  <div className="ctot">{formatCOP(cotizacion.total)}</div>
+                  <span className="csel-tag">
+                    <Check className="size-3" strokeWidth={3} />
+                    Cargada
+                  </span>
+                </div>
+              )}
             </div>
-          </Field>
-          {orden && (
-            <Field label=" ">
-              <p
-                className="text-xs pt-2"
-                style={{ color: "hsl(var(--success))" }}
+          )}
+
+          {/* Datos del recibo */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <Sparkles className="size-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Datos del recibo</div>
+            </div>
+            <div className="flex flex-col gap-3">
+              <Field label="Consecutivo" badge="auto">
+                <input
+                  className="finput locked"
+                  readOnly
+                  value="Se asigna al guardar"
+                  title="El número de recibo lo asigna la base de datos de forma consecutiva."
+                />
+              </Field>
+              <div className="field-row">
+                <Field
+                  label="Cliente"
+                  req
+                  badge={modo === "cotizacion" ? "sugg" : undefined}
+                >
+                  <input
+                    type="text"
+                    value={clienteNombre}
+                    onChange={(e) => setClienteNombre(e.target.value)}
+                    placeholder="Razón social o nombre…"
+                    className="finput sans"
+                  />
+                </Field>
+                <Field label="NIT / Cédula">
+                  <input
+                    type="text"
+                    value={clienteNit}
+                    onChange={(e) => setClienteNit(e.target.value)}
+                    placeholder="900.123.456-7"
+                    className="finput"
+                  />
+                </Field>
+              </div>
+              <Field
+                label="Concepto"
+                req
+                badge={modo === "cotizacion" ? "sugg" : undefined}
               >
-                ✓ OT #{orden.numero} · abonos previos:{" "}
-                {formatCOP(abonosPrevios)}
-              </p>
-            </Field>
-          )}
-        </Row>
-        {orden && (
-          <label className="flex items-center gap-2 cursor-pointer text-sm">
-            <input
-              type="checkbox"
-              checked={crearAbono}
-              onChange={(e) => setCrearAbono(e.target.checked)}
-              className="cursor-pointer"
-            />
-            <span style={{ color: "hsl(var(--foreground))" }}>
-              Registrar el monto pagado como abono de la OT #{orden.numero}
-            </span>
-          </label>
-        )}
-      </Section>
+                <textarea
+                  value={concepto}
+                  onChange={(e) => setConcepto(e.target.value)}
+                  placeholder="Ej. Pago por reparación de compresor / abono a OT #12"
+                  maxLength={500}
+                  className="ftextarea"
+                />
+              </Field>
+            </div>
+          </div>
 
-      <Section title="Montos">
-        <Row>
-          <Field label="Subtotal (COP)">
-            <input
-              type="number"
-              min="0"
-              value={subtotal}
-              onChange={(e) => setSubtotal(e.target.value)}
-              className={inputCls}
-              style={inputStyle}
-            />
-          </Field>
-          <Field label="IVA %">
-            <input
-              type="number"
-              min="0"
-              max="100"
-              value={ivaPct}
-              onChange={(e) => setIvaPct(e.target.value)}
-              className={inputCls}
-              style={inputStyle}
-            />
-          </Field>
-        </Row>
-        <Row>
-          <Field label="Monto recibido (COP)">
-            <input
-              type="number"
-              min="0"
-              value={montoPagado}
-              onChange={(e) => setMontoPagado(e.target.value)}
-              className={inputCls}
-              style={inputStyle}
-            />
-          </Field>
-          <Field label="Forma de pago">
-            <select
-              value={metodoPago}
-              onChange={(e) => setMetodoPago(e.target.value)}
-              className={inputCls}
-              style={inputStyle}
-            >
-              <option value="efectivo">Efectivo</option>
-              <option value="transferencia">Transferencia</option>
-              <option value="tarjeta">Tarjeta</option>
-              <option value="otro">Otro</option>
-            </select>
-          </Field>
-        </Row>
-        <Field label="Cuenta bancaria (opcional)">
-          <select
-            value={cuentaId}
-            onChange={(e) => setCuentaId(e.target.value)}
-            className={inputCls}
-            style={inputStyle}
-          >
-            <option value="">— Ninguna —</option>
-            {cuentas.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.banco} {c.tipo} {c.numero}
-              </option>
-            ))}
-          </select>
-        </Field>
+          {/* Vínculo con OT (opcional) */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <Link2 className="size-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Vínculo con OT (opcional)</div>
+            </div>
+            <div className="flex flex-col gap-3">
+              <Field label="N° de OT">
+                <input
+                  type="number"
+                  value={ordenNum}
+                  onChange={(e) => setOrdenNum(e.target.value)}
+                  onBlur={buscarOrden}
+                  placeholder="Ej. 12"
+                  className="finput"
+                />
+              </Field>
+              {orden && (
+                <>
+                  <div className="banner-info">
+                    <Info className="mt-0.5 size-3.5 shrink-0" />
+                    <div className="body">
+                      <b>OT #{orden.numero}</b> · abonos previos registrados:{" "}
+                      <b>{formatCOP(abonosPrevios)}</b>.
+                    </div>
+                  </div>
+                  <label className="flex cursor-pointer items-center gap-2 text-[13px]">
+                    <input
+                      type="checkbox"
+                      checked={crearAbono}
+                      onChange={(e) => setCrearAbono(e.target.checked)}
+                      className="cursor-pointer"
+                    />
+                    <span style={{ color: "var(--n-900)" }}>
+                      Registrar el monto pagado como abono de la OT #
+                      {orden.numero}
+                    </span>
+                  </label>
+                </>
+              )}
+            </div>
+          </div>
 
-        {/* Resumen calculado */}
-        <div
-          className="rounded-lg border p-3 text-sm space-y-1"
-          style={{
-            backgroundColor: "hsl(var(--muted) / 0.3)",
-            borderColor: "hsl(var(--border))",
-          }}
-        >
-          <Linea label="Total (subtotal + IVA)" valor={formatCOP(total)} />
-          {abonosPrevios > 0 && (
-            <Linea
-              label="Abonos previos"
-              valor={`- ${formatCOP(abonosPrevios)}`}
+          {/* Montos */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico succ">
+                <Wallet className="size-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Montos y pago</div>
+            </div>
+            <div className="flex flex-col gap-3">
+              <div className="field-row">
+                <Field label="Subtotal">
+                  <div className="fprefix">
+                    <span className="pre">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={subtotal}
+                      onChange={(e) => setSubtotal(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                </Field>
+                <Field label="IVA %">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={ivaPct}
+                    onChange={(e) => setIvaPct(e.target.value)}
+                    className="finput"
+                  />
+                </Field>
+              </div>
+              <div className="field-row">
+                <Field label="Monto recibido">
+                  <div className="fprefix">
+                    <span className="pre">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={montoPagado}
+                      onChange={(e) => setMontoPagado(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                </Field>
+                <Field label="Forma de pago" req>
+                  <select
+                    value={metodoPago}
+                    onChange={(e) => setMetodoPago(e.target.value)}
+                    className="fselect"
+                  >
+                    {RECIBO_METODOS_PAGO.map((m) => (
+                      <option key={m.v} value={m.v}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <Field label="Cuenta bancaria (opcional)">
+                <select
+                  value={cuentaId}
+                  onChange={(e) => setCuentaId(e.target.value)}
+                  className="fselect"
+                >
+                  <option value="">— Ninguna —</option>
+                  {cuentas.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {cuentaBancariaLabel(c)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </div>
+
+          {/* Observaciones */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <Info className="size-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Observaciones</div>
+            </div>
+            <textarea
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              placeholder="Notas internas (opcional)…"
+              maxLength={500}
+              className="ftextarea"
             />
-          )}
-          <Linea label="Monto recibido" valor={formatCOP(pagadoN)} />
-          <Linea label="Saldo pendiente" valor={formatCOP(saldo)} bold />
+            <p className="mt-2 text-[12px]" style={{ color: "var(--n-500)" }}>
+              Recibido por:{" "}
+              <span style={{ color: "var(--n-900)" }}>
+                {perfil?.nombre ?? "—"}
+              </span>
+            </p>
+          </div>
         </div>
-      </Section>
 
-      <Section title="Observaciones">
-        <textarea
-          value={observaciones}
-          onChange={(e) => setObservaciones(e.target.value)}
-          className={inputCls + " min-h-[60px]"}
-          style={inputStyle}
-          maxLength={500}
-        />
-        <p
-          className="text-xs"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          Recibido por: {perfil?.nombre ?? "—"}
-        </p>
-      </Section>
-
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={() => navigate("/ops/recibos")}
-          disabled={submitting}
-          className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[48px] disabled:opacity-50"
-          style={{
-            borderColor: "hsl(var(--border))",
-            color: "hsl(var(--muted-foreground))",
-          }}
-        >
-          Cancelar
-        </button>
-        <button
-          onClick={guardar}
-          disabled={submitting}
-          className="text-sm px-5 py-2 rounded-lg cursor-pointer min-h-[48px] disabled:opacity-50"
-          style={{
-            backgroundColor: "hsl(var(--primary))",
-            color: "hsl(var(--primary-foreground))",
-          }}
-        >
-          {submitting ? "Guardando..." : "Crear recibo"}
-        </button>
+        {/* ── Resumen sticky ───────────────────────────────────────── */}
+        <aside className="cart">
+          <span className="cart-eyebrow">Resumen · Nuevo recibo</span>
+          <div className="cart-line">
+            <span>Tipo</span>
+            <span className="v">
+              {modo === "cotizacion" ? "Por cotización" : "Manual"}
+            </span>
+          </div>
+          <div className="cart-line">
+            <span>Consecutivo</span>
+            <span className="v">Auto BD</span>
+          </div>
+          <div className="cart-line">
+            <span>Cliente</span>
+            <span className="v">{clienteNombre || "—"}</span>
+          </div>
+          <div className="cart-line">
+            <span>Vínculos</span>
+            <span className="v">
+              {orden
+                ? cotizacion
+                  ? "Cot · OT"
+                  : "OT"
+                : cotizacion
+                  ? "Cotización"
+                  : "Opcional"}
+            </span>
+          </div>
+          <div className="cart-line">
+            <span>Forma de pago</span>
+            <span className="v">{metodoPagoLabel(metodoPago)}</span>
+          </div>
+          <div className="cart-line">
+            <span>Total recibo</span>
+            <span className="v">{formatCOP(total)}</span>
+          </div>
+          {abonosPrevios > 0 && (
+            <div className="cart-line" style={{ color: "var(--warn-700)" }}>
+              <span>Abonos previos</span>
+              <span className="v" style={{ color: "var(--warn-700)" }}>
+                −{formatCOP(abonosPrevios)}
+              </span>
+            </div>
+          )}
+          <div className="cart-line">
+            <span>Monto recibido</span>
+            <span className="v">{formatCOP(pagadoN)}</span>
+          </div>
+          <div className="cart-line tot">
+            <span>Saldo pendiente</span>
+            <span className="v">{formatCOP(saldo)}</span>
+          </div>
+          <div className="mt-2 flex flex-col gap-2">
+            <button
+              onClick={guardar}
+              disabled={submitting}
+              className="btn btn-pri w-full justify-center disabled:opacity-50"
+              style={{ height: 48 }}
+            >
+              <Check className="size-3.5" />
+              {submitting ? "Guardando…" : "Crear recibo"}
+            </button>
+            <button
+              onClick={() => navigate("/ops/recibos")}
+              disabled={submitting}
+              className="btn btn-out w-full justify-center disabled:opacity-50"
+              style={{ height: 48 }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </aside>
       </div>
     </div>
   );
 }
 
-function Section({ title, children }) {
-  return (
-    <div
-      className="rounded-xl border p-4 space-y-3"
-      style={{
-        backgroundColor: "hsl(var(--card))",
-        borderColor: "hsl(var(--border))",
-      }}
-    >
-      <h3
-        className="text-xs font-semibold uppercase tracking-wide"
-        style={{ color: "hsl(var(--muted-foreground))" }}
-      >
-        {title}
-      </h3>
-      {children}
-    </div>
-  );
-}
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
 
-function Row({ children }) {
+function Field({ label, req, badge, children }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{children}</div>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <div className="space-y-1">
-      <label
-        className="text-xs"
-        style={{ color: "hsl(var(--muted-foreground))" }}
-      >
+    <div className="flex flex-col gap-1.5">
+      <label className="flbl">
         {label}
+        {req && <span className="req">*</span>}
+        {badge === "auto" && (
+          <span className="auto">
+            <Zap className="size-2.5" />
+            Auto BD
+          </span>
+        )}
+        {badge === "sugg" && (
+          <span className="sugg">
+            <Sparkles className="size-2.5" />
+            Pre-cargado
+          </span>
+        )}
       </label>
       {children}
-    </div>
-  );
-}
-
-function Linea({ label, valor, bold }) {
-  return (
-    <div className="flex justify-between">
-      <span
-        style={{
-          color: bold
-            ? "hsl(var(--foreground))"
-            : "hsl(var(--muted-foreground))",
-          fontWeight: bold ? 700 : 400,
-        }}
-      >
-        {label}
-      </span>
-      <span
-        className="tabular-nums"
-        style={{
-          color: "hsl(var(--foreground))",
-          fontWeight: bold ? 700 : 400,
-        }}
-      >
-        {valor}
-      </span>
     </div>
   );
 }

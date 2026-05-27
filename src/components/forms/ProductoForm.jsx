@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 /**
- * Form reutilizable de producto (crear / editar — F12).
+ * Form reutilizable de producto (crear / editar — F12 · re-vestido Lovable F4c).
  *
  * Props:
  *   - initial: objeto con campos (opcional, para edición futura)
@@ -70,41 +70,40 @@ export default function ProductoForm({
   const errorBox = validationError || errorMsg;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-[18px]">
       {errorBox && (
         <div
           role="alert"
-          className="rounded-lg border px-3 py-2 text-xs"
+          className="rounded-[10px] border px-4 py-3"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.4)",
-            color: "hsl(var(--destructive))",
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
           }}
         >
-          {errorBox}
+          <p className="text-sm" style={{ color: "var(--dang-700)" }}>
+            {errorBox}
+          </p>
         </div>
       )}
 
-      <Section title="Identificación">
-        <Field label="Nombre *" required>
+      <SectionCard title="Identificación">
+        <Field label="Nombre *">
           <input
             type="text"
             value={form.nombre}
             onChange={set("nombre")}
-            className={inputCls}
-            style={inputStyle}
+            className="finput sans"
             placeholder="Ej. Compresor 50L 2HP"
             maxLength={200}
           />
         </Field>
         <Row>
-          <Field label="Código interno *" required>
+          <Field label="Código interno *">
             <input
               type="text"
               value={form.codigo_interno}
               onChange={set("codigo_interno")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput"
               placeholder="CV-001"
               maxLength={64}
             />
@@ -114,8 +113,7 @@ export default function ProductoForm({
               type="text"
               value={form.codigo_proveedor}
               onChange={set("codigo_proveedor")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput"
               placeholder="Opcional"
               maxLength={64}
             />
@@ -126,8 +124,7 @@ export default function ProductoForm({
             type="text"
             value={form.proveedor_inicial}
             onChange={set("proveedor_inicial")}
-            className={inputCls}
-            style={inputStyle}
+            className="finput sans"
             placeholder="Ej. ACME Repuestos — se llenará al recibir compras"
             maxLength={120}
           />
@@ -138,34 +135,31 @@ export default function ProductoForm({
               type="text"
               value={form.referencia}
               onChange={set("referencia")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput"
               maxLength={64}
             />
           </Field>
-          <Field label="Tipo *" required>
+          <Field label="Tipo *">
             <select
               value={form.tipo}
               onChange={set("tipo")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput sans"
             >
               <option value="nuevo">Nuevo</option>
               <option value="segunda_mano">Segunda mano</option>
             </select>
           </Field>
         </Row>
-      </Section>
+      </SectionCard>
 
-      <Section title="Catalogación">
+      <SectionCard title="Catalogación">
         <Row>
           <Field label="Categoría">
             <input
               type="text"
               value={form.categoria}
               onChange={set("categoria")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput sans"
               maxLength={80}
             />
           </Field>
@@ -174,8 +168,7 @@ export default function ProductoForm({
               type="text"
               value={form.subcategoria}
               onChange={set("subcategoria")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput sans"
               maxLength={80}
             />
           </Field>
@@ -186,8 +179,7 @@ export default function ProductoForm({
               type="text"
               value={form.marca}
               onChange={set("marca")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput sans"
               maxLength={80}
             />
           </Field>
@@ -196,8 +188,7 @@ export default function ProductoForm({
               type="text"
               value={form.modelo}
               onChange={set("modelo")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput sans"
               maxLength={80}
             />
           </Field>
@@ -206,14 +197,14 @@ export default function ProductoForm({
           <textarea
             value={form.descripcion}
             onChange={set("descripcion")}
-            className={inputCls + " min-h-[80px]"}
-            style={inputStyle}
+            className="ftextarea"
+            rows={3}
             maxLength={500}
           />
         </Field>
-      </Section>
+      </SectionCard>
 
-      <Section title="Precios e inventario">
+      <SectionCard title="Precios e inventario">
         <Row>
           <Field label="Precio de venta (COP)">
             <input
@@ -222,8 +213,7 @@ export default function ProductoForm({
               step="1"
               value={form.precio_venta}
               onChange={set("precio_venta")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput"
             />
           </Field>
           <Field label="Costo promedio (COP)">
@@ -233,19 +223,17 @@ export default function ProductoForm({
               step="1"
               value={form.costo_promedio}
               onChange={set("costo_promedio")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput"
             />
           </Field>
         </Row>
-        <Row>
+        <Row cols={3}>
           <Field label="Unidad de medida">
             <input
               type="text"
               value={form.unidad_medida}
               onChange={set("unidad_medida")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput sans"
               placeholder="unidad, kg, m, ..."
               maxLength={20}
             />
@@ -257,8 +245,7 @@ export default function ProductoForm({
               step="1"
               value={form.stock_minimo}
               onChange={set("stock_minimo")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput"
             />
           </Field>
           <Field label="Stock máximo">
@@ -268,87 +255,77 @@ export default function ProductoForm({
               step="1"
               value={form.stock_maximo}
               onChange={set("stock_maximo")}
-              className={inputCls}
-              style={inputStyle}
+              className="finput"
             />
           </Field>
         </Row>
-      </Section>
+      </SectionCard>
 
-      <div className="flex gap-2 justify-end pt-2">
+      <div className="flex justify-end gap-2 pt-1">
         <button
           type="button"
           onClick={onCancel}
           disabled={submitting}
-          className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[48px] disabled:opacity-50"
-          style={{
-            borderColor: "hsl(var(--border))",
-            color: "hsl(var(--muted-foreground))",
-            backgroundColor: "transparent",
-          }}
+          className="btn btn-out justify-center disabled:opacity-50"
+          style={{ height: 48 }}
         >
           Cancelar
         </button>
         <button
           type="submit"
           disabled={submitting}
-          className="text-sm px-5 py-2 rounded-lg cursor-pointer min-h-[48px] disabled:opacity-50"
-          style={{
-            backgroundColor: "hsl(var(--primary))",
-            color: "hsl(var(--primary-foreground))",
-          }}
+          className="btn btn-pri justify-center disabled:opacity-50"
+          style={{ height: 48 }}
         >
-          {submitting ? "Guardando..." : submitLabel}
+          {submitting ? "Guardando…" : submitLabel}
         </button>
       </div>
     </form>
   );
 }
 
-const inputCls =
-  "w-full px-3 py-2 rounded-lg border text-sm min-h-[44px] focus:outline-none";
-const inputStyle = {
-  backgroundColor: "hsl(var(--card))",
-  borderColor: "hsl(var(--border))",
-  color: "hsl(var(--foreground))",
-};
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
 
-function Section({ title, children }) {
+function SectionCard({ title, children }) {
   return (
     <div
-      className="rounded-xl border p-4 space-y-3"
-      style={{
-        backgroundColor: "hsl(var(--card))",
-        borderColor: "hsl(var(--border))",
-      }}
+      className="overflow-hidden rounded-[10px] border"
+      style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
     >
-      <h3
-        className="text-xs font-semibold uppercase tracking-wide"
-        style={{ color: "hsl(var(--muted-foreground))" }}
+      <div
+        className="border-b px-4 py-3"
+        style={{ borderColor: "var(--n-100)", backgroundColor: "var(--n-50)" }}
       >
-        {title}
-      </h3>
-      {children}
+        <p
+          className="font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
+          style={{ color: "var(--n-500)" }}
+        >
+          {title}
+        </p>
+      </div>
+      <div className="space-y-3 p-4">{children}</div>
     </div>
   );
 }
 
-function Row({ children }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{children}</div>
-  );
+function Row({ children, cols = 2 }) {
+  const gridCls =
+    cols === 3
+      ? "grid grid-cols-1 gap-3 md:grid-cols-3"
+      : "grid grid-cols-1 gap-3 md:grid-cols-2";
+  return <div className={gridCls}>{children}</div>;
 }
 
 function Field({ label, children }) {
   return (
-    <div className="space-y-1">
-      <label
-        className="text-xs"
-        style={{ color: "hsl(var(--muted-foreground))" }}
+    <label className="block space-y-1.5">
+      <span
+        className="block text-xs font-medium"
+        style={{ color: "var(--n-500)" }}
       >
         {label}
-      </label>
+      </span>
       {children}
-    </div>
+    </label>
   );
 }

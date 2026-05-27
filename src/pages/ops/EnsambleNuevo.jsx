@@ -1,9 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  Search,
+  Package,
+  Hash,
+  Layers,
+  FileText,
+  Check,
+  X,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
 
 export default function EnsambleNuevo() {
   const navigate = useNavigate();
@@ -236,22 +245,33 @@ export default function EnsambleNuevo() {
   };
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-5 animate-fade-in max-w-3xl"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Nuevo ensamble"
-        description="Selecciona producto, verifica componentes y completa"
-      />
+    <div className="mx-auto flex w-full max-w-[820px] flex-col gap-4 px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
+      <button
+        onClick={() => navigate("/ops/ensambles")}
+        className="back-btn inline-flex items-center gap-1.5"
+      >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+        Volver a Ensambles
+      </button>
+
+      <div className="border-b pb-4" style={{ borderColor: "var(--n-100)" }}>
+        <div className="ph-eyebrow">Nuevo ensamble</div>
+        <h1 className="ph-client" style={{ marginBottom: 0 }}>
+          Registrar ensamble
+        </h1>
+        <p className="ph-sub mt-1.5">
+          Selecciona producto, verifica componentes y completa.
+        </p>
+      </div>
 
       {errorMsg && (
         <div
-          className="rounded-lg border px-3 py-2 text-xs"
+          role="alert"
+          className="rounded-[10px] border px-4 py-3 text-sm"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.4)",
-            color: "hsl(var(--destructive))",
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
+            color: "var(--dang-700)",
           }}
         >
           {errorMsg}
@@ -259,29 +279,55 @@ export default function EnsambleNuevo() {
       )}
 
       {/* Paso 1: Selector de producto */}
-      <Section titulo="1. Producto a ensamblar">
+      <div className="iblock">
+        <div className="ib-head">
+          <div className="ib-ico">
+            <Package className="h-3.5 w-3.5" strokeWidth={1.7} />
+          </div>
+          <div className="ib-title">1 · Producto a ensamblar</div>
+        </div>
         {!productoSel ? (
-          <>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nombre o referencia (mín 2 letras)…"
-              className="w-full h-12 px-3 rounded-lg border text-sm"
-              style={inputStyle}
-            />
+          <div className="space-y-2">
+            <div
+              className="flex h-12 items-center gap-2.5 rounded-lg border px-3.5"
+              style={{
+                borderColor: "var(--n-200)",
+                backgroundColor: "var(--n-0)",
+              }}
+            >
+              <Search
+                className="h-4 w-4 shrink-0"
+                strokeWidth={1.5}
+                style={{ color: "var(--n-500)" }}
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nombre o referencia (mín 2 letras)…"
+                className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
+                style={{ color: "var(--n-950)" }}
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  aria-label="Limpiar"
+                  className="grid h-6 w-6 place-items-center rounded"
+                  style={{ color: "var(--n-500)" }}
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </button>
+              )}
+            </div>
             {buscando && (
-              <p
-                className="text-xs"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
+              <p className="text-xs" style={{ color: "var(--n-500)" }}>
                 Buscando…
               </p>
             )}
             {resultados.length > 0 && (
               <ul
-                className="rounded-lg border overflow-hidden"
-                style={{ borderColor: "hsl(var(--border))" }}
+                className="divide-y overflow-hidden rounded-lg border"
+                style={{ borderColor: "var(--n-150)" }}
               >
                 {resultados.map((p) => (
                   <li key={p.id}>
@@ -291,21 +337,24 @@ export default function EnsambleNuevo() {
                         setSearch("");
                         setResultados([]);
                       }}
-                      className="w-full text-left px-3 py-2.5 cursor-pointer"
-                      style={{
-                        backgroundColor: "hsl(var(--card))",
-                        borderBottom: "1px solid hsl(var(--border) / 0.5)",
-                      }}
+                      className="w-full px-3.5 py-3 text-left transition-colors"
+                      style={{ backgroundColor: "var(--n-0)" }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor = "var(--n-50)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "var(--n-0)")
+                      }
                     >
                       <p
                         className="text-sm font-medium"
-                        style={{ color: "hsl(var(--foreground))" }}
+                        style={{ color: "var(--n-950)" }}
                       >
                         {p.nombre}
                       </p>
                       <p
-                        className="text-xs font-mono"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
+                        className="font-mono text-xs"
+                        style={{ color: "var(--n-500)" }}
                       >
                         {p.referencia} · {formatCOP(p.precio_venta)}
                       </p>
@@ -317,32 +366,29 @@ export default function EnsambleNuevo() {
             {search.trim().length >= 2 &&
               !buscando &&
               resultados.length === 0 && (
-                <p
-                  className="text-xs italic"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
+                <p className="text-xs italic" style={{ color: "var(--n-500)" }}>
                   Sin productos con BOM que coincidan
                 </p>
               )}
-          </>
+          </div>
         ) : (
           <div
-            className="flex items-center justify-between gap-3 rounded-lg border px-3 py-3"
+            className="flex items-center justify-between gap-3 rounded-lg border px-3.5 py-3"
             style={{
-              backgroundColor: "hsl(var(--card))",
-              borderColor: "hsl(var(--primary))",
+              backgroundColor: "var(--n-25)",
+              borderColor: "var(--p-200)",
             }}
           >
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <p
                 className="text-sm font-semibold"
-                style={{ color: "hsl(var(--foreground))" }}
+                style={{ color: "var(--n-950)" }}
               >
                 {productoSel.nombre}
               </p>
               <p
-                className="text-xs font-mono"
-                style={{ color: "hsl(var(--muted-foreground))" }}
+                className="font-mono text-xs"
+                style={{ color: "var(--n-500)" }}
               >
                 {productoSel.referencia}
               </p>
@@ -352,48 +398,64 @@ export default function EnsambleNuevo() {
                 setProductoSel(null);
                 setBom([]);
               }}
-              className="text-xs px-3 py-2 rounded-lg border cursor-pointer"
+              className="rounded-lg border px-3 text-xs font-medium"
               style={{
-                borderColor: "hsl(var(--border))",
-                color: "hsl(var(--muted-foreground))",
+                height: 48,
+                borderColor: "var(--n-200)",
+                color: "var(--n-700)",
+                backgroundColor: "var(--n-0)",
               }}
             >
               Cambiar
             </button>
           </div>
         )}
-      </Section>
+      </div>
 
       {/* Paso 2: Cantidad */}
       {productoSel && (
-        <Section titulo="2. Cantidad a producir">
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico">
+              <Hash className="h-3.5 w-3.5" strokeWidth={1.7} />
+            </div>
+            <div className="ib-title">2 · Cantidad a producir</div>
+          </div>
           <input
             type="number"
             value={cantidadProducida}
             onChange={(e) => setCantidadProducida(e.target.value)}
             min="1"
             step="1"
-            className="w-32 h-12 px-3 rounded-lg border text-sm tabular-nums"
-            style={inputStyle}
+            className="w-32 rounded-lg border px-3 font-mono text-sm tabular-nums outline-none"
+            style={{
+              height: 48,
+              backgroundColor: "var(--n-0)",
+              borderColor: "var(--n-200)",
+              color: "var(--n-950)",
+            }}
           />
-        </Section>
+        </div>
       )}
 
       {/* Paso 3: BOM verde/rojo */}
       {productoSel && (
-        <Section titulo="3. Componentes requeridos (BOM)">
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico">
+              <Layers className="h-3.5 w-3.5" strokeWidth={1.7} />
+            </div>
+            <div className="ib-title">3 · Componentes requeridos (BOM)</div>
+            {componentesEnriched.length > 0 && (
+              <div className="ib-aux">{componentesEnriched.length} comp.</div>
+            )}
+          </div>
           {loadingBom ? (
-            <p
-              className="text-xs"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
+            <p className="text-xs" style={{ color: "var(--n-500)" }}>
               Cargando BOM…
             </p>
           ) : componentesEnriched.length === 0 ? (
-            <p
-              className="text-xs italic"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
+            <p className="text-xs italic" style={{ color: "var(--n-500)" }}>
               Sin componentes
             </p>
           ) : (
@@ -401,51 +463,55 @@ export default function EnsambleNuevo() {
               {componentesEnriched.map((c) => (
                 <li
                   key={c.componente_id}
-                  className="rounded-lg border px-3 py-2.5"
+                  className="rounded-lg border px-3.5 py-3"
                   style={{
-                    backgroundColor: c.ok
-                      ? "hsl(var(--success) / 0.06)"
-                      : "hsl(var(--destructive) / 0.08)",
+                    backgroundColor: c.ok ? "var(--succ-50)" : "var(--dang-50)",
                     borderColor: c.ok
-                      ? "hsl(var(--success) / 0.4)"
-                      : "hsl(var(--destructive) / 0.5)",
+                      ? "var(--succ-border, var(--succ-500))"
+                      : "var(--dang-border)",
                   }}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p
-                        className="text-sm font-medium truncate"
-                        style={{ color: "hsl(var(--foreground))" }}
+                        className="truncate text-sm font-medium"
+                        style={{ color: "var(--n-950)" }}
                       >
                         {c.nombre}
                       </p>
                       <p
-                        className="text-xs font-mono"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
+                        className="font-mono text-xs"
+                        style={{ color: "var(--n-500)" }}
                       >
                         {c.referencia} · {formatCOP(c.costo_unitario)} c/u
                       </p>
                     </div>
                     <div className="text-right">
                       <p
-                        className="text-sm font-bold tabular-nums"
+                        className="font-mono text-sm font-bold tabular-nums"
                         style={{
-                          color: c.ok
-                            ? "hsl(var(--success))"
-                            : "hsl(var(--destructive))",
+                          color: c.ok ? "var(--succ-700)" : "var(--dang-700)",
                         }}
                       >
                         {c.stock_disponible} / {c.requerido}
                       </p>
                       <p
-                        className="text-xs"
+                        className="inline-flex items-center gap-1 text-xs"
                         style={{
-                          color: c.ok
-                            ? "hsl(var(--success))"
-                            : "hsl(var(--destructive))",
+                          color: c.ok ? "var(--succ-700)" : "var(--dang-700)",
                         }}
                       >
-                        {c.ok ? "✓ Suficiente" : "✕ Faltan"}
+                        {c.ok ? (
+                          <>
+                            <Check className="h-3 w-3" strokeWidth={2.2} />
+                            Suficiente
+                          </>
+                        ) : (
+                          <>
+                            <X className="h-3 w-3" strokeWidth={2.2} />
+                            Faltan
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -453,49 +519,56 @@ export default function EnsambleNuevo() {
               ))}
             </ul>
           )}
-        </Section>
+        </div>
       )}
 
       {/* Observaciones */}
       {productoSel && (
-        <Section titulo="4. Observaciones (opcional)">
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico">
+              <FileText className="h-3.5 w-3.5" strokeWidth={1.7} />
+            </div>
+            <div className="ib-title">4 · Observaciones (opcional)</div>
+          </div>
           <textarea
             value={observaciones}
             onChange={(e) => setObservaciones(e.target.value)}
             rows={2}
-            className="w-full px-3 py-2 rounded-lg border text-sm"
-            style={inputStyle}
+            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+            style={{
+              backgroundColor: "var(--n-0)",
+              borderColor: "var(--n-200)",
+              color: "var(--n-950)",
+            }}
           />
-        </Section>
+        </div>
       )}
 
-      {/* Resumen + acción */}
+      {/* Resumen */}
       {productoSel && componentesEnriched.length > 0 && (
         <div
-          className="rounded-xl border p-4 flex items-center justify-between gap-3"
-          style={{
-            backgroundColor: "hsl(var(--card))",
-            borderColor: "hsl(var(--primary))",
-          }}
+          className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border p-4"
+          style={{ backgroundColor: "var(--n-0)", borderColor: "var(--p-200)" }}
         >
           <div>
             <p
-              className="text-xs"
-              style={{ color: "hsl(var(--muted-foreground))" }}
+              className="font-mono text-[10px] uppercase tracking-[0.08em]"
+              style={{ color: "var(--n-300)" }}
             >
               Costo estimado
             </p>
             <p
-              className="text-xl font-bold tabular-nums"
-              style={{ color: "hsl(var(--primary))" }}
+              className="font-mono text-[22px] font-medium tabular-nums"
+              style={{ color: "var(--p-700)" }}
             >
               {formatCOP(costoEstimado)}
             </p>
           </div>
           <p
-            className="text-xs flex-1 text-center"
+            className="text-[12.5px] font-medium"
             style={{
-              color: todoOk ? "hsl(var(--success))" : "hsl(var(--destructive))",
+              color: todoOk ? "var(--succ-700)" : "var(--dang-700)",
             }}
           >
             {todoOk
@@ -505,16 +578,18 @@ export default function EnsambleNuevo() {
         </div>
       )}
 
-      <div className="flex gap-2 pt-2">
+      {/* Acciones */}
+      <div className="flex gap-2.5">
         <button
           type="button"
           onClick={() => navigate("/ops/ensambles")}
           disabled={creando}
-          className="flex-1 h-12 rounded-lg text-sm font-medium border cursor-pointer disabled:opacity-50"
+          className="flex-1 rounded-lg border text-sm font-medium disabled:opacity-50"
           style={{
-            borderColor: "hsl(var(--border))",
-            color: "hsl(var(--muted-foreground))",
-            backgroundColor: "transparent",
+            height: 48,
+            borderColor: "var(--n-200)",
+            color: "var(--n-700)",
+            backgroundColor: "var(--n-0)",
           }}
         >
           Cancelar
@@ -523,35 +598,19 @@ export default function EnsambleNuevo() {
           type="button"
           onClick={completar}
           disabled={!productoSel || !todoOk || creando || loadingBom}
-          className="flex-1 h-12 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            backgroundColor: "hsl(var(--primary))",
-            color: "hsl(var(--primary-foreground))",
+          className="flex-1 rounded-lg text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ height: 48, backgroundColor: "var(--p-600)" }}
+          onMouseEnter={(e) => {
+            if (productoSel && todoOk && !creando && !loadingBom)
+              e.currentTarget.style.backgroundColor = "var(--p-700)";
           }}
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.backgroundColor = "var(--p-600)")
+          }
         >
           {creando ? "Procesando…" : "Completar ensamble"}
         </button>
       </div>
-    </div>
-  );
-}
-
-const inputStyle = {
-  backgroundColor: "hsl(var(--card))",
-  borderColor: "hsl(var(--border))",
-  color: "hsl(var(--foreground))",
-};
-
-function Section({ titulo, children }) {
-  return (
-    <div className="space-y-3">
-      <h3
-        className="text-xs font-semibold uppercase tracking-wide"
-        style={{ color: "hsl(var(--muted-foreground))" }}
-      >
-        {titulo}
-      </h3>
-      <div className="space-y-2">{children}</div>
     </div>
   );
 }

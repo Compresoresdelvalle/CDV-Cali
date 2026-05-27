@@ -1,7 +1,32 @@
 import { useState, useEffect } from "react";
-import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
+  Outlet,
+  Link,
+  NavLink,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import {
+  Package,
+  Tag,
+  ShoppingCart,
+  FileText,
+  Receipt,
+  Undo2,
+  ShoppingBag,
+  Truck,
+  Shield,
+  Wrench,
+  Puzzle,
+  Home,
+  Search,
+  Bell,
+  Menu,
+  LogOut,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { ROLE_MODULES, MODULE_ROUTES } from "../../lib/constants";
+import ThemeToggle from "../ui/ThemeToggle";
 import { supabase } from "../../lib/supabase";
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
@@ -9,378 +34,415 @@ const getInitials = (name = "") =>
   name
     .split(" ")
     .map((w) => w[0])
+    .filter(Boolean)
     .slice(0, 2)
     .join("")
     .toUpperCase();
 
-/** Map each module to a nav group */
-const MODULE_GROUP = {
-  Inicio: "Principal",
-  Inventario: "Operaciones",
-  Ventas: "Operaciones",
-  Cotizaciones: "Operaciones",
-  Compras: "Operaciones",
-  Devoluciones: "Operaciones",
-  Garantías: "Operaciones",
-  Recibos: "Operaciones",
-  Traspasos: "Logística",
-  Ensambles: "Servicio",
-  Órdenes: "Servicio",
-  Herramientas: "Servicio",
-  Productos: "Servicio",
-  "→ Panel Admin": "Control",
+/** Icono lucide por módulo (claves = nombres de ROLE_MODULES). */
+const MODULE_ICONS = {
+  Inventario: Package,
+  Productos: Tag,
+  Ventas: ShoppingCart,
+  Cotizaciones: FileText,
+  Recibos: Receipt,
+  Devoluciones: Undo2,
+  Compras: ShoppingBag,
+  Traspasos: Truck,
+  Garantías: Shield,
+  Órdenes: Wrench,
+  Ensambles: Puzzle,
+  Herramientas: Wrench,
 };
 
-const GROUP_ORDER = [
-  "Principal",
-  "Operaciones",
-  "Logística",
-  "Servicio",
-  "Control",
+/** Cada módulo se ubica en una sección del sidebar (estilo Lovable). */
+const MODULE_SECTION = {
+  Inventario: "Catálogo y stock",
+  Productos: "Catálogo y stock",
+  Ventas: "Operación comercial",
+  Cotizaciones: "Operación comercial",
+  Recibos: "Operación comercial",
+  Devoluciones: "Operación comercial",
+  Compras: "Bodega y movimiento",
+  Traspasos: "Bodega y movimiento",
+  Garantías: "Bodega y movimiento",
+  Órdenes: "Taller",
+  Ensambles: "Taller",
+  Herramientas: "Soporte",
+};
+
+const SECTION_ORDER = [
+  "Catálogo y stock",
+  "Operación comercial",
+  "Bodega y movimiento",
+  "Taller",
+  "Soporte",
 ];
 
-/** Build grouped nav from role modules list */
-function buildGroupedNav(modulos) {
-  const allItems = [
-    { name: "Inicio", label: "Dashboard", to: "/ops", end: true },
-    ...modulos
-      .filter((m) => m !== "→ Panel Admin")
-      .map((m) => ({ name: m, label: m, to: MODULE_ROUTES[m], end: false })),
-    ...(modulos.includes("→ Panel Admin")
-      ? [
-          {
-            name: "→ Panel Admin",
-            label: "Panel Admin",
-            to: "/admin",
-            end: false,
-          },
-        ]
-      : []),
-  ];
-
-  const groups = {};
-  allItems.forEach((item) => {
-    const g = MODULE_GROUP[item.name] ?? "Otros";
-    if (!groups[g]) groups[g] = [];
-    groups[g].push(item);
-  });
-  return groups;
+/** Construye las secciones del sidebar a partir de los módulos del rol. */
+function buildSections(modulos) {
+  const sections = {};
+  modulos
+    .filter((m) => m !== "→ Panel Admin")
+    .forEach((m) => {
+      const section = MODULE_SECTION[m] ?? "Otros";
+      if (!sections[section]) sections[section] = [];
+      sections[section].push({
+        id: m,
+        label: m,
+        href: MODULE_ROUTES[m],
+        icon: MODULE_ICONS[m] ?? Package,
+      });
+    });
+  return SECTION_ORDER.filter((s) => sections[s]).map((s) => ({
+    label: s,
+    modulos: sections[s],
+  }));
 }
 
-/* ── SVG Icons ────────────────────────────────────────────────────────── */
-const ICON_PATHS = {
-  Inicio:
-    "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
-  Inventario: "M20 7l-8-4-8 4m16 0-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
-  Ventas:
-    "M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z",
-  Cotizaciones:
-    "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-  Compras:
-    "M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4",
-  Traspasos: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4",
-  Órdenes:
-    "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z",
-  Ensambles:
-    "M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z",
-  Herramientas:
-    "M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z",
-  Devoluciones: "M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6",
-  Productos:
-    "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z",
-  "→ Panel Admin":
-    "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
-};
-
-function NavIcon({ name, size = 16 }) {
-  const d = ICON_PATHS[name] || "M12 6v6m0 0v6m0-6h6m-6 0H6";
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d={d} />
-    </svg>
-  );
-}
-
-function LogoutIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
-    </svg>
-  );
-}
-
-function MenuIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M3 6h18M3 12h18M3 18h18" />
-    </svg>
-  );
-}
-
-function BellIcon() {
-  return (
-    <svg
-      width="17"
-      height="17"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-    </svg>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.35-4.35" />
-    </svg>
-  );
-}
-
-/* ── Nav group label ──────────────────────────────────────────────────── */
-function GroupLabel({ children }) {
-  return (
-    <p
-      className="text-[10px] uppercase tracking-widest px-3 mt-4 mb-1 first:mt-2"
-      style={{ color: "hsl(var(--sidebar-foreground) / 0.4)" }}
-    >
-      {children}
-    </p>
-  );
-}
-
-/* ── Sidebar nav item ─────────────────────────────────────────────────── */
-function SidebarNavItem({ name, label, to, iconsOnly, end: endProp = false }) {
+/* ── Sidebar (desktop ≥ lg) ───────────────────────────────────────────── */
+function SidebarItem({ href, label, iconNode }) {
   const location = useLocation();
-  const isAdmin = name === "→ Panel Admin";
-  const isActive = endProp
-    ? location.pathname === to
-    : location.pathname.startsWith(to);
+  const active =
+    location.pathname === href || location.pathname.startsWith(href + "/");
 
   return (
-    <NavLink
-      to={to}
-      end={endProp}
-      title={iconsOnly ? label || name : undefined}
-      className={() =>
-        [
-          "flex items-center gap-3 rounded-md text-sm transition-colors duration-150",
-          "focus:outline-none focus-visible:ring-1",
-          iconsOnly ? "justify-center h-9 w-9 mx-auto" : "px-3 py-2",
-          isAdmin && !isActive
-            ? "text-amber-400 hover:bg-amber-400/10"
-            : isActive
-              ? "font-medium"
-              : "",
-        ].join(" ")
-      }
-      style={({ isActive: navActive }) => {
-        if (isAdmin && !navActive) return { color: "rgb(251 191 36)" };
-        if (navActive)
-          return {
-            backgroundColor: "hsl(var(--sidebar-accent))",
-            color: "hsl(var(--sidebar-accent-foreground))",
-          };
-        return {
-          color: "hsl(var(--sidebar-foreground))",
-        };
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive)
-          e.currentTarget.style.backgroundColor =
-            "hsl(var(--sidebar-accent) / 0.5)";
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) e.currentTarget.style.backgroundColor = "";
-      }}
-    >
-      <span className="shrink-0">
-        <NavIcon name={name} size={15} />
-      </span>
-      {!iconsOnly && <span className="truncate">{label || name}</span>}
-    </NavLink>
+    <li>
+      <Link
+        to={href}
+        data-active={active}
+        className="group flex h-9 items-center gap-2.5 rounded-md px-3 text-[13px] text-white/70 transition-colors hover:bg-white/[0.04] hover:text-white data-[active=true]:bg-[--p-600]/15 data-[active=true]:text-white data-[active=true]:shadow-[inset_2px_0_0_var(--p-500)]"
+      >
+        {iconNode}
+        <span className="truncate">{label}</span>
+      </Link>
+    </li>
   );
 }
 
-/* ── Sidebar component ────────────────────────────────────────────────── */
-function Sidebar({ collapsed, modulos, perfil, rol, initials, onLogout }) {
-  const grouped = buildGroupedNav(modulos);
+function SidebarOps({ sections, isAdmin }) {
+  const location = useLocation();
+  const inicioActive = location.pathname === "/ops";
 
   return (
-    <aside
-      className="flex flex-col h-full select-none border-r"
-      style={{
-        backgroundColor: "hsl(var(--sidebar-background))",
-        borderColor: "hsl(var(--sidebar-border))",
-      }}
-    >
-      {/* Header / Logo */}
-      <div
-        className={`flex-shrink-0 border-b p-4 ${collapsed ? "flex justify-center" : ""}`}
-        style={{ borderColor: "hsl(var(--sidebar-border))" }}
-      >
-        {collapsed ? (
-          <span
-            className="text-lg font-bold"
-            style={{ color: "hsl(var(--sidebar-primary))" }}
-          >
-            CV
-          </span>
-        ) : (
-          <div className="space-y-0.5">
-            <h2
-              className="text-sm font-bold tracking-wide"
-              style={{ color: "hsl(var(--sidebar-accent-foreground))" }}
-            >
-              COMPRESORES
-            </h2>
-            <p
-              className="text-[10px] tracking-widest uppercase"
-              style={{ color: "hsl(var(--sidebar-foreground) / 0.6)" }}
-            >
-              del Valle S.A.S.
-            </p>
+    <aside className="chv-sidebar hidden lg:flex w-[240px] shrink-0 flex-col">
+      {/* Logo */}
+      <div className="flex h-14 items-center gap-2 border-b border-white/[0.04] px-4">
+        <div className="grid h-7 w-7 place-items-center rounded-md bg-[--p-600] font-mono text-[11px] font-semibold tracking-wider text-white">
+          CV
+        </div>
+        <div className="leading-tight">
+          <div className="text-[13px] font-semibold text-white/90">
+            Compresores
           </div>
-        )}
+          <div className="text-[10.5px] uppercase tracking-[0.1em] text-white/40">
+            del Valle
+          </div>
+        </div>
       </div>
 
-      {/* Navigation */}
-      <nav
-        className={`flex-1 overflow-y-auto py-2 ${collapsed ? "px-2 space-y-1" : "px-2"}`}
-      >
-        {GROUP_ORDER.filter((g) => grouped[g]).map((groupName) => (
-          <div key={groupName}>
-            {!collapsed && <GroupLabel>{groupName}</GroupLabel>}
-            <div className={`space-y-0.5 ${collapsed ? "" : "mb-1"}`}>
-              {grouped[groupName].map((item) => (
-                <SidebarNavItem
-                  key={item.to}
-                  name={item.name}
-                  label={item.label}
-                  to={item.to}
-                  end={item.end}
-                  iconsOnly={collapsed}
+      <nav className="flex-1 overflow-y-auto px-2 py-3">
+        {/* Inicio (Dashboard) */}
+        <div className="mb-4">
+          <div className="px-3 pb-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-white/35">
+            Principal
+          </div>
+          <ul className="space-y-0.5">
+            <li>
+              <Link
+                to="/ops"
+                data-active={inicioActive}
+                className="group flex h-9 items-center gap-2.5 rounded-md px-3 text-[13px] text-white/70 transition-colors hover:bg-white/[0.04] hover:text-white data-[active=true]:bg-[--p-600]/15 data-[active=true]:text-white data-[active=true]:shadow-[inset_2px_0_0_var(--p-500)]"
+              >
+                <Home
+                  className="h-[15px] w-[15px] shrink-0"
+                  strokeWidth={1.75}
+                />
+                <span className="truncate">Inicio</span>
+              </Link>
+            </li>
+          </ul>
+        </div>
+
+        {sections.map((section) => (
+          <div key={section.label} className="mb-4">
+            <div className="px-3 pb-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-white/35">
+              {section.label}
+            </div>
+            <ul className="space-y-0.5">
+              {section.modulos.map((m) => (
+                <SidebarItem
+                  key={m.id}
+                  href={m.href}
+                  label={m.label}
+                  iconNode={
+                    <m.icon
+                      className="h-[15px] w-[15px] shrink-0"
+                      strokeWidth={1.75}
+                    />
+                  }
                 />
               ))}
-            </div>
+            </ul>
           </div>
         ))}
-      </nav>
 
-      {/* Footer */}
-      <div
-        className="flex-shrink-0 border-t p-3"
-        style={{ borderColor: "hsl(var(--sidebar-border))" }}
-      >
-        {collapsed ? (
-          <button
-            onClick={onLogout}
-            title="Cerrar sesión"
-            className="w-9 h-9 mx-auto flex items-center justify-center rounded-lg transition-colors cursor-pointer"
-            style={{ color: "hsl(var(--sidebar-foreground) / 0.6)" }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.color = "hsl(var(--destructive))")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.color =
-                "hsl(var(--sidebar-foreground) / 0.6)")
-            }
-          >
-            <LogoutIcon />
-          </button>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                style={{
-                  backgroundColor: "hsl(var(--sidebar-primary) / 0.2)",
-                  color: "hsl(var(--sidebar-primary))",
-                }}
-              >
-                {initials}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p
-                  className="text-xs font-medium truncate"
-                  style={{ color: "hsl(var(--sidebar-accent-foreground))" }}
-                >
-                  {perfil?.nombre}
-                </p>
-                <p
-                  className="text-[10px] truncate"
-                  style={{ color: "hsl(var(--sidebar-foreground) / 0.6)" }}
-                >
-                  {rol}
-                  {perfil?.sede_id ? ` · ${perfil.sede_id}` : ""}
-                </p>
-              </div>
+        {isAdmin && (
+          <div className="mb-4">
+            <div className="px-3 pb-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-white/35">
+              Control
             </div>
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-2 text-xs w-full px-1 transition-colors cursor-pointer"
-              style={{ color: "hsl(var(--sidebar-foreground) / 0.6)" }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.color = "hsl(var(--destructive))")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.color =
-                  "hsl(var(--sidebar-foreground) / 0.6)")
-              }
-            >
-              <LogoutIcon />
-              <span>Cerrar sesión</span>
-            </button>
+            <ul className="space-y-0.5">
+              <li>
+                <Link
+                  to="/admin"
+                  className="group flex h-9 items-center gap-2.5 rounded-md px-3 text-[13px] text-amber-400 transition-colors hover:bg-amber-400/10 hover:text-amber-300"
+                >
+                  <Shield
+                    className="h-[15px] w-[15px] shrink-0"
+                    strokeWidth={1.75}
+                  />
+                  <span className="truncate">Panel Admin</span>
+                </Link>
+              </li>
+            </ul>
           </div>
         )}
+      </nav>
+
+      <div className="border-t border-white/[0.04] px-4 py-3 text-[10.5px] text-white/35">
+        Sistema v1.0 · mayo 2026
       </div>
     </aside>
   );
+}
+
+/* ── Topbar (brand color) ─────────────────────────────────────────────── */
+function HeaderOps({ perfil, rol, initials, alertCount, onLogout, onSearch }) {
+  return (
+    <header className="chv-topbar sticky top-0 z-30 hidden lg:flex h-14 items-center gap-3 px-4">
+      {/* Buscador global → navega a inventario al enviar */}
+      <button
+        type="button"
+        onClick={onSearch}
+        className="focus-ring flex h-9 min-w-[280px] flex-1 max-w-[480px] items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-left text-[13px] text-white/70 hover:bg-white/15 hover:border-white/25"
+      >
+        <Search className="h-4 w-4" strokeWidth={1.75} />
+        <span className="flex-1">Buscar productos, ventas, clientes...</span>
+      </button>
+
+      <div className="flex-1" />
+
+      {/* Sede activa del usuario */}
+      {perfil?.sede_id && (
+        <div className="hidden md:inline-flex h-8 items-center gap-2 rounded-md border border-white/15 bg-white/10 px-2.5 text-[12px]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[--succ-500]" />
+          <span className="font-mono text-white">{perfil.sede_id}</span>
+        </div>
+      )}
+
+      <ThemeToggle />
+
+      {/* Alertas de stock → inventario */}
+      <button
+        onClick={onSearch}
+        className="focus-ring relative grid h-9 w-9 place-items-center rounded-md text-white/85 hover:bg-white/10"
+        aria-label={
+          alertCount > 0
+            ? `${alertCount} alertas de stock`
+            : "Sin alertas de stock"
+        }
+        title={
+          alertCount > 0
+            ? `${alertCount} producto${alertCount !== 1 ? "s" : ""} con stock bajo o agotado`
+            : "Sin alertas de stock"
+        }
+      >
+        <Bell className="h-4 w-4" strokeWidth={1.75} />
+        {alertCount > 0 && (
+          <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-[--dang-500] px-1 text-[9px] font-bold leading-none text-white">
+            {alertCount > 99 ? "99+" : alertCount}
+          </span>
+        )}
+      </button>
+
+      {/* Usuario + logout */}
+      <div className="ml-1 flex h-8 items-center gap-2 pl-2">
+        <div className="grid h-8 w-8 place-items-center rounded-full bg-white/15 ring-1 ring-white/25 font-mono text-[11px] font-semibold text-white">
+          {initials}
+        </div>
+        <div className="hidden text-left leading-tight sm:block">
+          <div className="text-[12px] font-medium text-white">
+            {perfil?.nombre}
+          </div>
+          <div className="text-[10.5px] text-white/70">{rol}</div>
+        </div>
+        <button
+          onClick={onLogout}
+          className="focus-ring ml-1 grid h-9 w-9 place-items-center rounded-md text-white/85 hover:bg-white/10"
+          aria-label="Cerrar sesión"
+          title="Cerrar sesión"
+        >
+          <LogOut className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+      </div>
+    </header>
+  );
+}
+
+/* ── Header móvil/tablet (< lg) ───────────────────────────────────────── */
+function MobileHeader({ perfil, initials, onLogout }) {
+  return (
+    <header className="chv-topbar sticky top-0 z-30 flex lg:hidden h-14 items-center justify-between px-4">
+      <div className="flex items-center gap-2.5">
+        <div className="grid h-7 w-7 place-items-center rounded-md bg-[--p-600] font-mono text-[11px] font-semibold tracking-wider text-white">
+          CV
+        </div>
+        <span className="text-[14px] font-semibold text-white">
+          CDV Gestión
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        <span className="text-[12px] text-white/85">
+          {perfil?.nombre?.split(" ")[0]}
+        </span>
+        <div className="grid h-7 w-7 place-items-center rounded-full bg-white/15 ring-1 ring-white/25 font-mono text-[10px] font-semibold text-white">
+          {initials}
+        </div>
+        <button
+          onClick={onLogout}
+          className="focus-ring grid h-9 w-9 place-items-center rounded-md text-white/85 hover:bg-white/10"
+          aria-label="Cerrar sesión"
+          title="Cerrar sesión"
+        >
+          <LogOut className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+      </div>
+    </header>
+  );
+}
+
+/* ── Bottom nav (móvil/tablet < lg) ───────────────────────────────────── */
+function BottomNav({ items }) {
+  return (
+    <nav className="chv-bottomnav lg:hidden sticky bottom-0 z-30 grid grid-cols-5">
+      {items.map((it) => {
+        const { icon: Icon, fab } = it;
+        if (fab) {
+          return (
+            <NavLink
+              key={it.href + it.label}
+              to={it.href}
+              className="relative flex items-center justify-center"
+            >
+              {({ isActive }) => (
+                <>
+                  <span
+                    className="absolute -top-5 grid h-12 w-12 place-items-center rounded-full bg-white ring-2 ring-white/30 shadow-[var(--shadow-elevation)]"
+                    style={{ color: "var(--p-700)" }}
+                  >
+                    <Icon className="h-5 w-5" strokeWidth={2} />
+                  </span>
+                  <span
+                    className={`mt-7 text-[10px] font-medium ${
+                      isActive ? "text-white" : "text-white/75"
+                    }`}
+                  >
+                    {it.label}
+                  </span>
+                </>
+              )}
+            </NavLink>
+          );
+        }
+        return (
+          <NavLink
+            key={it.href + it.label}
+            to={it.href}
+            end={it.end}
+            className="flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] min-h-[56px]"
+          >
+            {({ isActive }) => (
+              <>
+                <Icon
+                  className={`h-[18px] w-[18px] ${isActive ? "text-white" : "text-white/70"}`}
+                  strokeWidth={isActive ? 2 : 1.75}
+                />
+                <span
+                  className={
+                    isActive ? "font-medium text-white" : "text-white/70"
+                  }
+                >
+                  {it.label}
+                </span>
+              </>
+            )}
+          </NavLink>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** Arma los 5 ítems del bottom-nav según el rol (con FAB central). */
+function buildBottomNav(modulos) {
+  const has = (m) => modulos.includes(m);
+
+  const inicio = { label: "Inicio", href: "/ops", icon: Home, end: true };
+
+  // FAB central: el módulo "primario" según rol (Ventas si vende, si no Inventario).
+  const fabItem = has("Ventas")
+    ? {
+        label: "Vender",
+        href: MODULE_ROUTES.Ventas,
+        icon: ShoppingCart,
+        fab: true,
+      }
+    : has("Órdenes")
+      ? { label: "Orden", href: MODULE_ROUTES.Órdenes, icon: Wrench, fab: true }
+      : {
+          label: "Inventario",
+          href: MODULE_ROUTES.Inventario,
+          icon: Package,
+          fab: true,
+        };
+
+  const candidates = [
+    has("Inventario") && {
+      label: "Inventario",
+      href: MODULE_ROUTES.Inventario,
+      icon: Package,
+    },
+    has("Compras") && {
+      label: "Compras",
+      href: MODULE_ROUTES.Compras,
+      icon: ShoppingBag,
+    },
+    has("Traspasos") && {
+      label: "Traspasos",
+      href: MODULE_ROUTES.Traspasos,
+      icon: Truck,
+    },
+    has("Órdenes") && {
+      label: "Órdenes",
+      href: MODULE_ROUTES.Órdenes,
+      icon: Wrench,
+    },
+    has("Herramientas") && {
+      label: "Más",
+      href: MODULE_ROUTES.Herramientas,
+      icon: Menu,
+    },
+  ].filter(Boolean);
+
+  // Estructura: [izq1, izq2, FAB, der1, der2] → 5 columnas
+  const left = candidates.slice(0, 2);
+  const right = candidates.slice(2, 4);
+  const items = [inicio, ...left, fabItem, ...right].slice(0, 5);
+
+  // Garantizar exactamente 5 columnas (rellenar con el FAB-equivalente si falta).
+  return items;
 }
 
 /* ── Hook: conteo de alertas de stock ────────────────────────────────── */
@@ -396,7 +458,6 @@ function useAlertasCount(perfil) {
         .select("id", { count: "exact", head: true })
         .in("estado_stock", ["Bajo", "Agotado"]);
 
-      // No-Admin: filtrar solo su sede
       if (perfil.rol !== "Admin" && perfil.sede_id) {
         q = q.eq("sede_id", perfil.sede_id);
       }
@@ -407,7 +468,6 @@ function useAlertasCount(perfil) {
 
     fetchCount();
 
-    // Actualizar en tiempo real cuando cambia el inventario
     const channel = supabase
       .channel("alertas-stock-count")
       .on(
@@ -429,272 +489,59 @@ function useAlertasCount(perfil) {
 export default function AppShell() {
   const { perfil, logout } = useAuthStore();
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
 
   const alertCount = useAlertasCount(perfil);
 
   const rol = perfil?.rol ?? "";
   const modulos = ROLE_MODULES[rol] ?? [];
-  const navMods = modulos.filter((m) => m !== "→ Panel Admin");
+  const isAdmin = modulos.includes("→ Panel Admin");
   const initials = getInitials(perfil?.nombre || "");
+
+  const sections = buildSections(modulos);
+  const bottomItems = buildBottomNav(modulos);
 
   const handleLogout = async () => {
     await logout();
     window.location.assign("/login");
   };
 
-  const sidebarProps = {
-    collapsed,
-    onToggle: () => setCollapsed((c) => !c),
-    modulos,
-    perfil,
-    rol,
-    initials,
-    onLogout: handleLogout,
-  };
+  const goToInventario = () => navigate("/ops/inventario");
 
   return (
     <div
       className="flex h-screen overflow-hidden"
-      style={{ backgroundColor: "hsl(var(--background))" }}
+      style={{ backgroundColor: "var(--n-50)" }}
     >
-      {/* Desktop sidebar — always expanded */}
-      <div className="hidden lg:flex flex-col w-56 xl:w-60 h-full shrink-0">
-        <Sidebar {...sidebarProps} collapsed={false} />
-      </div>
+      {/* Sidebar fija oscura (desktop) */}
+      <SidebarOps sections={sections} isAdmin={isAdmin} />
 
-      {/* Tablet sidebar — collapsible */}
-      <div
-        className={`hidden sm:flex lg:hidden flex-col shrink-0 h-full transition-all duration-200 ${
-          collapsed ? "w-14" : "w-52"
-        }`}
-      >
-        <Sidebar {...sidebarProps} />
-      </div>
-
-      {/* Main area */}
+      {/* Área principal */}
       <div className="flex-1 flex flex-col min-h-0 min-w-0">
-        {/* Topbar */}
-        <header
-          className="hidden sm:flex items-center gap-3 px-4 h-14 border-b shrink-0 sticky top-0 z-30"
-          style={{
-            backgroundColor: "hsl(var(--card))",
-            borderColor: "hsl(var(--border))",
-          }}
-        >
-          {/* Tablet collapse toggle */}
-          <button
-            onClick={() => setCollapsed((c) => !c)}
-            className="lg:hidden p-2 rounded-lg transition-colors cursor-pointer"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "hsl(var(--muted))";
-              e.currentTarget.style.color = "hsl(var(--foreground))";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "";
-              e.currentTarget.style.color = "hsl(var(--muted-foreground))";
-            }}
-            aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
-          >
-            <MenuIcon />
-          </button>
+        {/* Topbar desktop */}
+        <HeaderOps
+          perfil={perfil}
+          rol={rol}
+          initials={initials}
+          alertCount={alertCount}
+          onLogout={handleLogout}
+          onSearch={goToInventario}
+        />
 
-          {/* Search */}
-          <div className="flex-1 max-w-md">
-            <div className="relative">
-              <span
-                className="absolute left-3 top-1/2 -translate-y-1/2"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                <SearchIcon />
-              </span>
-              <input
-                type="text"
-                placeholder="Buscar productos, ventas, clientes..."
-                className="w-full pl-9 pr-4 h-9 text-sm rounded-md border-0 focus:outline-none focus:ring-1 transition-all"
-                style={{
-                  backgroundColor: "hsl(var(--muted) / 0.5)",
-                  color: "hsl(var(--foreground))",
-                }}
-              />
-            </div>
-          </div>
+        {/* Header móvil/tablet */}
+        <MobileHeader
+          perfil={perfil}
+          initials={initials}
+          onLogout={handleLogout}
+        />
 
-          {/* Right actions */}
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={() => navigate("/ops/inventario")}
-              className="relative p-2 rounded-lg transition-colors cursor-pointer"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "hsl(var(--muted))";
-                e.currentTarget.style.color = "hsl(var(--foreground))";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "";
-                e.currentTarget.style.color = "hsl(var(--muted-foreground))";
-              }}
-              aria-label={
-                alertCount > 0
-                  ? `${alertCount} alertas de stock`
-                  : "Sin alertas de stock"
-              }
-              title={
-                alertCount > 0
-                  ? `${alertCount} producto${alertCount !== 1 ? "s" : ""} con stock bajo o agotado`
-                  : "Sin alertas de stock"
-              }
-            >
-              <BellIcon />
-              {alertCount > 0 && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-0.5 text-[10px] font-bold rounded-full flex items-center justify-center"
-                  style={{
-                    backgroundColor: "hsl(var(--destructive))",
-                    color: "hsl(var(--destructive-foreground))",
-                  }}
-                >
-                  {alertCount > 99 ? "99+" : alertCount}
-                </span>
-              )}
-            </button>
-
-            <div
-              className="hidden sm:flex items-center gap-2 pl-3 border-l"
-              style={{ borderColor: "hsl(var(--border))" }}
-            >
-              <div
-                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                style={{
-                  backgroundColor: "hsl(var(--primary) / 0.1)",
-                  color: "hsl(var(--primary))",
-                }}
-              >
-                {initials}
-              </div>
-              <div className="hidden md:block text-xs">
-                <p
-                  className="font-medium leading-tight"
-                  style={{ color: "hsl(var(--foreground))" }}
-                >
-                  {perfil?.nombre}
-                </p>
-                <p
-                  className="leading-tight"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  {rol}
-                </p>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Mobile header */}
-        <header
-          className="sm:hidden flex items-center justify-between px-4 h-14 border-b shrink-0"
-          style={{
-            backgroundColor: "hsl(var(--card))",
-            borderColor: "hsl(var(--border))",
-          }}
-        >
-          <div className="flex items-center gap-2.5">
-            <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
-              style={{
-                backgroundColor: "hsl(var(--primary))",
-                color: "hsl(var(--primary-foreground))",
-              }}
-            >
-              CV
-            </div>
-            <span
-              className="font-semibold text-sm"
-              style={{ color: "hsl(var(--foreground))" }}
-            >
-              CDV Gestión
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span
-              className="text-xs"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              {perfil?.nombre?.split(" ")[0]}
-            </span>
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold"
-              style={{
-                backgroundColor: "hsl(var(--primary) / 0.1)",
-                color: "hsl(var(--primary))",
-              }}
-            >
-              {initials}
-            </div>
-          </div>
-        </header>
-
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto pb-20 sm:pb-0">
+        {/* Contenido de página */}
+        <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
           <Outlet />
         </main>
-      </div>
 
-      {/* Mobile bottom nav */}
-      <nav
-        className="sm:hidden fixed bottom-0 left-0 right-0 z-30 flex shrink-0 border-t"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
-      >
-        <div className="flex w-full">
-          {navMods.slice(0, 5).map((mod) => (
-            <NavLink
-              key={mod}
-              to={MODULE_ROUTES[mod]}
-              className={({ isActive }) =>
-                `flex-1 flex flex-col items-center justify-center py-2.5 gap-1 min-h-[56px]
-                text-[10px] font-medium transition-colors cursor-pointer ${
-                  isActive ? "text-primary" : ""
-                }`
-              }
-              style={({ isActive }) => ({
-                color: isActive
-                  ? "hsl(var(--primary))"
-                  : "hsl(var(--muted-foreground))",
-              })}
-            >
-              <span className="w-5 h-5 flex items-center justify-center">
-                <NavIcon name={mod} size={18} />
-              </span>
-              <span className="leading-tight truncate max-w-full px-0.5">
-                {mod}
-              </span>
-            </NavLink>
-          ))}
-          {modulos.includes("→ Panel Admin") && (
-            <NavLink
-              to="/admin"
-              className={() =>
-                `flex-1 flex flex-col items-center justify-center py-2.5 gap-1 min-h-[56px]
-                text-[10px] font-medium transition-colors cursor-pointer`
-              }
-              style={({ isActive }) => ({
-                color: isActive
-                  ? "rgb(251 191 36)"
-                  : "hsl(var(--muted-foreground))",
-              })}
-            >
-              <span className="w-5 h-5 flex items-center justify-center">
-                <NavIcon name="→ Panel Admin" size={18} />
-              </span>
-              <span>Admin</span>
-            </NavLink>
-          )}
-        </div>
-      </nav>
+        {/* Bottom nav móvil/tablet */}
+        <BottomNav items={bottomItems} />
+      </div>
     </div>
   );
 }

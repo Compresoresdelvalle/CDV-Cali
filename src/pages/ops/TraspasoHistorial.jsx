@@ -1,42 +1,84 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  LayoutGrid,
+  List as ListIcon,
+  Plus,
+  ArrowRight,
+  Clock,
+  MoreHorizontal,
+  RefreshCw,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
-import StatusBadge from "../../components/ui/StatusBadge";
+import {
+  SEDE_LABELS,
+  estadoToKanban,
+  traspasoBadge,
+  KANBAN_COLS,
+} from "../../lib/traspasos-ui";
+import {
+  WhChip,
+  Avatar,
+  Pill,
+  TipoBadge,
+} from "../../components/traspasos/TraspasoBits";
 
-const ESTADOS = [
-  "Todos",
-  "borrador",
-  "picking",
-  "verificado",
-  "en_transito",
-  "recibido",
-  "con_diferencia",
-];
+const PAGE_SIZE = 60;
 
-const SEDE_LABELS = {
-  "BOD-PRINCIPAL": "Bodega Principal",
-  "ALM-01": "Almacén 01",
-  "ALM-02": "Almacén 02",
-  "ALM-03": "Almacén 03",
+const SEDE_OPTS = Object.entries(SEDE_LABELS).map(([id, label]) => ({
+  id,
+  label,
+}));
+
+/* Estado real → {pillKind, label} de Lovable para el matiz dentro de la columna. */
+const ESTADO_PILL_KIND = {
+  borrador: { kind: "neut", label: "Pendiente" },
+  picking: { kind: "info", label: "En picking" },
+  verificado: { kind: "prog", label: "Verificado" },
+  en_transito: { kind: "warn", label: "En tránsito" },
+  recibido: { kind: "succ", label: "Recibido" },
+  con_diferencia: { kind: "dang", label: "Con diferencia" },
 };
 
-const PAGE_SIZE = 20;
+function estadoPillKind(estado) {
+  return ESTADO_PILL_KIND[estado] ?? { kind: "neut", label: estado ?? "—" };
+}
+
+/** Deriva "N productos · N unidades" del join de detalle (fallback a bultos). */
+function conteo(t) {
+  const detalle = Array.isArray(t.detalle_traspaso) ? t.detalle_traspaso : [];
+  if (detalle.length > 0) {
+    const productos = detalle.length;
+    const unidades = detalle.reduce(
+      (s, d) => s + (d.cantidad_solicitada ?? 0),
+      0,
+    );
+    return { productos, unidades };
+  }
+  // Sin detalle disponible: deriva de bultos como aproximación honesta.
+  const bultos = t.bultos ?? 0;
+  return { productos: bultos || 0, unidades: bultos || 0 };
+}
+
+/** Responsable mostrado: picker > solicitante (lo más representativo del flujo). */
+function responsableNombre(t) {
+  return t.picker?.nombre ?? t.solicitante?.nombre ?? null;
+}
 
 export default function TraspasoHistorial() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
   const esAdmin = perfil?.rol === "Admin";
 
+  const [vista, setVista] = useState("board");
+  const [sedeFiltro, setSedeFiltro] = useState("ALL");
   const [traspasos, setTraspasos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtroEstado, setFiltroEstado] = useState("Todos");
+  const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
-  // Token de secuencia: descarta respuestas obsoletas al cambiar de filtro.
   const reqIdRef = useRef(0);
 
   const cargar = async (reset = false) => {
@@ -51,24 +93,20 @@ export default function TraspasoHistorial() {
           `id, numero, fecha, estado, tipo, sede_origen_id, sede_destino_id, bultos, observaciones,
            solicitante:solicitado_por(nombre),
            picker:picker_id(nombre),
-           verificador:verificado_por(nombre)`,
+           verificador:verificado_por(nombre),
+           detalle_traspaso(cantidad_solicitada)`,
         )
         .order("fecha", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (!esAdmin) {
-        // Bodeguero/Vendedor ve traspasos de su sede (origen o destino)
         query = query.or(
           `sede_origen_id.eq.${perfil?.sede_id},sede_destino_id.eq.${perfil?.sede_id}`,
         );
       }
 
-      if (filtroEstado !== "Todos") {
-        query = query.eq("estado", filtroEstado);
-      }
-
       const { data, error } = await query;
-      if (myReq !== reqIdRef.current) return; // respuesta obsoleta
+      if (myReq !== reqIdRef.current) return;
       if (error) throw error;
 
       if (reset) {
@@ -90,359 +128,535 @@ export default function TraspasoHistorial() {
   useEffect(() => {
     cargar(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroEstado]);
+  }, []);
 
-  const sedeLabel = (id) => SEDE_LABELS[id] ?? id;
+  /* Filtro por sede (cliente) — origen o destino. */
+  const filtrados = useMemo(() => {
+    if (sedeFiltro === "ALL") return traspasos;
+    return traspasos.filter(
+      (t) =>
+        t.sede_origen_id === sedeFiltro || t.sede_destino_id === sedeFiltro,
+    );
+  }, [traspasos, sedeFiltro]);
+
+  /* Agrupación por columna Kanban. */
+  const grupos = useMemo(() => {
+    const g = { pendiente: [], enviado: [], transito: [], recibido: [] };
+    for (const t of filtrados) g[estadoToKanban(t.estado)].push(t);
+    return g;
+  }, [filtrados]);
+
+  /* KPIs del header — derivados de lo disponible (sin números inventados). */
+  const kpis = useMemo(() => {
+    const activos = filtrados.filter((t) =>
+      ["borrador", "picking", "verificado", "en_transito"].includes(t.estado),
+    ).length;
+    const unidades = filtrados.reduce((s, t) => s + conteo(t).unidades, 0);
+    return { activos, total: filtrados.length, unidades };
+  }, [filtrados]);
 
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      <PageHeader
-        title="Traspasos"
-        description={
-          !loading
-            ? `${traspasos.length}${hasMore ? "+" : ""} registros`
-            : "Cargando…"
-        }
-        actions={
-          <button
-            onClick={() => navigate("/ops/traspasos/nuevo")}
-            className="flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-medium transition-opacity cursor-pointer"
-            style={{
-              backgroundColor: "hsl(var(--primary))",
-              color: "hsl(var(--primary-foreground))",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+    <div className="flex h-full flex-col animate-fade-in">
+      {/* ── Encabezado ──────────────────────────────────────────────── */}
+      <div
+        className="flex flex-wrap items-end justify-between gap-4 border-b px-4 pb-4 pt-5 sm:px-7 sm:pt-6"
+        style={{ borderColor: "var(--n-100)", backgroundColor: "var(--n-0)" }}
+      >
+        <div className="min-w-0 flex-1">
+          <h1
+            className="m-0 text-[22px] font-semibold tracking-[-0.01em]"
+            style={{ color: "var(--n-950)" }}
           >
-            <PlusIcon />
-            Nuevo traspaso
-          </button>
-        }
-      />
-
-      {/* Filtros de estado */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {ESTADOS.map((e) => (
-          <button
-            key={e}
-            onClick={() => setFiltroEstado(e)}
-            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer"
-            style={
-              filtroEstado === e
-                ? {
-                    backgroundColor: "hsl(var(--primary))",
-                    color: "hsl(var(--primary-foreground))",
-                    borderColor: "hsl(var(--primary))",
-                  }
-                : {
-                    backgroundColor: "transparent",
-                    color: "hsl(var(--muted-foreground))",
-                    borderColor: "hsl(var(--border))",
-                  }
-            }
+            Traspasos
+          </h1>
+          <p
+            className="mt-1.5 text-[13px] leading-[1.5]"
+            style={{ color: "var(--n-500)" }}
           >
-            {e === "Todos"
-              ? "Todos"
-              : e === "borrador"
-                ? "Pendiente"
-                : e === "picking"
-                  ? "En Picking"
-                  : e === "verificado"
-                    ? "Verificado"
-                    : e === "en_transito"
-                      ? "En Tránsito"
-                      : e === "recibido"
-                        ? "Recibido"
-                        : "Con Diferencia"}
-          </button>
-        ))}
-      </div>
-
-      {errorMsg && (
-        <div
-          role="alert"
-          className="rounded-lg border px-3 py-2 text-xs"
-          style={{
-            backgroundColor: "hsl(var(--destructive) / 0.08)",
-            borderColor: "hsl(var(--destructive) / 0.4)",
-            color: "hsl(var(--destructive))",
-          }}
-        >
-          {errorMsg}
-        </div>
-      )}
-
-      {/* Contenido */}
-      {loading && traspasos.length === 0 ? (
-        <SkeletonList />
-      ) : traspasos.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <>
-          {/* Desktop tabla */}
-          <div
-            className="hidden md:block overflow-x-auto rounded-xl border"
-            style={{ borderColor: "hsl(var(--border))" }}
-          >
-            <table className="w-full border-collapse">
-              <thead>
-                <tr
-                  style={{
-                    backgroundColor: "hsl(var(--muted) / 0.4)",
-                    borderBottom: "1px solid hsl(var(--border))",
-                  }}
+            {loading && filtrados.length === 0 ? (
+              "cargando…"
+            ) : (
+              <>
+                <b
+                  className="font-mono font-medium"
+                  style={{ color: "var(--n-700)" }}
                 >
-                  {[
-                    "#",
-                    "Fecha",
-                    "Origen",
-                    "Destino",
-                    "Estado",
-                    "Picker",
-                    "",
-                  ].map((col) => (
-                    <th
-                      key={col}
-                      className="px-3 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-left"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {traspasos.map((t, idx) => (
-                  <tr
-                    key={t.id}
-                    onClick={() => navigate(`/ops/traspasos/${t.id}`)}
-                    className="cursor-pointer transition-colors"
-                    style={{
-                      borderTop:
-                        idx === 0
-                          ? "none"
-                          : "1px solid hsl(var(--border) / 0.5)",
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.backgroundColor =
-                        "hsl(var(--muted) / 0.3)")
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.backgroundColor = "")
-                    }
-                  >
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs font-bold font-mono"
-                        style={{ color: "hsl(var(--primary))" }}
-                      >
-                        #{t.numero}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
-                      >
-                        {formatDate(t.fecha)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs font-medium"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {sedeLabel(t.sede_origen_id)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs font-medium"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {sedeLabel(t.sede_destino_id)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <StatusBadge status={t.estado} />
-                        {t.tipo === "mercancia_abandonada" && (
-                          <span
-                            className="px-2 py-0.5 rounded text-[10px] font-semibold"
-                            style={{
-                              backgroundColor: "hsl(var(--warning) / 0.15)",
-                              color: "hsl(var(--warning))",
-                            }}
-                            title="Mercancía abandonada"
-                          >
-                            📦 Abandonada
-                          </span>
-                        )}
-                        {t.tipo === "devolucion_garantia" && (
-                          <span
-                            className="px-2 py-0.5 rounded text-[10px] font-semibold"
-                            style={{
-                              backgroundColor: "hsl(var(--info) / 0.15)",
-                              color: "hsl(var(--info))",
-                            }}
-                            title="Devolución por garantía"
-                          >
-                            🛡️ Garantía
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span
-                        className="text-xs"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
-                      >
-                        {t.picker?.nombre ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <ArrowIcon />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  {kpis.activos}
+                </b>{" "}
+                activos ·{" "}
+                <b
+                  className="font-mono font-medium"
+                  style={{ color: "var(--n-700)" }}
+                >
+                  {kpis.total}
+                  {hasMore ? "+" : ""}
+                </b>{" "}
+                en vista ·{" "}
+                <b
+                  className="font-mono font-medium"
+                  style={{ color: "var(--n-700)" }}
+                >
+                  {kpis.unidades}
+                </b>{" "}
+                unidades
+              </>
+            )}
+          </p>
+        </div>
+
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* Toggle Tablero / Lista */}
+          <div
+            className="flex items-center gap-0.5 rounded-lg p-[3px]"
+            style={{ backgroundColor: "var(--n-100)" }}
+          >
+            <ToggleBtn
+              active={vista === "board"}
+              onClick={() => setVista("board")}
+              icon={<LayoutGrid className="h-3.5 w-3.5" strokeWidth={2} />}
+              label="Tablero"
+            />
+            <ToggleBtn
+              active={vista === "list"}
+              onClick={() => setVista("list")}
+              icon={<ListIcon className="h-3.5 w-3.5" strokeWidth={2} />}
+              label="Lista"
+            />
           </div>
 
-          {/* Mobile cards */}
-          <ul className="md:hidden space-y-2.5" role="list">
-            {traspasos.map((t) => (
-              <li key={t.id}>
-                <button
-                  onClick={() => navigate(`/ops/traspasos/${t.id}`)}
-                  className="w-full text-left rounded-xl px-4 py-4 border transition-all cursor-pointer"
-                  style={{
-                    backgroundColor: "hsl(var(--card))",
-                    borderColor: "hsl(var(--border))",
-                  }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.borderColor =
-                      "hsl(var(--primary) / 0.3)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.borderColor = "hsl(var(--border))")
-                  }
-                >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <span
-                      className="text-xs font-bold font-mono"
-                      style={{ color: "hsl(var(--primary))" }}
-                    >
-                      #{t.numero}
-                    </span>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <StatusBadge status={t.estado} />
-                      {t.tipo === "mercancia_abandonada" && (
-                        <span
-                          className="px-2 py-0.5 rounded text-[10px] font-semibold"
-                          style={{
-                            backgroundColor: "hsl(var(--warning) / 0.15)",
-                            color: "hsl(var(--warning))",
-                          }}
-                          title="Mercancía abandonada"
-                        >
-                          📦 Abandonada
-                        </span>
-                      )}
-                      {t.tipo === "devolucion_garantia" && (
-                        <span
-                          className="px-2 py-0.5 rounded text-[10px] font-semibold"
-                          style={{
-                            backgroundColor: "hsl(var(--info) / 0.15)",
-                            color: "hsl(var(--info))",
-                          }}
-                          title="Devolución por garantía"
-                        >
-                          🛡️ Garantía
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span
-                      className="text-sm font-medium"
-                      style={{ color: "hsl(var(--foreground))" }}
-                    >
-                      {sedeLabel(t.sede_origen_id)}
-                    </span>
-                    <span style={{ color: "hsl(var(--muted-foreground))" }}>
-                      →
-                    </span>
-                    <span
-                      className="text-sm font-medium"
-                      style={{ color: "hsl(var(--foreground))" }}
-                    >
-                      {sedeLabel(t.sede_destino_id)}
-                    </span>
-                  </div>
-                  <p
-                    className="text-xs"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {formatDate(t.fecha)}
-                    {t.picker?.nombre && ` · Picker: ${t.picker.nombre}`}
-                  </p>
-                </button>
-              </li>
+          <select
+            value={sedeFiltro}
+            onChange={(e) => setSedeFiltro(e.target.value)}
+            className="rounded-lg border px-3 pr-8 text-[13px] outline-none"
+            style={{
+              height: 36,
+              borderColor: "var(--n-150)",
+              backgroundColor: "var(--n-0)",
+              color: "var(--n-700)",
+            }}
+            aria-label="Filtrar por sede"
+          >
+            <option value="ALL">Todas las sedes</option>
+            {SEDE_OPTS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
             ))}
-          </ul>
+          </select>
 
-          {hasMore && (
-            <button
-              onClick={() => cargar(false)}
-              disabled={loading}
-              className="w-full py-3 rounded-xl text-sm font-medium border transition-all disabled:opacity-50 cursor-pointer"
-              style={{
-                borderColor: "hsl(var(--border))",
-                color: "hsl(var(--muted-foreground))",
-                backgroundColor: "transparent",
-              }}
-            >
-              {loading ? "Cargando..." : "Cargar más"}
-            </button>
-          )}
-        </>
+          <button
+            onClick={() => navigate("/ops/traspasos/nuevo")}
+            className="btn btn-pri"
+            style={{ height: 48 }}
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Nuevo traspaso
+          </button>
+        </div>
+      </div>
+
+      {/* ── Contenido ───────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-auto px-4 pb-14 pt-5 sm:px-7">
+        {errorMsg && (
+          <div
+            role="alert"
+            className="mb-4 rounded-[10px] border px-4 py-3 text-sm"
+            style={{
+              backgroundColor: "var(--dang-50)",
+              borderColor: "var(--dang-border)",
+              color: "var(--dang-700)",
+            }}
+          >
+            {errorMsg}
+          </div>
+        )}
+
+        {loading && filtrados.length === 0 ? (
+          <SkeletonBoard />
+        ) : filtrados.length === 0 ? (
+          <EmptyState />
+        ) : vista === "board" ? (
+          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-4">
+            {KANBAN_COLS.map((col) => (
+              <BoardColumn
+                key={col.key}
+                col={col}
+                rows={grupos[col.key]}
+                onOpen={(id) => navigate(`/ops/traspasos/${id}`)}
+              />
+            ))}
+          </div>
+        ) : (
+          <ListaTabla
+            rows={filtrados}
+            onOpen={(id) => navigate(`/ops/traspasos/${id}`)}
+          />
+        )}
+
+        {hasMore && (
+          <button
+            onClick={() => cargar(false)}
+            disabled={loading}
+            className="btn btn-out mt-4 w-full justify-center disabled:opacity-50"
+            style={{ height: 48 }}
+          >
+            {loading ? "Cargando…" : "Cargar más"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+function ToggleBtn({ active, onClick, icon, label }) {
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors"
+      style={
+        active
+          ? {
+              backgroundColor: "var(--n-0)",
+              color: "var(--n-950)",
+              boxShadow: "0 1px 2px rgba(14,16,24,.06)",
+            }
+          : { backgroundColor: "transparent", color: "var(--n-500)" }
+      }
+    >
+      {icon} {label}
+    </button>
+  );
+}
+
+/* ---------- TABLERO ---------- */
+
+function BoardColumn({ col, rows, onOpen }) {
+  const isTransit = col.key === "transito";
+  const isDone = col.key === "recibido";
+  return (
+    <div
+      className="flex min-h-[640px] flex-col gap-2.5 rounded-xl border p-3"
+      style={{
+        borderColor: "var(--n-100)",
+        backgroundColor: isDone ? "var(--n-25)" : "var(--n-50)",
+      }}
+    >
+      <div className="flex items-center justify-between gap-2 px-1.5 py-1">
+        <div className="flex items-center gap-2">
+          <span
+            className={`h-2 w-2 rounded-full ${col.pulse ? "animate-pulse" : ""}`}
+            style={{
+              background: col.dotVar,
+              boxShadow: col.pulse
+                ? "0 0 0 4px rgba(247,144,9,.18)"
+                : undefined,
+            }}
+          />
+          <span
+            className="text-[13px] font-semibold"
+            style={{ color: "var(--n-950)" }}
+          >
+            {col.label}
+          </span>
+        </div>
+        <span
+          className="rounded-full border px-1.5 py-0.5 font-mono text-[11px]"
+          style={
+            isTransit
+              ? {
+                  borderColor: "var(--warn-border)",
+                  backgroundColor: "var(--warn-50)",
+                  color: "var(--warn-700)",
+                }
+              : {
+                  borderColor: "var(--n-150)",
+                  backgroundColor: "var(--n-0)",
+                  color: "var(--n-500)",
+                }
+          }
+        >
+          {rows.length}
+        </span>
+      </div>
+
+      {rows.length === 0 ? (
+        <div
+          className="rounded-[10px] border border-dashed px-3 py-6 text-center font-mono text-[11.5px]"
+          style={{ borderColor: "var(--n-200)", color: "var(--n-400)" }}
+        >
+          Sin traspasos
+        </div>
+      ) : (
+        rows.map((t) => <BoardCard key={t.id} t={t} onOpen={onOpen} />)
       )}
     </div>
   );
 }
 
-function SkeletonList() {
+function BoardCard({ t, onOpen }) {
+  const { productos, unidades } = conteo(t);
+  const badge = traspasoBadge(t.tipo);
+  const pill = estadoPillKind(t.estado);
+  const resp = responsableNombre(t);
   return (
-    <div className="space-y-3">
-      {[...Array(5)].map((_, i) => (
+    <button
+      onClick={() => onOpen(t.id)}
+      className="flex w-full cursor-pointer flex-col gap-2.5 rounded-[10px] border p-3.5 text-left transition-all"
+      style={{
+        borderColor: "var(--n-150)",
+        backgroundColor: "var(--n-0)",
+        boxShadow: "0 1px 2px rgba(14,16,24,.04)",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = "var(--n-300)";
+        e.currentTarget.style.boxShadow = "0 4px 12px rgba(14,16,24,.08)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "var(--n-150)";
+        e.currentTarget.style.boxShadow = "0 1px 2px rgba(14,16,24,.04)";
+      }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className="flex items-center gap-1.5 font-mono text-[13px] font-medium"
+          style={{ color: "var(--n-950)" }}
+        >
+          <span
+            className="h-[7px] w-[7px] rounded-full"
+            style={{
+              background: `var(--${pill.kind === "neut" ? "n-400" : `${pill.kind}-500`})`,
+            }}
+          />
+          #{t.numero}
+          <TipoBadge badge={badge} />
+        </span>
+        <span style={{ color: "var(--n-400)" }}>
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </span>
+      </div>
+
+      <div
+        className="flex items-center gap-2 text-[12.5px] font-medium"
+        style={{ color: "var(--n-950)" }}
+      >
+        <WhChip sedeId={t.sede_origen_id} />
+        <ArrowRight
+          className="h-3.5 w-3.5 shrink-0"
+          strokeWidth={2}
+          style={{ color: "var(--n-400)" }}
+        />
+        <WhChip sedeId={t.sede_destino_id} />
+      </div>
+
+      <div
+        className="font-mono text-[11.5px]"
+        style={{ color: "var(--n-500)" }}
+      >
+        {productos} productos · {unidades} unidades
+      </div>
+
+      {t.observaciones && (
         <div
-          key={i}
-          className="rounded-xl p-4 animate-pulse border"
+          className="text-[12px] italic leading-[1.45]"
+          style={{ color: "var(--n-700)" }}
+        >
+          &ldquo;{t.observaciones}&rdquo;
+        </div>
+      )}
+
+      <div
+        className="flex items-center justify-between gap-1.5 border-t border-dashed pt-2"
+        style={{ borderColor: "var(--n-100)" }}
+      >
+        <span
+          className="flex items-center gap-1 font-mono text-[11px]"
+          style={{ color: "var(--n-500)" }}
+        >
+          <Clock
+            className="h-[11px] w-[11px]"
+            strokeWidth={2}
+            style={{ color: "var(--n-400)" }}
+          />
+          {formatDate(t.fecha)}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Pill kind={pill.kind} label={pill.label} />
+          <Avatar nombre={resp} />
+        </span>
+      </div>
+    </button>
+  );
+}
+
+/* ---------- LISTA ---------- */
+
+function ListaTabla({ rows, onOpen }) {
+  return (
+    <>
+      {/* Desktop: tabla rica */}
+      <div
+        className="hidden overflow-hidden rounded-[10px] border md:block"
+        style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                {[
+                  "#",
+                  "Fecha",
+                  "Origen",
+                  "Destino",
+                  "Productos",
+                  "Motivo",
+                  "Estado",
+                  "Responsable",
+                ].map((h) => (
+                  <th
+                    key={h}
+                    className="border-b px-3 py-3 text-left font-mono text-[10px] font-medium uppercase tracking-[0.08em]"
+                    style={{
+                      borderColor: "var(--n-150)",
+                      backgroundColor: "var(--n-25)",
+                      color: "var(--n-400)",
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((t) => {
+                const { productos, unidades } = conteo(t);
+                const badge = traspasoBadge(t.tipo);
+                const pill = estadoPillKind(t.estado);
+                const resp = responsableNombre(t);
+                return (
+                  <tr
+                    key={t.id}
+                    onClick={() => onOpen(t.id)}
+                    className="cursor-pointer transition-colors"
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.backgroundColor = "var(--n-25)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.backgroundColor = "")
+                    }
+                  >
+                    <Td>
+                      <span
+                        className="font-mono text-[12.5px] font-medium"
+                        style={{ color: "var(--n-950)" }}
+                      >
+                        #{t.numero}
+                      </span>
+                    </Td>
+                    <Td>
+                      <span
+                        className="font-mono text-[11.5px]"
+                        style={{ color: "var(--n-500)" }}
+                      >
+                        {formatDate(t.fecha)}
+                      </span>
+                    </Td>
+                    <Td>
+                      <WhChip sedeId={t.sede_origen_id} />
+                    </Td>
+                    <Td>
+                      <WhChip sedeId={t.sede_destino_id} />
+                    </Td>
+                    <Td>
+                      <div className="flex flex-col leading-[1.3]">
+                        <span
+                          className="text-[13px] font-medium"
+                          style={{ color: "var(--n-950)" }}
+                        >
+                          {productos} producto{productos !== 1 ? "s" : ""}
+                          <TipoBadge badge={badge} compact />
+                        </span>
+                        <span
+                          className="mt-0.5 font-mono text-[11px]"
+                          style={{ color: "var(--n-500)" }}
+                        >
+                          {unidades} unidades
+                        </span>
+                      </div>
+                    </Td>
+                    <Td>
+                      <span
+                        className="text-[12px] italic"
+                        style={{ color: "var(--n-700)" }}
+                      >
+                        {t.observaciones ? `“${t.observaciones}”` : "—"}
+                      </span>
+                    </Td>
+                    <Td>
+                      <Pill kind={pill.kind} label={pill.label} />
+                    </Td>
+                    <Td>
+                      <div
+                        className="flex items-center gap-2 text-[12.5px]"
+                        style={{ color: "var(--n-700)" }}
+                      >
+                        <Avatar nombre={resp} />
+                        {resp ?? "Sin asignar"}
+                      </div>
+                    </Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Mobile: cards (misma tarjeta del tablero) */}
+      <ul className="space-y-2.5 md:hidden" role="list">
+        {rows.map((t) => (
+          <li key={t.id}>
+            <BoardCard t={t} onOpen={onOpen} />
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function Td({ children }) {
+  return (
+    <td className="border-b px-3 py-3" style={{ borderColor: "var(--n-75)" }}>
+      {children}
+    </td>
+  );
+}
+
+/* ---------- estados ---------- */
+
+function SkeletonBoard() {
+  return (
+    <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-4">
+      {[...Array(4)].map((_, c) => (
+        <div
+          key={c}
+          className="flex min-h-[320px] flex-col gap-2.5 rounded-xl border p-3"
           style={{
-            backgroundColor: "hsl(var(--card))",
-            borderColor: "hsl(var(--border))",
+            borderColor: "var(--n-100)",
+            backgroundColor: "var(--n-50)",
           }}
         >
-          <div className="flex justify-between items-start gap-4">
-            <div className="flex-1 space-y-2">
-              <div
-                className="h-4 rounded w-1/4"
-                style={{ backgroundColor: "hsl(var(--muted))" }}
-              />
-              <div
-                className="h-3 rounded w-1/2"
-                style={{ backgroundColor: "hsl(var(--muted))" }}
-              />
-            </div>
+          <div
+            className="h-4 w-24 animate-pulse rounded"
+            style={{ backgroundColor: "var(--n-100)" }}
+          />
+          {[...Array(2)].map((_, i) => (
             <div
-              className="w-20 h-6 rounded"
-              style={{ backgroundColor: "hsl(var(--muted))" }}
+              key={i}
+              className="h-28 animate-pulse rounded-[10px]"
+              style={{ backgroundColor: "var(--n-0)" }}
             />
-          </div>
+          ))}
         </div>
       ))}
     </div>
@@ -451,56 +665,19 @@ function SkeletonList() {
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="text-5xl mb-4">🔄</div>
-      <p className="font-semibold" style={{ color: "hsl(var(--foreground))" }}>
+    <div className="flex flex-col items-center justify-center px-8 py-20 text-center">
+      <div
+        className="mb-4 grid h-14 w-14 place-items-center rounded-[12px]"
+        style={{ backgroundColor: "var(--p-50)", color: "var(--p-600)" }}
+      >
+        <RefreshCw className="h-7 w-7" strokeWidth={1.5} />
+      </div>
+      <p className="font-semibold" style={{ color: "var(--n-950)" }}>
         Sin traspasos registrados
       </p>
-      <p
-        className="text-sm mt-1"
-        style={{ color: "hsl(var(--muted-foreground))" }}
-      >
+      <p className="mt-1 text-sm" style={{ color: "var(--n-500)" }}>
         Crea un nuevo traspaso para mover mercancía entre sedes
       </p>
     </div>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 4v16m8-8H4"
-      />
-    </svg>
-  );
-}
-
-function ArrowIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      style={{ color: "hsl(var(--muted-foreground))" }}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M9 5l7 7-7 7"
-      />
-    </svg>
   );
 }

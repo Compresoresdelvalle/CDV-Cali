@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Check, Info } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
 import FeedbackBanners from "../ui/FeedbackBanners";
@@ -120,14 +121,14 @@ export default function ChecklistRecepcion({
 
   if (loading) {
     return (
-      <div className="space-y-1.5">
+      <div className="ck-grid">
         {[...Array(8)].map((_, i) => (
           <div
             key={i}
-            className="rounded-lg p-2 animate-pulse border h-10"
+            className="h-10 animate-pulse rounded-[7px] border"
             style={{
-              backgroundColor: "hsl(var(--card))",
-              borderColor: "hsl(var(--border))",
+              backgroundColor: "var(--n-25)",
+              borderColor: "var(--n-100)",
             }}
           />
         ))}
@@ -136,29 +137,22 @@ export default function ChecklistRecepcion({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <FeedbackBanners errorMsg={errorMsg} />
 
-      <div
-        className="rounded-lg border px-3 py-2 text-xs flex items-center justify-between gap-3"
-        style={{
-          backgroundColor: "hsl(var(--info) / 0.08)",
-          borderColor: "hsl(var(--info) / 0.4)",
-          color: "hsl(var(--info))",
-        }}
-      >
-        <span>
-          <strong>¿Cómo se usa?</strong> Marca cada componente que el cliente
-          entregó FÍSICAMENTE con el equipo. Lo que NO marques queda como prueba
-          de que NO llegó — esto te protege legalmente si después reclama.
-        </span>
+      {/* Banner explicativo + contador */}
+      <div className="banner-info">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+        <div className="body">
+          <b className="font-medium">¿Cómo se usa?</b> Marca cada componente que
+          el cliente entregó FÍSICAMENTE con el equipo. Lo que NO marques queda
+          como prueba de que NO llegó — esto te protege legalmente si después
+          reclama.
+        </div>
         <span
-          className="font-mono font-bold whitespace-nowrap text-base"
+          className="shrink-0 whitespace-nowrap font-mono text-base font-semibold tabular-nums"
           style={{
-            color:
-              totalMarcados === 0
-                ? "hsl(var(--muted-foreground))"
-                : "hsl(var(--info))",
+            color: totalMarcados === 0 ? "var(--n-300)" : "var(--info-700)",
           }}
         >
           {totalMarcados} / {items.length}
@@ -166,69 +160,44 @@ export default function ChecklistRecepcion({
       </div>
 
       {totalMarcados === 0 && (
-        <p
-          className="text-xs italic"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
+        <p className="text-xs italic" style={{ color: "var(--n-500)" }}>
           Empieza marcando los componentes que ves en el equipo. Click en cada
           tarjeta para marcar/desmarcar.
         </p>
       )}
 
-      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5" role="list">
+      <div className="ck-grid">
         {items.map((it) => {
           const saving = savingId === it.id;
           return (
-            <li key={it.id}>
-              <button
-                onClick={() => toggleMarca(it)}
-                disabled={saving || readOnly}
-                aria-pressed={it.marcado}
-                className="w-full rounded-lg border px-3 py-2 flex items-center gap-2 text-left cursor-pointer min-h-[44px] disabled:opacity-50"
-                style={{
-                  backgroundColor: it.marcado
-                    ? "hsl(var(--success) / 0.12)"
-                    : "hsl(var(--card))",
-                  borderColor: it.marcado
-                    ? "hsl(var(--success))"
-                    : "hsl(var(--border))",
-                }}
-              >
-                <span
-                  className="w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center text-xs font-bold"
-                  style={{
-                    backgroundColor: it.marcado
-                      ? "hsl(var(--success))"
-                      : "transparent",
-                    borderColor: it.marcado
-                      ? "hsl(var(--success))"
-                      : "hsl(var(--border))",
-                    color: it.marcado
-                      ? "hsl(var(--primary-foreground))"
-                      : "transparent",
-                  }}
-                >
-                  ✓
-                </span>
-                <span
-                  className="text-sm font-medium flex-1 min-w-0 truncate"
-                  style={{ color: "hsl(var(--foreground))" }}
-                >
-                  {it.componente?.nombre ?? "—"}
-                </span>
-                {saving && (
-                  <span
-                    className="text-[10px] font-mono"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    …
-                  </span>
+            <button
+              key={it.id}
+              onClick={() => toggleMarca(it)}
+              disabled={saving || readOnly}
+              aria-pressed={it.marcado}
+              className={`ck-item ${it.marcado ? "on" : ""} disabled:opacity-60`}
+              style={{ minHeight: 44 }}
+            >
+              <span className={`ck-cb ${it.marcado ? "on" : ""}`}>
+                {it.marcado && (
+                  <Check className="h-2.5 w-2.5" strokeWidth={3} />
                 )}
-              </button>
-            </li>
+              </span>
+              <span className="min-w-0 flex-1 truncate text-left">
+                {it.componente?.nombre ?? "—"}
+              </span>
+              {saving && (
+                <span
+                  className="font-mono text-[10px]"
+                  style={{ color: "var(--n-500)" }}
+                >
+                  …
+                </span>
+              )}
+            </button>
           );
         })}
-      </ul>
+      </div>
     </div>
   );
 }

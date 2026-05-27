@@ -1,12 +1,29 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  User,
+  Package,
+  Wallet,
+  Link2,
+  Activity,
+  XCircle,
+  Printer,
+  Shield,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
-import PageHeader from "../../components/layout/PageHeader";
-import StatusBadge from "../../components/ui/StatusBadge";
 import ModalAbrirGarantiaVenta from "../../components/garantias/ModalAbrirGarantiaVenta";
 import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
+import { MARCA } from "../../lib/pdf/pdfStyles";
+import {
+  metodoPagoClass,
+  ventaEstadoLabel,
+  devolucionEstadoLabel,
+  garantiaVentaEstadoLabel,
+  construirHistorialVenta,
+} from "../../lib/ventas-ui";
 
 export default function VentaDetalle() {
   const { id } = useParams();
@@ -16,6 +33,8 @@ export default function VentaDetalle() {
 
   const [venta, setVenta] = useState(null);
   const [items, setItems] = useState([]);
+  const [devoluciones, setDevoluciones] = useState([]);
+  const [garantias, setGarantias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [anulando, setAnulando] = useState(false);
   const [confirmAnular, setConfirmAnular] = useState(false);
@@ -42,6 +61,7 @@ export default function VentaDetalle() {
     const cargar = async () => {
       setLoading(true);
       try {
+        // Datos primarios de la venta y su detalle.
         const [{ data: v }, { data: d }] = await Promise.all([
           supabase
             .from("ventas")
@@ -66,6 +86,29 @@ export default function VentaDetalle() {
     cargar();
   }, [id]);
 
+  // Vinculaciones del ciclo (lecturas READ-ONLY a tablas existentes que
+  // referencian la venta). Se cargan aparte para que un eventual error de
+  // permisos en una tabla secundaria nunca afecte el render principal.
+  useEffect(() => {
+    const cargarVinculos = async () => {
+      const [{ data: dev }, { data: gar }] = await Promise.all([
+        supabase
+          .from("devoluciones")
+          .select("id, numero, fecha, estado")
+          .eq("venta_id", id)
+          .order("fecha", { ascending: true }),
+        supabase
+          .from("garantias_venta")
+          .select("id, numero, fecha, estado")
+          .eq("venta_id", id)
+          .order("fecha", { ascending: true }),
+      ]);
+      setDevoluciones(dev ?? []);
+      setGarantias(gar ?? []);
+    };
+    cargarVinculos();
+  }, [id]);
+
   const anularVenta = async () => {
     setAnulando(true);
     setError(null);
@@ -85,26 +128,20 @@ export default function VentaDetalle() {
 
   if (loading) {
     return (
-      <div
-        className="p-4 sm:p-6 space-y-4 animate-pulse"
-        style={{ backgroundColor: "hsl(var(--background))" }}
-      >
+      <div className="mx-auto w-full max-w-[1240px] px-4 py-5 sm:px-7 sm:py-6 animate-pulse">
         <div
-          className="h-8 rounded-lg w-1/3"
-          style={{ backgroundColor: "hsl(var(--muted))" }}
+          className="h-8 w-1/3 rounded-lg"
+          style={{ backgroundColor: "var(--n-100)" }}
         />
         <div
-          className="rounded-xl border p-4 space-y-3"
-          style={{
-            backgroundColor: "hsl(var(--card))",
-            borderColor: "hsl(var(--border))",
-          }}
+          className="mt-4 rounded-[10px] border p-5 space-y-3"
+          style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
         >
           {[...Array(4)].map((_, i) => (
             <div
               key={i}
-              className="h-4 rounded w-3/4"
-              style={{ backgroundColor: "hsl(var(--muted))" }}
+              className="h-4 w-3/4 rounded"
+              style={{ backgroundColor: "var(--n-100)" }}
             />
           ))}
         </div>
@@ -114,14 +151,8 @@ export default function VentaDetalle() {
 
   if (!venta) {
     return (
-      <div
-        className="flex items-center justify-center min-h-[60vh]"
-        style={{ backgroundColor: "hsl(var(--background))" }}
-      >
-        <p
-          className="text-sm"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <p className="text-sm" style={{ color: "var(--n-500)" }}>
           Venta no encontrada
         </p>
       </div>
@@ -140,59 +171,24 @@ export default function VentaDetalle() {
   const iva = baseIva * ((venta.iva_pct ?? 19) / 100);
   const totalCalc = venta.total > 0 ? venta.total : baseIva + iva;
 
+  const historial = construirHistorialVenta(
+    venta,
+    { devoluciones, garantias },
+    formatDate,
+  );
+
   return (
-    <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
-      style={{ backgroundColor: "hsl(var(--background))" }}
-    >
-      {/* ── PageHeader ── */}
-      <PageHeader
-        title={`Venta #${venta.numero}`}
-        description={formatDate(venta.fecha)}
-        actions={
-          <div className="flex items-center gap-2 flex-wrap">
-            <StatusBadge status={venta.anulada ? "anulada" : "completada"} />
-            <button
-              onClick={imprimirRecibo}
-              disabled={imprimiendo}
-              className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer disabled:opacity-50"
-              style={{
-                borderColor: "hsl(var(--primary))",
-                color: "hsl(var(--primary))",
-                backgroundColor: "hsl(var(--primary) / 0.08)",
-              }}
-              title="Imprimir recibo POS"
-            >
-              🖨️ Imprimir recibo
-            </button>
-            {!venta.anulada && (
-              <button
-                onClick={() => setModalGarantia(true)}
-                className="h-9 px-3 rounded-lg border text-xs font-semibold cursor-pointer"
-                style={{
-                  borderColor: "hsl(var(--warning))",
-                  color: "hsl(var(--warning))",
-                  backgroundColor: "hsl(var(--warning) / 0.08)",
-                }}
-                title="Abrir reclamo de garantía"
-              >
-                🛡️ Cliente reclama garantía
-              </button>
-            )}
-            <button
-              onClick={() => navigate("/ops/ventas")}
-              className="h-9 px-3 rounded-lg border text-sm font-medium transition-all cursor-pointer"
-              style={{
-                borderColor: "hsl(var(--border))",
-                color: "hsl(var(--muted-foreground))",
-                backgroundColor: "hsl(var(--card))",
-              }}
-            >
-              ← Volver
-            </button>
-          </div>
-        }
-      />
+    <div className="mx-auto w-full max-w-[1240px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
+      <button
+        onClick={() => navigate("/ops/ventas")}
+        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium transition-colors"
+        style={{ color: "var(--n-500)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--n-700)")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--n-500)")}
+      >
+        <ArrowLeftCircle className="h-3.5 w-3.5" strokeWidth={1.7} />
+        Volver a Ventas
+      </button>
 
       {modalGarantia && (
         <ModalAbrirGarantiaVenta
@@ -210,246 +206,498 @@ export default function VentaDetalle() {
         />
       )}
 
-      {/* ── Info general ── */}
+      {/* ── Header ─────────────────────────────────────────────────── */}
       <div
-        className="rounded-xl border overflow-hidden"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
+        className="mt-4 flex flex-col items-start gap-4 border-b pb-4 md:flex-row md:gap-6"
+        style={{ borderColor: "var(--n-150)" }}
       >
-        <div
-          className="px-4 py-3 border-b"
-          style={{
-            borderColor: "hsl(var(--border))",
-            backgroundColor: "hsl(var(--muted) / 0.3)",
-          }}
-        >
-          <p
-            className="text-xs font-semibold uppercase tracking-wide"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Información
-          </p>
-        </div>
-        <div>
-          <InfoRow label="Vendedor" value={venta.vendedor?.nombre ?? "—"} />
-          <InfoRow label="Sede" value={venta.sede_id} />
-          <InfoRow
-            label="Cliente"
-            value={venta.cliente_nombre || "Mostrador"}
-          />
-          {venta.cliente_nit && (
-            <InfoRow label="NIT / Cédula" value={venta.cliente_nit} />
-          )}
-          <InfoRow label="Método de pago" value={venta.metodo_pago} />
-          {venta.observaciones && (
-            <InfoRow label="Observaciones" value={venta.observaciones} />
-          )}
-        </div>
-      </div>
-
-      {/* ── Productos ── */}
-      <div
-        className="rounded-xl border overflow-hidden"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
-      >
-        <div
-          className="px-4 py-3 border-b"
-          style={{
-            borderColor: "hsl(var(--border))",
-            backgroundColor: "hsl(var(--muted) / 0.3)",
-          }}
-        >
-          <p
-            className="text-xs font-semibold uppercase tracking-wide"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Productos ({items.length})
-          </p>
-        </div>
-        {items.map((item, idx) => (
-          <div
-            key={item.id}
-            className="flex items-center justify-between px-4 py-3"
-            style={{
-              borderTop:
-                idx === 0 ? "none" : `1px solid hsl(var(--border) / 0.5)`,
-            }}
-          >
-            <div className="flex-1 min-w-0">
-              <p
-                className="text-sm font-medium truncate"
-                style={{ color: "hsl(var(--foreground))" }}
-              >
-                {item.producto?.nombre}
-              </p>
-              <p
-                className="text-xs"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                {item.producto?.referencia} · {item.cantidad}{" "}
-                {item.producto?.unidad_medida} ×{" "}
-                {formatCOP(item.precio_unitario)}
-              </p>
-            </div>
-            <p
-              className="text-sm font-semibold ml-4 tabular-nums"
-              style={{ color: "hsl(var(--foreground))" }}
+        <div className="min-w-0 flex-1">
+          <div className="ph-eyebrow">Venta</div>
+          <div className="ph-num">#{venta.numero}</div>
+          <div className="ph-client">
+            {venta.cliente_nombre || "Cliente mostrador"}
+          </div>
+          <div className="ph-sub">
+            {venta.anulada ? "Anulada" : "Completada"} el{" "}
+            <b
+              className="font-mono font-medium"
+              style={{ color: "var(--n-900)" }}
             >
-              {formatCOP(item.subtotal)}
-            </p>
+              {formatDate(venta.fecha)}
+            </b>{" "}
+            · Vendida por {venta.vendedor?.nombre ?? "—"}
           </div>
-        ))}
+        </div>
+        <div className="flex flex-col items-start gap-3 md:items-end">
+          <span className={`ph-state ${venta.anulada ? "danger" : "succ"}`}>
+            <span className="dot" />
+            {ventaEstadoLabel(venta.anulada)}
+          </span>
+          <div className="flex flex-col md:items-end">
+            <span className="ph-total-lbl">Total</span>
+            <span
+              className="ph-total"
+              style={
+                venta.anulada
+                  ? { textDecoration: "line-through", color: "var(--n-300)" }
+                  : undefined
+              }
+            >
+              {formatCOP(totalCalc)}
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* ── Totales ── */}
-      <div
-        className="rounded-xl border p-4 space-y-2"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
-      >
-        <div
-          className="flex justify-between text-sm"
-          style={{ color: "hsl(var(--muted-foreground))" }}
+      {/* ── Action bar ─────────────────────────────────────────────── */}
+      <div className="action-bar mt-4">
+        <button
+          onClick={imprimirRecibo}
+          disabled={imprimiendo}
+          className="btn btn-out disabled:opacity-50"
+          style={{ height: 48 }}
+          title="Imprimir recibo POS"
         >
-          <span>Subtotal</span>
-          <span className="tabular-nums">{formatCOP(subtotalCalc)}</span>
-        </div>
-        {venta.descuento_pct > 0 && (
-          <div
-            className="flex justify-between text-sm"
-            style={{ color: "hsl(var(--warning))" }}
+          <Printer className="h-3.5 w-3.5" />
+          Imprimir recibo
+        </button>
+        {!venta.anulada && (
+          <button
+            onClick={() => setModalGarantia(true)}
+            className="btn btn-out"
+            style={{ height: 48, color: "var(--warn-700)" }}
+            title="Abrir reclamo de garantía"
           >
-            <span>Descuento ({venta.descuento_pct}%)</span>
-            <span className="tabular-nums">−{formatCOP(descuento)}</span>
-          </div>
+            <Shield className="h-3.5 w-3.5" />
+            Cliente reclama garantía
+          </button>
         )}
+        {esAdmin && !venta.anulada && !confirmAnular && (
+          <button
+            onClick={() => setConfirmAnular(true)}
+            className="btn btn-out"
+            style={{ height: 48, color: "var(--dang-700)" }}
+          >
+            <XCircle className="h-3.5 w-3.5" />
+            Anular venta
+          </button>
+        )}
+      </div>
+
+      {/* ── Confirmación de anulación ──────────────────────────────── */}
+      {confirmAnular && (
         <div
-          className="flex justify-between text-sm"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          <span>IVA {venta.iva_pct}%</span>
-          <span className="tabular-nums">{formatCOP(iva)}</span>
-        </div>
-        <div
-          className="flex justify-between font-bold text-base pt-2 border-t"
+          className="mt-4 rounded-[10px] border p-4 space-y-3"
           style={{
-            borderColor: "hsl(var(--border))",
-            color: "hsl(var(--foreground))",
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
           }}
         >
-          <span>Total</span>
-          <span className="tabular-nums">{formatCOP(totalCalc)}</span>
+          <p
+            className="text-sm font-medium"
+            style={{ color: "var(--dang-700)" }}
+          >
+            ¿Confirmar anulación? El stock será devuelto automáticamente.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setConfirmAnular(false)}
+              className="btn btn-out"
+              style={{ height: 48 }}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={anularVenta}
+              disabled={anulando}
+              className="btn disabled:opacity-50"
+              style={{
+                height: 48,
+                backgroundColor: "var(--dang-600)",
+                borderColor: "var(--dang-600)",
+                color: "#fff",
+              }}
+            >
+              {anulando ? "Anulando…" : "Sí, anular"}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* ── Error ── */}
+      {/* ── Error ──────────────────────────────────────────────────── */}
       {error && (
         <div
-          className="rounded-xl border px-4 py-3"
+          className="mt-4 rounded-[10px] border px-4 py-3"
           style={{
-            backgroundColor: "hsl(var(--destructive) / 0.05)",
-            borderColor: "hsl(var(--destructive) / 0.2)",
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
           }}
         >
-          <p className="text-sm" style={{ color: "hsl(var(--destructive))" }}>
+          <p className="text-sm" style={{ color: "var(--dang-700)" }}>
             {error}
           </p>
         </div>
       )}
 
-      {/* ── Anular venta (solo Admin, no anulada) ── */}
-      {esAdmin && !venta.anulada && (
-        <>
-          {!confirmAnular ? (
-            <button
-              onClick={() => setConfirmAnular(true)}
-              className="w-full py-3 rounded-xl text-sm font-medium border transition-all cursor-pointer"
-              style={{
-                borderColor: "hsl(var(--destructive) / 0.4)",
-                color: "hsl(var(--destructive))",
-                backgroundColor: "transparent",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor =
-                  "hsl(var(--destructive) / 0.05)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
-              }}
-            >
-              Anular venta
-            </button>
-          ) : (
-            <div
-              className="rounded-xl border p-4 space-y-3"
-              style={{
-                backgroundColor: "hsl(var(--destructive) / 0.05)",
-                borderColor: "hsl(var(--destructive) / 0.2)",
-              }}
-            >
-              <p
-                className="text-sm font-medium"
-                style={{ color: "hsl(var(--destructive))" }}
-              >
-                ¿Confirmar anulación? El stock será devuelto automáticamente.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setConfirmAnular(false)}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-medium border transition-all cursor-pointer"
-                  style={{
-                    borderColor: "hsl(var(--border))",
-                    color: "hsl(var(--muted-foreground))",
-                    backgroundColor: "hsl(var(--card))",
-                  }}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={anularVenta}
-                  disabled={anulando}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-opacity disabled:opacity-50 cursor-pointer"
-                  style={{
-                    backgroundColor: "hsl(var(--destructive))",
-                    color: "hsl(var(--destructive-foreground))",
-                  }}
-                >
-                  {anulando ? "Anulando..." : "Sí, anular"}
-                </button>
+      {/* ── Layout: contenido + preview de recibo sticky ───────────── */}
+      <div className="mt-4 grid items-start gap-3 lg:grid-cols-[1fr_380px]">
+        <div className="flex flex-col gap-3">
+          {/* Cliente */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <User className="h-3.5 w-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Cliente</div>
+            </div>
+            <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+              <Kv
+                label="Cliente"
+                value={venta.cliente_nombre || "Mostrador"}
+                full
+              />
+              {venta.cliente_nit && (
+                <Kv label="NIT / Cédula" value={venta.cliente_nit} mono />
+              )}
+              <Kv label="Sede" value={venta.sede_id} mono />
+              <Kv label="Vendedor" value={venta.vendedor?.nombre ?? "—"} />
+              {venta.observaciones && (
+                <Kv label="Observaciones" value={venta.observaciones} full />
+              )}
+            </div>
+          </div>
+
+          {/* Productos vendidos */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <Package className="h-3.5 w-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Productos vendidos</div>
+              <div className="ib-aux">{items.length} items</div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="prod-tbl">
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <td style={{ width: 140 }}>
+                        <span className="p-sku">
+                          {item.producto?.referencia ?? "—"}
+                        </span>
+                        <div className="p-meta">
+                          {item.producto?.unidad_medida ?? ""}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="p-nm">{item.producto?.nombre}</div>
+                      </td>
+                      <td className="p-pr" style={{ width: 170 }}>
+                        ×{item.cantidad} · {formatCOP(item.precio_unitario)}
+                      </td>
+                      <td className="p-sub" style={{ width: 130 }}>
+                        {formatCOP(item.subtotal)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="totals">
+              <div className="ln">
+                <span>Subtotal</span>
+                <span className="v">{formatCOP(subtotalCalc)}</span>
+              </div>
+              {venta.descuento_pct > 0 && (
+                <div className="ln">
+                  <span>Descuento ({venta.descuento_pct}%)</span>
+                  <span className="v">−{formatCOP(descuento)}</span>
+                </div>
+              )}
+              <div className="ln">
+                <span>IVA {venta.iva_pct ?? 19}%</span>
+                <span className="v">{formatCOP(iva)}</span>
+              </div>
+              <div className="ln tot">
+                <span>Total</span>
+                <span className="v">{formatCOP(totalCalc)}</span>
               </div>
             </div>
-          )}
-        </>
-      )}
+          </div>
+
+          {/* Pago */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico succ">
+                <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Pago</div>
+              <div className="ib-aux">{venta.metodo_pago} · 1 movimiento</div>
+            </div>
+            <div className="pay-row">
+              <span className="pdate">{formatDate(venta.fecha)}</span>
+              <span
+                className={`pay-pill ${metodoPagoClass(venta.metodo_pago)}`}
+              >
+                <span className="dot" />
+                {venta.metodo_pago}
+              </span>
+              <span className="pamt">{formatCOP(totalCalc)}</span>
+            </div>
+            {/* Referencia/cuenta no se almacenan para ventas POS; se documenta
+                el pago con los datos reales disponibles. */}
+            <div
+              className="mt-2 font-mono text-[11px]"
+              style={{ color: "var(--n-500)" }}
+            >
+              Pago registrado en {venta.sede_id} · Recibo POS Rec #
+              {venta.numero}
+            </div>
+          </div>
+
+          {/* Vinculaciones del ciclo comercial */}
+          <div className="iblock info-tint">
+            <div className="ib-head">
+              <div className="ib-ico info">
+                <Link2 className="h-3.5 w-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Vinculaciones del ciclo comercial</div>
+            </div>
+            <div className="vinc-link-grid">
+              {/* Recibo POS — siempre presente (impreso desde esta venta). */}
+              <VincLink
+                kind="Recibo emitido"
+                num={`Rec #${venta.numero}`}
+                estado={venta.anulada ? "Anulado" : "Activo"}
+              />
+              {/* Devoluciones reales asociadas (sin ruta de detalle propia). */}
+              {devoluciones.length > 0 ? (
+                devoluciones.map((d) => (
+                  <VincLink
+                    key={d.id}
+                    kind="Devolución asociada"
+                    num={`Dev #${d.numero}`}
+                    estado={devolucionEstadoLabel(d.estado)}
+                  />
+                ))
+              ) : (
+                <VincLink
+                  kind="Devoluciones"
+                  num="Ninguna"
+                  estado="Sin devoluciones"
+                />
+              )}
+              {/* Garantías reales asociadas (con ruta de detalle navegable). */}
+              {garantias.length > 0 ? (
+                garantias.map((g) => (
+                  <VincLink
+                    key={g.id}
+                    kind="Garantía asociada"
+                    num={`Gar #${g.numero}`}
+                    estado={garantiaVentaEstadoLabel(g.estado)}
+                    to={`/ops/garantias/venta/${g.id}`}
+                  />
+                ))
+              ) : (
+                <VincLink
+                  kind="Garantías"
+                  num="Ninguna"
+                  estado="Sin reclamos"
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Historial */}
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <Activity className="h-3.5 w-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Historial</div>
+            </div>
+            <div className="timeline">
+              {historial.map((h, i) => (
+                <div className="tl-row" key={i}>
+                  <span className={`tl-dot ${h.tone}`} />
+                  <div>
+                    <div className="tl-act">{h.act}</div>
+                    <div className="tl-meta">{h.meta}</div>
+                  </div>
+                  {h.time && <span className="tl-time">{h.time}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Recibo preview (sticky) ───────────────────────────────── */}
+        <aside className="pdf-wrap lg:sticky lg:top-4">
+          <header className="pdf-head">
+            <div>
+              <div className="pdf-eyebrow">Preview del recibo</div>
+              <div className="pdf-title">Rec #{venta.numero}</div>
+            </div>
+          </header>
+          <div className="pdf-stage">
+            <div className="pdf-paper">
+              <div className="mb-3 flex items-start justify-between">
+                <div>
+                  <div className="pdf-logo-sq">CHV</div>
+                  <div className="pdf-logo-tag">Compresores del Valle</div>
+                </div>
+                <div className="text-right">
+                  <div className="pdf-co-name">{MARCA.nombre}</div>
+                  <div className="pdf-co-line sans">{MARCA.ciudad}</div>
+                </div>
+              </div>
+              <div
+                className="my-3 flex items-end justify-between border-y border-dashed py-3"
+                style={{ borderColor: "#DADCE3" }}
+              >
+                <div>
+                  <div className="pdf-title-main">RECIBO</div>
+                  <div className="pdf-title-num">
+                    Rec #{venta.numero} · #{venta.numero}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="pdf-eyebrow-print">Fecha</div>
+                  <div className="pdf-meta-val sans">
+                    {formatDate(venta.fecha)}
+                  </div>
+                </div>
+              </div>
+              <div className="mb-3 grid grid-cols-2 gap-4">
+                <div>
+                  <div className="pdf-eyebrow-print">Cliente</div>
+                  <div className="pdf-cli-name">
+                    {venta.cliente_nombre || "Cliente mostrador"}
+                  </div>
+                  {venta.cliente_nit && (
+                    <div className="pdf-cli-line">NIT {venta.cliente_nit}</div>
+                  )}
+                  <div className="pdf-cli-line">Sede {venta.sede_id}</div>
+                </div>
+                <div>
+                  <div className="pdf-eyebrow-print">Método</div>
+                  <div className="pdf-meta-val sans">{venta.metodo_pago}</div>
+                  <div className="pdf-cli-line">
+                    Vendedor: {venta.vendedor?.nombre ?? "—"}
+                  </div>
+                </div>
+              </div>
+              <table className="pdf-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th className="c" style={{ width: 36 }}>
+                      Cant
+                    </th>
+                    <th className="r" style={{ width: 70 }}>
+                      Unit
+                    </th>
+                    <th className="r" style={{ width: 78 }}>
+                      Subtotal
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        {p.producto?.nombre}
+                        <div
+                          className="mono"
+                          style={{ fontSize: 8, color: "#5C6070" }}
+                        >
+                          {p.producto?.referencia ?? "—"}
+                        </div>
+                      </td>
+                      <td className="c">{p.cantidad}</td>
+                      <td className="r">{formatCOP(p.precio_unitario)}</td>
+                      <td className="r sub">{formatCOP(p.subtotal)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="flex justify-end">
+                <table className="pdf-totals-tbl">
+                  <tbody>
+                    <tr>
+                      <td>Subtotal</td>
+                      <td>{formatCOP(subtotalCalc)}</td>
+                    </tr>
+                    {venta.descuento_pct > 0 && (
+                      <tr>
+                        <td>Descuento ({venta.descuento_pct}%)</td>
+                        <td>−{formatCOP(descuento)}</td>
+                      </tr>
+                    )}
+                    <tr>
+                      <td>IVA {venta.iva_pct ?? 19}%</td>
+                      <td>{formatCOP(iva)}</td>
+                    </tr>
+                    <tr className="tot">
+                      <td>Total</td>
+                      <td>{formatCOP(totalCalc)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="pdf-footer-page mt-6">
+                Página 1 de 1 · CHV · Rec #{venta.numero}
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
 
-function InfoRow({ label, value }) {
+/* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+function Kv({ label, value, mono, full }) {
   return (
-    <div
-      className="flex justify-between items-start px-4 py-3 border-t first:border-t-0"
-      style={{ borderColor: "hsl(var(--border) / 0.5)" }}
-    >
-      <span
-        className="text-sm"
-        style={{ color: "hsl(var(--muted-foreground))" }}
+    <div className={full ? "sm:col-span-2" : undefined}>
+      <div
+        className="font-mono text-[10px] uppercase tracking-[0.08em]"
+        style={{ color: "var(--n-300)" }}
       >
         {label}
-      </span>
-      <span
-        className="text-sm font-medium text-right max-w-[60%]"
-        style={{ color: "hsl(var(--foreground))" }}
+      </div>
+      <div
+        className={"mt-1 text-[13px] font-medium" + (mono ? " font-mono" : "")}
+        style={{ color: "var(--n-900)" }}
       >
         {value}
-      </span>
+      </div>
     </div>
   );
+}
+
+function VincLink({ kind, num, estado, to }) {
+  const body = (
+    <>
+      <span className="vlk">{kind}</span>
+      <span className="vpill">{num}</span>
+      <span className="vst">{estado}</span>
+    </>
+  );
+  if (to) {
+    return (
+      <Link
+        to={to}
+        className="vinc-link transition-colors"
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.backgroundColor = "var(--n-50)")
+        }
+        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
+      >
+        {body}
+      </Link>
+    );
+  }
+  return <div className="vinc-link">{body}</div>;
 }
