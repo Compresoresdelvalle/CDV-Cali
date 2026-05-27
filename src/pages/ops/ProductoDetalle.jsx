@@ -37,6 +37,14 @@ export default function ProductoDetalle() {
   const [guardandoPrecio, setGuardandoPrecio] = useState(false);
   const [errorPrecio, setErrorPrecio] = useState("");
   const guardandoPrecioRef = useRef(false);
+
+  // ── Edición de costo (solo Admin) ────────────────────────────────────
+  const [editandoCosto, setEditandoCosto] = useState(false);
+  const [nuevoCosto, setNuevoCosto] = useState("");
+  const [guardandoCosto, setGuardandoCosto] = useState(false);
+  const [errorCosto, setErrorCosto] = useState("");
+  const guardandoCostoRef = useRef(false);
+
   const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -151,6 +159,52 @@ export default function ProductoDetalle() {
     }
   };
 
+  const abrirEditarCosto = () => {
+    if (!producto) return;
+    setNuevoCosto(String(producto.costo_promedio ?? ""));
+    setErrorCosto("");
+    setEditandoCosto(true);
+  };
+
+  const guardarCosto = async () => {
+    if (!producto) return;
+    setErrorCosto("");
+    const costo = Number(nuevoCosto);
+    if (!Number.isFinite(costo) || costo < 0) {
+      setErrorCosto("El costo debe ser un número mayor o igual a 0");
+      return;
+    }
+    if (costo === Number(producto.costo_promedio)) {
+      setEditandoCosto(false);
+      return; // sin cambio
+    }
+    const ok = await confirm({
+      titulo: "Confirmar cambio de costo",
+      mensaje: `Se cambiará el costo de "${producto.nombre}" de ${formatCOP(
+        producto.costo_promedio,
+      )} a ${formatCOP(costo)}. Esto afecta el cálculo de márgenes y utilidad en ventas futuras. ¿Confirmar?`,
+      confirmLabel: "Sí, cambiar costo",
+    });
+    if (!ok) return;
+    if (guardandoCostoRef.current) return;
+    guardandoCostoRef.current = true;
+    setGuardandoCosto(true);
+    try {
+      const { error: rpcErr } = await supabase.rpc("fn_editar_costo_producto", {
+        p_producto_id: producto.id,
+        p_costo: costo,
+      });
+      if (rpcErr) throw rpcErr;
+      setProducto((p) => (p ? { ...p, costo_promedio: costo } : p));
+      setEditandoCosto(false);
+    } catch (err) {
+      setErrorCosto(safeError(err, "Error al actualizar el costo"));
+    } finally {
+      setGuardandoCosto(false);
+      guardandoCostoRef.current = false;
+    }
+  };
+
   if (loading) return <LoadingSkeleton />;
   if (error) return <ErrorState message={error} onBack={() => navigate(-1)} />;
   if (!producto) return null;
@@ -215,7 +269,15 @@ export default function ProductoDetalle() {
           <Stat
             label="Costo promedio"
             value={formatCOP(producto.costo_promedio)}
-          />
+          >
+            <button
+              onClick={abrirEditarCosto}
+              className="mt-2 cursor-pointer text-xs font-medium"
+              style={{ color: "var(--p-700)" }}
+            >
+              ✏️ Editar costo
+            </button>
+          </Stat>
         )}
         <Stat label="Stock mínimo" value={producto.stock_minimo} small />
         <Stat label="Stock máximo" value={producto.stock_maximo ?? "—"} small />
@@ -544,6 +606,94 @@ export default function ProductoDetalle() {
                 style={{ backgroundColor: "var(--p-700)", color: "#fff" }}
               >
                 {guardandoPrecio ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: editar costo (solo Admin) ── */}
+      {esAdmin && editandoCosto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => !guardandoCosto && setEditandoCosto(false)}
+        >
+          <div
+            className="w-full max-w-md space-y-3 rounded-xl border p-5"
+            style={{
+              backgroundColor: "var(--n-0)",
+              borderColor: "var(--n-200)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              className="text-lg font-semibold"
+              style={{ color: "var(--n-950)" }}
+            >
+              Editar costo
+            </h3>
+            <p className="text-xs" style={{ color: "var(--n-500)" }}>
+              <strong>{producto.nombre}</strong> · costo actual:{" "}
+              {formatCOP(producto.costo_promedio)}
+            </p>
+            {errorCosto && (
+              <div
+                role="alert"
+                className="rounded-lg border px-3 py-2 text-xs"
+                style={{
+                  backgroundColor: "var(--dang-50)",
+                  borderColor: "var(--dang-200)",
+                  color: "var(--dang-700)",
+                }}
+              >
+                {errorCosto}
+              </div>
+            )}
+            <div>
+              <label className="text-xs" style={{ color: "var(--n-500)" }}>
+                Nuevo costo (COP)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={nuevoCosto}
+                onChange={(e) => setNuevoCosto(e.target.value)}
+                disabled={guardandoCosto}
+                autoFocus
+                className="mt-1 min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
+                style={{
+                  backgroundColor: "var(--n-0)",
+                  borderColor: "var(--n-200)",
+                  color: "var(--n-900)",
+                }}
+              />
+              {Number(nuevoCosto) > 0 && (
+                <p className="mt-1 text-xs" style={{ color: "var(--n-500)" }}>
+                  Vista previa: {formatCOP(Number(nuevoCosto))}
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setEditandoCosto(false)}
+                disabled={guardandoCosto}
+                className="min-h-[44px] rounded-lg border px-4 py-2 text-sm disabled:opacity-50"
+                style={{
+                  borderColor: "var(--n-200)",
+                  color: "var(--n-500)",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardarCosto}
+                disabled={guardandoCosto}
+                className="min-h-[44px] rounded-lg px-5 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--p-700)", color: "#fff" }}
+              >
+                {guardandoCosto ? "Guardando..." : "Guardar"}
               </button>
             </div>
           </div>

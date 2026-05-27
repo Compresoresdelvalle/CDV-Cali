@@ -18,6 +18,9 @@ export default function ProductoForm({
   submitLabel = "Crear producto",
   submitting = false,
   errorMsg = "",
+  // Solo el Admin puede fijar el costo. Para otros roles el campo se oculta
+  // y el producto se crea con costo 0 (lo ajusta el Admin o las compras).
+  puedeEditarCosto = false,
 }) {
   const [form, setForm] = useState({
     nombre: initial.nombre ?? "",
@@ -216,16 +219,18 @@ export default function ProductoForm({
               className="finput"
             />
           </Field>
-          <Field label="Costo promedio (COP)">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={form.costo_promedio}
-              onChange={set("costo_promedio")}
-              className="finput"
-            />
-          </Field>
+          {puedeEditarCosto && (
+            <Field label="Costo promedio (COP)">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={form.costo_promedio}
+                onChange={set("costo_promedio")}
+                className="finput"
+              />
+            </Field>
+          )}
         </Row>
         <Row cols={3}>
           <Field label="Unidad de medida">

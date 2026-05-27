@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeftCircle } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
+import { useAuthStore } from "../../stores/authStore";
 import ProductoForm from "../../components/forms/ProductoForm";
 
 /**
@@ -14,6 +15,7 @@ import ProductoForm from "../../components/forms/ProductoForm";
  */
 export default function ProductoNuevo() {
   const navigate = useNavigate();
+  const esAdmin = useAuthStore((s) => s.perfil?.rol) === "Admin";
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -77,6 +79,7 @@ export default function ProductoNuevo() {
           submitting={submitting}
           errorMsg={errorMsg}
           submitLabel="Crear producto"
+          puedeEditarCosto={esAdmin}
         />
       </div>
     </div>
