@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Cog, List, LayoutGrid, Search, X } from "lucide-react";
+import { Plus, Cog, List, LayoutGrid, Search, X, Trash2 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 import {
   ensambleEstadoPill,
   tecnicoAvatar,
@@ -25,7 +26,29 @@ export default function EnsambleHistorial() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const esAdmin = perfil?.rol === "Admin";
+  const { confirm, ConfirmDialog } = useConfirm();
   const mountedRef = useRef(true);
+
+  const eliminar = async (e) => {
+    const ok = await confirm({
+      titulo: "Eliminar ensamble",
+      mensaje: `Se eliminará el ensamble #${e.numero} de "${
+        e.producto?.nombre ?? ""
+      }". Si está completado, se devolverán los insumos al pool y se quitará el producto ensamblado del stock. ¿Confirmar?`,
+      confirmLabel: "Sí, eliminar",
+    });
+    if (!ok) return;
+    try {
+      const { error } = await supabase.rpc("fn_eliminar_ensamble", {
+        p_ensamble_id: e.id,
+      });
+      if (error) throw error;
+      setEnsambles((prev) => prev.filter((x) => x.id !== e.id));
+    } catch (err) {
+      setErrorMsg(safeError(err, "Error al eliminar ensamble"));
+    }
+  };
   // Token de secuencia: descarta respuestas obsoletas (cambio de filtro o
   // "Cargar más" mientras hay otra carga en vuelo).
   const reqIdRef = useRef(0);
@@ -266,7 +289,7 @@ export default function EnsambleHistorial() {
       ) : filtrados.length === 0 ? (
         <Empty q={q} />
       ) : view === "lista" ? (
-        <ListView rows={filtrados} />
+        <ListView rows={filtrados} esAdmin={esAdmin} onEliminar={eliminar} />
       ) : (
         <KanbanView rows={filtrados} />
       )}
@@ -284,20 +307,26 @@ export default function EnsambleHistorial() {
           Cargar más
         </button>
       )}
+
+      <ConfirmDialog />
     </div>
   );
 }
 
 /* ─────────────────────────── Vista lista (desktop tabla / mobile cards) ── */
 
-function ListView({ rows }) {
+function ListView({ rows, esAdmin, onEliminar }) {
   return (
     <>
       {/* Móvil: cards */}
       <ul className="space-y-2.5 md:hidden" role="list">
         {rows.map((e) => (
           <li key={e.id}>
-            <EnsambleCard ensamble={e} />
+            <EnsambleCard
+              ensamble={e}
+              esAdmin={esAdmin}
+              onEliminar={onEliminar}
+            />
           </li>
         ))}
       </ul>
@@ -325,11 +354,17 @@ function ListView({ rows }) {
                 <Th width={140} right>
                   Costo
                 </Th>
+                {esAdmin && <Th width={70} />}
               </tr>
             </thead>
             <tbody>
               {rows.map((e) => (
-                <EnsambleFila key={e.id} ensamble={e} />
+                <EnsambleFila
+                  key={e.id}
+                  ensamble={e}
+                  esAdmin={esAdmin}
+                  onEliminar={onEliminar}
+                />
               ))}
             </tbody>
           </table>
@@ -367,7 +402,7 @@ function Td({ children, right }) {
   );
 }
 
-function EnsambleFila({ ensamble: e }) {
+function EnsambleFila({ ensamble: e, esAdmin, onEliminar }) {
   const pill = ensambleEstadoPill(e.completado);
   const av = tecnicoAvatar(e.realizador?.nombre);
   return (
@@ -441,13 +476,26 @@ function EnsambleFila({ ensamble: e }) {
           {formatCOP(e.costo_total ?? 0)}
         </span>
       </Td>
+      {esAdmin && (
+        <Td right>
+          <button
+            onClick={() => onEliminar(e)}
+            aria-label="Eliminar ensamble"
+            title="Eliminar ensamble (devuelve insumos y quita el producto)"
+            className="grid h-8 w-8 place-items-center rounded-md"
+            style={{ color: "var(--dang-700)" }}
+          >
+            <Trash2 className="h-4 w-4" strokeWidth={1.7} />
+          </button>
+        </Td>
+      )}
     </tr>
   );
 }
 
 /* ─────────────────────────── Card (mobile) ────────────────────────────── */
 
-function EnsambleCard({ ensamble: e }) {
+function EnsambleCard({ ensamble: e, esAdmin, onEliminar }) {
   const pill = ensambleEstadoPill(e.completado);
   const av = tecnicoAvatar(e.realizador?.nombre);
   return (
@@ -498,6 +546,18 @@ function EnsambleCard({ ensamble: e }) {
           {formatCOP(e.costo_total ?? 0)}
         </p>
       </div>
+      {esAdmin && (
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={() => onEliminar(e)}
+            className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium"
+            style={{ borderColor: "var(--dang-200)", color: "var(--dang-700)" }}
+          >
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.7} />
+            Eliminar
+          </button>
+        </div>
+      )}
     </div>
   );
 }

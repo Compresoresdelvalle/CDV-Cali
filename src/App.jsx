@@ -15,6 +15,7 @@ import Productos from "./pages/ops/Productos";
 import Clientes from "./pages/ops/Clientes";
 import ProductoDetalle from "./pages/ops/ProductoDetalle";
 import ProductoNuevo from "./pages/ops/ProductoNuevo";
+import ProductoEditar from "./pages/ops/ProductoEditar";
 import VentaHistorial from "./pages/ops/VentaHistorial";
 import VentaNueva from "./pages/ops/VentaNueva";
 import VentaDetalle from "./pages/ops/VentaDetalle";
@@ -127,6 +128,15 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin"]}>
                 <ProductoNuevo />
+              </RoleGuard>
+            }
+          />
+          {/* Inventario — editar producto (solo Admin) */}
+          <Route
+            path="inventario/:productoId/editar"
+            element={
+              <RoleGuard roles={["Admin"]}>
+                <ProductoEditar />
               </RoleGuard>
             }
           />

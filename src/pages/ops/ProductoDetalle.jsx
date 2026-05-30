@@ -329,9 +329,24 @@ export default function ProductoDetalle() {
             )}
           </div>
         </div>
-        <div className="flex flex-col items-start md:items-end">
-          <span className="ph-total-lbl">Stock total</span>
-          <span className="ph-total tabular-nums">{stockTotal}</span>
+        <div className="flex flex-col items-start gap-2 md:items-end">
+          <div className="flex flex-col items-start md:items-end">
+            <span className="ph-total-lbl">Stock total</span>
+            <span className="ph-total tabular-nums">{stockTotal}</span>
+          </div>
+          {esAdmin && (
+            <button
+              onClick={() => navigate(`/ops/inventario/${producto.id}/editar`)}
+              className="rounded-lg border px-3 py-2 text-xs font-medium"
+              style={{
+                borderColor: "var(--n-200)",
+                color: "var(--p-700)",
+                backgroundColor: "var(--n-0)",
+              }}
+            >
+              ✏️ Editar producto
+            </button>
+          )}
         </div>
       </div>
 
