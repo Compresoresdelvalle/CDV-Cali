@@ -24,6 +24,7 @@ export const EMAIL_MAP = {
   Deyanira: "compresoresdelvallesas@gmail.com",
   Bladimir: "compresoresdelvallesas@hotmail.com",
   Edna: "compresorescv@hotmail.com",
+  TecPrueba: "tecnico.prueba@compresoresdelvalle.com",
 };
 
 // Módulos visibles por rol (orden importa para el menú)
