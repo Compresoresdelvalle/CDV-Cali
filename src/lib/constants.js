@@ -14,14 +14,16 @@ export const ROLES = {
   TECNICO: "Tecnico",
 };
 
-// Mapa de nombre → email en Supabase Auth
+// Mapa de nombre → email en Supabase Auth (usuarios reales de producción).
+// El nombre debe coincidir EXACTAMENTE con usuarios.nombre (la pantalla de
+// login arma la lista desde la tabla usuarios).
 export const EMAIL_MAP = {
-  "Carlos Dueño": "carlos@compresores.local",
-  "Pedro Bodeguero": "pedro@compresores.local",
-  "María Vendedora": "maria@compresores.local",
-  "Juan Vendedor": "juan@compresores.local",
-  "Ana Vendedora": "ana@compresores.local",
-  "Luis Técnico": "luis@compresores.local",
+  Admin: "compresorescvsas@gmail.com",
+  Bodega: "ventascompresoresdelvalle@hotmail.com",
+  Sofía: "compresoresdelvalle1@hotmail.com",
+  Deyanira: "compresoresdelvallesas@gmail.com",
+  Bladimir: "compresoresdelvallesas@hotmail.com",
+  Edna: "compresorescv@hotmail.com",
 };
 
 // Módulos visibles por rol (orden importa para el menú)
@@ -39,6 +41,7 @@ export const ROLE_MODULES = {
     "Herramientas",
     "Devoluciones",
     "Productos",
+    "Clientes",
     "→ Panel Admin",
   ],
   Bodeguero: [
@@ -59,6 +62,7 @@ export const ROLE_MODULES = {
     "Recibos",
     "Herramientas",
     "Productos",
+    "Clientes",
   ],
   Tecnico: ["Órdenes", "Ensambles", "Herramientas", "Productos"],
 };
@@ -77,6 +81,7 @@ export const MODULE_ICONS = {
   Productos: "🏷️",
   Garantías: "🛡️",
   Recibos: "🧾",
+  Clientes: "👤",
   "→ Panel Admin": "📊",
 };
 
@@ -94,6 +99,7 @@ export const MODULE_ROUTES = {
   Productos: "/ops/productos",
   Garantías: "/ops/garantias",
   Recibos: "/ops/recibos",
+  Clientes: "/ops/clientes",
   "→ Panel Admin": "/admin",
 };
 
