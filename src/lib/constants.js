@@ -60,6 +60,7 @@ export const ROLE_MODULES = {
     "Traspasos",
     "Ventas",
     "Órdenes",
+    "Ensambles",
     "Cotizaciones",
     "Garantías",
     "Recibos",

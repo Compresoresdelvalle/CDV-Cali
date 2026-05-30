@@ -45,6 +45,7 @@ import OrdenNueva from "./pages/ops/OrdenNueva";
 import OrdenDetalle from "./pages/ops/OrdenDetalle";
 import EnsambleHistorial from "./pages/ops/EnsambleHistorial";
 import EnsambleNuevo from "./pages/ops/EnsambleNuevo";
+import EnsambleDetalle from "./pages/ops/EnsambleDetalle";
 import ReciboHistorial from "./pages/ops/Recibos/ReciboHistorial";
 import ReciboNuevo from "./pages/ops/Recibos/ReciboNuevo";
 import ReciboDetalle from "./pages/ops/Recibos/ReciboDetalle";
@@ -299,7 +300,7 @@ export default function App() {
           <Route
             path="ensambles"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero", "Tecnico"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Tecnico", "Vendedor"]}>
                 <EnsambleHistorial />
               </RoleGuard>
             }
@@ -307,8 +308,16 @@ export default function App() {
           <Route
             path="ensambles/nuevo"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero", "Tecnico"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Tecnico", "Vendedor"]}>
                 <EnsambleNuevo />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="ensambles/:ensambleId"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero", "Tecnico", "Vendedor"]}>
+                <EnsambleDetalle />
               </RoleGuard>
             }
           />

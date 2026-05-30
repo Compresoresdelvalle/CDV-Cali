@@ -254,10 +254,13 @@ export const METODO_PAGO_LABELS = {
  * @param {boolean} completado
  * @returns {{ cls: string, label: string }}
  */
-export function ensambleEstadoPill(completado) {
-  return completado
-    ? { cls: "s-pill s-completada", label: "Completado" }
-    : { cls: "s-pill s-proceso", label: "Pendiente" };
+export function ensambleEstadoPill(e) {
+  // Acepta el objeto ensamble (terminado/completado) o el booleano legacy.
+  const completado = typeof e === "object" && e !== null ? e.completado : e;
+  const terminado = typeof e === "object" && e !== null ? e.terminado : false;
+  if (completado) return { cls: "s-pill s-completada", label: "Completado" };
+  if (terminado) return { cls: "s-pill s-esperando", label: "Terminado" };
+  return { cls: "s-pill s-proceso", label: "En proceso" };
 }
 
 /**
@@ -271,25 +274,32 @@ export function ensambleEstadoPill(completado) {
  */
 export const ENSAMBLE_KANBAN_COLS = [
   {
-    id: "pendiente",
-    label: "Pendiente",
+    id: "en_proceso",
+    label: "En proceso",
     dot: "var(--warn-500)",
     pulse: true,
-    match: (e) => !e.completado,
+    match: (e) => !e.terminado && !e.completado,
+  },
+  {
+    id: "terminado",
+    label: "Terminados",
+    dot: "var(--info-500)",
+    match: (e) => e.terminado && !e.completado,
   },
   {
     id: "completado",
-    label: "Completado",
+    label: "Completados",
     dot: "var(--succ-500)",
     match: (e) => !!e.completado,
   },
 ];
 
-/** Filtros de la lista de ensambles (Todos / Pendientes / Completados). */
+/** Filtros de la lista de ensambles (Todos / En proceso / Terminados / Completados). */
 export const ENSAMBLE_TABS = [
-  { v: "Todos", estado: null },
-  { v: "Pendientes", estado: false },
-  { v: "Completados", estado: true },
+  { v: "Todos", key: null },
+  { v: "En proceso", key: "en_proceso" },
+  { v: "Terminados", key: "terminado" },
+  { v: "Completados", key: "completado" },
 ];
 
 /**

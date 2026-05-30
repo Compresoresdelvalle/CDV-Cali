@@ -38,6 +38,26 @@ export default function EnsambleNuevo() {
   const [productoSel, setProductoSel] = useState(null);
   const [cantidadProducida, setCantidadProducida] = useState("1");
 
+  // Técnico asignado (la vendedora elige a quién se le asigna).
+  const [tecnicos, setTecnicos] = useState([]);
+  const [tecnicoSel, setTecnicoSel] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from("usuarios")
+      .select("id, nombre")
+      .eq("rol", "Tecnico")
+      .eq("activo", true)
+      .order("nombre")
+      .then(({ data }) => {
+        if (alive) setTecnicos(data ?? []);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // Componentes (receta al vuelo)
   const [componentes, setComponentes] = useState([]);
   const [compSearch, setCompSearch] = useState("");
@@ -235,11 +255,17 @@ export default function EnsambleNuevo() {
     0,
   );
   const faltantes = componentes.filter((c) => c.cantidad > (c.insumo ?? 0));
-  const puedeCompletar =
-    !!productoSel && componentes.length > 0 && faltantes.length === 0;
+  const puedeCrear =
+    !!productoSel &&
+    !!tecnicoSel &&
+    componentes.length > 0 &&
+    faltantes.length === 0;
 
-  const completar = async () => {
-    if (!puedeCompletar || creando) return;
+  // Crea el ensamble EN PROCESO: los insumos se restan al insertar el detalle
+  // (vía trigger). NO se completa aquí — eso lo hará la vendedora tras el "terminado"
+  // del técnico, desde el detalle del ensamble.
+  const crearEnsamble = async () => {
+    if (!puedeCrear || creando) return;
     if (creandoRef.current) return;
     creandoRef.current = true;
     setCreando(true);
@@ -251,9 +277,11 @@ export default function EnsambleNuevo() {
           producto_resultado_id: productoSel.id,
           cantidad_producida: cantProd,
           realizado_por: perfil?.id,
+          tecnico_id: tecnicoSel,
           sede_id: sede,
           observaciones: observaciones.trim() || null,
           completado: false,
+          terminado: false,
         })
         .select("id")
         .single();
@@ -273,15 +301,9 @@ export default function EnsambleNuevo() {
         throw e2;
       }
 
-      const { error: e3 } = await supabase
-        .from("ensambles")
-        .update({ completado: true })
-        .eq("id", ens.id);
-      if (e3) throw e3;
-
-      navigate("/ops/ensambles");
+      navigate(`/ops/ensambles/${ens.id}`);
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al completar ensamble"));
+      setErrorMsg(safeError(err, "Error al crear el ensamble"));
     } finally {
       setCreando(false);
       creandoRef.current = false;
@@ -488,6 +510,41 @@ export default function EnsambleNuevo() {
               color: "var(--n-950)",
             }}
           />
+        </div>
+      )}
+
+      {/* Paso 2b: técnico asignado */}
+      {productoSel && (
+        <div className="iblock">
+          <div className="ib-head">
+            <div className="ib-ico">
+              <Package className="h-3.5 w-3.5" strokeWidth={1.7} />
+            </div>
+            <div className="ib-title">2b · Técnico asignado</div>
+          </div>
+          <select
+            value={tecnicoSel}
+            onChange={(e) => setTecnicoSel(e.target.value)}
+            className="w-full max-w-xs rounded-lg border px-3 text-sm outline-none"
+            style={{
+              height: 48,
+              backgroundColor: "var(--n-0)",
+              borderColor: "var(--n-200)",
+              color: "var(--n-950)",
+            }}
+          >
+            <option value="">Selecciona un técnico…</option>
+            {tecnicos.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nombre}
+              </option>
+            ))}
+          </select>
+          {tecnicos.length === 0 && (
+            <p className="mt-1 text-xs" style={{ color: "var(--warn-700)" }}>
+              No hay técnicos activos. Crea uno o actívalo para asignar.
+            </p>
+          )}
         </div>
       )}
 
@@ -770,12 +827,14 @@ export default function EnsambleNuevo() {
           <p
             className="text-[12.5px] font-medium"
             style={{
-              color: puedeCompletar ? "var(--succ-700)" : "var(--dang-700)",
+              color: puedeCrear ? "var(--succ-700)" : "var(--dang-700)",
             }}
           >
-            {puedeCompletar
-              ? "Insumos suficientes — listo para completar"
-              : "Faltan insumos — convierte o ajusta cantidades"}
+            {!tecnicoSel
+              ? "Asigna un técnico para crear"
+              : faltantes.length > 0
+                ? "Faltan insumos — convierte o ajusta cantidades"
+                : "Listo para crear (los insumos se reservan al crear)"}
           </p>
         </div>
       )}
@@ -798,12 +857,12 @@ export default function EnsambleNuevo() {
         </button>
         <button
           type="button"
-          onClick={completar}
-          disabled={!puedeCompletar || creando}
+          onClick={crearEnsamble}
+          disabled={!puedeCrear || creando}
           className="flex-1 rounded-lg text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           style={{ height: 48, backgroundColor: "var(--p-600)" }}
         >
-          {creando ? "Procesando…" : "Completar ensamble"}
+          {creando ? "Procesando…" : "Crear ensamble"}
         </button>
       </div>
 
