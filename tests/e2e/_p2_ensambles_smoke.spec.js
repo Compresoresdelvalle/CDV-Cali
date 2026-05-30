@@ -51,8 +51,9 @@ test.describe("Parte 2 — Ensambles (Admin)", () => {
     const search = page.locator('input[placeholder*="ensamblable" i]').first();
     await search.waitFor({ state: "visible", timeout: 15_000 });
     await search.fill("COMPRESOR");
-    const primer = page.getByText(/COMPRESOR/i).first();
-    await expect(primer).toBeVisible({ timeout: 15_000 });
+    // El primer resultado del buscador (un botón de la lista) que contiene "COMPRESOR".
+    const primer = page.getByRole("button", { name: /COMPRESOR/i }).first();
+    await primer.waitFor({ state: "visible", timeout: 15_000 });
     await primer.click();
     // Paso 3 + toggle aparecen tras elegir el producto.
     await expect(page.getByText(/insumos de la receta/i)).toBeVisible({
