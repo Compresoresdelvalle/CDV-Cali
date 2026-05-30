@@ -66,12 +66,10 @@ test.describe("Parte 1 — insumos en OT (Admin)", () => {
       .then(() => true)
       .catch(() => false);
     if (!hayOT) {
-      test
-        .info()
-        .annotations.push({
-          type: "nota",
-          description: "No hay OT para abrir.",
-        });
+      test.info().annotations.push({
+        type: "nota",
+        description: "No hay OT para abrir.",
+      });
       return;
     }
     await primera.click();

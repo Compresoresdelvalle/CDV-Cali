@@ -6,6 +6,39 @@
 
 ---
 
+## 0. ESTADO ACTUAL (2026-05-30, sesión larga) — LEER PRIMERO
+
+**Hecho y commiteado** en `fix/correcciones-post-deploy` (backend en PROD, frontend en rama, app **pausada**):
+
+- ✅ Bloque 0, ✅ Bloque 1, ✅ Bloque 2 (insumos pool + ubicación).
+- ✅ **Bloque 7 (Ensambles) COMPLETO** + flujo nuevo de estados.
+- 🟡 Bloque 6 parcial (#26 OT-solo-insumos + fix asignación técnico).
+
+**Insumos / OT / Ensambles — qué se construyó:**
+
+- **Pool de stock:** `inventario.cantidad_insumo` (separado de `cantidad`=venta) + `productos.vendible` (false = insumo puro, oculto en ventas). Conversión venta↔insumo: `fn_convertir_a_insumo`/`fn_revertir_insumo_a_venta` (ampliada a Admin/Bodeguero/Tecnico/Vendedor; notifica al Admin si NO es Admin).
+- **OT (`OrdenDetalle`):** picker consume de `cantidad_insumo`, muestra insumos aunque tengan 0, toggle "Solo insumos / Inventario global", convertir-desde-OT con aviso al Admin.
+- **Ensambles — flujo nuevo:** vendedora crea (asigna técnico) → insumos se **restan al ponerlos** en la receta (trigger en `detalle_ensamble` INSERT; devuelve al DELETE/ajusta al UPDATE) → técnico marca **"Ensamble terminado"** → vendedora **"Completa"** (suma el producto a venta + notifica). `recetas_bom` quedó obsoleta. `productos.ensamblable` (seed: 107 COMPRESORES). `EnsambleNuevo` reescrito (sin BOM, selector de técnico, "Crear" deja en_proceso). **`EnsambleDetalle` (NUEVA)** con edición de receta + botones de estado. `EnsambleHistorial`: 3 estados (En proceso/Terminados/Completados), filas clicables, técnico ve solo los suyos. `fn_eliminar_ensamble` (Admin, revierte stock).
+- **Notificaciones:** tabla `notificaciones` + campana `NotificacionesBell` en AdminShell.
+- **Productos:** botón "Editar costo" + **ProductoEditar** (editar productos viejos: vendible/ensamblable/stand/posición) + check ensamblable en el form.
+
+**Migraciones aplicadas a PROD esta sesión:** `20260530000005`–`20260530000015` (esquema insumos, enum, funciones, triggers, datos, ensamble flujo, RLS vendedor/técnico). Ver `BLOQUE2_PLAN.md`.
+
+**🐞 Bugs encontrados y corregidos (esta sesión):**
+
+1. "Solo insumos" en OT no mostraba productos vendibles convertidos → filtro `vendible=false OR cantidad_insumo>0` (commit `e024a17`).
+2. Vendedor "no permisos" al crear ensamble → RLS `ens_insert` no incluía Vendedor (commit `b984a9f`). Mismo fix: técnico asignado puede ver/operar (ens_select/update/de_select += tecnico_id).
+3. Desplegable de técnico vacío en OT → filtraba por sede del vendedor; un solo técnico (BODEGA) (commit `e05c164`).
+4. Vendedor "no permisos" al crear OT → la OT tomaba la sede del técnico (BODEGA) y chocaba con RLS `os_insert` (exige sede propia) → la OT usa la sede del CREADOR (commit `ec3deb4`).
+5. Aclarado: NO se quitó "editar costo promedio" (nunca estuvo en código commiteado); se agregó el botón. `fn_editar_costo_producto` existía en prod sin migración (**DRIFT BD↔repo**).
+6. `npm run build` da Segmentation fault (OOM del bundler) tras muchos builds → usar `NODE_OPTIONS=--max-old-space-size=4096 npx vite build`. No afecta `npm run dev`.
+
+**Usuario de prueba:** `TecPrueba` (rol Tecnico, BODEGA, PIN 1234, email `tecnico.prueba@compresoresdelvalle.com`, uid `672d3434-…`). Mapeado en `EMAIL_MAP`. Único técnico activo.
+
+**⏳ Pendiente:** Bloque 3 (Ventas), 4 (Recibos), 5 (Traspasos), 6 resto (#22-25, ojo #25 editar cantidades repuestos OT), 8 (Compras), 9 (UX/Conteo). **Operativo: merge a `main` + deploy del frontend** (backend ya vivo). Limpiar specs `tests/e2e/_bloque*`/`_p*` temporales antes del merge.
+
+---
+
 ## 1. Dónde estamos
 
 - Rama: **`fix/correcciones-post-deploy`** (NO se ha mergeado a `main`).
