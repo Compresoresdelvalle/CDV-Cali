@@ -25,6 +25,9 @@ yarn-debug.log*
 .claude/worktrees/
 .mcp.json
 
+# Artefactos del plugin context-mode (no son del proyecto)
+.github/hooks/
+
 # Playwright artifacts (screenshots, traces, last-run state)
 test-results/
 tests/results/

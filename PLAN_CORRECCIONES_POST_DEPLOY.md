@@ -7,6 +7,24 @@ fundacionales y afectan a los demás). Commit de git al terminar cada bloque.
 
 ---
 
+## 📊 ESTADO (act. 2026-05-30) — rama `fix/correcciones-post-deploy`
+
+- ✅ **Bloque 0** (datos/contadores) · ✅ **Bloque 1** (permisos/roles) · ✅ **Bloque 2** (insumos pool + ubicación).
+- ✅ **Bloque 7 (Ensambles) COMPLETO** — se hizo como extensión de insumos: receta al
+  vuelo (#27), observaciones (#28), barra solo ensamblables (#29 vía flag `ensamblable`),
+  insumos+cantidades y suma al inventario / resta insumos al completar (#30). Además flujo
+  nuevo: en_proceso → terminado (técnico) → completado (vendedora), insumos reservados al
+  ponerlos, notificación al Admin, eliminar ensamble con reversa.
+- 🟡 **Bloque 6 parcial:** #26 (OT solo insumos) ✅ + fix asignación de técnico. Falta #22-25.
+- ⏳ **Pendientes:** Bloque 3 (Ventas), Bloque 4 (Recibos), Bloque 5 (Traspasos),
+  Bloque 6 resto (#22-25), Bloque 8 (Compras), Bloque 9 (UX/Conteo).
+- ⚠️ **Deploy pendiente:** el BACKEND (BD) ya está vivo en prod; el FRONTEND sigue en la
+  rama sin mergear/desplegar (app pausada). Mergear a `main` + deploy cuando se decida.
+- Detalle por sesión en `HANDOFF_SESION.md`; memoria del proyecto en
+  `.claude/.../memory/proyecto-correcciones-post-deploy.md`.
+
+---
+
 ## BLOQUE 0 — DATOS Y BACKEND (fundacional)
 
 _Arreglos de base de datos que afectan a todo. Hacer PRIMERO._
@@ -94,14 +112,14 @@ _Depende de la lógica de insumos (Bloque 2)._
     - Teléfonos por almacen--> CV: 3127536787 / L3: 3114940799 / CHV: 3174675905
 23. **Campo "Sede"** en la orden, que ponga el teléfono de esa sede.
 24. **Checklist de recepción debe aparecer en el recibo de la orden.**
-25. **Permitir editar cantidades en los repuestos consumidos** en la OT. Hoy en día si se necesita 3 unidades de un producto debe registrarse 3 veces, en vez de poder seleccionar la cantidad desde un inicio
-26. _(En OT solo insumos — ya cubierto en Bloque 2, verificar aquí.)_
+25. **Permitir editar cantidades en los repuestos consumidos** en la OT. Hoy en día si se necesita 3 unidades de un producto debe registrarse 3 veces, en vez de poder seleccionar la cantidad desde un inicio. ⏳ PENDIENTE (el picker de OT aún agrega de a 1).
+26. _(En OT solo insumos — ✅ hecho en Bloque 2: el picker consume de `cantidad_insumo`, con toggle "Solo insumos/Inventario global" y convertir-desde-OT.)_
 
 ---
 
-## BLOQUE 7 — ENSAMBLES
+## BLOQUE 7 — ENSAMBLES ✅ COMPLETO (2026-05-30)
 
-_Módulo independiente._
+_Módulo independiente. Hecho como extensión de insumos. #27, #28, #29, #30 ✅._
 
 27. **Ingresar manualmente los productos utilizados** en el ensamble.
 28. **Casilla de observaciones** en el ensamble (igual que en ventas).
