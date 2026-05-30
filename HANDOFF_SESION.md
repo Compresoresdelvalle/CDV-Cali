@@ -83,6 +83,7 @@ Verificado: policies correctas, enum con `cancelado`, gates de rol OK, `get_advi
 - FKs: `detalle_venta.venta_id → ventas` es **ON DELETE CASCADE**; **`movimientos` NO tiene FK a `ventas`** (solo a producto/sede/usuario).
 - RLS actuales relevantes (resumen): `inv_select` = Admin o su sede; `prod_modify` = Admin+Bodeguero (cambiar a solo Admin); `os_insert` = Admin+Tecnico (añadir Vendedor); `traspasos` solo tiene policy de SELECT (create/recibir van por funciones SECURITY DEFINER).
 - Falta leer al implementar Bloque 1: `fn_crear_traspaso`, `fn_procesar_traspaso`, `fn_crear_producto`, enum de estados de traspaso/OT.
+- **⚠️ DRIFT BD↔repo:** `fn_editar_costo_producto(uuid,numeric)` (Admin-only, hace `UPDATE productos SET costo_promedio`) **existe en producción pero NO está en ninguna migración commiteada** (`git log -S` no la encuentra). Se creó directo en la BD en algún momento. 2026-05-30 se cableó por fin un botón "Editar costo" en ProductoDetalle que la usa (commit `f4ce285`). Lección: la BD de prod puede tener objetos que no están en `supabase/migrations/`; al planear migraciones, verificar el estado real con `pg_proc`/`pg_policies`, no asumir que el repo = la BD.
 
 ## 6. Restricciones de seguridad que el clasificador BLOQUEA (no reintentar a la fuerza)
 
