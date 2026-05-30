@@ -84,6 +84,8 @@ export default function Inventario() {
   };
 
   const esVendedor = perfil?.rol === "Vendedor";
+  // Bloque 1 (#4): crear producto es exclusivo de Admin.
+  const esAdmin = perfil?.rol === "Admin";
   const sedeLabel = filtroSede ? SEDE_LABELS[filtroSede] : "Todas las sedes";
 
   return (
@@ -108,7 +110,7 @@ export default function Inventario() {
             Inventario
           </h1>
         </div>
-        {!esVendedor && (
+        {esAdmin && (
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate("/ops/inventario/nuevo")}

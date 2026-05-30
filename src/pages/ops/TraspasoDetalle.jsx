@@ -37,6 +37,7 @@ const PILL_KIND = {
   en_transito: "warn",
   recibido: "succ",
   con_diferencia: "dang",
+  cancelado: "dang",
 };
 
 export default function TraspasoDetalle() {
@@ -133,6 +134,29 @@ export default function TraspasoDetalle() {
       await cargar();
     } catch (e) {
       setError(safeError(e, "Error en operación de traspaso"));
+    } finally {
+      setAccionando(false);
+      accionandoRef.current = false;
+    }
+  };
+
+  // ── Acción: cancelar traspaso (#5 · solo Admin · solo no recibido) ──
+  const cancelarTraspaso = async () => {
+    if (accionandoRef.current) return;
+    const motivo = window.prompt("Motivo de la cancelación (opcional):", "");
+    if (motivo === null) return; // el Admin cerró el prompt
+    accionandoRef.current = true;
+    setError(null);
+    setAccionando(true);
+    try {
+      const { error: rpcErr } = await supabase.rpc("fn_cancelar_traspaso", {
+        p_traspaso_id: id,
+        p_motivo: motivo.trim() || null,
+      });
+      if (rpcErr) throw new Error(rpcErr.message);
+      await cargar();
+    } catch (e) {
+      setError(safeError(e, "Error al cancelar el traspaso"));
     } finally {
       setAccionando(false);
       accionandoRef.current = false;
@@ -362,6 +386,7 @@ export default function TraspasoDetalle() {
             onIrPicking={() => navigate(`/ops/traspasos/${id}/picking`)}
             onVerificar={() => navigate(`/ops/traspasos/${id}/verificar`)}
             onRecibir={() => navigate(`/ops/traspasos/${id}/recibir`)}
+            onCancelar={cancelarTraspaso}
           />
         </div>
       </div>
@@ -635,6 +660,7 @@ function AccionPanel(props) {
     onIrPicking,
     onVerificar,
     onRecibir,
+    onCancelar,
   } = props;
 
   const config = construirConfig({
@@ -770,6 +796,30 @@ function AccionPanel(props) {
             Sin acciones pendientes en este momento.
           </p>
         )}
+
+        {esAdmin &&
+          ["borrador", "picking", "verificado", "en_transito"].includes(
+            estado,
+          ) && (
+            <button
+              onClick={onCancelar}
+              disabled={accionando}
+              className="inline-flex items-center justify-center gap-1.5 rounded-[10px] text-[13.5px] font-medium transition-opacity disabled:opacity-40"
+              style={{
+                height: 48,
+                border: "1px solid var(--dang-border)",
+                backgroundColor: "var(--n-0)",
+                color: "var(--dang-600)",
+              }}
+              onMouseEnter={(e) => {
+                if (!accionando) e.currentTarget.style.opacity = "0.9";
+              }}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            >
+              <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2} />
+              {accionando ? "Cancelando…" : "Cancelar traspaso"}
+            </button>
+          )}
       </div>
     </div>
   );
@@ -914,6 +964,16 @@ function construirConfig(p) {
       desc: "El stock fue recibido en la sede destino sin diferencias.",
       progreso: null,
       tone: "success",
+      actions: [],
+    };
+  }
+  if (estado === "cancelado") {
+    return {
+      icon: <AlertTriangle className="h-4 w-4" strokeWidth={2} />,
+      title: "Traspaso cancelado",
+      desc: "Un Admin canceló este traspaso. Si ya estaba en tránsito, el stock se devolvió a la sede origen.",
+      progreso: null,
+      tone: "danger",
       actions: [],
     };
   }

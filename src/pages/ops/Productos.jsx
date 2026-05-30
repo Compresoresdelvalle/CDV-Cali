@@ -125,7 +125,8 @@ export default function Productos() {
     if (id) navigate(`/ops/inventario/${id}`);
   };
 
-  const esVendedor = perfil?.rol === "Vendedor";
+  // Bloque 1 (#4): crear producto es exclusivo de Admin.
+  const esAdmin = perfil?.rol === "Admin";
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-[18px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
@@ -149,7 +150,7 @@ export default function Productos() {
             Productos
           </h1>
         </div>
-        {!esVendedor && (
+        {esAdmin && (
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate("/ops/inventario/nuevo")}
