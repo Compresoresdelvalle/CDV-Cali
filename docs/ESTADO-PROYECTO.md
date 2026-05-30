@@ -23,9 +23,9 @@
 PWA de gestión de inventarios y operaciones para una empresa colombiana de
 compresores y repuestos neumáticos. Reemplaza un sistema fallido en AppSheet.
 
-- **Stack:** React 18 + Vite + Tailwind + Zustand + Supabase (Postgres + Auth + Realtime)
+- **Stack:** React 19 + Vite + Tailwind + Zustand + Supabase (Postgres + Auth + Realtime)
 - **Escala:** ~2.000-3.000 productos, 4 sedes, 6 usuarios, uso diario móvil/PC
-- **Hosting destino:** Netlify Free
+- **Hosting:** Cloudflare
 - **Repo:** github.com/jdconsultors369-ai/Compresores-del-Valle (rama `main`)
 - **Reglas de código:** ver `CLAUDE.md` (tokens CSS `hsl(var(--*))`, soft-delete,
   RLS en todas las tablas, stock solo vía funciones PG con `FOR UPDATE`, etc.)
