@@ -37,6 +37,7 @@ export default function ProductoForm({
     stock_minimo: initial.stock_minimo ?? 0,
     stock_maximo: initial.stock_maximo ?? "",
     vendible: initial.vendible ?? true,
+    ensamblable: initial.ensamblable ?? false,
     stand: initial.stand ?? "",
     posicion: initial.posicion ?? "",
   });
@@ -67,6 +68,7 @@ export default function ProductoForm({
       stock_minimo: form.stock_minimo === "" ? 0 : Number(form.stock_minimo),
       stock_maximo: form.stock_maximo === "" ? null : Number(form.stock_maximo),
       vendible: !!form.vendible,
+      ensamblable: !!form.ensamblable,
       stand: form.stand === "" ? null : Number(form.stand),
       posicion: form.posicion === "" ? null : Number(form.posicion),
     };
@@ -280,6 +282,22 @@ export default function ProductoForm({
               className="h-4 w-4"
             />
             Vendible (desmárcalo si es un insumo que no se vende)
+          </label>
+        </Field>
+        <Field label="¿Es ensamblable?">
+          <label
+            className="flex items-center gap-2 text-sm"
+            style={{ color: "var(--n-700)" }}
+          >
+            <input
+              type="checkbox"
+              checked={form.ensamblable}
+              onChange={(e) =>
+                setForm({ ...form, ensamblable: e.target.checked })
+              }
+              className="h-4 w-4"
+            />
+            Ensamblable (puede producirse en el módulo de Ensambles)
           </label>
         </Field>
         <Row>

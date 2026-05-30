@@ -7,37 +7,57 @@ import {
   Hash,
   Layers,
   FileText,
-  Check,
   X,
+  Trash2,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 
+/**
+ * Nuevo ensamble (rediseño Parte 2 — receta al vuelo, sin BOM).
+ *
+ * Flujo:
+ *  1. Elegir el producto a ensamblar (ensamblable=true).
+ *  2. Cantidad a producir.
+ *  3. Armar la receta agregando componentes (insumos) y sus cantidades. Los
+ *     componentes se consumen del POOL DE INSUMO de la sede; si falta, se puede
+ *     convertir desde el stock de venta (avisa al Admin).
+ *  4. Completar → el trigger consume insumos, suma el resultado al stock vendible
+ *     del compresor y notifica al Admin para revisar precio/costo.
+ */
 export default function EnsambleNuevo() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
+  const sede = perfil?.sede_id;
 
-  // Selector de producto resultado
+  // Producto resultado
   const [search, setSearch] = useState("");
   const [resultados, setResultados] = useState([]);
   const [buscando, setBuscando] = useState(false);
   const [productoSel, setProductoSel] = useState(null);
-
-  // Cantidad a producir
   const [cantidadProducida, setCantidadProducida] = useState("1");
 
-  // BOM
-  const [bom, setBom] = useState([]);
-  const [loadingBom, setLoadingBom] = useState(false);
+  // Componentes (receta al vuelo)
+  const [componentes, setComponentes] = useState([]);
+  const [compSearch, setCompSearch] = useState("");
+  const [compResultados, setCompResultados] = useState([]);
+  const [compBuscando, setCompBuscando] = useState(false);
+  const [modoGlobal, setModoGlobal] = useState(false);
 
-  // Submit
+  // Conversión venta→insumo de un componente
+  const [convComp, setConvComp] = useState(null);
+  const [convCant, setConvCant] = useState("1");
+  const [convSaving, setConvSaving] = useState(false);
+  const [convError, setConvError] = useState("");
+
   const [observaciones, setObservaciones] = useState("");
   const [creando, setCreando] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [aviso, setAviso] = useState("");
   const creandoRef = useRef(false);
 
-  // Buscar producto resultado por nombre/referencia (limitado a productos con BOM definido)
+  // Buscar producto resultado (ensamblable=true)
   useEffect(() => {
     const q = sanitizeSearch(search);
     if (q.length < 2 || productoSel) {
@@ -48,31 +68,19 @@ export default function EnsambleNuevo() {
     const t = setTimeout(async () => {
       setBuscando(true);
       try {
-        // Una sola query con inner join contra recetas_bom usando la FK
-        // producto_resultado_id. Esto evita N+1 y descargar toda la tabla.
         const { data, error } = await supabase
           .from("productos")
-          .select(
-            `id, referencia, nombre, precio_venta,
-             recetas_bom!recetas_bom_producto_resultado_id_fkey!inner(id)`,
-          )
+          .select("id, referencia, nombre, precio_venta")
           .eq("activo", true)
+          .eq("ensamblable", true)
           .or(`referencia.ilike.%${q}%,nombre.ilike.%${q}%`)
-          .limit(10);
+          .limit(15);
         if (ac.signal.aborted) return;
         if (error) throw error;
-        // Dedupe: el inner join puede traer duplicados si hay N filas BOM
-        const seen = new Set();
-        const unique = (data ?? []).filter((p) => {
-          if (seen.has(p.id)) return false;
-          seen.add(p.id);
-          return true;
-        });
-        setResultados(unique);
+        setResultados(data ?? []);
       } catch (err) {
-        if (!ac.signal.aborted) {
+        if (!ac.signal.aborted)
           setErrorMsg(safeError(err, "Error al buscar productos"));
-        }
       } finally {
         setBuscando(false);
       }
@@ -83,115 +91,167 @@ export default function EnsambleNuevo() {
     };
   }, [search, productoSel]);
 
-  // Al seleccionar producto, cargar BOM + stock actual de cada componente en la sede
+  // Buscar componentes (insumos por defecto / inventario global)
   useEffect(() => {
-    if (!productoSel || !perfil?.sede_id) {
-      setBom([]);
+    const q = sanitizeSearch(compSearch);
+    if (q.length < 2 || !sede) {
+      setCompResultados([]);
       return;
     }
-    const cargarBom = async () => {
-      setLoadingBom(true);
-      setErrorMsg("");
-      const timeout = (p, ms = 15000) =>
-        Promise.race([
-          p,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Timeout: red lenta")), ms),
-          ),
-        ]);
+    const ac = new AbortController();
+    const t = setTimeout(async () => {
+      setCompBuscando(true);
       try {
-        const { data: receta, error: e1 } = await timeout(
-          supabase
-            .from("recetas_bom")
-            .select(
-              `cantidad,
-             componente:componente_id(id, referencia, nombre, costo_promedio)`,
-            )
-            .eq("producto_resultado_id", productoSel.id),
-        );
+        const { data: prods, error: e1 } = await supabase
+          .from("productos")
+          .select("id, referencia, nombre, costo_promedio, vendible")
+          .eq("activo", true)
+          .or(`referencia.ilike.%${q}%,nombre.ilike.%${q}%`)
+          .limit(30);
+        if (ac.signal.aborted) return;
         if (e1) throw e1;
-        if (!receta || receta.length === 0) {
-          setBom([]);
-          setErrorMsg("Este producto no tiene receta BOM definida");
+        if (!prods?.length) {
+          setCompResultados([]);
           return;
         }
-        // Filtra filas BOM cuyo componente fue eliminado (join devuelve null).
-        const recetaValida = receta.filter((r) => r.componente);
-        if (recetaValida.length === 0) {
-          setBom([]);
-          setErrorMsg(
-            "La receta BOM referencia componentes inválidos (productos eliminados)",
-          );
-          return;
-        }
-
-        const compIds = recetaValida.map((r) => r.componente.id);
-        const { data: inv, error: e2 } = await timeout(
-          supabase
-            .from("inventario")
-            .select("producto_id, cantidad")
-            .in("producto_id", compIds)
-            .eq("sede_id", perfil.sede_id),
-        );
+        const ids = prods.map((p) => p.id);
+        const { data: inv, error: e2 } = await supabase
+          .from("inventario")
+          .select("producto_id, cantidad, cantidad_insumo")
+          .in("producto_id", ids)
+          .eq("sede_id", sede);
+        if (ac.signal.aborted) return;
         if (e2) throw e2;
-
-        const stockMap = new Map();
-        (inv ?? []).forEach((r) => stockMap.set(r.producto_id, r.cantidad));
-
-        setBom(
-          recetaValida.map((r) => ({
-            componente_id: r.componente.id,
-            referencia: r.componente.referencia,
-            nombre: r.componente.nombre,
-            costo_unitario: r.componente.costo_promedio ?? 0,
-            cantidad_unitaria: r.cantidad,
-            stock_disponible: stockMap.get(r.componente.id) ?? 0,
-          })),
-        );
-      } catch (err) {
-        setErrorMsg(safeError(err, "Error al cargar BOM"));
+        const byProd = new Map();
+        (inv ?? []).forEach((r) => byProd.set(r.producto_id, r));
+        const enriched = prods.map((p) => ({
+          ...p,
+          insumo: byProd.get(p.id)?.cantidad_insumo ?? 0,
+          venta: byProd.get(p.id)?.cantidad ?? 0,
+        }));
+        // "Solo insumos": designados (vendible=false) o con stock de insumo.
+        const visibles = modoGlobal
+          ? enriched
+          : enriched.filter((p) => p.vendible === false || (p.insumo ?? 0) > 0);
+        setCompResultados(visibles);
+      } catch {
+        /* ignore */
       } finally {
-        setLoadingBom(false);
+        setCompBuscando(false);
       }
+    }, 300);
+    return () => {
+      ac.abort();
+      clearTimeout(t);
     };
-    cargarBom();
-  }, [productoSel, perfil?.sede_id]);
+  }, [compSearch, sede, modoGlobal]);
+
+  const agregarComponente = (p) => {
+    setErrorMsg("");
+    setAviso("");
+    setCompSearch("");
+    setCompResultados([]);
+    if (componentes.some((c) => c.id === p.id)) return;
+    setComponentes((cs) => [
+      ...cs,
+      {
+        id: p.id,
+        referencia: p.referencia,
+        nombre: p.nombre,
+        costo_unitario: p.costo_promedio ?? 0,
+        cantidad: 1,
+        insumo: p.insumo ?? 0,
+        venta: p.venta ?? 0,
+      },
+    ]);
+  };
+
+  const setCompCantidad = (id, val) => {
+    const n = Math.max(1, parseInt(val, 10) || 1);
+    setComponentes((cs) =>
+      cs.map((c) => (c.id === id ? { ...c, cantidad: n } : c)),
+    );
+  };
+  const quitarComponente = (id) =>
+    setComponentes((cs) => cs.filter((c) => c.id !== id));
+
+  const abrirConversion = (c) => {
+    const deficit = Math.max(1, c.cantidad - (c.insumo ?? 0));
+    setConvComp(c);
+    setConvCant(String(deficit));
+    setConvError("");
+  };
+
+  const convertir = async () => {
+    if (!convComp) return;
+    setConvError("");
+    const n = Number(convCant);
+    if (!Number.isInteger(n) || n < 1) {
+      setConvError("La cantidad debe ser un entero mayor a 0");
+      return;
+    }
+    if (n > (convComp.venta ?? 0)) {
+      setConvError(`Máximo de venta disponible: ${convComp.venta ?? 0}`);
+      return;
+    }
+    setConvSaving(true);
+    try {
+      const { data, error } = await supabase.rpc("fn_convertir_a_insumo", {
+        p_producto_id: convComp.id,
+        p_sede_id: sede,
+        p_cantidad: n,
+      });
+      if (error) throw error;
+      setComponentes((cs) =>
+        cs.map((c) =>
+          c.id === convComp.id
+            ? {
+                ...c,
+                insumo: (c.insumo ?? 0) + n,
+                venta: (c.venta ?? 0) - n,
+              }
+            : c,
+        ),
+      );
+      setConvComp(null);
+      setAviso(
+        data?.notificado_admin
+          ? "Convertido a insumo. Se notificó al Admin."
+          : "Convertido a insumo.",
+      );
+    } catch (err) {
+      setConvError(safeError(err, "Error al convertir a insumo"));
+    } finally {
+      setConvSaving(false);
+    }
+  };
 
   const cantProd = Math.min(
     9999,
     Math.max(1, parseInt(cantidadProducida, 10) || 1),
   );
-
-  // Estado de cada componente: requerido vs disponible × cantProd
-  const componentesEnriched = bom.map((c) => {
-    const requerido = c.cantidad_unitaria * cantProd;
-    const ok = c.stock_disponible >= requerido;
-    return { ...c, requerido, ok };
-  });
-  const todoOk =
-    componentesEnriched.length > 0 && componentesEnriched.every((c) => c.ok);
-  const costoEstimado = componentesEnriched.reduce(
-    (s, c) => s + c.costo_unitario * c.requerido,
+  const costoEstimado = componentes.reduce(
+    (s, c) => s + c.costo_unitario * c.cantidad,
     0,
   );
+  const faltantes = componentes.filter((c) => c.cantidad > (c.insumo ?? 0));
+  const puedeCompletar =
+    !!productoSel && componentes.length > 0 && faltantes.length === 0;
 
   const completar = async () => {
-    if (!productoSel || !todoOk || creando) return;
-    // Guard síncrono: sin esto, un doble-tap crea DOS ensambles y descuenta
-    // stock dos veces (el `creando` de state no frena el segundo tap veloz).
+    if (!puedeCompletar || creando) return;
     if (creandoRef.current) return;
     creandoRef.current = true;
     setCreando(true);
     setErrorMsg("");
     try {
-      // 1) Crear cabecera de ensamble en estado pendiente
       const { data: ens, error: e1 } = await supabase
         .from("ensambles")
         .insert({
           producto_resultado_id: productoSel.id,
           cantidad_producida: cantProd,
           realizado_por: perfil?.id,
-          sede_id: perfil?.sede_id,
+          sede_id: sede,
           observaciones: observaciones.trim() || null,
           completado: false,
         })
@@ -199,36 +259,20 @@ export default function EnsambleNuevo() {
         .single();
       if (e1) throw e1;
 
-      // 2) Insertar detalle (componentes que se consumirán)
-      const detalles = componentesEnriched.map((c) => ({
+      const detalles = componentes.map((c) => ({
         ensamble_id: ens.id,
-        producto_id: c.componente_id,
-        cantidad: c.requerido,
+        producto_id: c.id,
+        cantidad: c.cantidad,
         costo_unitario: c.costo_unitario,
       }));
       const { error: e2 } = await supabase
         .from("detalle_ensamble")
         .insert(detalles);
       if (e2) {
-        // Cleanup: si falla detalle, borrar la cabecera para no dejar huérfanos
-        const { error: cleanupErr } = await supabase
-          .from("ensambles")
-          .delete()
-          .eq("id", ens.id);
-        if (cleanupErr) {
-          // Si el cleanup también falla, queda una fila huérfana en `ensambles`
-          // con completado=false. No produce pérdida de stock (los triggers solo
-          // disparan en completado=true) pero sí ensucia el historial.
-          console.error(
-            "[EnsambleNuevo] CRITICAL: cleanup falló, ensamble huérfano id=" +
-              ens.id,
-            cleanupErr,
-          );
-        }
+        await supabase.from("ensambles").delete().eq("id", ens.id);
         throw e2;
       }
 
-      // 3) Marcar completado=true → trigger BD descuenta componentes y suma producto
       const { error: e3 } = await supabase
         .from("ensambles")
         .update({ completado: true })
@@ -260,7 +304,7 @@ export default function EnsambleNuevo() {
           Registrar ensamble
         </h1>
         <p className="ph-sub mt-1.5">
-          Selecciona producto, verifica componentes y completa.
+          Elige el producto, arma la receta con insumos y completa.
         </p>
       </div>
 
@@ -277,8 +321,20 @@ export default function EnsambleNuevo() {
           {errorMsg}
         </div>
       )}
+      {aviso && (
+        <div
+          className="rounded-[10px] border px-4 py-3 text-sm"
+          style={{
+            backgroundColor: "var(--succ-50)",
+            borderColor: "var(--succ-500)",
+            color: "var(--succ-700)",
+          }}
+        >
+          {aviso}
+        </div>
+      )}
 
-      {/* Paso 1: Selector de producto */}
+      {/* Paso 1: producto a ensamblar */}
       <div className="iblock">
         <div className="ib-head">
           <div className="ib-ico">
@@ -304,7 +360,7 @@ export default function EnsambleNuevo() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por nombre o referencia (mín 2 letras)…"
+                placeholder="Buscar compresor / ensamblable (mín 2 letras)…"
                 className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
                 style={{ color: "var(--n-950)" }}
               />
@@ -367,7 +423,7 @@ export default function EnsambleNuevo() {
               !buscando &&
               resultados.length === 0 && (
                 <p className="text-xs italic" style={{ color: "var(--n-500)" }}>
-                  Sin productos con BOM que coincidan
+                  Sin ensamblables que coincidan
                 </p>
               )}
           </div>
@@ -394,10 +450,7 @@ export default function EnsambleNuevo() {
               </p>
             </div>
             <button
-              onClick={() => {
-                setProductoSel(null);
-                setBom([]);
-              }}
+              onClick={() => setProductoSel(null)}
               className="rounded-lg border px-3 text-xs font-medium"
               style={{
                 height: 48,
@@ -412,7 +465,7 @@ export default function EnsambleNuevo() {
         )}
       </div>
 
-      {/* Paso 2: Cantidad */}
+      {/* Paso 2: cantidad */}
       {productoSel && (
         <div className="iblock">
           <div className="ib-head">
@@ -438,91 +491,240 @@ export default function EnsambleNuevo() {
         </div>
       )}
 
-      {/* Paso 3: BOM verde/rojo */}
+      {/* Paso 3: receta al vuelo */}
       {productoSel && (
         <div className="iblock">
           <div className="ib-head">
             <div className="ib-ico">
               <Layers className="h-3.5 w-3.5" strokeWidth={1.7} />
             </div>
-            <div className="ib-title">3 · Componentes requeridos (BOM)</div>
-            {componentesEnriched.length > 0 && (
-              <div className="ib-aux">{componentesEnriched.length} comp.</div>
+            <div className="ib-title">3 · Insumos de la receta</div>
+            {componentes.length > 0 && (
+              <div className="ib-aux">{componentes.length} comp.</div>
             )}
           </div>
-          {loadingBom ? (
-            <p className="text-xs" style={{ color: "var(--n-500)" }}>
-              Cargando BOM…
-            </p>
-          ) : componentesEnriched.length === 0 ? (
-            <p className="text-xs italic" style={{ color: "var(--n-500)" }}>
-              Sin componentes
-            </p>
-          ) : (
-            <ul className="space-y-2" role="list">
-              {componentesEnriched.map((c) => (
-                <li
-                  key={c.componente_id}
-                  className="rounded-lg border px-3.5 py-3"
-                  style={{
-                    backgroundColor: c.ok ? "var(--succ-50)" : "var(--dang-50)",
-                    borderColor: c.ok
-                      ? "var(--succ-border, var(--succ-500))"
-                      : "var(--dang-border)",
-                  }}
+
+          {/* Buscador de componentes */}
+          <div className="space-y-2">
+            <div
+              className="flex h-12 items-center gap-2.5 rounded-lg border px-3.5"
+              style={{
+                borderColor: "var(--n-200)",
+                backgroundColor: "var(--n-0)",
+              }}
+            >
+              <Search
+                className="h-4 w-4 shrink-0"
+                strokeWidth={1.5}
+                style={{ color: "var(--n-500)" }}
+              />
+              <input
+                type="text"
+                value={compSearch}
+                onChange={(e) => setCompSearch(e.target.value)}
+                placeholder="Agregar insumo por nombre o referencia (mín 2)…"
+                className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
+                style={{ color: "var(--n-950)" }}
+              />
+              {compSearch && (
+                <button
+                  onClick={() => setCompSearch("")}
+                  aria-label="Limpiar"
+                  className="grid h-6 w-6 place-items-center rounded"
+                  style={{ color: "var(--n-500)" }}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className="truncate text-sm font-medium"
-                        style={{ color: "var(--n-950)" }}
+                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </button>
+              )}
+            </div>
+
+            {/* Toggle solo insumos / global */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setModoGlobal(false)}
+                className="rounded-md px-2.5 py-1 font-medium"
+                style={{
+                  backgroundColor: !modoGlobal
+                    ? "var(--p-700)"
+                    : "var(--n-100)",
+                  color: !modoGlobal ? "#fff" : "var(--n-500)",
+                }}
+              >
+                Solo insumos
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoGlobal(true)}
+                className="rounded-md px-2.5 py-1 font-medium"
+                style={{
+                  backgroundColor: modoGlobal ? "var(--p-700)" : "var(--n-100)",
+                  color: modoGlobal ? "#fff" : "var(--n-500)",
+                }}
+              >
+                Inventario global
+              </button>
+              <span style={{ color: "var(--n-500)" }}>
+                {modoGlobal
+                  ? "Todo el inventario (al agregar, convierte a insumo)"
+                  : "Solo insumos (agrega aunque tenga 0 y conviértelo)"}
+              </span>
+            </div>
+
+            {compBuscando && (
+              <p className="text-xs" style={{ color: "var(--n-500)" }}>
+                Buscando…
+              </p>
+            )}
+            {compResultados.length > 0 && (
+              <ul
+                className="max-h-56 divide-y overflow-y-auto rounded-lg border"
+                style={{ borderColor: "var(--n-150)" }}
+              >
+                {compResultados.map((p) => {
+                  const yaEsta = componentes.some((c) => c.id === p.id);
+                  return (
+                    <li key={p.id}>
+                      <button
+                        onClick={() => !yaEsta && agregarComponente(p)}
+                        disabled={yaEsta}
+                        className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition-colors disabled:opacity-40"
+                        style={{ backgroundColor: "var(--n-0)" }}
                       >
-                        {c.nombre}
-                      </p>
-                      <p
-                        className="font-mono text-xs"
-                        style={{ color: "var(--n-500)" }}
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="truncate text-sm font-medium"
+                            style={{ color: "var(--n-950)" }}
+                          >
+                            {p.nombre}
+                          </p>
+                          <p
+                            className="font-mono text-xs"
+                            style={{ color: "var(--n-500)" }}
+                          >
+                            {p.referencia} ·{" "}
+                            <span
+                              style={{
+                                color:
+                                  (p.insumo ?? 0) > 0
+                                    ? "var(--succ-700)"
+                                    : "var(--n-500)",
+                              }}
+                            >
+                              Insumo: {p.insumo ?? 0}
+                            </span>
+                            {(p.insumo ?? 0) < 1 && (
+                              <span style={{ color: "var(--warn-700)" }}>
+                                {" "}
+                                · venta: {p.venta ?? 0}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <span
+                          className="shrink-0 text-xs font-medium"
+                          style={{
+                            color: yaEsta ? "var(--n-300)" : "var(--p-700)",
+                          }}
+                        >
+                          {yaEsta ? "Agregado" : "+ Agregar"}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {/* Lista de componentes agregados */}
+          {componentes.length > 0 && (
+            <ul className="mt-3 space-y-2" role="list">
+              {componentes.map((c) => {
+                const ok = c.cantidad <= (c.insumo ?? 0);
+                return (
+                  <li
+                    key={c.id}
+                    className="rounded-lg border px-3.5 py-3"
+                    style={{
+                      backgroundColor: ok ? "var(--succ-50)" : "var(--dang-50)",
+                      borderColor: ok
+                        ? "var(--succ-500)"
+                        : "var(--dang-border)",
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className="truncate text-sm font-medium"
+                          style={{ color: "var(--n-950)" }}
+                        >
+                          {c.nombre}
+                        </p>
+                        <p
+                          className="font-mono text-xs"
+                          style={{ color: "var(--n-500)" }}
+                        >
+                          {c.referencia} · {formatCOP(c.costo_unitario)} c/u ·
+                          insumo disp.: {c.insumo ?? 0}
+                        </p>
+                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={c.cantidad}
+                        onChange={(e) => setCompCantidad(c.id, e.target.value)}
+                        className="w-20 rounded-lg border px-2 py-1.5 text-center font-mono text-sm tabular-nums outline-none"
+                        style={{
+                          backgroundColor: "var(--n-0)",
+                          borderColor: "var(--n-200)",
+                          color: "var(--n-950)",
+                        }}
+                      />
+                      <button
+                        onClick={() => quitarComponente(c.id)}
+                        aria-label="Quitar"
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-md"
+                        style={{ color: "var(--dang-700)" }}
                       >
-                        {c.referencia} · {formatCOP(c.costo_unitario)} c/u
-                      </p>
+                        <Trash2 className="h-4 w-4" strokeWidth={1.7} />
+                      </button>
                     </div>
-                    <div className="text-right">
-                      <p
-                        className="font-mono text-sm font-bold tabular-nums"
-                        style={{
-                          color: c.ok ? "var(--succ-700)" : "var(--dang-700)",
-                        }}
-                      >
-                        {c.stock_disponible} / {c.requerido}
-                      </p>
-                      <p
-                        className="inline-flex items-center gap-1 text-xs"
-                        style={{
-                          color: c.ok ? "var(--succ-700)" : "var(--dang-700)",
-                        }}
-                      >
-                        {c.ok ? (
-                          <>
-                            <Check className="h-3 w-3" strokeWidth={2.2} />
-                            Suficiente
-                          </>
-                        ) : (
-                          <>
-                            <X className="h-3 w-3" strokeWidth={2.2} />
-                            Faltan
-                          </>
+                    {!ok && (
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span
+                          className="text-xs"
+                          style={{ color: "var(--dang-700)" }}
+                        >
+                          Faltan {c.cantidad - (c.insumo ?? 0)} de insumo
+                          {(c.venta ?? 0) > 0
+                            ? ` (venta disp.: ${c.venta})`
+                            : " (sin stock de venta — pide traspaso/compra)"}
+                        </span>
+                        {(c.venta ?? 0) > 0 && (
+                          <button
+                            onClick={() => abrirConversion(c)}
+                            className="rounded-md px-2.5 py-1 text-xs font-medium"
+                            style={{
+                              backgroundColor: "var(--p-700)",
+                              color: "#fff",
+                            }}
+                          >
+                            Convertir a insumo
+                          </button>
                         )}
-                      </p>
-                    </div>
-                  </div>
-                </li>
-              ))}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
       )}
 
-      {/* Observaciones */}
+      {/* Paso 4: observaciones */}
       {productoSel && (
         <div className="iblock">
           <div className="ib-head">
@@ -546,7 +748,7 @@ export default function EnsambleNuevo() {
       )}
 
       {/* Resumen */}
-      {productoSel && componentesEnriched.length > 0 && (
+      {productoSel && componentes.length > 0 && (
         <div
           className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border p-4"
           style={{ backgroundColor: "var(--n-0)", borderColor: "var(--p-200)" }}
@@ -556,7 +758,7 @@ export default function EnsambleNuevo() {
               className="font-mono text-[10px] uppercase tracking-[0.08em]"
               style={{ color: "var(--n-300)" }}
             >
-              Costo estimado
+              Costo de materiales
             </p>
             <p
               className="font-mono text-[22px] font-medium tabular-nums"
@@ -568,12 +770,12 @@ export default function EnsambleNuevo() {
           <p
             className="text-[12.5px] font-medium"
             style={{
-              color: todoOk ? "var(--succ-700)" : "var(--dang-700)",
+              color: puedeCompletar ? "var(--succ-700)" : "var(--dang-700)",
             }}
           >
-            {todoOk
-              ? "Todos los componentes disponibles"
-              : "Faltan componentes — no se puede completar"}
+            {puedeCompletar
+              ? "Insumos suficientes — listo para completar"
+              : "Faltan insumos — convierte o ajusta cantidades"}
           </p>
         </div>
       )}
@@ -597,20 +799,103 @@ export default function EnsambleNuevo() {
         <button
           type="button"
           onClick={completar}
-          disabled={!productoSel || !todoOk || creando || loadingBom}
+          disabled={!puedeCompletar || creando}
           className="flex-1 rounded-lg text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           style={{ height: 48, backgroundColor: "var(--p-600)" }}
-          onMouseEnter={(e) => {
-            if (productoSel && todoOk && !creando && !loadingBom)
-              e.currentTarget.style.backgroundColor = "var(--p-700)";
-          }}
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.backgroundColor = "var(--p-600)")
-          }
         >
           {creando ? "Procesando…" : "Completar ensamble"}
         </button>
       </div>
+
+      {/* Modal: convertir venta→insumo de un componente */}
+      {convComp && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => !convSaving && setConvComp(null)}
+        >
+          <div
+            className="w-full max-w-md space-y-3 rounded-xl border p-5"
+            style={{
+              backgroundColor: "var(--n-0)",
+              borderColor: "var(--n-200)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              className="text-lg font-semibold"
+              style={{ color: "var(--n-950)" }}
+            >
+              Convertir a insumo
+            </h3>
+            <p className="text-xs" style={{ color: "var(--n-500)" }}>
+              <strong>{convComp.nombre}</strong> · insumo:{" "}
+              {convComp.insumo ?? 0} · venta disponible: {convComp.venta ?? 0}
+            </p>
+            <p
+              className="rounded-md px-3 py-2 text-xs"
+              style={{
+                backgroundColor: "var(--warn-50)",
+                color: "var(--warn-700)",
+              }}
+            >
+              ¿Seguro que deseas convertir? Al confirmar, se notificará al
+              Admin.
+            </p>
+            {convError && (
+              <div
+                role="alert"
+                className="rounded-lg border px-3 py-2 text-xs"
+                style={{
+                  backgroundColor: "var(--dang-50)",
+                  borderColor: "var(--dang-200)",
+                  color: "var(--dang-700)",
+                }}
+              >
+                {convError}
+              </div>
+            )}
+            <div>
+              <label className="text-xs" style={{ color: "var(--n-500)" }}>
+                Cantidad a convertir (máx. {convComp.venta ?? 0})
+              </label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={convCant}
+                onChange={(e) => setConvCant(e.target.value)}
+                disabled={convSaving}
+                autoFocus
+                className="mt-1 min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
+                style={{
+                  backgroundColor: "var(--n-0)",
+                  borderColor: "var(--n-200)",
+                  color: "var(--n-900)",
+                }}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setConvComp(null)}
+                disabled={convSaving}
+                className="min-h-[44px] rounded-lg border px-4 py-2 text-sm disabled:opacity-50"
+                style={{ borderColor: "var(--n-200)", color: "var(--n-500)" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={convertir}
+                disabled={convSaving}
+                className="min-h-[44px] rounded-lg px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
+                style={{ backgroundColor: "var(--p-700)" }}
+              >
+                {convSaving ? "Convirtiendo…" : "Sí, convertir"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
