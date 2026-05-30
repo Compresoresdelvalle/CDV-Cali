@@ -54,8 +54,8 @@ export default function OrdenNueva() {
           .eq("activo", true)
           .in("rol", ["Tecnico", "Admin"])
           .order("nombre");
-        if (perfil?.rol !== "Admin" && perfil?.sede_id)
-          q = q.eq("sede_id", perfil.sede_id);
+        // Sin filtro por sede: hay un solo técnico para toda la empresa y se le
+        // puede asignar OT de cualquier sede.
         const { data, error } = await q;
         if (error) throw error;
         setTecnicos(data ?? []);
