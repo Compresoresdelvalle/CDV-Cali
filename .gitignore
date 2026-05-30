@@ -19,8 +19,10 @@ yarn-debug.log*
 .idea/
 .DS_Store
 
-# Claude local settings (tokens, personal config)
+# Claude local settings (tokens, personal config) y artefactos de runtime
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/worktrees/
 .mcp.json
 
 # Playwright artifacts (screenshots, traces, last-run state)
