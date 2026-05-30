@@ -105,6 +105,12 @@ export default function OrdenDetalle() {
 
   // Repuesto picker state
   const [search, setSearch] = useState("");
+  const [modoGlobal, setModoGlobal] = useState(false); // false = solo insumos
+  const [aviso, setAviso] = useState(""); // aviso verde (p.ej. "se notificó al Admin")
+  const [convProd, setConvProd] = useState(null); // producto a convertir+agregar
+  const [convCant, setConvCant] = useState("1");
+  const [convSaving, setConvSaving] = useState(false);
+  const [convError, setConvError] = useState("");
   const [resultados, setResultados] = useState([]);
   const [buscando, setBuscando] = useState(false);
   const [agregando, setAgregando] = useState(false);
@@ -182,12 +188,18 @@ export default function OrdenDetalle() {
       try {
         // Búsqueda en dos pasos: primero match por nombre/referencia,
         // luego inventario para esos productos en la sede de la orden.
-        const { data: prods, error: e1 } = await supabase
+        // Modo "solo insumos" (default): productos vendible=false. Modo "global":
+        // todos los activos (para insumos aún no creados → convertir desde inventario).
+        let prodQuery = supabase
           .from("productos")
-          .select("id, referencia, nombre, precio_venta, costo_promedio")
+          .select(
+            "id, referencia, nombre, precio_venta, costo_promedio, vendible",
+          )
           .eq("activo", true)
           .or(`referencia.ilike.%${q}%,nombre.ilike.%${q}%`)
-          .limit(15);
+          .limit(20);
+        if (!modoGlobal) prodQuery = prodQuery.eq("vendible", false);
+        const { data: prods, error: e1 } = await prodQuery;
         if (ac.signal.aborted) return;
         if (e1) throw e1;
 
@@ -199,27 +211,23 @@ export default function OrdenDetalle() {
         const ids = prods.map((p) => p.id);
         const { data: inv, error: e2 } = await supabase
           .from("inventario")
-          .select("producto_id, cantidad_insumo")
+          .select("producto_id, cantidad, cantidad_insumo")
           .in("producto_id", ids)
           .eq("sede_id", sedeOrden);
         if (ac.signal.aborted) return;
         if (e2) throw e2;
 
-        const stockByProd = new Map();
-        (inv ?? []).forEach((r) =>
-          stockByProd.set(r.producto_id, r.cantidad_insumo),
-        );
+        const byProd = new Map();
+        (inv ?? []).forEach((r) => byProd.set(r.producto_id, r));
 
-        // Bloque 2: las OT consumen del POOL DE INSUMO (cantidad_insumo). Solo se
-        // ofrecen productos con stock de insumo (>0) en la sede de la orden.
-        const enriched = prods
-          .map((p) => ({
-            ...p,
-            inventario: [
-              { cantidad: stockByProd.get(p.id) ?? 0, sede_id: sedeOrden },
-            ],
-          }))
-          .filter((p) => p.inventario[0].cantidad > 0);
+        // Se muestran TODOS (incl. insumo 0) para poder convertir y no parar la
+        // operación. `insumo` = stock de insumo en la sede de la OT; `venta` = el
+        // stock de venta disponible para convertir.
+        const enriched = prods.map((p) => ({
+          ...p,
+          insumo: byProd.get(p.id)?.cantidad_insumo ?? 0,
+          venta: byProd.get(p.id)?.cantidad ?? 0,
+        }));
         setResultados(enriched);
       } catch (err) {
         if (!ac.signal.aborted) {
@@ -234,7 +242,7 @@ export default function OrdenDetalle() {
       ac.abort();
       clearTimeout(t);
     };
-  }, [search, sedeOrden]);
+  }, [search, sedeOrden, modoGlobal]);
 
   const agregarRepuesto = async (producto) => {
     // Guard síncrono: un doble-tap insertaría el repuesto dos veces
@@ -244,10 +252,10 @@ export default function OrdenDetalle() {
     setAgregando(true);
     setErrorMsg("");
     try {
-      const stockSede = producto.inventario?.[0]?.cantidad ?? 0;
-      if (stockSede < 1) {
+      const stockInsumo = producto.insumo ?? 0;
+      if (stockInsumo < 1) {
         setErrorMsg(
-          `Sin stock de insumo en esta sede para "${producto.nombre}" (disponible: ${stockSede}). Pide al Admin que convierta stock de venta a insumo.`,
+          `Sin stock de insumo de "${producto.nombre}" en esta sede.`,
         );
         return;
       }
@@ -274,6 +282,61 @@ export default function OrdenDetalle() {
     } finally {
       setAgregando(false);
       agregandoRef.current = false;
+    }
+  };
+
+  // Al elegir un repuesto: si tiene insumo, se agrega; si no, se ofrece convertir
+  // desde el stock de venta (sin parar la operación).
+  const onSelectRepuesto = (p) => {
+    setErrorMsg("");
+    setAviso("");
+    if ((p.insumo ?? 0) >= 1) {
+      agregarRepuesto(p);
+    } else if ((p.venta ?? 0) >= 1) {
+      setConvCant("1");
+      setConvError("");
+      setConvProd(p);
+    } else {
+      setErrorMsg(
+        `"${p.nombre}" no tiene insumo ni stock de venta en esta sede. Pide un traspaso o una compra.`,
+      );
+    }
+  };
+
+  // Convierte N de venta→insumo (en la sede de la OT) y luego agrega el repuesto.
+  // Avisa al Admin (la RPC inserta la notificación si no eres Admin).
+  const convertirYAgregar = async () => {
+    if (!convProd) return;
+    setConvError("");
+    const n = Number(convCant);
+    if (!Number.isInteger(n) || n < 1) {
+      setConvError("La cantidad debe ser un entero mayor a 0");
+      return;
+    }
+    if (n > (convProd.venta ?? 0)) {
+      setConvError(`Máximo de venta disponible: ${convProd.venta ?? 0}`);
+      return;
+    }
+    setConvSaving(true);
+    try {
+      const { data, error } = await supabase.rpc("fn_convertir_a_insumo", {
+        p_producto_id: convProd.id,
+        p_sede_id: sedeOrden,
+        p_cantidad: n,
+      });
+      if (error) throw error;
+      const prod = { ...convProd, insumo: (convProd.insumo ?? 0) + n };
+      setConvProd(null);
+      await agregarRepuesto(prod);
+      setAviso(
+        data?.notificado_admin
+          ? "Convertido a insumo. Se notificó al Admin."
+          : "Convertido a insumo.",
+      );
+    } catch (err) {
+      setConvError(safeError(err, "Error al convertir a insumo"));
+    } finally {
+      setConvSaving(false);
     }
   };
 
@@ -763,6 +826,53 @@ export default function OrdenDetalle() {
                     </button>
                   )}
                 </div>
+
+                {/* Toggle: solo insumos vs inventario global */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setModoGlobal(false)}
+                    className="rounded-md px-2.5 py-1 font-medium"
+                    style={{
+                      backgroundColor: !modoGlobal
+                        ? "var(--p-700)"
+                        : "var(--n-100)",
+                      color: !modoGlobal ? "#fff" : "var(--n-500)",
+                    }}
+                  >
+                    Solo insumos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModoGlobal(true)}
+                    className="rounded-md px-2.5 py-1 font-medium"
+                    style={{
+                      backgroundColor: modoGlobal
+                        ? "var(--p-700)"
+                        : "var(--n-100)",
+                      color: modoGlobal ? "#fff" : "var(--n-500)",
+                    }}
+                  >
+                    Inventario global
+                  </button>
+                  <span style={{ color: "var(--n-500)" }}>
+                    {modoGlobal
+                      ? "Todo el inventario (al elegir, convierte a insumo)"
+                      : "Solo insumos (elige aunque tenga 0 y conviértelo)"}
+                  </span>
+                </div>
+
+                {aviso && (
+                  <p
+                    className="rounded-md px-3 py-2 text-xs"
+                    style={{
+                      backgroundColor: "var(--succ-50)",
+                      color: "var(--succ-700)",
+                    }}
+                  >
+                    {aviso}
+                  </p>
+                )}
                 {buscando && (
                   <p className="text-xs" style={{ color: "var(--n-500)" }}>
                     Buscando…
@@ -774,17 +884,18 @@ export default function OrdenDetalle() {
                     style={{ borderColor: "var(--n-150)" }}
                   >
                     {resultados.map((p) => {
-                      const stock = p.inventario?.[0]?.cantidad ?? 0;
-                      const sinStock = stock < 1;
+                      const insumo = p.insumo ?? 0;
+                      const venta = p.venta ?? 0;
+                      const sinNada = insumo < 1 && venta < 1;
                       return (
                         <li key={p.id}>
                           <button
-                            onClick={() => !sinStock && agregarRepuesto(p)}
-                            disabled={agregando || sinStock}
+                            onClick={() => !sinNada && onSelectRepuesto(p)}
+                            disabled={agregando || sinNada}
                             className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                             style={{ backgroundColor: "var(--n-0)" }}
                             onMouseEnter={(e) => {
-                              if (!sinStock)
+                              if (!sinNada)
                                 e.currentTarget.style.backgroundColor =
                                   "var(--n-50)";
                             }}
@@ -807,13 +918,26 @@ export default function OrdenDetalle() {
                                 {p.referencia} ·{" "}
                                 <span
                                   style={{
-                                    color: sinStock
-                                      ? "var(--dang-700)"
-                                      : "var(--succ-700)",
+                                    color:
+                                      insumo > 0
+                                        ? "var(--succ-700)"
+                                        : "var(--n-500)",
                                   }}
                                 >
-                                  Stock: {stock}
+                                  Insumo: {insumo}
                                 </span>
+                                {insumo < 1 &&
+                                  (venta >= 1 ? (
+                                    <span style={{ color: "var(--warn-700)" }}>
+                                      {" "}
+                                      · convertir (venta: {venta})
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: "var(--dang-700)" }}>
+                                      {" "}
+                                      · sin stock
+                                    </span>
+                                  ))}
                               </p>
                             </div>
                             <p
@@ -1052,6 +1176,97 @@ export default function OrdenDetalle() {
           )}
         </aside>
       </div>
+
+      {/* Modal: convertir venta→insumo desde la OT (cualquier rol; avisa al Admin) */}
+      {convProd && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => !convSaving && setConvProd(null)}
+        >
+          <div
+            className="w-full max-w-md space-y-3 rounded-xl border p-5"
+            style={{
+              backgroundColor: "var(--n-0)",
+              borderColor: "var(--n-200)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              className="text-lg font-semibold"
+              style={{ color: "var(--n-950)" }}
+            >
+              Convertir a insumo
+            </h3>
+            <p className="text-xs" style={{ color: "var(--n-500)" }}>
+              <strong>{convProd.nombre}</strong> no tiene stock de insumo en
+              esta sede. Convierte desde el stock de venta (disponible:{" "}
+              {convProd.venta ?? 0}) para poder usarlo en la orden.
+            </p>
+            <p
+              className="rounded-md px-3 py-2 text-xs"
+              style={{
+                backgroundColor: "var(--warn-50)",
+                color: "var(--warn-700)",
+              }}
+            >
+              ¿Seguro que deseas convertir? Al confirmar, se notificará al
+              Admin.
+            </p>
+            {convError && (
+              <div
+                role="alert"
+                className="rounded-lg border px-3 py-2 text-xs"
+                style={{
+                  backgroundColor: "var(--dang-50)",
+                  borderColor: "var(--dang-200)",
+                  color: "var(--dang-700)",
+                }}
+              >
+                {convError}
+              </div>
+            )}
+            <div>
+              <label className="text-xs" style={{ color: "var(--n-500)" }}>
+                Cantidad a convertir (máx. {convProd.venta ?? 0})
+              </label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={convCant}
+                onChange={(e) => setConvCant(e.target.value)}
+                disabled={convSaving}
+                autoFocus
+                className="mt-1 min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
+                style={{
+                  backgroundColor: "var(--n-0)",
+                  borderColor: "var(--n-200)",
+                  color: "var(--n-900)",
+                }}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setConvProd(null)}
+                disabled={convSaving}
+                className="min-h-[44px] rounded-lg border px-4 py-2 text-sm disabled:opacity-50"
+                style={{ borderColor: "var(--n-200)", color: "var(--n-500)" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={convertirYAgregar}
+                disabled={convSaving}
+                className="min-h-[44px] rounded-lg px-5 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--p-700)", color: "#fff" }}
+              >
+                {convSaving ? "Convirtiendo…" : "Sí, convertir y agregar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog />
     </div>
