@@ -186,20 +186,16 @@ export default function OrdenDetalle() {
     const t = setTimeout(async () => {
       setBuscando(true);
       try {
-        // Búsqueda en dos pasos: primero match por nombre/referencia,
-        // luego inventario para esos productos en la sede de la orden.
-        // Modo "solo insumos" (default): productos vendible=false. Modo "global":
-        // todos los activos (para insumos aún no creados → convertir desde inventario).
-        let prodQuery = supabase
+        // Búsqueda por nombre/referencia; luego inventario en la sede de la orden.
+        // Traemos todos los activos que coincidan y filtramos por modo más abajo.
+        const { data: prods, error: e1 } = await supabase
           .from("productos")
           .select(
             "id, referencia, nombre, precio_venta, costo_promedio, vendible",
           )
           .eq("activo", true)
           .or(`referencia.ilike.%${q}%,nombre.ilike.%${q}%`)
-          .limit(20);
-        if (!modoGlobal) prodQuery = prodQuery.eq("vendible", false);
-        const { data: prods, error: e1 } = await prodQuery;
+          .limit(30);
         if (ac.signal.aborted) return;
         if (e1) throw e1;
 
@@ -228,7 +224,13 @@ export default function OrdenDetalle() {
           insumo: byProd.get(p.id)?.cantidad_insumo ?? 0,
           venta: byProd.get(p.id)?.cantidad ?? 0,
         }));
-        setResultados(enriched);
+        // "Solo insumos": designados insumo (vendible=false) O cualquiera que ya
+        // tenga stock de insumo en esta sede (p.ej. un vendible convertido).
+        // "Inventario global": todo el catálogo activo.
+        const visibles = modoGlobal
+          ? enriched
+          : enriched.filter((p) => p.vendible === false || (p.insumo ?? 0) > 0);
+        setResultados(visibles);
       } catch (err) {
         if (!ac.signal.aborted) {
           console.error("[OrdenDetalle] search:", err);
