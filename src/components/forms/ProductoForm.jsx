@@ -36,6 +36,9 @@ export default function ProductoForm({
     costo_promedio: initial.costo_promedio ?? "",
     stock_minimo: initial.stock_minimo ?? 0,
     stock_maximo: initial.stock_maximo ?? "",
+    vendible: initial.vendible ?? true,
+    stand: initial.stand ?? "",
+    posicion: initial.posicion ?? "",
   });
   const [validationError, setValidationError] = useState("");
 
@@ -63,6 +66,9 @@ export default function ProductoForm({
         form.costo_promedio === "" ? 0 : Number(form.costo_promedio),
       stock_minimo: form.stock_minimo === "" ? 0 : Number(form.stock_minimo),
       stock_maximo: form.stock_maximo === "" ? null : Number(form.stock_maximo),
+      vendible: !!form.vendible,
+      stand: form.stand === "" ? null : Number(form.stand),
+      posicion: form.posicion === "" ? null : Number(form.posicion),
     };
     await onSubmit?.(payload);
   };
@@ -256,6 +262,48 @@ export default function ProductoForm({
               value={form.stock_maximo}
               onChange={set("stock_maximo")}
               className="finput"
+            />
+          </Field>
+        </Row>
+      </SectionCard>
+
+      <SectionCard title="Clasificación y ubicación">
+        <Field label="¿Se puede vender?">
+          <label
+            className="flex items-center gap-2 text-sm"
+            style={{ color: "var(--n-700)" }}
+          >
+            <input
+              type="checkbox"
+              checked={form.vendible}
+              onChange={(e) => setForm({ ...form, vendible: e.target.checked })}
+              className="h-4 w-4"
+            />
+            Vendible (desmárcalo si es un insumo que no se vende)
+          </label>
+        </Field>
+        <Row>
+          <Field label="Stand (1–8)">
+            <input
+              type="number"
+              min="1"
+              max="8"
+              step="1"
+              value={form.stand}
+              onChange={set("stand")}
+              className="finput"
+              placeholder="—"
+            />
+          </Field>
+          <Field label="Posición">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={form.posicion}
+              onChange={set("posicion")}
+              className="finput"
+              placeholder="—"
             />
           </Field>
         </Row>
