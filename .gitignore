@@ -25,5 +25,6 @@ yarn-debug.log*
 
 # Playwright artifacts (screenshots, traces, last-run state)
 test-results/
+tests/results/
 playwright-report/
 

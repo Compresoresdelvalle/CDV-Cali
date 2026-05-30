@@ -1,0 +1,27 @@
+# ============================================================================
+# Normalización de fin de línea — evita el "churn" CRLF/LF entre máquinas.
+# Política: el repositorio guarda y entrega LF en todos los archivos de texto.
+# Esto ANULA core.autocrlf a nivel de repo, así que da igual la config local
+# de cada desarrollador (el árbol de trabajo y el repo quedan siempre en LF).
+# ============================================================================
+
+# Autodetecta texto vs binario; fuerza LF en el árbol de trabajo y en el repo.
+* text=auto eol=lf
+
+# Scripts de shell: SIEMPRE LF (CRLF los rompe al ejecutarse).
+*.sh text eol=lf
+
+# Archivos binarios — nunca normalizar su contenido.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.pdf   binary
+*.zip   binary
+*.mp4   binary
