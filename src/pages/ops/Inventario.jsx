@@ -24,10 +24,10 @@ const TIPOS = [
 ];
 
 const SEDE_LABELS = {
-  [SEDES.BOD_PRINCIPAL]: "Bodega Principal",
-  [SEDES.ALM_01]: "Almacén 01",
-  [SEDES.ALM_02]: "Almacén 02",
-  [SEDES.ALM_03]: "Almacén 03",
+  [SEDES.BODEGA]: "Bodega Principal",
+  [SEDES.CV]: "Almacén CV",
+  [SEDES.L3]: "Almacén L3",
+  [SEDES.CHV]: "Almacén CHV",
 };
 
 export default function Inventario() {

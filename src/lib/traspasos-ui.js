@@ -8,18 +8,18 @@
 
 /** Etiqueta legible para cada sede (IDs TEXT reales). */
 export const SEDE_LABELS = {
-  "BOD-PRINCIPAL": "Bodega Principal",
-  "ALM-01": "Almacén 01",
-  "ALM-02": "Almacén 02",
-  "ALM-03": "Almacén 03",
+  BODEGA: "Bodega Principal",
+  CV: "Almacén CV",
+  L3: "Almacén L3",
+  CHV: "Almacén CHV",
 };
 
 /** Etiqueta corta para chips/avatares de ruta. */
 export const SEDE_CORTO = {
-  "BOD-PRINCIPAL": "Bodega",
-  "ALM-01": "Almacén 01",
-  "ALM-02": "Almacén 02",
-  "ALM-03": "Almacén 03",
+  BODEGA: "Bodega",
+  CV: "CV",
+  L3: "L3",
+  CHV: "CHV",
 };
 
 /** ID de sede → etiqueta legible (fallback al ID si no se reconoce). */
@@ -39,10 +39,10 @@ export function sedeCorto(id) {
  * Devuelve el nombre de la familia de token (`succ`|`info`|`warn`|`prog`).
  */
 export const SEDE_TONO = {
-  "BOD-PRINCIPAL": "succ",
-  "ALM-01": "info",
-  "ALM-02": "warn",
-  "ALM-03": "prog",
+  BODEGA: "succ",
+  CV: "info",
+  L3: "warn",
+  CHV: "prog",
 };
 
 /** ID de sede → variable CSS del dot de color (fallback neutro). */
