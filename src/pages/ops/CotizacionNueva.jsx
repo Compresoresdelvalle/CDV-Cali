@@ -149,6 +149,7 @@ export default function CotizacionNueva() {
           "id, nombre, referencia, precio_venta, unidad_medida, categoria, marca",
         )
         .eq("activo", true)
+        .eq("vendible", true) // Bloque 2: los insumos no se cotizan/venden
         .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
         .limit(8);
       if (err) throw err;
@@ -177,6 +178,7 @@ export default function CotizacionNueva() {
           "id, nombre, referencia, precio_venta, unidad_medida, categoria, marca",
         )
         .eq("id", productoId)
+        .eq("vendible", true) // Bloque 2: los insumos no se cotizan/venden
         .maybeSingle();
       if (err || !data) return;
       agregarAlCarrito(data);

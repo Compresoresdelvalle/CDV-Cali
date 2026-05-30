@@ -64,6 +64,7 @@ export default function VentaNueva() {
           .from("productos")
           .select("id, nombre, referencia, precio_venta, unidad_medida")
           .eq("activo", true)
+          .eq("vendible", true) // Bloque 2: los insumos no se venden
           .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
           .limit(10);
         if (e1) throw e1;
@@ -147,6 +148,7 @@ export default function VentaNueva() {
             .select("id, nombre, referencia, precio_venta, unidad_medida")
             .eq("id", productoId)
             .eq("activo", true)
+            .eq("vendible", true) // Bloque 2: los insumos no se venden
             .maybeSingle(),
           supabase
             .from("inventario")

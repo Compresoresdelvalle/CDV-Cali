@@ -199,21 +199,27 @@ export default function OrdenDetalle() {
         const ids = prods.map((p) => p.id);
         const { data: inv, error: e2 } = await supabase
           .from("inventario")
-          .select("producto_id, cantidad")
+          .select("producto_id, cantidad_insumo")
           .in("producto_id", ids)
           .eq("sede_id", sedeOrden);
         if (ac.signal.aborted) return;
         if (e2) throw e2;
 
         const stockByProd = new Map();
-        (inv ?? []).forEach((r) => stockByProd.set(r.producto_id, r.cantidad));
+        (inv ?? []).forEach((r) =>
+          stockByProd.set(r.producto_id, r.cantidad_insumo),
+        );
 
-        const enriched = prods.map((p) => ({
-          ...p,
-          inventario: [
-            { cantidad: stockByProd.get(p.id) ?? 0, sede_id: sedeOrden },
-          ],
-        }));
+        // Bloque 2: las OT consumen del POOL DE INSUMO (cantidad_insumo). Solo se
+        // ofrecen productos con stock de insumo (>0) en la sede de la orden.
+        const enriched = prods
+          .map((p) => ({
+            ...p,
+            inventario: [
+              { cantidad: stockByProd.get(p.id) ?? 0, sede_id: sedeOrden },
+            ],
+          }))
+          .filter((p) => p.inventario[0].cantidad > 0);
         setResultados(enriched);
       } catch (err) {
         if (!ac.signal.aborted) {
@@ -241,7 +247,7 @@ export default function OrdenDetalle() {
       const stockSede = producto.inventario?.[0]?.cantidad ?? 0;
       if (stockSede < 1) {
         setErrorMsg(
-          `Sin stock en esta sede para "${producto.nombre}" (disponible: ${stockSede})`,
+          `Sin stock de insumo en esta sede para "${producto.nombre}" (disponible: ${stockSede}). Pide al Admin que convierta stock de venta a insumo.`,
         );
         return;
       }

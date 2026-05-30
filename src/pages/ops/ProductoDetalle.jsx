@@ -45,6 +45,14 @@ export default function ProductoDetalle() {
   const [errorCosto, setErrorCosto] = useState("");
   const guardandoCostoRef = useRef(false);
 
+  // ── Conversión venta <-> insumo (solo Admin) ─────────────────────────
+  const [convInv, setConvInv] = useState(null); // fila de inventario en conversión
+  const [convDir, setConvDir] = useState("a_insumo"); // "a_insumo" | "a_venta"
+  const [convCantidad, setConvCantidad] = useState("");
+  const [guardandoConv, setGuardandoConv] = useState(false);
+  const [errorConv, setErrorConv] = useState("");
+  const guardandoConvRef = useRef(false);
+
   const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
@@ -58,7 +66,7 @@ export default function ProductoDetalle() {
         const { data: prod, error: prodErr } = await supabase
           .from("productos")
           .select(
-            "id, referencia, codigo_interno, codigo_proveedor, tipo, nombre, categoria, subcategoria, marca, modelo, descripcion, precio_venta, costo_promedio, stock_minimo, stock_maximo, unidad_medida, activo",
+            "id, referencia, codigo_interno, codigo_proveedor, tipo, nombre, categoria, subcategoria, marca, modelo, descripcion, precio_venta, costo_promedio, stock_minimo, stock_maximo, unidad_medida, activo, vendible, stand, posicion",
           )
           .eq("id", productoId)
           .single();
@@ -68,7 +76,7 @@ export default function ProductoDetalle() {
         const { data: inv } = await supabase
           .from("inventario")
           .select(
-            "id, cantidad, estado_stock, ubicacion_id, sede:sedes(id, nombre)",
+            "id, cantidad, cantidad_insumo, estado_stock, ubicacion_id, sede:sedes(id, nombre)",
           )
           .eq("producto_id", productoId)
           .order("sede_id");
@@ -207,6 +215,68 @@ export default function ProductoDetalle() {
     }
   };
 
+  const abrirConversion = (inv, dir) => {
+    setConvInv(inv);
+    setConvDir(dir);
+    setConvCantidad("");
+    setErrorConv("");
+  };
+
+  const guardarConversion = async () => {
+    if (!convInv || !producto) return;
+    setErrorConv("");
+    const cant = Number(convCantidad);
+    const max =
+      convDir === "a_insumo"
+        ? convInv.cantidad
+        : (convInv.cantidad_insumo ?? 0);
+    if (!Number.isInteger(cant) || cant <= 0) {
+      setErrorConv("La cantidad debe ser un entero mayor a 0");
+      return;
+    }
+    if (cant > max) {
+      setErrorConv(`Máximo disponible: ${max}`);
+      return;
+    }
+    if (guardandoConvRef.current) return;
+    guardandoConvRef.current = true;
+    setGuardandoConv(true);
+    try {
+      const fn =
+        convDir === "a_insumo"
+          ? "fn_convertir_a_insumo"
+          : "fn_revertir_insumo_a_venta";
+      const { error: rpcErr } = await supabase.rpc(fn, {
+        p_producto_id: producto.id,
+        p_sede_id: convInv.sede?.id,
+        p_cantidad: cant,
+      });
+      if (rpcErr) throw rpcErr;
+      setInventario((rows) =>
+        rows.map((r) => {
+          if (r.id !== convInv.id) return r;
+          return convDir === "a_insumo"
+            ? {
+                ...r,
+                cantidad: r.cantidad - cant,
+                cantidad_insumo: (r.cantidad_insumo ?? 0) + cant,
+              }
+            : {
+                ...r,
+                cantidad: r.cantidad + cant,
+                cantidad_insumo: (r.cantidad_insumo ?? 0) - cant,
+              };
+        }),
+      );
+      setConvInv(null);
+    } catch (err) {
+      setErrorConv(safeError(err, "Error al convertir stock"));
+    } finally {
+      setGuardandoConv(false);
+      guardandoConvRef.current = false;
+    }
+  };
+
   if (loading) return <LoadingSkeleton />;
   if (error) return <ErrorState message={error} onBack={() => navigate(-1)} />;
   if (!producto) return null;
@@ -246,6 +316,17 @@ export default function ProductoDetalle() {
             {!producto.activo && (
               <StatusBadge status="anulada">Inactivo</StatusBadge>
             )}
+            {!producto.vendible && (
+              <span
+                className="rounded-md px-2 py-0.5 text-xs font-semibold"
+                style={{
+                  backgroundColor: "var(--warn-50)",
+                  color: "var(--warn-700)",
+                }}
+              >
+                Insumo · no se vende
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-start md:items-end">
@@ -283,6 +364,17 @@ export default function ProductoDetalle() {
         )}
         <Stat label="Stock mínimo" value={producto.stock_minimo} small />
         <Stat label="Stock máximo" value={producto.stock_maximo ?? "—"} small />
+        <Stat
+          label="Ubicación"
+          value={
+            producto.stand
+              ? `Stand ${producto.stand}${
+                  producto.posicion ? ` · Pos ${producto.posicion}` : ""
+                }`
+              : "—"
+          }
+          small
+        />
       </div>
 
       {producto.descripcion && (
@@ -324,9 +416,34 @@ export default function ProductoDetalle() {
                       <td style={{ width: 120 }}>
                         <StatusBadge status={inv.estado_stock} />
                       </td>
-                      <td className="p-sub" style={{ width: 90 }}>
-                        {inv.cantidad}
+                      <td className="p-sub" style={{ width: 110 }}>
+                        <div>Venta: {inv.cantidad}</div>
+                        <div style={{ color: "var(--n-500)" }}>
+                          Insumo: {inv.cantidad_insumo ?? 0}
+                        </div>
                       </td>
+                      {esAdmin && (
+                        <td style={{ width: 110 }}>
+                          <div className="flex flex-col gap-1">
+                            <button
+                              onClick={() => abrirConversion(inv, "a_insumo")}
+                              disabled={inv.cantidad <= 0}
+                              className="cursor-pointer text-left text-xs font-medium disabled:cursor-default disabled:opacity-40"
+                              style={{ color: "var(--p-700)" }}
+                            >
+                              → a insumo
+                            </button>
+                            <button
+                              onClick={() => abrirConversion(inv, "a_venta")}
+                              disabled={(inv.cantidad_insumo ?? 0) <= 0}
+                              className="cursor-pointer text-left text-xs font-medium disabled:cursor-default disabled:opacity-40"
+                              style={{ color: "var(--n-500)" }}
+                            >
+                              → a venta
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -700,6 +817,93 @@ export default function ProductoDetalle() {
                 style={{ backgroundColor: "var(--p-700)", color: "#fff" }}
               >
                 {guardandoCosto ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: convertir stock venta <-> insumo (solo Admin) ── */}
+      {esAdmin && convInv && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => !guardandoConv && setConvInv(null)}
+        >
+          <div
+            className="w-full max-w-md space-y-3 rounded-xl border p-5"
+            style={{
+              backgroundColor: "var(--n-0)",
+              borderColor: "var(--n-200)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              className="text-lg font-semibold"
+              style={{ color: "var(--n-950)" }}
+            >
+              {convDir === "a_insumo"
+                ? "Convertir venta → insumo"
+                : "Devolver insumo → venta"}
+            </h3>
+            <p className="text-xs" style={{ color: "var(--n-500)" }}>
+              <strong>{producto.nombre}</strong> · {convInv.sede?.nombre} ·
+              venta: {convInv.cantidad} / insumo: {convInv.cantidad_insumo ?? 0}
+            </p>
+            {errorConv && (
+              <div
+                role="alert"
+                className="rounded-lg border px-3 py-2 text-xs"
+                style={{
+                  backgroundColor: "var(--dang-50)",
+                  borderColor: "var(--dang-200)",
+                  color: "var(--dang-700)",
+                }}
+              >
+                {errorConv}
+              </div>
+            )}
+            <div>
+              <label className="text-xs" style={{ color: "var(--n-500)" }}>
+                Cantidad a {convDir === "a_insumo" ? "convertir" : "devolver"}{" "}
+                (máx.{" "}
+                {convDir === "a_insumo"
+                  ? convInv.cantidad
+                  : (convInv.cantidad_insumo ?? 0)}
+                )
+              </label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={convCantidad}
+                onChange={(e) => setConvCantidad(e.target.value)}
+                disabled={guardandoConv}
+                autoFocus
+                className="mt-1 min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
+                style={{
+                  backgroundColor: "var(--n-0)",
+                  borderColor: "var(--n-200)",
+                  color: "var(--n-900)",
+                }}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setConvInv(null)}
+                disabled={guardandoConv}
+                className="min-h-[44px] rounded-lg border px-4 py-2 text-sm disabled:opacity-50"
+                style={{ borderColor: "var(--n-200)", color: "var(--n-500)" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardarConversion}
+                disabled={guardandoConv}
+                className="min-h-[44px] rounded-lg px-5 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--p-700)", color: "#fff" }}
+              >
+                {guardandoConv ? "Guardando..." : "Confirmar"}
               </button>
             </div>
           </div>
