@@ -2,6 +2,7 @@ import { Outlet, Link, NavLink, useLocation } from "react-router-dom";
 import { ArrowLeftCircle, Bell, LogOut } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import ThemeToggle from "../ui/ThemeToggle";
+import NotificacionesBell from "../admin/NotificacionesBell";
 import {
   SECCIONES_ADMIN,
   MODULOS_ADMIN,
@@ -90,6 +91,8 @@ function HeaderAdmin({ perfil, initials, onLogout }) {
       <div className="flex-1" />
 
       <ThemeToggle />
+
+      <NotificacionesBell />
 
       <Link
         to="/admin/alertas"
