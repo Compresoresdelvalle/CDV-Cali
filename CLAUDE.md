@@ -13,11 +13,11 @@ App de gestión de inventarios y operaciones para empresa colombiana de compreso
 
 ## Stack técnico
 
-- **Frontend:** React 18 + Vite + Tailwind CSS (PWA)
+- **Frontend:** React 19 + Vite + Tailwind CSS (PWA)
 - **Estado global:** Zustand (NO usar Context API para estado)
 - **Base de datos:** Supabase (PostgreSQL + Realtime + Auth + Edge Functions)
 - **Auth:** 6 usuarios reales en Supabase Auth — PIN de 4 dígitos como password
-- **Hosting:** Netlify Free (permite uso comercial)
+- **Hosting:** Cloudflare
 - **QR:** qrcode.react (generar) + html5-qrcode (escanear con cámara)
 
 ## Sistema de Diseño (REGLAS OBLIGATORIAS)
