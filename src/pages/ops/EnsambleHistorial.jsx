@@ -70,17 +70,23 @@ export default function EnsambleHistorial() {
       let query = supabase
         .from("ensambles")
         .select(
-          `id, numero, fecha, cantidad_producida, completado, costo_total,
+          `id, numero, fecha, cantidad_producida, completado, terminado, costo_total,
            producto:producto_resultado_id(referencia, nombre),
-           realizador:realizado_por(nombre)`,
+           realizador:realizado_por(nombre),
+           tecnico:tecnico_id(nombre)`,
         )
         .order("fecha", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
-      if (perfil?.rol !== "Admin" && perfil?.sede_id)
+      // El técnico ve solo los ensambles asignados a él; el resto (no Admin) por sede.
+      if (perfil?.rol === "Tecnico") query = query.eq("tecnico_id", perfil.id);
+      else if (perfil?.rol !== "Admin" && perfil?.sede_id)
         query = query.eq("sede_id", perfil.sede_id);
-      if (filtro === false) query = query.eq("completado", false);
-      if (filtro === true) query = query.eq("completado", true);
+      if (filtro === "en_proceso")
+        query = query.eq("completado", false).eq("terminado", false);
+      else if (filtro === "terminado")
+        query = query.eq("terminado", true).eq("completado", false);
+      else if (filtro === "completado") query = query.eq("completado", true);
 
       // Timeout duro 15s para evitar UI atorada si la red se cuelga
       const { data, error } = await Promise.race([
@@ -216,11 +222,11 @@ export default function EnsambleHistorial() {
       {/* ── Filtros ─────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-1.5">
         {ENSAMBLE_TABS.map((f) => {
-          const on = filtro === f.estado;
+          const on = filtro === f.key;
           return (
             <button
               key={f.v}
-              onClick={() => setFiltro(f.estado)}
+              onClick={() => setFiltro(f.key)}
               className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors"
               style={
                 on
@@ -403,10 +409,19 @@ function Td({ children, right }) {
 }
 
 function EnsambleFila({ ensamble: e, esAdmin, onEliminar }) {
-  const pill = ensambleEstadoPill(e.completado);
+  const navigate = useNavigate();
+  const pill = ensambleEstadoPill(e);
   const av = tecnicoAvatar(e.realizador?.nombre);
   return (
-    <tr>
+    <tr
+      onClick={() => navigate(`/ops/ensambles/${e.id}`)}
+      className="cursor-pointer"
+      style={{ transition: "background-color .12s" }}
+      onMouseEnter={(ev) =>
+        (ev.currentTarget.style.backgroundColor = "var(--n-50)")
+      }
+      onMouseLeave={(ev) => (ev.currentTarget.style.backgroundColor = "")}
+    >
       <Td>
         <span
           className="font-mono text-[12.5px] font-medium"
@@ -479,7 +494,10 @@ function EnsambleFila({ ensamble: e, esAdmin, onEliminar }) {
       {esAdmin && (
         <Td right>
           <button
-            onClick={() => onEliminar(e)}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onEliminar(e);
+            }}
             aria-label="Eliminar ensamble"
             title="Eliminar ensamble (devuelve insumos y quita el producto)"
             className="grid h-8 w-8 place-items-center rounded-md"
@@ -496,11 +514,13 @@ function EnsambleFila({ ensamble: e, esAdmin, onEliminar }) {
 /* ─────────────────────────── Card (mobile) ────────────────────────────── */
 
 function EnsambleCard({ ensamble: e, esAdmin, onEliminar }) {
-  const pill = ensambleEstadoPill(e.completado);
+  const navigate = useNavigate();
+  const pill = ensambleEstadoPill(e);
   const av = tecnicoAvatar(e.realizador?.nombre);
   return (
     <div
-      className="rounded-[10px] border px-4 py-3.5 shadow-sm"
+      onClick={() => navigate(`/ops/ensambles/${e.id}`)}
+      className="cursor-pointer rounded-[10px] border px-4 py-3.5 shadow-sm"
       style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
     >
       <div className="flex items-start justify-between gap-3">
@@ -549,7 +569,10 @@ function EnsambleCard({ ensamble: e, esAdmin, onEliminar }) {
       {esAdmin && (
         <div className="mt-2 flex justify-end">
           <button
-            onClick={() => onEliminar(e)}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onEliminar(e);
+            }}
             className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium"
             style={{ borderColor: "var(--dang-200)", color: "var(--dang-700)" }}
           >
@@ -566,7 +589,7 @@ function EnsambleCard({ ensamble: e, esAdmin, onEliminar }) {
 
 function KanbanView({ rows }) {
   return (
-    <div className="kanban" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+    <div className="kanban" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
       {ENSAMBLE_KANBAN_COLS.map((col) => {
         const items = rows.filter(col.match);
         return (
