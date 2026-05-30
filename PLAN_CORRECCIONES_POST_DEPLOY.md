@@ -26,6 +26,7 @@ _Cambios de acceso que tocan varios módulos. Hacer segundo._
 
 3. **Inventario visible en TODAS las bodegas para TODOS los vendedores.**
    (Antes cada vendedor solo veía su sede — ahora todos ven todos los stocks de las otras sedes.)
+   ✅ Hecho en backend (`inv_select=true`). ⚠️ **Aclaración clienta 2026-05-30:** esto es **solo VER**. **VENDER sigue restringido a la sede propia** del vendedor (Admin = cualquiera). La parte de "vender desde otra sede" queda descartada; el flujo de comprar/usar producto de otra sede se resuelve con el botón "Sede" + venta sin stock del Bloque 3 (#10, #11). Migración de la corrección: `20260530000004_bloque1_revert_venta_solo_su_sede.sql`.
 4. **Cada producto del inventario debe ser editable/eliminable SOLO por admin.**
 5. **Habilitar la opción de cancelar traspasos, solo para el admin.**
 6. **El vendedor tiene acceso a la función de órdenes de trabajo y traslados.**
@@ -51,8 +52,10 @@ _Cambios en cómo se manejan los productos. Afecta ventas y órdenes._
 _Hacer después de productos porque depende de la lógica de insumos y sedes._
 
 9. **Editar precio de venta e impuesto durante la venta.**
-10. **Opción "venta sin stock"** deja el producto con inventario negativo, se repone cuando se produce la compra pero que alerte que hay inventario negativo para solucionarlo con urgencia
+10. **Opción "venta sin stock"** deja el producto con inventario negativo, se repone cuando se produce la compra pero que alerte que hay inventario negativo para solucionarlo con urgencia.
+    📌 **Aclaración clienta 2026-05-30:** este inventario negativo es justamente lo que resuelve el caso "el producto no está en mi sede": en vez de bloquear, el stock baja a negativo y el sistema **pide hacer un traspaso o una compra** para regularizar. **Aplica a TODO lo que disminuye inventario, no solo Ventas → también las OT (Bloque 6) y demás operaciones que restan stock.**
 11. **Botón "Sede"** en todas las funciones que requira seleccionar algún producto, cada sede vinculada a su propio inventario. Para así validar dónde está el producto que se va a utilizar.
+    📌 **Aclaración clienta 2026-05-30:** desplegable "Sede" que, al elegir una sede, muestra el inventario de ESA sede (consultar sin ir al módulo Inventario; se apoya en `inv_select=true` del Bloque 1). **El vendedor SOLO puede vender de su sede:** si intenta vender un producto que está en otra sede, mostrar **popup con la estética del sistema de diseño** (tokens CSS, sin hardcode): _"No puedes vender este producto porque no está en tu sede. Búscalo en tu sede; si no hay stock, pide un traspaso."_ Implementar el patrón una sola vez (ProductPicker consolidado, ver Bloque 9) y reusar en Venta y OT.
 12. **Mostrar TODOS los productos en todas las funciones aunque no tengan stock**; si seleccionan uno sin
     stock, mostrar alerta "sin stock" (no bloquear, solo avisar).
 13. **Agregar a qué cuenta bancaria se está pagando** En la venta.

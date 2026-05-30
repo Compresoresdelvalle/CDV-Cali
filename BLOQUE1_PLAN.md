@@ -7,17 +7,27 @@ Rama: `fix/correcciones-post-deploy`. Migraciones vía MCP con respaldo. Probar 
 - **#4** Crear/editar/eliminar productos = **solo Admin**.
 - **#6** Vendedor **crea y gestiona** OT y traslados.
 - **#5** Cancelar traspaso = **solo Admin**, **solo si está pendiente** (no recibido), **revirtiendo el stock** que salió de la sede origen.
-- **#3** Vendedor ve **sus** ventas (de cualquier sede) **+** las de su sede; ve **todo** el inventario; **vende de cualquier sede**.
+- **#3** Vendedor ve **todo** el inventario (las 4 sedes), pero **vende SOLO desde su sede**. ⚠️ **CORREGIDO 2026-05-30** (la clienta llamó a corregir): se descartó "vender de cualquier sede". Ver detalle y plan futuro en el bloque #3 de abajo.
 
 ## Cambios backend (RLS + funciones) — una migración aditiva/reversible
 
-### #3 Inventario global + vender de cualquier sede
+### #3 Inventario global (VER todo) + vender SOLO desde su sede
 
-- `inv_select` → `USING (true)` para authenticated (ver todas las sedes). `inv_modify_block` (solo Admin) se mantiene.
-- `fn_registrar_venta` (SECURITY DEFINER): **quitar** el bloque `IF v_mi_rol <> 'Admin' AND v_mi_sede <> p_sede_id THEN RAISE`. (Recrear con CREATE OR REPLACE; cuerpo ya conocido.)
-- `ventas_insert` with_check → `get_my_rol() IN ('Admin','Vendedor')` (quitar match de sede).
-- `ventas_select` → `Admin OR vendedor_id = auth.uid() OR sede_id = get_my_sede_id()`.
-- `detalle_venta` `dv_select`/`dv_write` → añadir `v.vendedor_id = auth.uid()` a la condición (para que vea/escriba su venta aunque sea de otra sede).
+**Estado final (tras la corrección de la clienta 2026-05-30):**
+
+- `inv_select` → `USING (true)` para authenticated (ver todas las sedes). `inv_modify_block` (solo Admin) se mantiene. ✅ **Esto SÍ se mantiene** — es la base para el futuro desplegable "Sede".
+- `fn_registrar_venta` (SECURITY DEFINER): **conserva** el bloque `IF v_mi_rol <> 'Admin' AND v_mi_sede IS DISTINCT FROM p_sede_id THEN RAISE` (vende solo su sede) + gate de rol Admin/Vendedor.
+- `ventas_insert` with_check → `get_my_rol() IN ('Admin','Vendedor') AND (Admin OR sede_id = get_my_sede_id())`.
+- `ventas_select` → `Admin OR sede_id = get_my_sede_id()` (sede-scoped).
+- `detalle_venta` `dv_select` → `Admin OR v.sede_id = get_my_sede_id()`; `dv_write` → `Admin OR (v.vendedor_id = auth.uid() AND v.sede_id = get_my_sede_id())`.
+- **Historia:** la migración `...000001` había abierto "vender de cualquier sede"; se revirtió en `20260530000004_bloque1_revert_venta_solo_su_sede.sql`. `inv_select=true` NO se revirtió.
+
+**🔮 Plan futuro (NO en este bloque) — confirmado por la clienta:**
+
+1. **Desplegable "Sede"** en Venta/ProductPicker: elegir una sede y ver su inventario sin ir al módulo Inventario (solo consulta; se apoya en `inv_select=true`).
+2. **Popup estético** (tokens del sistema de diseño, sin hardcode) al intentar vender un producto de otra sede: _"No puedes vender este producto porque no está en tu sede. Búscalo en tu sede; si no hay stock, pide un traspaso."_ El RPC ya bloquea; la UI debe avisar antes.
+3. **Inventario negativo** (bloque futuro): permitir stock negativo; si no hay producto en el almacén, baja a negativo y se **sugiere traspaso o compra** en vez de bloquear.
+4. **Aplica a TODO lo que disminuye inventario** (no solo Ventas): **OT** que consumen repuestos y demás operaciones que restan stock siguen la misma lógica. Implementar el patrón una vez (ProductPicker consolidado) y reusar en Venta y OT.
 
 ### #4 Productos solo Admin
 
