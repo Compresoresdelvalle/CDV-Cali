@@ -125,7 +125,7 @@ export default function App() {
           <Route
             path="inventario/nuevo"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
+              <RoleGuard roles={["Admin"]}>
                 <ProductoNuevo />
               </RoleGuard>
             }
@@ -225,7 +225,7 @@ export default function App() {
           <Route
             path="traspasos/nuevo"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <TraspasoNuevo />
               </RoleGuard>
             }
@@ -241,7 +241,7 @@ export default function App() {
           <Route
             path="traspasos/:id/picking"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <PickingPage />
               </RoleGuard>
             }
@@ -249,7 +249,7 @@ export default function App() {
           <Route
             path="traspasos/:id/verificar"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <VerificacionTraspaso />
               </RoleGuard>
             }
@@ -265,7 +265,7 @@ export default function App() {
           <Route
             path="ordenes"
             element={
-              <RoleGuard roles={["Admin", "Tecnico", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Tecnico", "Bodeguero", "Vendedor"]}>
                 <OrdenHistorial />
               </RoleGuard>
             }
@@ -273,7 +273,7 @@ export default function App() {
           <Route
             path="ordenes/nueva"
             element={
-              <RoleGuard roles={["Admin", "Tecnico"]}>
+              <RoleGuard roles={["Admin", "Tecnico", "Vendedor"]}>
                 <OrdenNueva />
               </RoleGuard>
             }
@@ -281,7 +281,7 @@ export default function App() {
           <Route
             path="ordenes/:id"
             element={
-              <RoleGuard roles={["Admin", "Tecnico", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Tecnico", "Bodeguero", "Vendedor"]}>
                 <OrdenDetalle />
               </RoleGuard>
             }

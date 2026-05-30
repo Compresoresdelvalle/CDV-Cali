@@ -10,8 +10,40 @@
 
 - Rama: **`fix/correcciones-post-deploy`** (NO se ha mergeado a `main`).
 - **Bloque 0 = COMPLETO, probado y commiteado.** Commits: `647d80d` (reset contadores + clientes + fix login) y `b14cd0c` (botón "Eliminar").
-- **Bloque 1 = solo PLANEADO** (ver `BLOQUE1_PLAN.md`). Sin tocar todavía.
-- Siguiente acción: implementar Bloque 1 (RLS de permisos — la parte más delicada; el cliente usa la app en vivo).
+- **Bloque 1 = IMPLEMENTADO (2026-05-30).** Backend (RLS + funciones) **aplicado a PRODUCCIÓN**; frontend en el branch (sin desplegar). Ver sección **"Bloque 1 — Resultado"** abajo. Falta: que el usuario pruebe con login (E2E) y luego merge a `main` + deploy.
+- Siguiente acción: el usuario prueba Bloque 1 con login real; corregir lo que salga; luego Bloque 2 (insumos).
+
+## Bloque 1 — Resultado (2026-05-30)
+
+**Migraciones aplicadas a producción (vía MCP), respaldo en `supabase/backups/20260530_bloque1_permisos_RESTORE.sql`:**
+
+- `20260530000001_bloque1_permisos_rls.sql` — RLS + funciones #3/#4/#6.
+- `20260530000002_bloque1_traspaso_estado_cancelado.sql` — valor enum `cancelado` (aislado, obligatorio).
+- `20260530000003_bloque1_fn_cancelar_traspaso.sql` — validador de transición + `fn_cancelar_traspaso`.
+
+Verificado: policies correctas, enum con `cancelado`, gates de rol OK, `get_advisors security` sin ERROR nuevos (solo los WARN preexistentes de SECURITY DEFINER que comparten todas las RPC).
+
+**Qué hace cada punto:**
+
+- **#3** `inv_select` = `USING(true)` (todos ven todo el inventario); `fn_registrar_venta` sin bloqueo de sede (gate de rol Admin/Vendedor); `ventas_select`/`detalle_venta` muestran al vendedor SUS ventas de cualquier sede + las de su sede.
+- **#4** Crear producto = solo Admin (`prod_modify` + `fn_crear_producto`). Front: botón "Nuevo producto" solo Admin (Productos.jsx, Inventario.jsx) y ruta `inventario/nuevo` solo Admin.
+- **#5** `fn_cancelar_traspaso(p_traspaso_id, p_motivo)` — solo Admin, solo NO recibido; si está `en_transito` devuelve el stock al origen (movimiento `ajuste`). Botón "Cancelar traspaso" en TraspasoDetalle (solo Admin + estado no recibido).
+- **#6** Vendedor crea+opera traslados (`fn_crear_traspaso`/`fn_procesar_traspaso` + rutas) y crea+gestiona OT como técnico (`os_insert`/`os_update` + `OrdenDetalle.puedeEditar`). Borrar OT/traslado sigue vetado al vendedor. ROLE_MODULES.Vendedor ganó "Traspasos" y "Órdenes".
+
+**Decisiones registradas:**
+
+- Bodeguero **ya no** puede registrar ventas (gate de rol en `fn_registrar_venta`). Correcto por el modelo de roles (Ventas = Vendedor); antes la función no tenía gate de rol (solo de sede). El Bodeguero no tiene UI de Ventas, así que no se nota.
+- Cancelar traslado: permitido en `borrador/picking/verificado/en_transito`; bloqueado en `recibido/con_diferencia`. El movimiento de reversión usa `usuario_id` = Admin que cancela.
+
+**⚠️ Pendientes de frontend para completar #3 (backend YA listo, UI no):**
+
+1. **Vender desde cualquier sede (VentaNueva.jsx):** la UI sigue forzando `perfil.sede_id` (`.eq("sede_id", perfil.sede_id)` y `p_sede_id`). Falta un selector de sede (idealmente con la consolidación del ProductPicker, bloques 3/9). Hoy el vendedor PUEDE vender de otra sede por RPC, pero la UI no lo ofrece.
+2. **Ver todo el inventario con filtro (Inventario.jsx):** el filtro de Sede sigue oculto al vendedor (`esVendedor`). Con `inv_select=true`, el vendedor ya ve las 4 sedes en la lista, pero sin poder filtrar por sede. Falta mostrarle el filtro **y verificar que `SEDE_LABELS` (lib/traspasos-ui.js) use las sedes activas reales (BODEGA/CV/L3/CHV)**, no los IDs viejos del seed.
+3. **Ventana en vivo:** `inv_select=true` ya está en prod; el frontend viejo (Netlify) muestra a los vendedores las 4 sedes mezcladas en Inventario hasta que se despliegue el branch. (Usuario aceptó este interino el 2026-05-30.)
+
+**Nota menor:** en el tablero Kanban de traspasos los cancelados se agrupan en la columna "Recibido" (distinguidos por pill roja "Cancelado"). Mejora futura: columna dedicada "Cancelado".
+
+**Testing:** las funciones SECURITY DEFINER necesitan `auth.uid()`, así que **se prueban con login (E2E lo corre el usuario)**, no por MCP. Probar SOLO con productos `INVENTARIO DE PRUEBA` (999). Hay 1 traspaso real `en_transito` en prod — **NO cancelarlo** al probar.
 
 ## 2. Qué está DESPLEGADO vs solo en la rama (¡importante!)
 

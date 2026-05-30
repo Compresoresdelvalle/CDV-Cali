@@ -86,6 +86,8 @@ export function traspasoEstadoPill(estado) {
       return { cls: "s-pill s-apr", label: "Recibido" };
     case "con_diferencia":
       return { cls: "s-pill s-anul", label: "Con Diferencia" };
+    case "cancelado":
+      return { cls: "s-pill s-anul", label: "Cancelado" };
     default:
       return { cls: "s-pill s-borr", label: estado ?? "—" };
   }
@@ -164,6 +166,11 @@ export function estadoToKanban(estado) {
       return "transito";
     case "recibido":
     case "con_diferencia":
+      return "recibido";
+    // Bloque 1 (#5): un traspaso cancelado es un estado cerrado; se agrupa con
+    // los recibidos (la pill roja "Cancelado" lo distingue). Evita que aparezca
+    // como tarjeta activa en la columna "Pendiente".
+    case "cancelado":
       return "recibido";
     default:
       return "pendiente";

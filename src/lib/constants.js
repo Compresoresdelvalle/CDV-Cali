@@ -56,7 +56,9 @@ export const ROLE_MODULES = {
   ],
   Vendedor: [
     "Inventario",
+    "Traspasos",
     "Ventas",
+    "Órdenes",
     "Cotizaciones",
     "Garantías",
     "Recibos",

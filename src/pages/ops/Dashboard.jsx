@@ -223,13 +223,13 @@ export default function Dashboard() {
       label: "Nuevo Traspaso",
       icon: <Icon d={ICONS.arrows} />,
       url: "/ops/traspasos",
-      roles: ["Admin", "Bodeguero"],
+      roles: ["Admin", "Bodeguero", "Vendedor"],
     },
     {
       label: "Orden de Servicio",
       icon: <Icon d={ICONS.wrench} />,
       url: "/ops/ordenes",
-      roles: ["Admin", "Tecnico"],
+      roles: ["Admin", "Tecnico", "Vendedor"],
     },
     {
       label: "Registrar Compra",
