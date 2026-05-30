@@ -130,9 +130,15 @@ export default function OrdenNueva() {
     setError("");
     try {
       const costo = Math.max(0, parseFloat(costoManoObra) || 0);
-      // La sede de la orden es la del técnico asignado (no la del Admin que crea)
+      // La OT pertenece a la sede de QUIEN LA CREA (de ahí salen los repuestos) y
+      // así cumple el RLS os_insert (no-Admin debe insertar en su propia sede). El
+      // técnico asignado puede ser de otra sede. El Admin sí puede crearla para la
+      // sede del técnico (su RLS permite cualquier sede).
       const tecnicoSeleccionado = tecnicos.find((t) => t.id === tecnicoId);
-      const sedeOrden = tecnicoSeleccionado?.sede_id ?? perfil?.sede_id;
+      const sedeOrden =
+        perfil?.rol === "Admin"
+          ? (tecnicoSeleccionado?.sede_id ?? perfil?.sede_id)
+          : perfil?.sede_id;
       if (!sedeOrden) {
         setError(
           "No se pudo determinar la sede. Revisa que tu usuario o el técnico tenga sede asignada.",
