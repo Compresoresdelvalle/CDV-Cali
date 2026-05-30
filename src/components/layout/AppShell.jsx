@@ -23,6 +23,7 @@ import {
   Bell,
   Menu,
   LogOut,
+  Users,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { ROLE_MODULES, MODULE_ROUTES } from "../../lib/constants";
@@ -53,6 +54,7 @@ const MODULE_ICONS = {
   Órdenes: Wrench,
   Ensambles: Puzzle,
   Herramientas: Wrench,
+  Clientes: Users,
 };
 
 /** Cada módulo se ubica en una sección del sidebar (estilo Lovable). */
@@ -62,6 +64,7 @@ const MODULE_SECTION = {
   Ventas: "Operación comercial",
   Cotizaciones: "Operación comercial",
   Recibos: "Operación comercial",
+  Clientes: "Operación comercial",
   Devoluciones: "Operación comercial",
   Compras: "Bodega y movimiento",
   Traspasos: "Bodega y movimiento",

@@ -20,8 +20,10 @@ import {
   safeError,
 } from "../../lib/utils";
 import QRScanner from "../../components/forms/QRScanner";
+import ClientePicker from "../../components/forms/ClientePicker";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { metodoPagoClass } from "../../lib/ventas-ui";
+import { upsertCliente } from "../../lib/clientes";
 
 const METODOS_PAGO = ["Efectivo", "Transferencia", "Tarjeta", "Crédito"];
 const IVA_PCT = 19;
@@ -37,6 +39,11 @@ export default function VentaNueva() {
   const [carrito, setCarrito] = useState([]);
   const [clienteNombre, setClienteNombre] = useState("");
   const [clienteNit, setClienteNit] = useState("");
+  // Datos adicionales del cliente (al elegir uno existente). Se reutilizan en el
+  // upsert para conservarlos; la venta solo persiste nombre + nit vía RPC.
+  const [clienteTelefono, setClienteTelefono] = useState("");
+  const [clienteEmail, setClienteEmail] = useState("");
+  const [clienteDireccion, setClienteDireccion] = useState("");
   const [metodoPago, setMetodoPago] = useState("Efectivo");
   const [descuentoPct, setDescuentoPct] = useState(0);
   const [observaciones, setObservaciones] = useState("");
@@ -129,12 +136,6 @@ export default function VentaNueva() {
       setHistorialCliente(null);
     }
   }, 500);
-
-  const handleClienteNombreChange = (e) => {
-    const val = e.target.value;
-    setClienteNombre(val);
-    buscarHistorialCliente(val);
-  };
 
   const handleQRFound = useCallback(
     async (productoId) => {
@@ -263,6 +264,17 @@ export default function VentaNueva() {
         })),
       });
       if (rpcErr) throw new Error(rpcErr.message);
+      // Bloque 0 #2: guardar/reutilizar cliente para el autocompletado. NO toca
+      // la venta (cliente_id se omite a propósito por RLS) y nunca rompe el flujo.
+      if (clienteNombre.trim()) {
+        await upsertCliente({
+          nombre: clienteNombre,
+          identificacion: clienteNit,
+          telefono: clienteTelefono,
+          email: clienteEmail,
+          direccion: clienteDireccion,
+        });
+      }
       navigate("/ops/ventas");
     } catch (e) {
       setError(safeError(e, "Error al registrar la venta"));
@@ -373,11 +385,21 @@ export default function VentaNueva() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Cliente (opcional)" full>
-              <input
+              <ClientePicker
                 value={clienteNombre}
-                onChange={handleClienteNombreChange}
-                placeholder="Nombre del cliente"
-                className="finput sans"
+                onChange={(v) => {
+                  setClienteNombre(v);
+                  buscarHistorialCliente(v);
+                }}
+                onSelect={(c) => {
+                  setClienteNombre(c.nombre ?? "");
+                  buscarHistorialCliente(c.nombre ?? "");
+                  if (c.identificacion) setClienteNit(c.identificacion);
+                  setClienteTelefono(c.telefono ?? "");
+                  setClienteEmail(c.email ?? "");
+                  setClienteDireccion(c.direccion ?? "");
+                }}
+                placeholder="Buscar o escribir cliente…"
               />
             </Field>
             <Field label="NIT o Cédula">

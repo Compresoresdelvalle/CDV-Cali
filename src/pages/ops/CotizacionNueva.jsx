@@ -21,7 +21,9 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import QRScanner from "../../components/forms/QRScanner";
+import ClientePicker from "../../components/forms/ClientePicker";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
+import { upsertCliente } from "../../lib/clientes";
 import { getParametroInt } from "../../hooks/useParametro";
 import SelectorCuentasBancarias from "../../components/cotizaciones/SelectorCuentasBancarias";
 import {
@@ -347,6 +349,18 @@ export default function CotizacionNueva() {
       );
       if (rpcErr) throw new Error(rpcErr.message);
 
+      // Bloque 0 #2: guardar/reutilizar cliente para el autocompletado. NO toca
+      // la cotización (no se pasa cliente_id al RPC) y nunca rompe el flujo.
+      if (clienteNombre.trim()) {
+        await upsertCliente({
+          nombre: clienteNombre,
+          identificacion: clienteNit,
+          telefono: clienteTelefono,
+          email: clienteEmail,
+          direccion: clienteDireccion,
+        });
+      }
+
       // Si está vinculada a una OT, COPIAR los ítems cotizados al detalle de la
       // OT (los triggers descuentan stock y suman al total OT).
       if (otIdValido && rpcData?.cotizacion_id) {
@@ -465,6 +479,13 @@ export default function CotizacionNueva() {
               setClienteCargo={setClienteCargo}
               clienteDireccion={clienteDireccion}
               setClienteDireccion={setClienteDireccion}
+              onSelectCliente={(c) => {
+                setClienteNombre(c.nombre ?? "");
+                if (c.identificacion) setClienteNit(c.identificacion);
+                if (c.telefono) setClienteTelefono(c.telefono);
+                if (c.email) setClienteEmail(c.email);
+                if (c.direccion) setClienteDireccion(c.direccion);
+              }}
               errores={erroresCampos}
             />
           )}
@@ -717,25 +738,39 @@ function PasoCliente({
   setClienteCargo,
   clienteDireccion,
   setClienteDireccion,
+  onSelectCliente,
   errores,
 }) {
   return (
     <WizCard
       paso={1}
       title="Datos del cliente"
-      sub="Sin módulo de clientes (decisión del cliente). Captura los datos como texto libre."
+      sub="Busca un cliente existente o escribe uno nuevo (se guarda al generar la cotización)."
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <FieldText
-          full
-          label="Cliente"
-          required
-          value={clienteNombre}
-          onChange={setClienteNombre}
-          placeholder="Ej. Industrial XYZ S.A.S."
-          sans
-          error={errores.nombre}
-        />
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <label className="flbl">
+            Cliente<span className="req">*</span>
+          </label>
+          <ClientePicker
+            value={clienteNombre}
+            onChange={setClienteNombre}
+            onSelect={onSelectCliente}
+            placeholder="Buscar o escribir cliente…"
+            inputStyle={
+              errores.nombre ? { color: "var(--dang-700)" } : undefined
+            }
+          />
+          {errores.nombre && (
+            <span
+              className="flex items-center gap-1.5 text-[11.5px] font-medium"
+              style={{ color: "var(--dang-700)" }}
+            >
+              <AlertCircle className="h-3 w-3" strokeWidth={2.5} />
+              {errores.nombre}
+            </span>
+          )}
+        </div>
         <FieldText
           label="NIT o Cédula"
           value={clienteNit}
@@ -784,9 +819,9 @@ function PasoCliente({
       <div className="banner-info mt-4">
         <Info className="size-4 shrink-0" strokeWidth={2} />
         <div className="body">
-          <b>Contacto, cargo y dirección</b> se guardan junto a las notas de la
-          cotización (no existe un módulo de clientes separado) y aparecen en el
-          PDF. Solo el <b>nombre</b> es obligatorio.
+          <b>Contacto y cargo</b> se guardan junto a las notas de la cotización
+          y aparecen en el PDF. Solo el <b>nombre</b> es obligatorio. El cliente
+          se registra automáticamente para reutilizarlo después.
         </div>
       </div>
     </WizCard>

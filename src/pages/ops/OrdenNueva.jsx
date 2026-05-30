@@ -13,6 +13,8 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
 import SelectorCotizacionExistente from "../../components/ot/SelectorCotizacionExistente";
+import ClientePicker from "../../components/forms/ClientePicker";
+import { upsertCliente } from "../../lib/clientes";
 
 export default function OrdenNueva() {
   const navigate = useNavigate();
@@ -20,6 +22,12 @@ export default function OrdenNueva() {
 
   const [clienteNombre, setClienteNombre] = useState("");
   const [clienteTelefono, setClienteTelefono] = useState("");
+  // Datos adicionales del cliente (al elegir uno existente). No tienen campo
+  // propio en la OT pero se reutilizan en el upsert para conservarlos.
+  const [clienteId, setClienteId] = useState(null);
+  const [clienteIdentificacion, setClienteIdentificacion] = useState("");
+  const [clienteEmail, setClienteEmail] = useState("");
+  const [clienteDireccion, setClienteDireccion] = useState("");
   const [equipoDescripcion, setEquipoDescripcion] = useState("");
   const [equipoSerie, setEquipoSerie] = useState("");
   const [diagnostico, setDiagnostico] = useState("");
@@ -133,11 +141,24 @@ export default function OrdenNueva() {
         savingRef.current = false;
         return;
       }
+      // Bloque 0 #2: guardar/reutilizar cliente para el autocompletado y obtener
+      // su id. Si el upsert falla NO debe romper la creación de la OT.
+      let clienteIdFinal = clienteId;
+      const cli = await upsertCliente({
+        nombre: clienteNombre,
+        identificacion: clienteIdentificacion,
+        telefono: clienteTelefono,
+        email: clienteEmail,
+        direccion: clienteDireccion,
+      });
+      if (cli?.id) clienteIdFinal = cli.id;
+
       const { data, error: e2 } = await supabase
         .from("ordenes_servicio")
         .insert({
           cliente_nombre: clienteNombre.trim(),
           cliente_telefono: clienteTelefono.trim() || null,
+          cliente_id: clienteIdFinal || null,
           equipo_descripcion: equipoDescripcion.trim(),
           equipo_serie: equipoSerie.trim() || null,
           diagnostico: diagnostico.trim() || null,
@@ -303,11 +324,23 @@ export default function OrdenNueva() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Nombre *">
-              <Input
+              <ClientePicker
                 value={clienteNombre}
-                onChange={setClienteNombre}
+                onChange={(v) => {
+                  setClienteNombre(v);
+                  // Texto libre → ya no corresponde a un cliente existente.
+                  setClienteId(null);
+                }}
+                onSelect={(c) => {
+                  setClienteNombre(c.nombre ?? "");
+                  setClienteId(c.id ?? null);
+                  setClienteIdentificacion(c.identificacion ?? "");
+                  setClienteEmail(c.email ?? "");
+                  setClienteDireccion(c.direccion ?? "");
+                  if (c.telefono) setClienteTelefono(c.telefono);
+                }}
                 required
-                placeholder="Ej. Juan Pérez"
+                placeholder="Buscar o escribir cliente…"
               />
             </Field>
             <Field label="Teléfono">

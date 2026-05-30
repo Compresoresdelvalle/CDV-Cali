@@ -12,6 +12,7 @@ import AppShell from "./components/layout/AppShell";
 import AdminShell from "./components/layout/AdminShell";
 import Inventario from "./pages/ops/Inventario";
 import Productos from "./pages/ops/Productos";
+import Clientes from "./pages/ops/Clientes";
 import ProductoDetalle from "./pages/ops/ProductoDetalle";
 import ProductoNuevo from "./pages/ops/ProductoNuevo";
 import VentaHistorial from "./pages/ops/VentaHistorial";
@@ -387,6 +388,15 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <Productos />
+              </RoleGuard>
+            }
+          />
+          {/* Clientes — Bloque 0 #2 */}
+          <Route
+            path="clientes"
+            element={
+              <RoleGuard roles={["Admin", "Vendedor"]}>
+                <Clientes />
               </RoleGuard>
             }
           />
