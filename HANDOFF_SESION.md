@@ -25,7 +25,7 @@ Verificado: policies correctas, enum con `cancelado`, gates de rol OK, `get_advi
 
 **Qué hace cada punto:**
 
-- **#3** `inv_select` = `USING(true)` (todos ven todo el inventario); `fn_registrar_venta` sin bloqueo de sede (gate de rol Admin/Vendedor); `ventas_select`/`detalle_venta` muestran al vendedor SUS ventas de cualquier sede + las de su sede.
+- **#3** `inv_select` = `USING(true)` (todos VEN todo el inventario — se mantiene). **CORRECCIÓN clienta 2026-05-30:** el Vendedor **vende SOLO desde su sede** (Admin = cualquiera). Revertido en `20260530000004_bloque1_revert_venta_solo_su_sede.sql`: `fn_registrar_venta` recupera el bloqueo de sede (mantiene gate de rol Admin/Vendedor); `ventas_insert`/`ventas_select`/`dv_select`/`dv_write` vuelven a sede-scoped (consistente con `ventas_update`). Ver / actuar: bloque "Plan futuro" más abajo.
 - **#4** Crear producto = solo Admin (`prod_modify` + `fn_crear_producto`). Front: botón "Nuevo producto" solo Admin (Productos.jsx, Inventario.jsx) y ruta `inventario/nuevo` solo Admin.
 - **#5** `fn_cancelar_traspaso(p_traspaso_id, p_motivo)` — solo Admin, solo NO recibido; si está `en_transito` devuelve el stock al origen (movimiento `ajuste`). Botón "Cancelar traspaso" en TraspasoDetalle (solo Admin + estado no recibido).
 - **#6** Vendedor crea+opera traslados (`fn_crear_traspaso`/`fn_procesar_traspaso` + rutas) y crea+gestiona OT como técnico (`os_insert`/`os_update` + `OrdenDetalle.puedeEditar`). Borrar OT/traslado sigue vetado al vendedor. ROLE_MODULES.Vendedor ganó "Traspasos" y "Órdenes".
@@ -35,10 +35,18 @@ Verificado: policies correctas, enum con `cancelado`, gates de rol OK, `get_advi
 - Bodeguero **ya no** puede registrar ventas (gate de rol en `fn_registrar_venta`). Correcto por el modelo de roles (Ventas = Vendedor); antes la función no tenía gate de rol (solo de sede). El Bodeguero no tiene UI de Ventas, así que no se nota.
 - Cancelar traslado: permitido en `borrador/picking/verificado/en_transito`; bloqueado en `recibido/con_diferencia`. El movimiento de reversión usa `usuario_id` = Admin que cancela.
 
-**⚠️ Pendientes de frontend para completar #3 (backend YA listo, UI no):**
+**⚠️ Pendiente de frontend de #3 (backend listo, UI no):**
 
-1. **Vender desde cualquier sede (VentaNueva.jsx):** la UI sigue forzando `perfil.sede_id` (`.eq("sede_id", perfil.sede_id)` y `p_sede_id`). Falta un selector de sede (idealmente con la consolidación del ProductPicker, bloques 3/9). Hoy el vendedor PUEDE vender de otra sede por RPC, pero la UI no lo ofrece.
-2. **Ver todo el inventario con filtro (Inventario.jsx):** el filtro de Sede sigue oculto al vendedor (`esVendedor`). Con `inv_select=true`, el vendedor ya ve las 4 sedes en la lista, pero sin poder filtrar por sede. Falta solo mostrarle el filtro (1 línea). El `SEDE_LABELS` ya quedó corregido (ver abajo).
+1. **Ver todo el inventario con filtro (Inventario.jsx):** el filtro de Sede sigue oculto al vendedor (`esVendedor`). Con `inv_select=true`, el vendedor ya ve las 4 sedes en la lista, pero sin poder filtrar por sede. Falta solo mostrarle el filtro (1 línea). El `SEDE_LABELS` ya quedó corregido (ver abajo).
+
+**🔮 PLAN FUTURO — venta por sede (definido por la clienta 2026-05-30, NO implementar aún):**
+
+> Regla de negocio confirmada: el Vendedor **vende SOLO desde su propia sede**. Lo de "vender de cualquier sede" queda descartado. El backend ya lo refleja (migración `...000004`). Lo siguiente es UX para los próximos bloques:
+
+1. **Desplegable "Sede" en Venta/ProductPicker:** el vendedor podrá elegir una sede en el selector y ver el inventario de esa sede **sin** ir al módulo Inventario. Es solo para CONSULTAR stock de otras sedes (apoyado en `inv_select=true`, que ya ve todo).
+2. **Popup al intentar vender de otra sede:** si el vendedor intenta agregar/vender un producto que está en otra sede (no la suya), mostrar un **popup con la misma estética del sistema de diseño** (tokens CSS, sin hardcodear): _"No puedes vender este producto porque no está en tu sede. Búscalo en tu sede; si no hay stock, pide un traspaso."_ El RPC ya bloquea por seguridad (`fn_registrar_venta`), pero la UI debe avisar amablemente antes, no dejar que falle el RPC.
+3. **Inventario negativo (bloque futuro):** se permitirá stock negativo. Cuando un producto no exista/no haya en ese almacén, en vez de bloquear, el stock baja a negativo y el sistema **pide hacer un traspaso o una compra** para regularizar. Esto sustituye al bloqueo duro.
+4. **Aplica a TODO lo que disminuye inventario, no solo Ventas:** **Órdenes de Servicio (OT)** que consumen repuestos y cualquier otra operación que reste stock deben seguir la misma lógica (consumir solo de tu sede; popup si está en otra; negativo + sugerir traspaso/compra en el bloque futuro). Pensar el patrón una sola vez (idealmente en el ProductPicker consolidado, ver bloques 3/9) y reusarlo en Venta y OT.
 
 **Fix de sedes (2026-05-30, commit aparte):** todos los mapas de sede del frontend usaban los IDs **inactivos** del seed (`BOD-PRINCIPAL`, `ALM-01/02/03`) en vez de las sedes **activas reales** (`BODEGA`, `CV`, `L3`, `CHV`). Esto rompía el filtro de sede en Inventario y, peor, el **selector de sede al crear un traslado** (TraspasoNuevo arma el dropdown desde `SEDE_LABELS`), lo que habría bloqueado el #6 del vendedor. Corregido en: `constants.js` (`SEDES`), `traspasos-ui.js` (`SEDE_LABELS`/`SEDE_CORTO`/`SEDE_TONO`), `herramientas-ui.js`, `Inventario.jsx`, `Login.jsx` y el fallback de `Herramientas.jsx`. Nombres: BODEGA="Bodega Principal", CV="Almacén CV", L3="Almacén L3", CHV="Almacén CHV". 3. **Ventana en vivo:** `inv_select=true` ya está en prod; el frontend viejo (Netlify) muestra a los vendedores las 4 sedes mezcladas en Inventario hasta que se despliegue el branch. (Usuario aceptó este interino el 2026-05-30.)
 
@@ -61,7 +69,7 @@ Verificado: policies correctas, enum con `cancelado`, gates de rol OK, `get_advi
 
 ## 4. Bloque 1 — decisiones ya confirmadas (detalle en BLOQUE1_PLAN.md)
 
-- **#3** Vendedor ve TODO el inventario y **vende de cualquier sede**; ve SUS ventas (cualquier sede) + las de su sede.
+- **#3** Vendedor ve TODO el inventario (`inv_select`=true) pero **vende SOLO desde su sede** (corrección clienta 2026-05-30; ve sus ventas de su sede). Plan futuro: desplegable "Sede" para consultar otras sedes + popup al intentar vender fuera de la suya. Ver §3 "Plan futuro".
 - **#4** Crear/editar/eliminar productos = **solo Admin** (todo).
 - **#5** Cancelar traspaso = **solo Admin**, **solo si está pendiente**, revirtiendo stock al origen. (Función NUEVA, hay que crearla.)
 - **#6** Vendedor **crea y gestiona** OT y traslados.
@@ -71,7 +79,7 @@ Verificado: policies correctas, enum con `cancelado`, gates de rol OK, `get_advi
 - **Migraciones se aplican vía MCP Supabase `apply_migration`** (no hay Supabase CLI ni `config.toml`). Un solo proyecto = PRODUCCIÓN. Respaldo antes de cada cambio.
 - `inventario`: la columna de stock es **`cantidad`** (no `stock`). Sedes activas: **BODEGA, CV, L3, CHV** (las del seed BOD-PRINCIPAL/ALM-01.. están inactivas).
 - **Triggers clave:** `trg_no_delete_inventario` (no borrar inventario; sí UPDATE), `trg_no_delete_movimientos` + `trg_prevent_update_movimientos` (movimientos append-only), `trg_no_modify_cierre` (cierres inmutables), `productos_costo_guard` (cambiar costo solo Admin), `trg_after_insert_detalle_venta` (descuenta stock al vender), `trg_recalcular_venta`.
-- `fn_registrar_venta` es **SECURITY DEFINER** y trae un check que BLOQUEA vender fuera de tu sede (`v_mi_rol <> 'Admin' AND v_mi_sede <> p_sede_id`). Para #3 hay que quitar ese check. `p_items` = `[{producto_id, cantidad}]`.
+- `fn_registrar_venta` es **SECURITY DEFINER** y trae un check que BLOQUEA vender fuera de tu sede (`v_mi_rol <> 'Admin' AND v_mi_sede IS DISTINCT FROM p_sede_id`). **Este check se mantiene** (corrección clienta: vendedor vende solo su sede). El descuento de stock NO lo hace la función: lo dispara el trigger `trg_after_insert_detalle_venta` al insertar en `detalle_venta`. `p_items` = `[{producto_id, cantidad}]`.
 - FKs: `detalle_venta.venta_id → ventas` es **ON DELETE CASCADE**; **`movimientos` NO tiene FK a `ventas`** (solo a producto/sede/usuario).
 - RLS actuales relevantes (resumen): `inv_select` = Admin o su sede; `prod_modify` = Admin+Bodeguero (cambiar a solo Admin); `os_insert` = Admin+Tecnico (añadir Vendedor); `traspasos` solo tiene policy de SELECT (create/recibir van por funciones SECURITY DEFINER).
 - Falta leer al implementar Bloque 1: `fn_crear_traspaso`, `fn_procesar_traspaso`, `fn_crear_producto`, enum de estados de traspaso/OT.
