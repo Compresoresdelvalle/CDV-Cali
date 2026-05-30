@@ -113,9 +113,9 @@ export default function Clientes() {
 
   const desactivar = async (cliente) => {
     const ok = await confirm({
-      titulo: "Desactivar cliente",
-      mensaje: `¿Desactivar a "${cliente.nombre}"? Dejará de aparecer en el listado y en el autocompletado, pero los documentos asociados se conservan.`,
-      confirmLabel: "Desactivar",
+      titulo: "Eliminar cliente",
+      mensaje: `¿Eliminar a "${cliente.nombre}"? Dejará de aparecer en el listado y en el autocompletado, pero los documentos asociados se conservan.`,
+      confirmLabel: "Eliminar",
       danger: true,
     });
     if (!ok) return;
@@ -127,7 +127,7 @@ export default function Clientes() {
       if (e) throw e;
       setItems((prev) => prev.filter((c) => c.id !== cliente.id));
     } catch (err) {
-      setError(safeError(err, "No se pudo desactivar el cliente"));
+      setError(safeError(err, "No se pudo eliminar el cliente"));
     }
   };
 
@@ -631,7 +631,7 @@ function ClienteFila({ cliente: c, esAdmin, onEdit, onDesactivar }) {
               }
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
             >
-              Desactivar
+              Eliminar
             </button>
           </div>
         </Td>
@@ -697,7 +697,7 @@ function ClienteCard({ cliente: c, esAdmin, onEdit, onDesactivar }) {
               color: "var(--dang-700)",
             }}
           >
-            Desactivar
+            Eliminar
           </button>
         </div>
       )}
