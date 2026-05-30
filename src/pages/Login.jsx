@@ -24,10 +24,10 @@ const ROLE_LABEL = {
   Tecnico: "Técnico",
 };
 const SEDE_LABEL = {
-  "BOD-PRINCIPAL": "Bodega Principal",
-  "ALM-01": "Almacén Norte",
-  "ALM-02": "Almacén Sur",
-  "ALM-03": "Almacén Centro",
+  BODEGA: "Bodega Principal",
+  CV: "Almacén CV",
+  L3: "Almacén L3",
+  CHV: "Almacén CHV",
 };
 
 const getInitials = (name = "") =>

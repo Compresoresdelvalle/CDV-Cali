@@ -435,7 +435,7 @@ export default function Herramientas() {
       )}
       {modalNueva && (
         <ModalNueva
-          sedeDefault={perfil?.sede_id ?? "BOD-PRINCIPAL"}
+          sedeDefault={perfil?.sede_id ?? "BODEGA"}
           onClose={() => setModalNueva(false)}
           onSaved={async () => {
             setModalNueva(false);

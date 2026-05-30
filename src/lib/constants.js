@@ -1,9 +1,9 @@
 // Sedes
 export const SEDES = {
-  BOD_PRINCIPAL: "BOD-PRINCIPAL",
-  ALM_01: "ALM-01",
-  ALM_02: "ALM-02",
-  ALM_03: "ALM-03",
+  BODEGA: "BODEGA",
+  CV: "CV",
+  L3: "L3",
+  CHV: "CHV",
 };
 
 // Roles

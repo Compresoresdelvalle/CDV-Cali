@@ -13,10 +13,10 @@
 
 /** Etiqueta legible para cada sede (IDs TEXT reales). */
 export const SEDE_LABELS = {
-  "BOD-PRINCIPAL": "Bodega Principal",
-  "ALM-01": "Almacén 01",
-  "ALM-02": "Almacén 02",
-  "ALM-03": "Almacén 03",
+  BODEGA: "Bodega Principal",
+  CV: "Almacén CV",
+  L3: "Almacén L3",
+  CHV: "Almacén CHV",
 };
 
 /** ID de sede → etiqueta legible (fallback al ID si no se reconoce). */
