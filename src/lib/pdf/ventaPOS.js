@@ -10,7 +10,7 @@
  *   r.download(); // descarga el PDF
  */
 import { jsPDF } from "jspdf";
-import { MARCA, formatCOP } from "./pdfStyles";
+import { MARCA, RECIBO_NOMBRE, SEDE_TELEFONO, formatCOP } from "./pdfStyles";
 
 const W = 80; // ancho tirilla en mm
 const MX = 5; // margen lateral
@@ -35,8 +35,14 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
     // 3.6 primera línea + 3.6 por cada línea extra del nombre + 4.2 precio c/u
     itemsAlto += 3.6 + Math.max(0, lineas.length - 1) * 3.6 + 4.2;
   }
-  // header ~58 + items + totales ~50 + footer ~25, mínimo 120
-  const altura = Math.max(58 + itemsAlto + 50 + 25, 120);
+  // #15: la observación puede ocupar varias líneas — reservar su alto.
+  let obsAlto = 0;
+  if (venta.observaciones) {
+    const ol = probe.splitTextToSize(`Obs: ${venta.observaciones}`, CW);
+    obsAlto = ol.length * 3.4 + 4;
+  }
+  // header ~58 + items + obs + totales ~50 + footer ~25, mínimo 120
+  const altura = Math.max(58 + itemsAlto + obsAlto + 50 + 25, 120);
 
   const doc = new jsPDF({
     unit: "mm",
@@ -47,15 +53,21 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
   let y = 8;
   const center = W / 2;
 
-  // ── Encabezado empresa ───────────────────────────────────────────────
+  // ── Encabezado empresa (#14: nombre comercial + teléfono de la sede) ──
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text(MARCA.nombre, center, y, { align: "center" });
+  doc.text(RECIBO_NOMBRE, center, y, { align: "center" });
   y += 4.5;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.text(MARCA.ciudad, center, y, { align: "center" });
-  y += 6;
+  y += 3.8;
+  const telSede = SEDE_TELEFONO[venta.sede_id];
+  if (telSede) {
+    doc.text(`Tel: ${telSede}`, center, y, { align: "center" });
+    y += 3.8;
+  }
+  y += 2;
 
   // Línea
   doc.setLineWidth(0.2);
@@ -159,13 +171,24 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
   };
   fila("Subtotal:", formatCOP(subtotal));
   if (descPct > 0) fila(`Descuento (${descPct}%):`, `-${formatCOP(descuento)}`);
-  fila(`IVA ${ivaPct}%:`, formatCOP(iva));
+  // #16: IVA condicional — si la venta es exenta (0%) no se imprime la línea.
+  if (ivaPct > 0) fila(`IVA ${ivaPct}%:`, formatCOP(iva));
   doc.setFontSize(9);
   fila("TOTAL:", formatCOP(total), true);
 
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
   fila("Forma de pago:", String(venta.metodo_pago ?? "—"));
+
+  // #15: observación de la venta en el recibo (si existe).
+  if (venta.observaciones) {
+    y += 1;
+    doc.setFontSize(6.5);
+    const obs = doc.splitTextToSize(`Obs: ${venta.observaciones}`, CW);
+    doc.text(obs, MX, y);
+    y += obs.length * 3.4 + 1;
+    doc.setFontSize(7);
+  }
 
   y += 2;
   doc.line(MX, y, W - MX, y);

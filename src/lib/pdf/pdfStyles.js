@@ -17,6 +17,17 @@ export const MARCA = {
   // Email/teléfono van vacíos por ahora — Admin puede llenar en config futura
 };
 
+// #14 — Nombre comercial corto que va en los RECIBOS (no el nombre legal).
+export const RECIBO_NOMBRE = "Compresores CV";
+
+// #14 — Teléfono por sede para los recibos (se muestra el de la sede de la venta).
+// ⚠️ BODEGA (Bodega Principal) pendiente de dato — se omite si no hay teléfono.
+export const SEDE_TELEFONO = {
+  CV: "3127536787",
+  L3: "3114940799",
+  CHV: "3174675905",
+};
+
 // Paleta corporativa (sincronizada con tokens CSS hsl(var(--primary)))
 export const COLORES = {
   primario: [36, 90, 140], // #245A8C — azul corporativo

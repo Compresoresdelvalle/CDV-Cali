@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import {
   ArrowLeftCircle,
@@ -16,7 +16,6 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import ModalAbrirGarantiaVenta from "../../components/garantias/ModalAbrirGarantiaVenta";
 import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
-import { MARCA } from "../../lib/pdf/pdfStyles";
 import {
   metodoPagoClass,
   ventaEstadoLabel,
@@ -41,17 +40,36 @@ export default function VentaDetalle() {
   const [error, setError] = useState(null);
   const [modalGarantia, setModalGarantia] = useState(false);
   const [imprimiendo, setImprimiendo] = useState(false);
+  const [reciboUrl, setReciboUrl] = useState(null);
 
-  // Guard anti doble-click: genera el recibo POS una sola vez por tap
+  // #17: un ÚNICO documento PDF (ventaPOS) alimenta el preview Y la impresión,
+  // así lo que se ve en pantalla es exactamente lo que se imprime.
+  const reciboDoc = useMemo(() => {
+    if (!venta) return null;
+    return generarVentaPOS({
+      venta,
+      items,
+      vendedor: venta.vendedor?.nombre ?? "—",
+    });
+  }, [venta, items]);
+
+  // URL del blob para el <iframe> de preview (se libera al cambiar/desmontar).
+  useEffect(() => {
+    if (!reciboDoc) {
+      setReciboUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(reciboDoc.blob);
+    setReciboUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [reciboDoc]);
+
+  // Guard anti doble-click: imprime el MISMO documento del preview.
   const imprimirRecibo = () => {
-    if (imprimiendo) return;
+    if (imprimiendo || !reciboDoc) return;
     setImprimiendo(true);
     try {
-      generarVentaPOS({
-        venta,
-        items,
-        vendedor: venta.vendedor?.nombre ?? "—",
-      }).print();
+      reciboDoc.print();
     } finally {
       setTimeout(() => setImprimiendo(false), 1500);
     }
@@ -540,115 +558,26 @@ export default function VentaDetalle() {
             </div>
           </header>
           <div className="pdf-stage">
-            <div className="pdf-paper">
-              <div className="mb-3 flex items-start justify-between">
-                <div>
-                  <div className="pdf-logo-sq">CHV</div>
-                  <div className="pdf-logo-tag">Compresores del Valle</div>
-                </div>
-                <div className="text-right">
-                  <div className="pdf-co-name">{MARCA.nombre}</div>
-                  <div className="pdf-co-line sans">{MARCA.ciudad}</div>
-                </div>
-              </div>
+            {/* #17: el preview ES el PDF real (mismo blob que se imprime). */}
+            {reciboUrl ? (
+              <iframe
+                title={`Recibo de venta #${venta.numero}`}
+                src={reciboUrl}
+                className="w-full rounded-lg border"
+                style={{
+                  height: 560,
+                  borderColor: "var(--n-150)",
+                  backgroundColor: "var(--n-0)",
+                }}
+              />
+            ) : (
               <div
-                className="my-3 flex items-end justify-between border-y border-dashed py-3"
-                style={{ borderColor: "#DADCE3" }}
+                className="px-4 py-10 text-center text-sm"
+                style={{ color: "var(--n-500)" }}
               >
-                <div>
-                  <div className="pdf-title-main">RECIBO</div>
-                  <div className="pdf-title-num">
-                    Rec #{venta.numero} · #{venta.numero}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="pdf-eyebrow-print">Fecha</div>
-                  <div className="pdf-meta-val sans">
-                    {formatDate(venta.fecha)}
-                  </div>
-                </div>
+                Generando recibo…
               </div>
-              <div className="mb-3 grid grid-cols-2 gap-4">
-                <div>
-                  <div className="pdf-eyebrow-print">Cliente</div>
-                  <div className="pdf-cli-name">
-                    {venta.cliente_nombre || "Cliente mostrador"}
-                  </div>
-                  {venta.cliente_nit && (
-                    <div className="pdf-cli-line">NIT {venta.cliente_nit}</div>
-                  )}
-                  <div className="pdf-cli-line">Sede {venta.sede_id}</div>
-                </div>
-                <div>
-                  <div className="pdf-eyebrow-print">Método</div>
-                  <div className="pdf-meta-val sans">{venta.metodo_pago}</div>
-                  <div className="pdf-cli-line">
-                    Vendedor: {venta.vendedor?.nombre ?? "—"}
-                  </div>
-                </div>
-              </div>
-              <table className="pdf-table">
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th className="c" style={{ width: 36 }}>
-                      Cant
-                    </th>
-                    <th className="r" style={{ width: 70 }}>
-                      Unit
-                    </th>
-                    <th className="r" style={{ width: 78 }}>
-                      Subtotal
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((p) => (
-                    <tr key={p.id}>
-                      <td>
-                        {p.producto?.nombre}
-                        <div
-                          className="mono"
-                          style={{ fontSize: 8, color: "#5C6070" }}
-                        >
-                          {p.producto?.referencia ?? "—"}
-                        </div>
-                      </td>
-                      <td className="c">{p.cantidad}</td>
-                      <td className="r">{formatCOP(p.precio_unitario)}</td>
-                      <td className="r sub">{formatCOP(p.subtotal)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex justify-end">
-                <table className="pdf-totals-tbl">
-                  <tbody>
-                    <tr>
-                      <td>Subtotal</td>
-                      <td>{formatCOP(subtotalCalc)}</td>
-                    </tr>
-                    {venta.descuento_pct > 0 && (
-                      <tr>
-                        <td>Descuento ({venta.descuento_pct}%)</td>
-                        <td>−{formatCOP(descuento)}</td>
-                      </tr>
-                    )}
-                    <tr>
-                      <td>IVA {venta.iva_pct ?? 19}%</td>
-                      <td>{formatCOP(iva)}</td>
-                    </tr>
-                    <tr className="tot">
-                      <td>Total</td>
-                      <td>{formatCOP(totalCalc)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="pdf-footer-page mt-6">
-                Página 1 de 1 · CHV · Rec #{venta.numero}
-              </div>
-            </div>
+            )}
           </div>
         </aside>
       </div>
