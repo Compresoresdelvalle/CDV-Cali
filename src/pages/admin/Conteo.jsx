@@ -9,12 +9,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import {
-  formatDate,
-  formatCOP,
-  sanitizeSearch,
-  safeError,
-} from "../../lib/utils";
+import { formatDate, formatCOP, safeError } from "../../lib/utils";
+import { applyKeywordSearch } from "../../lib/search";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import {
   diferenciaToken,
@@ -825,8 +821,7 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
 
   // Búsqueda
   useEffect(() => {
-    const q = sanitizeSearch(search);
-    if (q.length < 2 || productoSel) {
+    if (search.trim().length < 2 || productoSel) {
       setResultados([]);
       return;
     }
@@ -834,14 +829,15 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
     const t = setTimeout(async () => {
       setBuscando(true);
       try {
-        const { data, error } = await supabase
+        // #32: búsqueda por palabras clave en referencia/nombre.
+        let pq = supabase
           .from("productos")
           .select(
             `id, referencia, nombre, inventario:inventario(id, cantidad, sede_id)`,
           )
-          .eq("activo", true)
-          .or(`referencia.ilike.%${q}%,nombre.ilike.%${q}%`)
-          .limit(10);
+          .eq("activo", true);
+        pq = applyKeywordSearch(pq, search, ["referencia", "nombre"]);
+        const { data, error } = await pq.limit(10);
         if (ac.signal.aborted) return;
         if (error) throw error;
         setResultados(data ?? []);

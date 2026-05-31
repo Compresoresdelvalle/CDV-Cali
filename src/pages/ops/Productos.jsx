@@ -6,7 +6,8 @@ import { useAuthStore } from "../../stores/authStore";
 import { useDebounce } from "../../hooks/useDebounce";
 import StatusBadge from "../../components/ui/StatusBadge";
 import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
-import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
+import { formatCOP, safeError } from "../../lib/utils";
+import { applyKeywordSearch } from "../../lib/search";
 import { categoriaClass } from "../../lib/inventario-ui";
 
 const PAGE_SIZE = 30;
@@ -59,9 +60,14 @@ export default function Productos() {
 
         if (soloActivos) q = q.eq("activo", true);
 
-        const raw = sanitizeSearch(debouncedBusqueda);
-        if (raw) {
-          q = q.or(`nombre.ilike.%${raw}%,referencia.ilike.%${raw}%`);
+        // #32: búsqueda por palabras clave en nombre/referencia/códigos.
+        if (debouncedBusqueda.trim()) {
+          q = applyKeywordSearch(q, debouncedBusqueda, [
+            "nombre",
+            "referencia",
+            "codigo_interno",
+            "codigo_proveedor",
+          ]);
         }
 
         const { data, error: qErr } = await q;

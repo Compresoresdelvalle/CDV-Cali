@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
-import { sanitizeSearch } from "../lib/utils";
+import { applyKeywordSearch } from "../lib/search";
 
 const PAGE_SIZE = 50;
 
@@ -79,10 +79,13 @@ export const useInventarioStore = create((set, get) => ({
           .eq("activo", true)
           .limit(500);
         if (busquedaRaw) {
-          const busqueda = sanitizeSearch(busquedaRaw);
-          pq = pq.or(
-            `nombre.ilike.%${busqueda}%,referencia.ilike.%${busqueda}%,codigo_interno.ilike.%${busqueda}%,codigo_proveedor.ilike.%${busqueda}%`,
-          );
+          // #32: cada palabra debe aparecer en alguna de estas columnas.
+          pq = applyKeywordSearch(pq, busquedaRaw, [
+            "nombre",
+            "referencia",
+            "codigo_interno",
+            "codigo_proveedor",
+          ]);
         }
         if (s.filtroTipo) pq = pq.eq("tipo", s.filtroTipo);
         const { data: prods, error: pqError } = await pq;

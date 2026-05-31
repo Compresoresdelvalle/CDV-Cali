@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, ScanLine, Plus, X, Package } from "lucide-react";
 import { useInventario } from "../../hooks/useInventario";
 import { useRealtimeInventario } from "../../hooks/useRealtime";
@@ -52,6 +52,14 @@ export default function Inventario() {
 
   // Suscripción Realtime
   useRealtimeInventario();
+
+  // #33: si llega ?q=… del buscador global, lo aplica una vez al montar.
+  const [searchParams] = useSearchParams();
+  const qParam = searchParams.get("q");
+  useEffect(() => {
+    if (qParam) setBusqueda(qParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Infinite scroll
   const sentinelRef = useRef(null);

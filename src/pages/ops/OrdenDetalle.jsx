@@ -21,12 +21,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import {
-  formatCOP,
-  formatDate,
-  sanitizeSearch,
-  safeError,
-} from "../../lib/utils";
+import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { applyKeywordSearch } from "../../lib/search";
 import {
   ordenEstadoPill,
   autorizacionPill,
@@ -193,8 +189,7 @@ export default function OrdenDetalle() {
   const sedeOrden = orden?.sede_id;
   useEffect(() => {
     if (!sedeOrden) return;
-    const q = sanitizeSearch(search.trim());
-    if (q.length < 2) {
+    if (search.trim().length < 2) {
       setResultados([]);
       setBuscando(false);
       return;
@@ -205,14 +200,15 @@ export default function OrdenDetalle() {
       try {
         // Búsqueda por nombre/referencia; luego inventario en la sede de la orden.
         // Traemos todos los activos que coincidan y filtramos por modo más abajo.
-        const { data: prods, error: e1 } = await supabase
+        // #32: búsqueda por palabras clave en referencia/nombre.
+        let pq = supabase
           .from("productos")
           .select(
             "id, referencia, nombre, precio_venta, costo_promedio, vendible",
           )
-          .eq("activo", true)
-          .or(`referencia.ilike.%${q}%,nombre.ilike.%${q}%`)
-          .limit(30);
+          .eq("activo", true);
+        pq = applyKeywordSearch(pq, search, ["referencia", "nombre"]);
+        const { data: prods, error: e1 } = await pq.limit(30);
         if (ac.signal.aborted) return;
         if (e1) throw e1;
 
