@@ -11,6 +11,8 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate, formatCOP, safeError } from "../../lib/utils";
 import { applyKeywordSearch } from "../../lib/search";
+import { SEDES } from "../../lib/constants";
+import { SEDE_LABELS } from "../../lib/traspasos-ui";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import {
   diferenciaToken,
@@ -809,6 +811,9 @@ function SkeletonList() {
 }
 
 function ModalNuevoConteo({ perfil, onClose, onSaved }) {
+  // #35: el Admin puede contar cualquier sede; el resto, la suya.
+  const esAdmin = perfil?.rol === "Admin";
+  const [sedeConteo, setSedeConteo] = useState(perfil?.sede_id ?? SEDES.BODEGA);
   const [search, setSearch] = useState("");
   const [resultados, setResultados] = useState([]);
   const [buscando, setBuscando] = useState(false);
@@ -818,6 +823,17 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
   const [observaciones, setObservaciones] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Cambiar la sede reinicia la selección: el stock del sistema es por sede,
+  // así que un conteo a medias dejaría de ser válido al cambiarla.
+  const cambiarSede = (sede) => {
+    setSedeConteo(sede);
+    setProductoSel(null);
+    setStockFisico("");
+    setSearch("");
+    setResultados([]);
+    setError("");
+  };
 
   // Búsqueda
   useEffect(() => {
@@ -854,12 +870,12 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
   }, [search, productoSel]);
 
   const seleccionar = (p) => {
-    const inv = (p.inventario ?? []).find((i) => i.sede_id === perfil?.sede_id);
+    const inv = (p.inventario ?? []).find((i) => i.sede_id === sedeConteo);
     if (!inv) {
-      // Producto no tiene fila inventario en la sede del usuario.
-      // Avisamos al operario en vez de continuar con stock=0 silencioso.
+      // Producto sin fila de inventario en la sede a contar.
+      // Avisamos en vez de continuar con stock=0 silencioso.
       setError(
-        `"${p.nombre}" no tiene inventario en tu sede. Pídele a un Admin que lo agregue antes de contar.`,
+        `"${p.nombre}" no tiene inventario en ${SEDE_LABELS[sedeConteo] ?? sedeConteo}. Pídele a un Admin que lo agregue antes de contar.`,
       );
       return;
     }
@@ -889,6 +905,7 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
         p_producto_id: productoSel.id,
         p_stock_fisico: fisico,
         p_observaciones: observaciones.trim() || null,
+        p_sede_id: sedeConteo,
       });
       if (error) throw error;
       if (data?.ok === false) throw new Error("No se pudo registrar el conteo");
@@ -925,6 +942,37 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
         </h2>
 
         {error && <Banner type="destructive">{error}</Banner>}
+
+        {/* #35: sede a contar — el Admin elige cualquiera; otros, la suya. */}
+        <div className="mb-3">
+          <label
+            className="mb-1 block text-xs font-medium"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Sede a contar
+          </label>
+          {esAdmin ? (
+            <select
+              value={sedeConteo}
+              onChange={(e) => cambiarSede(e.target.value)}
+              className="h-12 w-full rounded-lg border px-3 text-sm"
+              style={surfaceInputStyle}
+            >
+              {Object.values(SEDES).map((s) => (
+                <option key={s} value={s}>
+                  {SEDE_LABELS[s] ?? s}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div
+              className="flex h-12 items-center rounded-lg border px-3 text-sm"
+              style={{ ...surfaceInputStyle, opacity: 0.8 }}
+            >
+              {SEDE_LABELS[sedeConteo] ?? sedeConteo}
+            </div>
+          )}
+        </div>
 
         {!productoSel ? (
           <div className="space-y-3">
