@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/authStore";
 import { supabase } from "../lib/supabase";
 import loginBg from "../assets/login-bg.jpg";
+import Logo from "../components/ui/Logo";
 
 /* ── Role config ───────────────────────────────────────────────────────── */
 const ROLE_GRADIENTS = {
@@ -351,11 +352,7 @@ export default function Login() {
       {/* Left branding (desktop) */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 relative z-10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-            <span className="text-sm font-black text-white tracking-tight">
-              CV
-            </span>
-          </div>
+          <Logo className="w-11 h-11 shadow-lg shadow-blue-500/25" />
           <div>
             <h1 className="text-xl font-bold text-white">COMPRESORES</h1>
             <p className="text-[10px] tracking-[0.35em] uppercase text-white/50">
@@ -412,9 +409,7 @@ export default function Login() {
           >
             {/* Mobile logo */}
             <div className="lg:hidden text-center mb-8">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center mx-auto shadow-lg shadow-blue-500/25 mb-3">
-                <span className="text-base font-black text-white">CV</span>
-              </div>
+              <Logo className="w-16 h-16 mx-auto mb-3 shadow-lg shadow-blue-500/25" />
               <h1 className="text-lg font-bold text-white">
                 COMPRESORES DEL VALLE
               </h1>
