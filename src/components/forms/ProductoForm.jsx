@@ -40,6 +40,7 @@ export default function ProductoForm({
     ensamblable: initial.ensamblable ?? false,
     stand: initial.stand ?? "",
     posicion: initial.posicion ?? "",
+    en_piso: initial.en_piso ?? false,
   });
   const [validationError, setValidationError] = useState("");
 
@@ -69,8 +70,11 @@ export default function ProductoForm({
       stock_maximo: form.stock_maximo === "" ? null : Number(form.stock_maximo),
       vendible: !!form.vendible,
       ensamblable: !!form.ensamblable,
-      stand: form.stand === "" ? null : Number(form.stand),
-      posicion: form.posicion === "" ? null : Number(form.posicion),
+      // En piso: zona central, sin stand/posición.
+      en_piso: !!form.en_piso,
+      stand: form.en_piso || form.stand === "" ? null : Number(form.stand),
+      posicion:
+        form.en_piso || form.posicion === "" ? null : Number(form.posicion),
     };
     await onSubmit?.(payload);
   };
@@ -300,26 +304,50 @@ export default function ProductoForm({
             Ensamblable (puede producirse en el módulo de Ensambles)
           </label>
         </Field>
+        <Field label="¿En piso?">
+          <label
+            className="flex items-center gap-2 text-sm"
+            style={{ color: "var(--n-700)" }}
+          >
+            <input
+              type="checkbox"
+              checked={form.en_piso}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  en_piso: e.target.checked,
+                  stand: e.target.checked ? "" : form.stand,
+                  posicion: e.target.checked ? "" : form.posicion,
+                })
+              }
+              className="h-4 w-4"
+            />
+            En piso (zona central de carga pesada, sin stand ni posición)
+          </label>
+        </Field>
         <Row>
-          <Field label="Stand (1–8)">
+          <Field label="Stand (1–9)">
             <input
               type="number"
               min="1"
-              max="8"
+              max="9"
               step="1"
               value={form.stand}
               onChange={set("stand")}
+              disabled={form.en_piso}
               className="finput"
-              placeholder="—"
+              placeholder={form.en_piso ? "En piso" : "—"}
             />
           </Field>
-          <Field label="Posición">
+          <Field label="Posición (1–4)">
             <input
               type="number"
-              min="0"
+              min="1"
+              max="4"
               step="1"
               value={form.posicion}
               onChange={set("posicion")}
+              disabled={form.en_piso}
               className="finput"
               placeholder="—"
             />

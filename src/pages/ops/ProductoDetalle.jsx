@@ -16,6 +16,7 @@ import QRPrintLabel from "../../components/qr/QRPrintLabel";
 import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { ubicacionLabel } from "../../lib/inventario-ui";
 
 export default function ProductoDetalle() {
   const { productoId } = useParams();
@@ -66,7 +67,7 @@ export default function ProductoDetalle() {
         const { data: prod, error: prodErr } = await supabase
           .from("productos")
           .select(
-            "id, referencia, codigo_interno, codigo_proveedor, tipo, nombre, categoria, subcategoria, marca, modelo, descripcion, precio_venta, costo_promedio, stock_minimo, stock_maximo, unidad_medida, activo, vendible, stand, posicion",
+            "id, referencia, codigo_interno, codigo_proveedor, tipo, nombre, categoria, subcategoria, marca, modelo, descripcion, precio_venta, costo_promedio, stock_minimo, stock_maximo, unidad_medida, activo, vendible, stand, posicion, en_piso",
           )
           .eq("id", productoId)
           .single();
@@ -379,17 +380,7 @@ export default function ProductoDetalle() {
         )}
         <Stat label="Stock mínimo" value={producto.stock_minimo} small />
         <Stat label="Stock máximo" value={producto.stock_maximo ?? "—"} small />
-        <Stat
-          label="Ubicación"
-          value={
-            producto.stand
-              ? `Stand ${producto.stand}${
-                  producto.posicion ? ` · Pos ${producto.posicion}` : ""
-                }`
-              : "—"
-          }
-          small
-        />
+        <Stat label="Ubicación" value={ubicacionLabel(producto)} small />
       </div>
 
       {producto.descripcion && (
@@ -425,7 +416,9 @@ export default function ProductoDetalle() {
                       <td>
                         <div className="p-nm">{inv.sede?.nombre}</div>
                         <div className="p-meta">
-                          {inv.ubicacion_id ?? "Sin ubicación"}
+                          {inv.sede?.id === "BODEGA"
+                            ? ubicacionLabel(producto, "Sin ubicación")
+                            : (inv.ubicacion_id ?? "—")}
                         </div>
                       </td>
                       <td style={{ width: 120 }}>
