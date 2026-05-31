@@ -64,6 +64,8 @@ export default function VentaNueva() {
     () => perfil?.sede_id || SEDES.BODEGA,
   );
   const [bloqueoSede, setBloqueoSede] = useState(false);
+  // #10 — cuántos ítems quedaron en negativo tras la venta (0 = ninguno).
+  const [negativoInfo, setNegativoInfo] = useState(0);
   // La venta SALE de: Admin → la sede elegida; Vendedor → siempre su sede.
   const sedeVenta = esVendedor ? perfil?.sede_id : sedeConsulta;
   // El vendedor está mirando una sede que NO es la suya (solo consulta).
@@ -295,6 +297,10 @@ export default function VentaNueva() {
     if (carrito.length === 0) return;
     setError(null);
     setConfirmando(true);
+    // #10: ítems que dejarán el inventario en negativo (cantidad > disponible).
+    const negativos = carrito.filter(
+      (i) => i.cantidad > i.stock_disponible,
+    ).length;
     try {
       const { error: rpcErr } = await supabase.rpc("fn_registrar_venta", {
         p_sede_id: sedeVenta,
@@ -323,7 +329,13 @@ export default function VentaNueva() {
           direccion: clienteDireccion,
         });
       }
-      navigate("/ops/ventas");
+      // #10: si la venta dejó inventario negativo, avisar (urgente) antes de
+      // salir; el modal navega al cerrar. Si no, navegar directo.
+      if (negativos > 0) {
+        setNegativoInfo(negativos);
+      } else {
+        navigate("/ops/ventas");
+      }
     } catch (e) {
       setError(safeError(e, "Error al registrar la venta"));
     } finally {
@@ -939,6 +951,13 @@ export default function VentaNueva() {
           onClose={() => setBloqueoSede(false)}
         />
       )}
+
+      {negativoInfo > 0 && (
+        <NegativoModal
+          count={negativoInfo}
+          onClose={() => navigate("/ops/ventas")}
+        />
+      )}
     </div>
   );
 }
@@ -998,6 +1017,58 @@ function SedeBloqueoModal({ sedePropia, onClose }) {
         >
           Este producto no está en tu sede ({sedePropia}). Búscalo en tu sede;
           si no hay stock, pide un traspaso.
+        </p>
+        <button
+          onClick={onClose}
+          autoFocus
+          className="h-12 w-full rounded-lg text-sm font-medium"
+          style={{
+            backgroundColor: "hsl(var(--primary))",
+            color: "hsl(var(--primary-foreground))",
+          }}
+        >
+          Entendido
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// #10 — aviso urgente cuando la venta dejó inventario negativo.
+function NegativoModal({ count, onClose }) {
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full rounded-t-2xl p-5 sm:max-w-md sm:rounded-2xl"
+        style={{ backgroundColor: "hsl(var(--card))" }}
+        role="alertdialog"
+        aria-labelledby="negativo-title"
+      >
+        <div className="mb-2 flex items-center gap-2">
+          <AlertTriangle
+            className="size-5 shrink-0"
+            style={{ color: "hsl(var(--warning, var(--destructive)))" }}
+          />
+          <h2
+            id="negativo-title"
+            className="text-lg font-semibold"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            Venta registrada · inventario negativo
+          </h2>
+        </div>
+        <p
+          className="mb-4 text-sm"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          {count} producto{count !== 1 ? "s" : ""} quedó
+          {count !== 1 ? "ron" : ""} con stock negativo en esta sede.
+          Regularízalo cuanto antes con un <b>traspaso</b> o una <b>compra</b>.
         </p>
         <button
           onClick={onClose}
