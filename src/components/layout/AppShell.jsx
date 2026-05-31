@@ -19,7 +19,6 @@ import {
   Wrench,
   Puzzle,
   Home,
-  Search,
   Bell,
   Menu,
   LogOut,
@@ -28,6 +27,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { ROLE_MODULES, MODULE_ROUTES } from "../../lib/constants";
 import ThemeToggle from "../ui/ThemeToggle";
+import GlobalSearch from "./GlobalSearch";
 import { supabase } from "../../lib/supabase";
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
@@ -224,15 +224,8 @@ function SidebarOps({ sections, isAdmin }) {
 function HeaderOps({ perfil, rol, initials, alertCount, onLogout, onSearch }) {
   return (
     <header className="chv-topbar sticky top-0 z-30 hidden lg:flex h-14 items-center gap-3 px-4">
-      {/* Buscador global → navega a inventario al enviar */}
-      <button
-        type="button"
-        onClick={onSearch}
-        className="focus-ring flex h-9 min-w-[280px] flex-1 max-w-[480px] items-center gap-2 rounded-md border border-white/15 bg-white/10 px-3 text-left text-[13px] text-white/70 hover:bg-white/15 hover:border-white/25"
-      >
-        <Search className="h-4 w-4" strokeWidth={1.75} />
-        <span className="flex-1">Buscar productos, ventas, clientes...</span>
-      </button>
+      {/* #33 — Buscador global funcional (dropdown de resultados en vivo) */}
+      <GlobalSearch />
 
       <div className="flex-1" />
 

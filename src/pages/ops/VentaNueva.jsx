@@ -14,12 +14,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import {
-  formatCOP,
-  formatDate,
-  sanitizeSearch,
-  safeError,
-} from "../../lib/utils";
+import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { applyKeywordSearch } from "../../lib/search";
 import QRScanner from "../../components/forms/QRScanner";
 import ClientePicker from "../../components/forms/ClientePicker";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
@@ -79,14 +75,14 @@ export default function VentaNueva() {
       }
       setBuscando(true);
       try {
-        const safe = sanitizeSearch(q.trim());
-        const { data: prods, error: e1 } = await supabase
+        let pq = supabase
           .from("productos")
           .select("id, nombre, referencia, precio_venta, unidad_medida")
           .eq("activo", true)
-          .eq("vendible", true) // Bloque 2: los insumos no se venden
-          .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
-          .limit(10);
+          .eq("vendible", true); // Bloque 2: los insumos no se venden
+        // #32: búsqueda por palabras clave.
+        pq = applyKeywordSearch(pq, q, ["nombre", "referencia"]);
+        const { data: prods, error: e1 } = await pq.limit(10);
         if (e1) throw e1;
         if (!prods?.length) {
           setResultados([]);
