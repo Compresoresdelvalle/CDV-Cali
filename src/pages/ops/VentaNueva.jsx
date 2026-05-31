@@ -10,6 +10,7 @@ import {
   Star,
   AlertTriangle,
   ChevronRight,
+  MapPin,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -23,11 +24,14 @@ import QRScanner from "../../components/forms/QRScanner";
 import ClientePicker from "../../components/forms/ClientePicker";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { metodoPagoClass } from "../../lib/ventas-ui";
+import { SEDE_LABELS, sedeLabel } from "../../lib/traspasos-ui";
+import { SEDES } from "../../lib/constants";
 import { upsertCliente } from "../../lib/clientes";
 
 const METODOS_PAGO = ["Efectivo", "Transferencia", "Tarjeta", "Crédito"];
 const IVA_DEFAULT = 19;
 const IVA_PRESETS = [0, 19];
+const SEDE_IDS = Object.values(SEDES); // BODEGA, CV, L3, CHV
 
 export default function VentaNueva() {
   const navigate = useNavigate();
@@ -53,9 +57,20 @@ export default function VentaNueva() {
   const [error, setError] = useState(null);
   const [historialCliente, setHistorialCliente] = useState(null);
 
+  // #11 — Sede a consultar (de qué almacén veo el stock). Default: la mía.
+  const esVendedor = perfil?.rol === "Vendedor";
+  const [sedeConsulta, setSedeConsulta] = useState(
+    () => perfil?.sede_id || SEDES.BODEGA,
+  );
+  const [bloqueoSede, setBloqueoSede] = useState(false);
+  // La venta SALE de: Admin → la sede elegida; Vendedor → siempre su sede.
+  const sedeVenta = esVendedor ? perfil?.sede_id : sedeConsulta;
+  // El vendedor está mirando una sede que NO es la suya (solo consulta).
+  const consultandoOtraSede = esVendedor && sedeConsulta !== perfil?.sede_id;
+
   const buscarProductos = useCallback(
     async (q) => {
-      if (!q || q.trim().length < 2 || !perfil?.sede_id) {
+      if (!q || q.trim().length < 2 || !sedeConsulta) {
         setResultados([]);
         return;
       }
@@ -76,20 +91,22 @@ export default function VentaNueva() {
         }
 
         const ids = prods.map((p) => p.id);
+        // #11: stock de la sede consultada. #12: NO filtramos por cantidad>0,
+        // mostramos TODOS (los sin stock con su badge).
         const { data: inv, error: e2 } = await supabase
           .from("inventario")
           .select("producto_id, cantidad")
-          .eq("sede_id", perfil.sede_id)
-          .gt("cantidad", 0)
+          .eq("sede_id", sedeConsulta)
           .in("producto_id", ids);
         if (e2) throw e2;
 
         const stockMap = Object.fromEntries(
           (inv ?? []).map((i) => [i.producto_id, i.cantidad]),
         );
-        const merged = prods
-          .filter((p) => stockMap[p.id] !== undefined)
-          .map((p) => ({ ...p, stock_disponible: stockMap[p.id] }));
+        const merged = prods.map((p) => ({
+          ...p,
+          stock_disponible: stockMap[p.id] ?? 0,
+        }));
 
         setResultados(merged.slice(0, 8));
       } catch {
@@ -98,7 +115,7 @@ export default function VentaNueva() {
         setBuscando(false);
       }
     },
-    [perfil?.sede_id],
+    [sedeConsulta],
   );
 
   const buscarDebounced = useDebouncedCallback(buscarProductos, 400);
@@ -155,20 +172,28 @@ export default function VentaNueva() {
           supabase
             .from("inventario")
             .select("cantidad")
-            .eq("sede_id", perfil?.sede_id)
+            .eq("sede_id", sedeConsulta)
             .eq("producto_id", productoId)
             .maybeSingle(),
         ]);
-        if (!prod || !inv || inv.cantidad <= 0) return;
-        agregarAlCarrito({ ...prod, stock_disponible: inv.cantidad });
+        // #12: aunque no haya stock se agrega (con aviso). Solo exigimos que el
+        // producto exista y sea vendible.
+        if (!prod) return;
+        agregarAlCarrito({ ...prod, stock_disponible: inv?.cantidad ?? 0 });
       } catch {
         // silently ignore
       }
     },
-    [perfil?.sede_id],
+    [sedeConsulta],
   );
 
   const agregarAlCarrito = (prod) => {
+    // #11: el vendedor solo vende desde su sede. Si está consultando otra,
+    // no deja agregar y muestra el popup informativo.
+    if (consultandoOtraSede) {
+      setBloqueoSede(true);
+      return;
+    }
     setBusqueda("");
     setResultados([]);
     setCarrito((prev) => {
@@ -176,7 +201,8 @@ export default function VentaNueva() {
       if (idx >= 0) {
         const updated = [...prev];
         const item = { ...updated[idx] };
-        if (item.cantidad < prod.stock_disponible) item.cantidad += 1;
+        // #12: sin tope por stock (puede quedar negativo; el RPC lo gobierna).
+        item.cantidad += 1;
         updated[idx] = item;
         return updated;
       }
@@ -196,15 +222,12 @@ export default function VentaNueva() {
   };
 
   const actualizarCantidad = (productoId, delta) => {
+    // #12: sin tope por stock (la venta puede exceder el disponible → negativo).
     setCarrito((prev) =>
       prev
         .map((i) => {
           if (i.producto_id !== productoId) return i;
-          const nueva = Math.max(
-            0,
-            Math.min(i.cantidad + delta, i.stock_disponible),
-          );
-          return { ...i, cantidad: nueva };
+          return { ...i, cantidad: Math.max(0, i.cantidad + delta) };
         })
         .filter((i) => i.cantidad > 0),
     );
@@ -217,10 +240,7 @@ export default function VentaNueva() {
       prev
         .map((i) => {
           if (i.producto_id !== productoId) return i;
-          return {
-            ...i,
-            cantidad: Math.max(0, Math.min(n, i.stock_disponible)),
-          };
+          return { ...i, cantidad: Math.max(0, n) };
         })
         .filter((i) => i.cantidad > 0),
     );
@@ -240,6 +260,15 @@ export default function VentaNueva() {
 
   const eliminarItem = (productoId) => {
     setCarrito((prev) => prev.filter((i) => i.producto_id !== productoId));
+  };
+
+  // #11: cambiar la sede a consultar. Limpia la búsqueda; si el Admin cambia la
+  // sede de la venta, vacía el carrito (la venta es de una sola sede).
+  const onChangeSede = (nuevaSede) => {
+    setSedeConsulta(nuevaSede);
+    setBusqueda("");
+    setResultados([]);
+    if (!esVendedor) setCarrito([]);
   };
 
   // Misma fórmula que el trigger trg_recalcular_total_venta del servidor:
@@ -267,7 +296,7 @@ export default function VentaNueva() {
     setConfirmando(true);
     try {
       const { error: rpcErr } = await supabase.rpc("fn_registrar_venta", {
-        p_sede_id: perfil.sede_id,
+        p_sede_id: sedeVenta,
         p_cliente_nombre: clienteNombre || null,
         p_cliente_nit: clienteNit || null,
         p_metodo_pago: metodoPago,
@@ -446,6 +475,56 @@ export default function VentaNueva() {
             Productos a vender
           </div>
 
+          {/* #11 — Sede a consultar (de qué almacén se ve el stock) */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div
+              className="inline-flex h-10 items-center gap-2 rounded-[10px] border px-3"
+              style={{
+                borderColor: "var(--n-200)",
+                backgroundColor: "var(--n-0)",
+              }}
+            >
+              <MapPin
+                className="h-4 w-4 shrink-0"
+                strokeWidth={1.6}
+                style={{ color: "var(--n-500)" }}
+              />
+              <label
+                htmlFor="sede-venta"
+                className="text-[12px]"
+                style={{ color: "var(--n-500)" }}
+              >
+                Sede
+              </label>
+              <select
+                id="sede-venta"
+                value={sedeConsulta}
+                onChange={(e) => onChangeSede(e.target.value)}
+                className="cursor-pointer border-none bg-transparent text-[13px] font-medium outline-none"
+                style={{ color: "var(--n-950)" }}
+              >
+                {SEDE_IDS.map((s) => (
+                  <option key={s} value={s}>
+                    {SEDE_LABELS[s] ?? s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {consultandoOtraSede ? (
+              <span
+                className="inline-flex items-center gap-1.5 text-[11.5px]"
+                style={{ color: "var(--warn-700)" }}
+              >
+                <AlertTriangle className="size-3.5" /> Solo consulta · vendes
+                desde {sedeLabel(perfil?.sede_id)}
+              </span>
+            ) : !esVendedor ? (
+              <span className="text-[11.5px]" style={{ color: "var(--n-500)" }}>
+                La venta se registrará en {sedeLabel(sedeVenta)}
+              </span>
+            ) : null}
+          </div>
+
           {/* Buscador de productos + QR */}
           <div className="flex items-stretch">
             <div
@@ -524,7 +603,17 @@ export default function VentaNueva() {
                       className="font-mono text-[11px]"
                       style={{ color: "var(--n-500)" }}
                     >
-                      {r.referencia} · Stock: {r.stock_disponible}
+                      {r.referencia} ·{" "}
+                      {r.stock_disponible > 0 ? (
+                        <>Stock: {r.stock_disponible}</>
+                      ) : (
+                        <span
+                          className="font-semibold"
+                          style={{ color: "var(--warn-700)" }}
+                        >
+                          Sin stock
+                        </span>
+                      )}
                     </p>
                   </div>
                   <div className="text-right">
@@ -575,7 +664,11 @@ export default function VentaNueva() {
                 </thead>
                 <tbody>
                   {carrito.map((item) => {
-                    const topeStock = item.cantidad >= item.stock_disponible;
+                    // #12: ya no topamos por stock. Avisamos si está sin stock
+                    // o si la cantidad excede el disponible (quedará negativo).
+                    const sinStock = item.stock_disponible <= 0;
+                    const excede = item.cantidad > item.stock_disponible;
+                    const aviso = sinStock || excede;
                     return (
                       <tr key={item.producto_id}>
                         <td>
@@ -590,7 +683,7 @@ export default function VentaNueva() {
                         <td style={{ textAlign: "right" }}>
                           <QtyControl
                             value={item.cantidad}
-                            danger={topeStock}
+                            danger={aviso}
                             onDec={() =>
                               actualizarCantidad(item.producto_id, -1)
                             }
@@ -600,16 +693,17 @@ export default function VentaNueva() {
                             onSet={(v) =>
                               setCantidadDirecta(item.producto_id, v)
                             }
-                            max={item.stock_disponible}
-                            incDisabled={topeStock}
+                            incDisabled={false}
                           />
-                          {topeStock && (
+                          {aviso && (
                             <div
                               className="mt-1 inline-flex items-center gap-1 font-mono text-[10.5px]"
                               style={{ color: "var(--warn-700)" }}
                             >
-                              <AlertTriangle className="size-3" /> Máx.{" "}
-                              {item.stock_disponible} en stock
+                              <AlertTriangle className="size-3" />
+                              {sinStock
+                                ? "Sin stock en esta sede"
+                                : `Excede stock (${item.stock_disponible} disp.)`}
                             </div>
                           )}
                         </td>
@@ -801,6 +895,13 @@ export default function VentaNueva() {
           onClose={() => setScannerOpen(false)}
         />
       )}
+
+      {bloqueoSede && (
+        <SedeBloqueoModal
+          sedePropia={sedeLabel(perfil?.sede_id)}
+          onClose={() => setBloqueoSede(false)}
+        />
+      )}
     </div>
   );
 }
@@ -827,6 +928,52 @@ function Field({ label, full, children }) {
         {label}
       </label>
       {children}
+    </div>
+  );
+}
+
+// #11 — popup cuando el vendedor intenta agregar un producto de otra sede.
+// Usa los tokens del sistema de diseño (mismo esquema que ConfirmDialog).
+function SedeBloqueoModal({ sedePropia, onClose }) {
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full rounded-t-2xl p-5 sm:max-w-md sm:rounded-2xl"
+        style={{ backgroundColor: "hsl(var(--card))" }}
+        role="alertdialog"
+        aria-labelledby="sede-bloqueo-title"
+      >
+        <h2
+          id="sede-bloqueo-title"
+          className="mb-2 text-lg font-semibold"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
+          No puedes vender desde otra sede
+        </h2>
+        <p
+          className="mb-4 text-sm"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Este producto no está en tu sede ({sedePropia}). Búscalo en tu sede;
+          si no hay stock, pide un traspaso.
+        </p>
+        <button
+          onClick={onClose}
+          autoFocus
+          className="h-12 w-full rounded-lg text-sm font-medium"
+          style={{
+            backgroundColor: "hsl(var(--primary))",
+            color: "hsl(var(--primary-foreground))",
+          }}
+        >
+          Entendido
+        </button>
+      </div>
     </div>
   );
 }
