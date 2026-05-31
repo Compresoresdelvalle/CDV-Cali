@@ -19,10 +19,13 @@ export default function CompraNueva() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
 
+  const [modo, setModo] = useState("normal"); // #31: 'normal' | 'caja_menor'
   const [proveedor, setProveedor] = useState("");
   const [facturaProveedor, setFacturaProveedor] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [recibirAhora, setRecibirAhora] = useState(false);
+  const [concepto, setConcepto] = useState(""); // #31 caja menor
+  const [monto, setMonto] = useState(""); // #31 caja menor (total manual)
   // estado_compra removido del form: se asigna 'completada' en BD por default.
   // Las garantías se gestionarán desde la compra ya recibida (Fase 13).
 
@@ -182,6 +185,39 @@ export default function CompraNueva() {
     }
   };
 
+  // #31 — registrar una compra de CAJA MENOR (concepto + monto, no inventariable).
+  const guardarCajaMenor = async () => {
+    const m = Number(monto);
+    if (!concepto.trim()) {
+      setError("El concepto es obligatorio.");
+      return;
+    }
+    if (!m || m <= 0) {
+      setError("Ingresa un monto mayor a 0.");
+      return;
+    }
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
+    setError(null);
+    setGuardando(true);
+    try {
+      const { error: rpcErr } = await supabase.rpc("fn_registrar_caja_menor", {
+        p_sede_id: perfil?.sede_id,
+        p_concepto: concepto.trim(),
+        p_monto: m,
+        p_proveedor: proveedor.trim() || null,
+        p_observaciones: observaciones.trim() || null,
+      });
+      if (rpcErr) throw new Error(rpcErr.message);
+      navigate("/ops/compras");
+    } catch (e) {
+      setError(safeError(e, "Error al registrar la caja menor"));
+    } finally {
+      setGuardando(false);
+      guardandoRef.current = false;
+    }
+  };
+
   return (
     <div className="flex h-full flex-col gap-4 px-4 pb-14 pt-5 sm:px-7 animate-fade-in">
       <button
@@ -221,26 +257,54 @@ export default function CompraNueva() {
         </button>
       </div>
 
-      {/* ── Stepper ─────────────────────────────────────────────────── */}
-      <div className="stepper overflow-x-auto">
-        <Step
-          n={1}
-          label="Proveedor"
-          state={pasoProveedor ? "done" : "active"}
-        />
-        <Line done={pasoProveedor} />
-        <Step
-          n={2}
-          label="Productos"
-          state={pasoProductos ? "done" : pasoProveedor ? "active" : "todo"}
-        />
-        <Line done={pasoProductos} />
-        <Step
-          n={3}
-          label="Confirmación"
-          state={pasoProveedor && pasoProductos ? "active" : "todo"}
-        />
+      {/* ── Selector de tipo de compra (#31) ─────────────────────────── */}
+      <div className="flex flex-wrap gap-2">
+        {[
+          { v: "normal", t: "Compra normal" },
+          { v: "caja_menor", t: "Caja menor" },
+        ].map((m) => {
+          const on = modo === m.v;
+          return (
+            <button
+              key={m.v}
+              type="button"
+              onClick={() => setModo(m.v)}
+              className="rounded-lg border px-3.5 text-[13px] font-medium transition-colors"
+              style={{
+                minHeight: 40,
+                borderColor: on ? "var(--p-500)" : "var(--n-200)",
+                backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
+                color: on ? "#fff" : "var(--n-700)",
+              }}
+            >
+              {m.t}
+            </button>
+          );
+        })}
       </div>
+
+      {/* ── Stepper (solo compra normal) ─────────────────────────────── */}
+      {modo === "normal" && (
+        <div className="stepper">
+          <Step
+            n={1}
+            label="Proveedor"
+            state={pasoProveedor ? "done" : "active"}
+          />
+          <Line done={pasoProveedor} />
+          <Step
+            n={2}
+            label="Productos"
+            state={pasoProductos ? "done" : pasoProveedor ? "active" : "todo"}
+          />
+          <Line done={pasoProductos} />
+          <Step
+            n={3}
+            label="Confirmación"
+            state={pasoProveedor && pasoProductos ? "active" : "todo"}
+          />
+        </div>
+      )}
 
       {/* ── Wizard grid ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_340px]">
@@ -255,12 +319,16 @@ export default function CompraNueva() {
               <div className="ib-title">Datos del proveedor</div>
             </div>
             <div className="grid grid-cols-1 gap-3 gap-x-3.5 sm:grid-cols-2">
-              <Field label="Proveedor" req>
+              <Field label="Proveedor" req={modo === "normal"}>
                 <input
                   type="text"
                   value={proveedor}
                   onChange={(e) => setProveedor(e.target.value)}
-                  placeholder="Nombre del proveedor"
+                  placeholder={
+                    modo === "normal"
+                      ? "Nombre del proveedor"
+                      : "Opcional (caja menor)"
+                  }
                   className="finput sans"
                 />
               </Field>
@@ -276,129 +344,246 @@ export default function CompraNueva() {
             </div>
           </div>
 
-          {/* Productos */}
-          <div className="iblock flex flex-col gap-3.5">
-            <div className="ib-head">
-              <div className="ib-ico">
-                <Search className="h-3.5 w-3.5" strokeWidth={2} />
+          {/* Productos (solo compra normal) */}
+          {modo === "normal" && (
+            <div className="iblock flex flex-col gap-3.5">
+              <div className="ib-head">
+                <div className="ib-ico">
+                  <Search className="h-3.5 w-3.5" strokeWidth={2} />
+                </div>
+                <div className="ib-title">Productos a ordenar</div>
+                <div className="ib-aux">{carrito.length} en la orden</div>
               </div>
-              <div className="ib-title">Productos a ordenar</div>
-              <div className="ib-aux">{carrito.length} en la orden</div>
-            </div>
 
-            {/* Búsqueda */}
-            <div
-              className="flex h-11 items-center gap-2.5 rounded-[10px] border px-3.5"
-              style={{
-                borderColor: "var(--n-150)",
-                backgroundColor: "var(--n-0)",
-              }}
-            >
-              <Search
-                className="h-4 w-4 shrink-0"
-                strokeWidth={1.5}
-                style={{ color: "var(--n-300)" }}
-              />
-              <input
-                type="text"
-                value={busqueda}
-                onChange={handleBusquedaChange}
-                placeholder="Buscar por nombre o referencia del catálogo…"
-                className="flex-1 border-none bg-transparent text-[14px] outline-none"
-                style={{ color: "var(--n-700)" }}
-              />
-            </div>
-
-            {buscando && (
-              <p className="text-xs" style={{ color: "var(--n-500)" }}>
-                Buscando…
-              </p>
-            )}
-
-            {resultados.length > 0 && (
+              {/* Búsqueda */}
               <div
-                className="overflow-hidden rounded-lg border"
-                style={{ borderColor: "var(--n-150)" }}
-              >
-                {resultados.map((r, idx) => (
-                  <button
-                    key={r.id}
-                    onClick={() => agregarAlCarrito(r)}
-                    className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
-                    style={{
-                      borderTop: idx === 0 ? "none" : "1px solid var(--n-100)",
-                      backgroundColor: "var(--n-0)",
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.backgroundColor = "var(--n-50)")
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.backgroundColor = "var(--n-0)")
-                    }
-                  >
-                    <div>
-                      <p
-                        className="text-sm font-medium"
-                        style={{ color: "var(--n-950)" }}
-                      >
-                        {r.nombre}
-                      </p>
-                      <p
-                        className="font-mono text-[11px]"
-                        style={{ color: "var(--n-500)" }}
-                      >
-                        {r.referencia} · {r.unidad_medida}
-                      </p>
-                    </div>
-                    <span className="text-xs" style={{ color: "var(--p-600)" }}>
-                      + Agregar
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Carrito */}
-            {carrito.length === 0 ? (
-              <p
-                className="rounded-[10px] border border-dashed py-10 text-center text-sm"
+                className="flex h-11 items-center gap-2.5 rounded-[10px] border px-3.5"
                 style={{
-                  borderColor: "var(--n-200)",
-                  backgroundColor: "var(--n-25)",
-                  color: "var(--n-500)",
+                  borderColor: "var(--n-150)",
+                  backgroundColor: "var(--n-0)",
                 }}
               >
-                Busca y agrega productos a la orden de compra
-              </p>
-            ) : (
-              <>
-                {/* Desktop: tabla */}
+                <Search
+                  className="h-4 w-4 shrink-0"
+                  strokeWidth={1.5}
+                  style={{ color: "var(--n-300)" }}
+                />
+                <input
+                  type="text"
+                  value={busqueda}
+                  onChange={handleBusquedaChange}
+                  placeholder="Buscar por nombre o referencia del catálogo…"
+                  className="flex-1 border-none bg-transparent text-[14px] outline-none"
+                  style={{ color: "var(--n-700)" }}
+                />
+              </div>
+
+              {buscando && (
+                <p className="text-xs" style={{ color: "var(--n-500)" }}>
+                  Buscando…
+                </p>
+              )}
+
+              {resultados.length > 0 && (
                 <div
-                  className="hidden overflow-hidden rounded-[10px] border md:block"
+                  className="overflow-hidden rounded-lg border"
                   style={{ borderColor: "var(--n-150)" }}
                 >
-                  <table className="prod-tbl w-full">
-                    <thead>
-                      <tr>
-                        <th>Producto</th>
-                        <th className="r" style={{ width: 130 }}>
-                          Cantidad
-                        </th>
-                        <th className="r" style={{ width: 140 }}>
-                          Costo unit
-                        </th>
-                        <th className="r" style={{ width: 120 }}>
-                          Subtotal
-                        </th>
-                        <th style={{ width: 42 }} />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {carrito.map((item) => (
-                        <tr key={item.producto_id}>
-                          <td>
+                  {resultados.map((r, idx) => (
+                    <button
+                      key={r.id}
+                      onClick={() => agregarAlCarrito(r)}
+                      className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
+                      style={{
+                        borderTop:
+                          idx === 0 ? "none" : "1px solid var(--n-100)",
+                        backgroundColor: "var(--n-0)",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor = "var(--n-50)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "var(--n-0)")
+                      }
+                    >
+                      <div>
+                        <p
+                          className="text-sm font-medium"
+                          style={{ color: "var(--n-950)" }}
+                        >
+                          {r.nombre}
+                        </p>
+                        <p
+                          className="font-mono text-[11px]"
+                          style={{ color: "var(--n-500)" }}
+                        >
+                          {r.referencia} · {r.unidad_medida}
+                        </p>
+                      </div>
+                      <span
+                        className="text-xs"
+                        style={{ color: "var(--p-600)" }}
+                      >
+                        + Agregar
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Carrito */}
+              {carrito.length === 0 ? (
+                <p
+                  className="rounded-[10px] border border-dashed py-10 text-center text-sm"
+                  style={{
+                    borderColor: "var(--n-200)",
+                    backgroundColor: "var(--n-25)",
+                    color: "var(--n-500)",
+                  }}
+                >
+                  Busca y agrega productos a la orden de compra
+                </p>
+              ) : (
+                <>
+                  {/* Desktop: tabla */}
+                  <div
+                    className="hidden overflow-hidden rounded-[10px] border md:block"
+                    style={{ borderColor: "var(--n-150)" }}
+                  >
+                    <table className="prod-tbl w-full">
+                      <thead>
+                        <tr>
+                          <th>Producto</th>
+                          <th className="r" style={{ width: 130 }}>
+                            Cantidad
+                          </th>
+                          <th className="r" style={{ width: 140 }}>
+                            Costo unit
+                          </th>
+                          <th className="r" style={{ width: 120 }}>
+                            Subtotal
+                          </th>
+                          <th style={{ width: 42 }} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {carrito.map((item) => (
+                          <tr key={item.producto_id}>
+                            <td>
+                              <p
+                                className="text-[12.5px] font-medium leading-tight"
+                                style={{ color: "var(--n-950)" }}
+                              >
+                                {item.nombre}
+                              </p>
+                              <p
+                                className="font-mono text-[11px]"
+                                style={{ color: "var(--n-500)" }}
+                              >
+                                {item.referencia}
+                              </p>
+                            </td>
+                            <td className="text-right">
+                              <div className="inline-flex items-center gap-1">
+                                <QtyBtn
+                                  onClick={() =>
+                                    actualizarCantidad(item.producto_id, -1)
+                                  }
+                                >
+                                  −
+                                </QtyBtn>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.cantidad}
+                                  onChange={(e) =>
+                                    setCantidadDirecta(
+                                      item.producto_id,
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="w-12 rounded-lg border py-1 text-center font-mono text-sm font-semibold outline-none"
+                                  style={{
+                                    borderColor: "var(--n-150)",
+                                    color: "var(--n-950)",
+                                    backgroundColor: "var(--n-0)",
+                                  }}
+                                />
+                                <QtyBtn
+                                  onClick={() =>
+                                    actualizarCantidad(item.producto_id, 1)
+                                  }
+                                >
+                                  +
+                                </QtyBtn>
+                              </div>
+                            </td>
+                            <td className="text-right">
+                              <input
+                                type="number"
+                                min="0"
+                                step="100"
+                                value={item.costo_unitario}
+                                onChange={(e) =>
+                                  setCostoDirecto(
+                                    item.producto_id,
+                                    e.target.value,
+                                  )
+                                }
+                                className="w-32 rounded-lg border px-3 py-1.5 text-right font-mono text-sm outline-none"
+                                style={{
+                                  borderColor: "var(--n-150)",
+                                  color: "var(--n-950)",
+                                  backgroundColor: "var(--n-0)",
+                                }}
+                              />
+                            </td>
+                            <td className="text-right">
+                              <span
+                                className="font-mono text-sm font-semibold tabular-nums"
+                                style={{ color: "var(--n-950)" }}
+                              >
+                                {formatCOP(item.cantidad * item.costo_unitario)}
+                              </span>
+                            </td>
+                            <td>
+                              <button
+                                onClick={() => eliminarItem(item.producto_id)}
+                                className="grid h-8 w-8 place-items-center rounded-lg transition-colors"
+                                style={{ color: "var(--n-500)" }}
+                                onMouseEnter={(e) =>
+                                  (e.currentTarget.style.color =
+                                    "var(--dang-600)")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.currentTarget.style.color = "var(--n-500)")
+                                }
+                                aria-label="Eliminar producto"
+                              >
+                                <Trash2 className="h-4 w-4" strokeWidth={1.7} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile: cards */}
+                  <div className="space-y-2.5 md:hidden">
+                    {carrito.map((item) => (
+                      <div
+                        key={item.producto_id}
+                        className="space-y-2 rounded-[10px] border p-3"
+                        style={{
+                          backgroundColor: "var(--n-0)",
+                          borderColor: "var(--n-150)",
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
                             <p
-                              className="text-[12.5px] font-medium leading-tight"
+                              className="truncate text-sm font-medium"
                               style={{ color: "var(--n-950)" }}
                             >
                               {item.nombre}
@@ -409,43 +594,57 @@ export default function CompraNueva() {
                             >
                               {item.referencia}
                             </p>
-                          </td>
-                          <td className="text-right">
-                            <div className="inline-flex items-center gap-1">
-                              <QtyBtn
-                                onClick={() =>
-                                  actualizarCantidad(item.producto_id, -1)
-                                }
-                              >
-                                −
-                              </QtyBtn>
-                              <input
-                                type="number"
-                                min="1"
-                                value={item.cantidad}
-                                onChange={(e) =>
-                                  setCantidadDirecta(
-                                    item.producto_id,
-                                    e.target.value,
-                                  )
-                                }
-                                className="w-12 rounded-lg border py-1 text-center font-mono text-sm font-semibold outline-none"
-                                style={{
-                                  borderColor: "var(--n-150)",
-                                  color: "var(--n-950)",
-                                  backgroundColor: "var(--n-0)",
-                                }}
-                              />
-                              <QtyBtn
-                                onClick={() =>
-                                  actualizarCantidad(item.producto_id, 1)
-                                }
-                              >
-                                +
-                              </QtyBtn>
-                            </div>
-                          </td>
-                          <td className="text-right">
+                          </div>
+                          <button
+                            onClick={() => eliminarItem(item.producto_id)}
+                            className="shrink-0"
+                            style={{ color: "var(--n-500)" }}
+                            aria-label="Eliminar producto"
+                          >
+                            <Trash2 className="h-4 w-4" strokeWidth={1.7} />
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex items-center gap-1">
+                            <QtyBtn
+                              onClick={() =>
+                                actualizarCantidad(item.producto_id, -1)
+                              }
+                            >
+                              −
+                            </QtyBtn>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.cantidad}
+                              onChange={(e) =>
+                                setCantidadDirecta(
+                                  item.producto_id,
+                                  e.target.value,
+                                )
+                              }
+                              className="w-14 rounded-lg border py-1.5 text-center font-mono text-sm font-semibold outline-none"
+                              style={{
+                                borderColor: "var(--n-150)",
+                                color: "var(--n-950)",
+                                backgroundColor: "var(--n-0)",
+                              }}
+                            />
+                            <QtyBtn
+                              onClick={() =>
+                                actualizarCantidad(item.producto_id, 1)
+                              }
+                            >
+                              +
+                            </QtyBtn>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="text-xs"
+                              style={{ color: "var(--n-500)" }}
+                            >
+                              $
+                            </span>
                             <input
                               type="number"
                               min="0"
@@ -457,150 +656,66 @@ export default function CompraNueva() {
                                   e.target.value,
                                 )
                               }
-                              className="w-32 rounded-lg border px-3 py-1.5 text-right font-mono text-sm outline-none"
+                              className="w-28 rounded-lg border px-2 py-1.5 font-mono text-sm outline-none"
                               style={{
                                 borderColor: "var(--n-150)",
                                 color: "var(--n-950)",
                                 backgroundColor: "var(--n-0)",
                               }}
                             />
-                          </td>
-                          <td className="text-right">
-                            <span
-                              className="font-mono text-sm font-semibold tabular-nums"
-                              style={{ color: "var(--n-950)" }}
-                            >
-                              {formatCOP(item.cantidad * item.costo_unitario)}
-                            </span>
-                          </td>
-                          <td>
-                            <button
-                              onClick={() => eliminarItem(item.producto_id)}
-                              className="grid h-8 w-8 place-items-center rounded-lg transition-colors"
-                              style={{ color: "var(--n-500)" }}
-                              onMouseEnter={(e) =>
-                                (e.currentTarget.style.color =
-                                  "var(--dang-600)")
-                              }
-                              onMouseLeave={(e) =>
-                                (e.currentTarget.style.color = "var(--n-500)")
-                              }
-                              aria-label="Eliminar producto"
-                            >
-                              <Trash2 className="h-4 w-4" strokeWidth={1.7} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile: cards */}
-                <div className="space-y-2.5 md:hidden">
-                  {carrito.map((item) => (
-                    <div
-                      key={item.producto_id}
-                      className="space-y-2 rounded-[10px] border p-3"
-                      style={{
-                        backgroundColor: "var(--n-0)",
-                        borderColor: "var(--n-150)",
-                      }}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className="truncate text-sm font-medium"
+                          </div>
+                          <span
+                            className="ml-auto font-mono text-sm font-bold tabular-nums"
                             style={{ color: "var(--n-950)" }}
                           >
-                            {item.nombre}
-                          </p>
-                          <p
-                            className="font-mono text-[11px]"
-                            style={{ color: "var(--n-500)" }}
-                          >
-                            {item.referencia}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => eliminarItem(item.producto_id)}
-                          className="shrink-0"
-                          style={{ color: "var(--n-500)" }}
-                          aria-label="Eliminar producto"
-                        >
-                          <Trash2 className="h-4 w-4" strokeWidth={1.7} />
-                        </button>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-1">
-                          <QtyBtn
-                            onClick={() =>
-                              actualizarCantidad(item.producto_id, -1)
-                            }
-                          >
-                            −
-                          </QtyBtn>
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.cantidad}
-                            onChange={(e) =>
-                              setCantidadDirecta(
-                                item.producto_id,
-                                e.target.value,
-                              )
-                            }
-                            className="w-14 rounded-lg border py-1.5 text-center font-mono text-sm font-semibold outline-none"
-                            style={{
-                              borderColor: "var(--n-150)",
-                              color: "var(--n-950)",
-                              backgroundColor: "var(--n-0)",
-                            }}
-                          />
-                          <QtyBtn
-                            onClick={() =>
-                              actualizarCantidad(item.producto_id, 1)
-                            }
-                          >
-                            +
-                          </QtyBtn>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className="text-xs"
-                            style={{ color: "var(--n-500)" }}
-                          >
-                            $
+                            {formatCOP(item.cantidad * item.costo_unitario)}
                           </span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="100"
-                            value={item.costo_unitario}
-                            onChange={(e) =>
-                              setCostoDirecto(item.producto_id, e.target.value)
-                            }
-                            className="w-28 rounded-lg border px-2 py-1.5 font-mono text-sm outline-none"
-                            style={{
-                              borderColor: "var(--n-150)",
-                              color: "var(--n-950)",
-                              backgroundColor: "var(--n-0)",
-                            }}
-                          />
                         </div>
-                        <span
-                          className="ml-auto font-mono text-sm font-bold tabular-nums"
-                          style={{ color: "var(--n-950)" }}
-                        >
-                          {formatCOP(item.cantidad * item.costo_unitario)}
-                        </span>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* #31 — Caja menor: concepto + monto (no inventariable) */}
+          {modo === "caja_menor" && (
+            <div className="iblock flex flex-col gap-3.5">
+              <div className="ib-head">
+                <div className="ib-ico">
+                  <Truck className="h-3.5 w-3.5" strokeWidth={2} />
                 </div>
-              </>
-            )}
-          </div>
+                <div className="ib-title">Gasto de caja menor</div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 gap-x-3.5 sm:grid-cols-2">
+                <Field label="Concepto" req>
+                  <input
+                    type="text"
+                    value={concepto}
+                    onChange={(e) => setConcepto(e.target.value)}
+                    placeholder="Ej: transporte, papelería, refrigerio…"
+                    className="finput sans"
+                  />
+                </Field>
+                <Field label="Monto" req>
+                  <input
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={monto}
+                    onChange={(e) => setMonto(e.target.value)}
+                    placeholder="0"
+                    className="finput"
+                  />
+                </Field>
+              </div>
+              <p className="text-xs" style={{ color: "var(--n-500)" }}>
+                La caja menor NO afecta el inventario. El monto es el total (sin
+                IVA).
+              </p>
+            </div>
+          )}
 
           {/* Observaciones */}
           <div className="iblock flex flex-col gap-3">
@@ -616,33 +731,35 @@ export default function CompraNueva() {
             />
           </div>
 
-          {/* Recibir ahora */}
-          <label
-            className="flex cursor-pointer select-none items-center gap-3 rounded-[10px] border p-4"
-            style={{
-              backgroundColor: "var(--n-0)",
-              borderColor: recibirAhora ? "var(--p-500)" : "var(--n-150)",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={recibirAhora}
-              onChange={(e) => setRecibirAhora(e.target.checked)}
-              className="h-5 w-5 cursor-pointer rounded"
-              style={{ accentColor: "var(--p-600)" }}
-            />
-            <div>
-              <p
-                className="text-sm font-semibold"
-                style={{ color: "var(--n-950)" }}
-              >
-                Marcar como recibida ahora
-              </p>
-              <p className="text-xs" style={{ color: "var(--n-500)" }}>
-                El stock se sumará automáticamente al confirmar
-              </p>
-            </div>
-          </label>
+          {/* Recibir ahora (solo compra normal) */}
+          {modo === "normal" && (
+            <label
+              className="flex cursor-pointer select-none items-center gap-3 rounded-[10px] border p-4"
+              style={{
+                backgroundColor: "var(--n-0)",
+                borderColor: recibirAhora ? "var(--p-500)" : "var(--n-150)",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={recibirAhora}
+                onChange={(e) => setRecibirAhora(e.target.checked)}
+                className="h-5 w-5 cursor-pointer rounded"
+                style={{ accentColor: "var(--p-600)" }}
+              />
+              <div>
+                <p
+                  className="text-sm font-semibold"
+                  style={{ color: "var(--n-950)" }}
+                >
+                  Marcar como recibida ahora
+                </p>
+                <p className="text-xs" style={{ color: "var(--n-500)" }}>
+                  El stock se sumará automáticamente al confirmar
+                </p>
+              </div>
+            </label>
+          )}
 
           {error && (
             <div
@@ -661,30 +778,58 @@ export default function CompraNueva() {
 
         {/* ── Resumen (sticky) ──────────────────────────────────────── */}
         <aside className="cart">
-          <span className="cart-eyebrow">Resumen de la compra</span>
-          <div className="text-[12px]" style={{ color: "var(--n-500)" }}>
-            {totalItems} items · {carrito.length} productos
-          </div>
-          <div className="cart-line">
-            <span>Subtotal</span>
-            <span className="v">{formatCOP(subtotal)}</span>
-          </div>
-          <div className="cart-line">
-            <span>IVA {IVA_PCT}%</span>
-            <span className="v">{formatCOP(iva)}</span>
-          </div>
-          <div className="cart-line tot">
-            <span>Total estimado</span>
-            <span className="v">{formatCOP(total)}</span>
-          </div>
+          <span className="cart-eyebrow">
+            {modo === "caja_menor"
+              ? "Resumen de caja menor"
+              : "Resumen de la compra"}
+          </span>
+          {modo === "normal" ? (
+            <>
+              <div className="text-[12px]" style={{ color: "var(--n-500)" }}>
+                {totalItems} items · {carrito.length} productos
+              </div>
+              <div className="cart-line">
+                <span>Subtotal</span>
+                <span className="v">{formatCOP(subtotal)}</span>
+              </div>
+              <div className="cart-line">
+                <span>IVA {IVA_PCT}%</span>
+                <span className="v">{formatCOP(iva)}</span>
+              </div>
+              <div className="cart-line tot">
+                <span>Total estimado</span>
+                <span className="v">{formatCOP(total)}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-[12px]" style={{ color: "var(--n-500)" }}>
+                Gasto no inventariable
+              </div>
+              <div className="cart-line tot">
+                <span>Total</span>
+                <span className="v">{formatCOP(Number(monto) || 0)}</span>
+              </div>
+            </>
+          )}
           <button
-            onClick={guardarCompra}
-            disabled={carrito.length === 0 || !proveedor.trim() || guardando}
+            onClick={modo === "caja_menor" ? guardarCajaMenor : guardarCompra}
+            disabled={
+              guardando ||
+              (modo === "normal"
+                ? carrito.length === 0 || !proveedor.trim()
+                : !concepto.trim() || !(Number(monto) > 0))
+            }
             className="btn btn-pri mt-2 w-full justify-center disabled:opacity-40"
             style={{ height: 48 }}
           >
             {guardando ? (
               "Guardando…"
+            ) : modo === "caja_menor" ? (
+              <>
+                <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                Registrar caja menor
+              </>
             ) : recibirAhora ? (
               <>
                 <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
