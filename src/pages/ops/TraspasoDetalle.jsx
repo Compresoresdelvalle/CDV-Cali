@@ -55,8 +55,10 @@ export default function TraspasoDetalle() {
   const esBodeguero = perfil?.rol === "Bodeguero";
   const accionandoRef = useRef(false);
 
-  const cargar = async () => {
-    setLoading(true);
+  // `silent`: re-fetch en segundo plano (Realtime) sin parpadear el skeleton
+  // ni pisar la pantalla con un error de un refresco de fondo.
+  const cargar = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [{ data: t, error: errT }, { data: d, error: errD }] =
         await Promise.all([
@@ -83,16 +85,56 @@ export default function TraspasoDetalle() {
       if (errT) throw errT;
       setTraspaso(t);
       setItems(d ?? []);
-      if (errD) setError("No se pudo cargar el detalle de productos.");
+      if (!silent && errD)
+        setError("No se pudo cargar el detalle de productos.");
     } catch (e) {
-      setError(safeError(e, "Error al cargar el traspaso"));
+      if (!silent) setError(safeError(e, "Error al cargar el traspaso"));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // Realtime: refresca en vivo cuando otro usuario avanza el flujo
+  // (picker → verificador → envío → recepción), sin necesidad de F5.
+  useEffect(() => {
+    if (!id) return;
+    let t = null;
+    const refrescar = () => {
+      clearTimeout(t);
+      t = setTimeout(() => cargar(true), 300);
+    };
+    const channel = supabase
+      .channel(`traspaso-${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "traspasos",
+          filter: `id=eq.${id}`,
+        },
+        refrescar,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "detalle_traspaso",
+          filter: `traspaso_id=eq.${id}`,
+        },
+        refrescar,
+      )
+      .subscribe();
+    return () => {
+      clearTimeout(t);
+      supabase.removeChannel(channel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
