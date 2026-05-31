@@ -18,6 +18,9 @@ const IVA_PCT = 19;
 export default function CompraNueva() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
+  // Al Vendedor nunca se le muestra/precarga el costo histórico del producto:
+  // lo digita manualmente (arranca en 0).
+  const esVendedor = perfil?.rol === "Vendedor";
 
   const [modo, setModo] = useState("normal"); // #31: 'normal' | 'caja_menor'
   const [proveedor, setProveedor] = useState("");
@@ -88,7 +91,8 @@ export default function CompraNueva() {
           referencia: prod.referencia,
           unidad: prod.unidad_medida,
           cantidad: 1,
-          costo_unitario: prod.costo_promedio ?? 0,
+          // Vendedor: nunca el costo histórico → arranca en 0 (manual).
+          costo_unitario: esVendedor ? 0 : (prod.costo_promedio ?? 0),
         },
       ];
     });
