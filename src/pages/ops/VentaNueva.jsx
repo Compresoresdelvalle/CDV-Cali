@@ -25,7 +25,7 @@ import ClientePicker from "../../components/forms/ClientePicker";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { metodoPagoClass } from "../../lib/ventas-ui";
 import { SEDE_LABELS, sedeLabel } from "../../lib/traspasos-ui";
-import { SEDES } from "../../lib/constants";
+import { SEDES, CUENTAS_BANCARIAS } from "../../lib/constants";
 import { upsertCliente } from "../../lib/clientes";
 
 const METODOS_PAGO = ["Efectivo", "Transferencia", "Tarjeta", "Crédito"];
@@ -50,6 +50,7 @@ export default function VentaNueva() {
   const [clienteEmail, setClienteEmail] = useState("");
   const [clienteDireccion, setClienteDireccion] = useState("");
   const [metodoPago, setMetodoPago] = useState("Efectivo");
+  const [cuentaBancaria, setCuentaBancaria] = useState(""); // #13
   const [descuentoPct, setDescuentoPct] = useState(0);
   const [ivaPct, setIvaPct] = useState(IVA_DEFAULT);
   const [observaciones, setObservaciones] = useState("");
@@ -302,6 +303,7 @@ export default function VentaNueva() {
         p_metodo_pago: metodoPago,
         p_descuento_pct: descuentoPct,
         p_iva_pct: ivaPct,
+        p_cuenta_bancaria: cuentaBancaria || null,
         p_observaciones: observaciones || null,
         p_items: carrito.map((i) => ({
           producto_id: i.producto_id,
@@ -772,6 +774,41 @@ export default function VentaNueva() {
               );
             })}
           </div>
+
+          {/* #13 — Cuenta bancaria donde entra el pago (opcional) */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <label
+              htmlFor="cuenta-banc"
+              className="text-sm"
+              style={{ color: "var(--n-500)" }}
+            >
+              Cuenta bancaria
+            </label>
+            <select
+              id="cuenta-banc"
+              value={cuentaBancaria}
+              onChange={(e) => setCuentaBancaria(e.target.value)}
+              className="h-10 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+              style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
+            >
+              <option value="">Sin especificar</option>
+              {CUENTAS_BANCARIAS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            {(metodoPago === "Transferencia" || metodoPago === "Tarjeta") &&
+              !cuentaBancaria && (
+                <span
+                  className="text-[11.5px]"
+                  style={{ color: "var(--n-500)" }}
+                >
+                  Indica a qué cuenta entró el pago
+                </span>
+              )}
+          </div>
+
           <div className="flex items-center gap-3">
             <label className="text-sm" style={{ color: "var(--n-500)" }}>
               Descuento %
