@@ -86,14 +86,30 @@ export default function OrdenDetalle() {
   const cambiandoRef = useRef(false);
 
   // Guard anti doble-click: imprime la OT una sola vez por tap
-  const imprimirOT = () => {
+  const imprimirOT = async () => {
     if (imprimiendo) return;
     setImprimiendo(true);
     try {
+      // #24: cargar el checklist de recepción para incluirlo en el PDF.
+      const { data: ck } = await supabase
+        .from("ot_checklist")
+        .select(
+          "marcado, componente:componente_id!inner(nombre, orden, activo)",
+        )
+        .eq("orden_id", id)
+        .eq("componente.activo", true);
+      const checklist = (ck ?? [])
+        .map((r) => ({
+          nombre: r.componente?.nombre ?? "—",
+          marcado: !!r.marcado,
+          orden: r.componente?.orden ?? 0,
+        }))
+        .sort((a, b) => a.orden - b.orden);
       generarOrdenPDF({
         orden,
         repuestos: detalles,
         tecnico: orden.tecnico?.nombre ?? "—",
+        checklist,
       }).print();
     } catch (err) {
       console.error("[OrdenDetalle] imprimir:", err);
@@ -110,6 +126,7 @@ export default function OrdenDetalle() {
   const [convProd, setConvProd] = useState(null); // producto a convertir+agregar
   const [convCant, setConvCant] = useState("1");
   const [convSaving, setConvSaving] = useState(false);
+  const [cantAgregar, setCantAgregar] = useState(1); // #25 — cantidad a agregar
   const [convError, setConvError] = useState("");
   const [resultados, setResultados] = useState([]);
   const [buscando, setBuscando] = useState(false);
@@ -246,18 +263,19 @@ export default function OrdenDetalle() {
     };
   }, [search, sedeOrden, modoGlobal]);
 
-  const agregarRepuesto = async (producto) => {
+  const agregarRepuesto = async (producto, cantidad = 1) => {
     // Guard síncrono: un doble-tap insertaría el repuesto dos veces
     // (doble fila en detalle_orden + doble descuento de stock vía trigger).
     if (agregandoRef.current) return;
+    const qty = Math.max(1, Math.trunc(Number(cantidad) || 1));
     agregandoRef.current = true;
     setAgregando(true);
     setErrorMsg("");
     try {
       const stockInsumo = producto.insumo ?? 0;
-      if (stockInsumo < 1) {
+      if (stockInsumo < qty) {
         setErrorMsg(
-          `Sin stock de insumo de "${producto.nombre}" en esta sede.`,
+          `Solo hay ${stockInsumo} de insumo de "${producto.nombre}" en esta sede (pediste ${qty}).`,
         );
         return;
       }
@@ -269,14 +287,15 @@ export default function OrdenDetalle() {
       const { error } = await supabase.from("detalle_orden").insert({
         orden_id: id,
         producto_id: producto.id,
-        cantidad: 1,
+        cantidad: qty, // #25: cantidad elegida (el trigger consume NEW.cantidad)
         costo_unitario: costo,
-        subtotal: costo,
+        subtotal: costo * qty,
       });
       if (error) throw error;
       // Los totales se recalculan automáticamente vía trigger BD
       setSearch("");
       setResultados([]);
+      setCantAgregar(1);
       await cargar();
     } catch (err) {
       console.error("[OrdenDetalle] agregar:", err);
@@ -287,20 +306,24 @@ export default function OrdenDetalle() {
     }
   };
 
-  // Al elegir un repuesto: si tiene insumo, se agrega; si no, se ofrece convertir
-  // desde el stock de venta (sin parar la operación).
+  // Al elegir un repuesto: usa la cantidad elegida. Si hay insumo suficiente se
+  // agrega; si no, se ofrece convertir el faltante desde el stock de venta.
   const onSelectRepuesto = (p) => {
     setErrorMsg("");
     setAviso("");
-    if ((p.insumo ?? 0) >= 1) {
-      agregarRepuesto(p);
-    } else if ((p.venta ?? 0) >= 1) {
-      setConvCant("1");
+    const qty = Math.max(1, Math.trunc(Number(cantAgregar) || 1));
+    const insumo = p.insumo ?? 0;
+    const venta = p.venta ?? 0;
+    if (insumo >= qty) {
+      agregarRepuesto(p, qty);
+    } else if (insumo + venta >= qty) {
+      // Faltante a convertir de venta → insumo.
+      setConvCant(String(qty - insumo));
       setConvError("");
       setConvProd(p);
     } else {
       setErrorMsg(
-        `"${p.nombre}" no tiene insumo ni stock de venta en esta sede. Pide un traspaso o una compra.`,
+        `"${p.nombre}" no tiene suficiente stock (insumo ${insumo} + venta ${venta}) para ${qty} en esta sede. Pide un traspaso o una compra.`,
       );
     }
   };
@@ -329,7 +352,7 @@ export default function OrdenDetalle() {
       if (error) throw error;
       const prod = { ...convProd, insumo: (convProd.insumo ?? 0) + n };
       setConvProd(null);
-      await agregarRepuesto(prod);
+      await agregarRepuesto(prod, cantAgregar);
       setAviso(
         data?.notificado_admin
           ? "Convertido a insumo. Se notificó al Admin."
@@ -862,6 +885,52 @@ export default function OrdenDetalle() {
                       ? "Todo el inventario (al elegir, convierte a insumo)"
                       : "Solo insumos (elige aunque tenga 0 y conviértelo)"}
                   </span>
+                </div>
+
+                {/* #25 — cantidad a agregar (se aplica al tocar un repuesto) */}
+                <div className="flex items-center gap-2 text-xs">
+                  <span style={{ color: "var(--n-500)" }}>
+                    Cantidad a agregar
+                  </span>
+                  <div
+                    className="inline-flex h-9 items-center overflow-hidden rounded-md border"
+                    style={{
+                      borderColor: "var(--n-200)",
+                      backgroundColor: "var(--n-0)",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setCantAgregar((q) => Math.max(1, q - 1))}
+                      className="grid h-full w-8 place-items-center text-base"
+                      style={{ color: "var(--n-700)" }}
+                      aria-label="Disminuir cantidad"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      value={cantAgregar}
+                      onChange={(e) =>
+                        setCantAgregar(
+                          Math.max(1, Math.trunc(Number(e.target.value) || 1)),
+                        )
+                      }
+                      className="w-12 border-0 bg-transparent text-center font-mono text-sm font-medium outline-none"
+                      style={{ color: "var(--n-950)" }}
+                      aria-label="Cantidad a agregar"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCantAgregar((q) => q + 1)}
+                      className="grid h-full w-8 place-items-center text-base"
+                      style={{ color: "var(--n-700)" }}
+                      aria-label="Aumentar cantidad"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
 
                 {aviso && (

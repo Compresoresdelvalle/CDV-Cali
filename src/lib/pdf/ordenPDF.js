@@ -10,7 +10,14 @@
  */
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { MARCA, COLORES, LAYOUT, formatCOP } from "./pdfStyles";
+import {
+  MARCA,
+  COLORES,
+  LAYOUT,
+  formatCOP,
+  RECIBO_DIRECCION,
+  SEDE_TELEFONO,
+} from "./pdfStyles";
 
 const ESTADO_LABEL = {
   abierta: "Abierta",
@@ -32,7 +39,12 @@ const ESTADO_LABEL = {
  *                 subtotal }]
  *   tecnico:   string
  */
-export function generarOrdenPDF({ orden, repuestos = [], tecnico = "—" }) {
+export function generarOrdenPDF({
+  orden,
+  repuestos = [],
+  tecnico = "—",
+  checklist = [],
+}) {
   const doc = new jsPDF({ unit: "mm", format: "letter", compress: true });
   let y = LAYOUT.margenSup;
 
@@ -46,6 +58,8 @@ export function generarOrdenPDF({ orden, repuestos = [], tecnico = "—" }) {
   doc.setFontSize(9);
   doc.setTextColor(...COLORES.textoMedio);
   doc.text(MARCA.ciudad, LAYOUT.margenIzq, y + 5);
+  // #22: dirección de la empresa en la OT.
+  doc.text(`Dir: ${RECIBO_DIRECCION}`, LAYOUT.margenIzq, y + 9);
 
   const esGarantia = orden.tipo === "garantia";
   const titulo = `Orden de Trabajo N° ${String(orden.numero ?? "—").padStart(5, "0")}`;
@@ -93,7 +107,12 @@ export function generarOrdenPDF({ orden, repuestos = [], tecnico = "—" }) {
     orden.cliente_telefono ? `Teléfono: ${orden.cliente_telefono}` : null,
     `Equipo: ${orden.equipo_descripcion ?? "—"}`,
     orden.equipo_serie ? `Serie: ${orden.equipo_serie}` : null,
-    `Sede: ${orden.sede_id ?? "—"}`,
+    // #23: el campo Sede muestra el teléfono de esa sede.
+    `Sede: ${orden.sede_id ?? "—"}${
+      SEDE_TELEFONO[orden.sede_id]
+        ? `   ·   Tel: ${SEDE_TELEFONO[orden.sede_id]}`
+        : ""
+    }`,
     orden.fecha_entrega
       ? `Entregado: ${new Date(orden.fecha_entrega).toLocaleDateString("es-CO", { timeZone: "America/Bogota" })}`
       : null,
@@ -120,6 +139,37 @@ export function generarOrdenPDF({ orden, repuestos = [], tecnico = "—" }) {
     const wrap = doc.splitTextToSize(txt, LAYOUT.contentWidth);
     doc.text(wrap, LAYOUT.margenIzq, y);
     y += wrap.length * 4.5 + 3;
+  }
+
+  // ── Checklist de recepción (#24) ─────────────────────────────────────
+  // Marcado = el cliente lo trajo. Sin marcar = no llegó (soporte legal).
+  if (checklist.length > 0) {
+    if (y > LAYOUT.pageHeight - 55) {
+      doc.addPage();
+      y = LAYOUT.margenSup;
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...COLORES.textoOscuro);
+    doc.text("CHECKLIST DE RECEPCIÓN", LAYOUT.margenIzq, y);
+    y += 5;
+    doc.setFontSize(9);
+    const colW = LAYOUT.contentWidth / 2;
+    const half = Math.ceil(checklist.length / 2);
+    const startY = y;
+    checklist.forEach((c, i) => {
+      const col = i < half ? 0 : 1;
+      const row = col === 0 ? i : i - half;
+      const x = LAYOUT.margenIzq + col * colW;
+      const yy = startY + row * 4.8;
+      doc.setFont("helvetica", c.marcado ? "bold" : "normal");
+      doc.setTextColor(
+        ...(c.marcado ? COLORES.textoOscuro : COLORES.textoMedio),
+      );
+      doc.text(`${c.marcado ? "[X]" : "[  ]"} ${c.nombre}`, x, yy);
+    });
+    y = startY + half * 4.8 + 4;
+    doc.setTextColor(...COLORES.textoOscuro);
   }
 
   // ── Tabla de repuestos ───────────────────────────────────────────────
