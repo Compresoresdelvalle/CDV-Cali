@@ -27,9 +27,10 @@ export function useInventario() {
     initiated.current = true;
 
     if (perfil.rol === "Vendedor" && perfil.sede_id) {
-      // Vendedor solo ve su sede → setear filtroSede dispara el effect
-      // de re-fetch automáticamente. NO llamar fetchInventario aquí
-      // (causaría doble fetch).
+      // Vendedor arranca filtrado por SU sede (default cómodo), pero ahora
+      // puede ver y seleccionar otras sedes desde el filtro (solo lectura; el
+      // costo sigue oculto en la ficha). Setear filtroSede dispara el re-fetch;
+      // NO llamar fetchInventario aquí (causaría doble fetch).
       useInventarioStore.setState({
         filtroSede: [perfil.sede_id],
         items: [],

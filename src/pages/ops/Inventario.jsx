@@ -94,7 +94,6 @@ export default function Inventario() {
     if (productoId) navigate(`/ops/inventario/${productoId}`);
   };
 
-  const esVendedor = perfil?.rol === "Vendedor";
   // Bloque 1 (#4): crear producto es exclusivo de Admin.
   const esAdmin = perfil?.rol === "Admin";
   const sedeLabel =
@@ -190,7 +189,6 @@ export default function Inventario() {
       <div className="grid min-w-0 gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
         {/* Panel de filtros */}
         <FiltrosPanel
-          esVendedor={esVendedor}
           filtroSede={filtroSede}
           filtroEstado={filtroEstado}
           filtroTipo={filtroTipo}
@@ -360,46 +358,38 @@ function Th({ children, width, right }) {
   );
 }
 
-function FiltrosPanel({
-  esVendedor,
-  filtroSede,
-  filtroEstado,
-  filtroTipo,
-  setFiltros,
-}) {
+function FiltrosPanel({ filtroSede, filtroEstado, filtroTipo, setFiltros }) {
   return (
     <aside
       className="flex flex-col gap-4 self-start rounded-[10px] border p-3.5 text-[12.5px]"
       style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
     >
-      {/* Sede — #34: multi-selección */}
-      {!esVendedor && (
-        <FilterBlock
-          title="Sede"
-          clearable={filtroSede.length > 0}
-          onClear={() => setFiltros({ filtroSede: [] })}
+      {/* Sede — #34 multi-selección. El Vendedor también puede ver y filtrar
+          otras sedes (solo lectura; los costos siguen ocultos en la ficha del
+          producto, que es donde aparece el costo). */}
+      <FilterBlock
+        title="Sede"
+        clearable={filtroSede.length > 0}
+        onClear={() => setFiltros({ filtroSede: [] })}
+      >
+        <FilterRow
+          on={filtroSede.length === 0}
+          onClick={() => setFiltros({ filtroSede: [] })}
         >
+          <Check on={filtroSede.length === 0} />
+          Todas las sedes
+        </FilterRow>
+        {Object.entries(SEDE_LABELS).map(([id, label]) => (
           <FilterRow
-            on={filtroSede.length === 0}
-            onClick={() => setFiltros({ filtroSede: [] })}
+            key={id}
+            on={filtroSede.includes(id)}
+            onClick={() => setFiltros({ filtroSede: toggleEn(filtroSede, id) })}
           >
-            <Check on={filtroSede.length === 0} />
-            Todas las sedes
+            <Check on={filtroSede.includes(id)} />
+            {label}
           </FilterRow>
-          {Object.entries(SEDE_LABELS).map(([id, label]) => (
-            <FilterRow
-              key={id}
-              on={filtroSede.includes(id)}
-              onClick={() =>
-                setFiltros({ filtroSede: toggleEn(filtroSede, id) })
-              }
-            >
-              <Check on={filtroSede.includes(id)} />
-              {label}
-            </FilterRow>
-          ))}
-        </FilterBlock>
-      )}
+        ))}
+      </FilterBlock>
 
       {/* Estado de stock — #34: multi-selección */}
       <FilterBlock
