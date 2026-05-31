@@ -7,13 +7,13 @@ import { useAuthStore } from "../../stores/authStore";
 import StatusBadge from "../../components/ui/StatusBadge";
 import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
 import QRScanner from "../../components/forms/QRScanner";
-import { SEDES } from "../../lib/constants";
 import { formatCOP } from "../../lib/utils";
 import {
   categoriaClass,
   estadoStockClass,
   ubicacionLabel,
 } from "../../lib/inventario-ui";
+import { useSedes } from "../../hooks/useSedes";
 
 const ESTADOS = [
   { v: "OK", label: "Disponible", dot: "s" },
@@ -26,13 +26,6 @@ const TIPOS = [
   { v: "segunda_mano", label: "Segunda mano" },
 ];
 
-const SEDE_LABELS = {
-  [SEDES.BODEGA]: "Bodega Principal",
-  [SEDES.CV]: "Almacén CV",
-  [SEDES.L3]: "Almacén L3",
-  [SEDES.CHV]: "Almacén CHV",
-};
-
 /** #34: suma/quita un valor de un array (multi-selección de filtros). */
 const toggleEn = (arr, v) =>
   arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
@@ -40,6 +33,8 @@ const toggleEn = (arr, v) =>
 export default function Inventario() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
+  // Sedes activas desde la BD (única fuente de verdad)
+  const { sedes } = useSedes();
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const {
@@ -104,7 +99,7 @@ export default function Inventario() {
     filtroSede.length === 0
       ? "Todas las sedes"
       : filtroSede.length === 1
-        ? (SEDE_LABELS[filtroSede[0]] ?? filtroSede[0])
+        ? (sedes.find((s) => s.id === filtroSede[0])?.nombre ?? filtroSede[0])
         : `${filtroSede.length} sedes`;
 
   return (
@@ -193,6 +188,7 @@ export default function Inventario() {
       <div className="grid min-w-0 gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
         {/* Panel de filtros */}
         <FiltrosPanel
+          sedes={sedes}
           filtroSede={filtroSede}
           filtroEstado={filtroEstado}
           filtroTipo={filtroTipo}
@@ -363,7 +359,13 @@ function Th({ children, width, right }) {
   );
 }
 
-function FiltrosPanel({ filtroSede, filtroEstado, filtroTipo, setFiltros }) {
+function FiltrosPanel({
+  sedes,
+  filtroSede,
+  filtroEstado,
+  filtroTipo,
+  setFiltros,
+}) {
   return (
     <aside
       className="flex flex-col gap-4 self-start rounded-[10px] border p-3.5 text-[12.5px]"
@@ -371,7 +373,7 @@ function FiltrosPanel({ filtroSede, filtroEstado, filtroTipo, setFiltros }) {
     >
       {/* Sede — #34 multi-selección. El Vendedor también puede ver y filtrar
           otras sedes (solo lectura; los costos siguen ocultos en la ficha del
-          producto, que es donde aparece el costo). */}
+          producto). Las opciones vienen de la BD (hook useSedes). */}
       <FilterBlock
         title="Sede"
         clearable={filtroSede.length > 0}
@@ -384,14 +386,16 @@ function FiltrosPanel({ filtroSede, filtroEstado, filtroTipo, setFiltros }) {
           <Check on={filtroSede.length === 0} />
           Todas las sedes
         </FilterRow>
-        {Object.entries(SEDE_LABELS).map(([id, label]) => (
+        {sedes.map((s) => (
           <FilterRow
-            key={id}
-            on={filtroSede.includes(id)}
-            onClick={() => setFiltros({ filtroSede: toggleEn(filtroSede, id) })}
+            key={s.id}
+            on={filtroSede.includes(s.id)}
+            onClick={() =>
+              setFiltros({ filtroSede: toggleEn(filtroSede, s.id) })
+            }
           >
-            <Check on={filtroSede.includes(id)} />
-            {label}
+            <Check on={filtroSede.includes(s.id)} />
+            {s.nombre}
           </FilterRow>
         ))}
       </FilterBlock>

@@ -28,6 +28,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { ROLE_MODULES, MODULE_ROUTES } from "../../lib/constants";
 import ThemeToggle from "../ui/ThemeToggle";
 import GlobalSearch from "./GlobalSearch";
+import Logo from "../ui/Logo";
 import { supabase } from "../../lib/supabase";
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
@@ -131,9 +132,7 @@ function SidebarOps({ sections, isAdmin }) {
     <aside className="chv-sidebar hidden lg:flex w-[240px] shrink-0 flex-col">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2 border-b border-white/[0.04] px-4">
-        <div className="grid h-7 w-7 place-items-center rounded-md bg-[--p-600] font-mono text-[11px] font-semibold tracking-wider text-white">
-          CV
-        </div>
+        <Logo className="h-7 w-7" />
         <div className="leading-tight">
           <div className="text-[13px] font-semibold text-white/90">
             Compresores
@@ -291,9 +290,7 @@ function MobileHeader({ perfil, initials, onLogout }) {
   return (
     <header className="chv-topbar sticky top-0 z-30 flex lg:hidden h-14 items-center justify-between px-4">
       <div className="flex items-center gap-2.5">
-        <div className="grid h-7 w-7 place-items-center rounded-md bg-[--p-600] font-mono text-[11px] font-semibold tracking-wider text-white">
-          CV
-        </div>
+        <Logo className="h-7 w-7" />
         <span className="text-[14px] font-semibold text-white">
           CDV Gestión
         </span>
