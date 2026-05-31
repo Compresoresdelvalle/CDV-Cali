@@ -21,7 +21,8 @@ export const MARCA = {
 export const RECIBO_NOMBRE = "Compresores CV";
 
 // #14 — Teléfono por sede para los recibos (se muestra el de la sede de la venta).
-// ⚠️ BODEGA (Bodega Principal) pendiente de dato — se omite si no hay teléfono.
+// La Bodega Principal (BODEGA) no tiene teléfono propio: se omite la línea de
+// teléfono cuando la sede no está en este mapa.
 export const SEDE_TELEFONO = {
   CV: "3127536787",
   L3: "3114940799",
