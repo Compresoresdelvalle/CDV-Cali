@@ -177,7 +177,7 @@ export default function App() {
           <Route
             path="compras"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <CompraHistorial />
               </RoleGuard>
             }
@@ -185,7 +185,7 @@ export default function App() {
           <Route
             path="compras/nueva"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <CompraNueva />
               </RoleGuard>
             }
@@ -194,7 +194,7 @@ export default function App() {
           <Route
             path="compras/:id"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <CompraDetalle />
               </RoleGuard>
             }
