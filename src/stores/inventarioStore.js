@@ -17,11 +17,11 @@ export const useInventarioStore = create((set, get) => ({
   page: 0,
   error: null,
 
-  // Filtros
-  filtroSede: null,
+  // Filtros — #34: multi-selección. Arrays vacíos = sin filtro (todos).
+  filtroSede: [], // string[] de IDs de sede
   filtroBusqueda: "",
-  filtroEstado: null,
-  filtroTipo: null, // F12: 'nuevo' | 'segunda_mano' | null (todos)
+  filtroEstado: [], // string[] de 'OK' | 'Bajo' | 'Agotado'
+  filtroTipo: [], // string[] de 'nuevo' | 'segunda_mano'
 
   // Actualiza filtros de sede/estado/tipo y resetea paginación
   setFiltros: (partial) =>
@@ -71,7 +71,7 @@ export const useInventarioStore = create((set, get) => ({
       // Tope de 500 para no generar una URL gigante en el `.in()` posterior.
       let productoIds = null;
       const busquedaRaw = s.filtroBusqueda.trim();
-      const necesitaPreFiltro = !!busquedaRaw || !!s.filtroTipo;
+      const necesitaPreFiltro = !!busquedaRaw || s.filtroTipo.length > 0;
       if (necesitaPreFiltro) {
         let pq = supabase
           .from("productos")
@@ -87,7 +87,8 @@ export const useInventarioStore = create((set, get) => ({
             "codigo_proveedor",
           ]);
         }
-        if (s.filtroTipo) pq = pq.eq("tipo", s.filtroTipo);
+        // #34: tipo multi-selección.
+        if (s.filtroTipo.length) pq = pq.in("tipo", s.filtroTipo);
         const { data: prods, error: pqError } = await pq;
         if (seq !== fetchSeq) return;
         if (pqError) {
@@ -124,8 +125,9 @@ export const useInventarioStore = create((set, get) => ({
         .eq("producto.activo", true)
         .range(offset, offset + PAGE_SIZE - 1);
 
-      if (s.filtroSede) q = q.eq("sede_id", s.filtroSede);
-      if (s.filtroEstado) q = q.eq("estado_stock", s.filtroEstado);
+      // #34: sede y estado multi-selección.
+      if (s.filtroSede.length) q = q.in("sede_id", s.filtroSede);
+      if (s.filtroEstado.length) q = q.in("estado_stock", s.filtroEstado);
       if (productoIds) q = q.in("producto_id", productoIds);
 
       const { data, error } = await q;
@@ -182,9 +184,9 @@ export const useInventarioStore = create((set, get) => ({
       hasMore: true,
       page: 0,
       error: null,
-      filtroSede: null,
+      filtroSede: [],
       filtroBusqueda: "",
-      filtroEstado: null,
-      filtroTipo: null,
+      filtroEstado: [],
+      filtroTipo: [],
     }),
 }));
