@@ -10,7 +10,15 @@
  */
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { MARCA, COLORES, LAYOUT, formatCOP } from "./pdfStyles";
+import {
+  MARCA,
+  RECIBO_NOMBRE,
+  SEDE_TELEFONO,
+  RECIBO_DIRECCION,
+  COLORES,
+  LAYOUT,
+  formatCOP,
+} from "./pdfStyles";
 
 /**
  * Args:
@@ -30,16 +38,20 @@ export function generarReciboPDF({
   const doc = new jsPDF({ unit: "mm", format: "letter", compress: true });
   let y = LAYOUT.margenSup;
 
-  // ── Header ───────────────────────────────────────────────────────────
+  // ── Header (#14: nombre comercial + dirección + teléfono de la sede) ──
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   doc.setTextColor(...COLORES.primario);
-  doc.text(MARCA.nombre, LAYOUT.margenIzq, y);
+  doc.text(RECIBO_NOMBRE, LAYOUT.margenIzq, y);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...COLORES.textoMedio);
-  doc.text(MARCA.ciudad, LAYOUT.margenIzq, y + 5);
+  doc.text(`${RECIBO_DIRECCION} · ${MARCA.ciudad}`, LAYOUT.margenIzq, y + 5);
+  const telSede = SEDE_TELEFONO[recibo.sede_id];
+  if (telSede) {
+    doc.text(`Tel: ${telSede}`, LAYOUT.margenIzq, y + 9.5);
+  }
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
@@ -61,7 +73,7 @@ export function generarReciboPDF({
   doc.text(`Fecha: ${fecha}`, LAYOUT.pageWidth - LAYOUT.margenDer, y + 5, {
     align: "right",
   });
-  y += 14;
+  y += telSede ? 17 : 13;
 
   // Marca de anulado
   if (recibo.anulado) {
@@ -153,7 +165,8 @@ export function generarReciboPDF({
     y += bold ? 6 : 4.6;
   };
   fila("Subtotal:", formatCOP(subtotal));
-  fila(`IVA ${ivaPct}%:`, formatCOP(ivaMonto));
+  // #16: IVA condicional — si el recibo es exento (0%) no se imprime la línea.
+  if (ivaPct > 0) fila(`IVA ${ivaPct}%:`, formatCOP(ivaMonto));
   doc.setDrawColor(...COLORES.borde);
   doc.line(totalsX, y - 1, valuesX, y - 1);
   y += 1.5;
