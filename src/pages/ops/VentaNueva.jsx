@@ -26,7 +26,8 @@ import { metodoPagoClass } from "../../lib/ventas-ui";
 import { upsertCliente } from "../../lib/clientes";
 
 const METODOS_PAGO = ["Efectivo", "Transferencia", "Tarjeta", "Crédito"];
-const IVA_PCT = 19;
+const IVA_DEFAULT = 19;
+const IVA_PRESETS = [0, 19];
 
 export default function VentaNueva() {
   const navigate = useNavigate();
@@ -46,6 +47,7 @@ export default function VentaNueva() {
   const [clienteDireccion, setClienteDireccion] = useState("");
   const [metodoPago, setMetodoPago] = useState("Efectivo");
   const [descuentoPct, setDescuentoPct] = useState(0);
+  const [ivaPct, setIvaPct] = useState(IVA_DEFAULT);
   const [observaciones, setObservaciones] = useState("");
   const [confirmando, setConfirmando] = useState(false);
   const [error, setError] = useState(null);
@@ -224,6 +226,18 @@ export default function VentaNueva() {
     );
   };
 
+  // #9: editar el precio de venta por línea. Solo dígitos; vacío = 0.
+  const setPrecioDirecto = (productoId, valor) => {
+    const limpio = String(valor).replace(/[^\d]/g, "");
+    const n = limpio === "" ? 0 : Number(limpio);
+    if (isNaN(n) || n < 0) return;
+    setCarrito((prev) =>
+      prev.map((i) =>
+        i.producto_id === productoId ? { ...i, precio_unitario: n } : i,
+      ),
+    );
+  };
+
   const eliminarItem = (productoId) => {
     setCarrito((prev) => prev.filter((i) => i.producto_id !== productoId));
   };
@@ -237,8 +251,8 @@ export default function VentaNueva() {
   );
   const descuento = subtotal * (descuentoPct / 100);
   const baseIva = subtotal - descuento;
-  const iva = baseIva * (IVA_PCT / 100);
-  const total = subtotal * (1 - descuentoPct / 100) * (1 + IVA_PCT / 100);
+  const iva = baseIva * (ivaPct / 100);
+  const total = subtotal * (1 - descuentoPct / 100) * (1 + ivaPct / 100);
 
   // Paso activo del stepper, derivado del estado real de la venta en curso.
   const pasoActivo = useMemo(() => {
@@ -258,6 +272,7 @@ export default function VentaNueva() {
         p_cliente_nit: clienteNit || null,
         p_metodo_pago: metodoPago,
         p_descuento_pct: descuentoPct,
+        p_iva_pct: ivaPct,
         p_observaciones: observaciones || null,
         p_items: carrito.map((i) => ({
           producto_id: i.producto_id,
@@ -599,7 +614,10 @@ export default function VentaNueva() {
                           )}
                         </td>
                         <td className="p-pr">
-                          {formatCOP(item.precio_unitario)}
+                          <PriceInput
+                            value={item.precio_unitario}
+                            onSet={(v) => setPrecioDirecto(item.producto_id, v)}
+                          />
                         </td>
                         <td className="p-sub">
                           {formatCOP(item.cantidad * item.precio_unitario)}
@@ -679,6 +697,44 @@ export default function VentaNueva() {
             />
           </div>
 
+          {/* #9 — IVA por venta: exento (0%), estándar (19%) o editable */}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-sm" style={{ color: "var(--n-500)" }}>
+              IVA
+            </label>
+            {IVA_PRESETS.map((p) => {
+              const on = ivaPct === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setIvaPct(p)}
+                  className="rounded-md border px-3 text-[13px] font-medium transition-colors"
+                  style={{
+                    minHeight: 36,
+                    borderColor: on ? "var(--p-400)" : "var(--n-200)",
+                    backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
+                    color: on ? "#fff" : "var(--n-700)",
+                  }}
+                >
+                  {p === 0 ? "Exento (0%)" : `${p}%`}
+                </button>
+              );
+            })}
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={ivaPct}
+              onChange={(e) =>
+                setIvaPct(Math.min(100, Math.max(0, Number(e.target.value))))
+              }
+              className="finput"
+              style={{ width: 80, textAlign: "center" }}
+              aria-label="IVA porcentaje"
+            />
+          </div>
+
           {error && (
             <div
               className="rounded-[10px] border px-4 py-3"
@@ -713,7 +769,9 @@ export default function VentaNueva() {
             </div>
           )}
           <div className="cart-line">
-            <span>IVA {IVA_PCT}%</span>
+            <span>
+              IVA {ivaPct}%{ivaPct === 0 ? " (exento)" : ""}
+            </span>
             <span className="v">{formatCOP(iva)}</span>
           </div>
           <div className="cart-line tot">
@@ -812,6 +870,33 @@ function QtyControl({ value, danger, onDec, onInc, onSet, max, incDisabled }) {
       >
         <Plus className="size-3.5" />
       </button>
+    </div>
+  );
+}
+
+// #9 — precio de venta editable por línea. Muestra el entero (COP sin
+// decimales); el subtotal de la fila ya se muestra formateado al lado.
+function PriceInput({ value, onSet }) {
+  return (
+    <div
+      className="inline-flex h-9 items-center overflow-hidden rounded-md border"
+      style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+    >
+      <span
+        className="pl-2 font-mono text-[12px]"
+        style={{ color: "var(--n-500)" }}
+      >
+        $
+      </span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => onSet(e.target.value)}
+        className="w-[92px] border-0 bg-transparent px-1.5 text-right font-mono text-[13px] font-medium outline-none"
+        style={{ color: "var(--n-950)" }}
+        aria-label="Precio unitario"
+      />
     </div>
   );
 }
