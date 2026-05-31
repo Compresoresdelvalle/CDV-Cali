@@ -6,6 +6,15 @@ export const SEDES = {
   CHV: "CHV",
 };
 
+// #13 — Cuentas bancarias donde puede entrar el pago de una venta.
+// ⚠️ PROVISIONAL: reemplazar por las cuentas REALES que indique la empresa.
+export const CUENTAS_BANCARIAS = [
+  "Bancolombia",
+  "Davivienda",
+  "Nequi",
+  "Daviplata",
+];
+
 // Roles
 export const ROLES = {
   ADMIN: "Admin",
