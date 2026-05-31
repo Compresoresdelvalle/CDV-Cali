@@ -81,9 +81,11 @@ export default function TraspasoHistorial() {
   const [errorMsg, setErrorMsg] = useState(null);
   const reqIdRef = useRef(0);
 
-  const cargar = async (reset = false) => {
+  // `silent`: refresco en segundo plano (Realtime) sin parpadear el skeleton
+  // ni mostrar error de un refresco de fondo.
+  const cargar = async (reset = false, silent = false) => {
     const myReq = ++reqIdRef.current;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setErrorMsg(null);
     const currentPage = reset ? 0 : page;
     try {
@@ -118,7 +120,7 @@ export default function TraspasoHistorial() {
       }
       setHasMore((data ?? []).length === PAGE_SIZE);
     } catch {
-      if (myReq === reqIdRef.current)
+      if (myReq === reqIdRef.current && !silent)
         setErrorMsg("No se pudieron cargar los traspasos. Reintenta.");
     } finally {
       if (myReq === reqIdRef.current) setLoading(false);
@@ -127,6 +129,30 @@ export default function TraspasoHistorial() {
 
   useEffect(() => {
     cargar(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Realtime: refresca la lista en vivo cuando cualquier traspaso cambia de
+  // estado (la RLS de lectura sigue aplicando al re-cargar). Debounce para
+  // agrupar ráfagas de eventos (p.ej. al actualizar varios ítems).
+  useEffect(() => {
+    let t = null;
+    const refrescar = () => {
+      clearTimeout(t);
+      t = setTimeout(() => cargar(true, true), 400);
+    };
+    const channel = supabase
+      .channel("traspasos-historial")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "traspasos" },
+        refrescar,
+      )
+      .subscribe();
+    return () => {
+      clearTimeout(t);
+      supabase.removeChannel(channel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

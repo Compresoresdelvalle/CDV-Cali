@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeftCircle, Search, Trash2, ArrowRight } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { sanitizeSearch, safeError } from "../../lib/utils";
+import { safeError } from "../../lib/utils";
+import { applyKeywordSearch } from "../../lib/search";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { SEDE_LABELS, sedeLabel } from "../../lib/traspasos-ui";
 
@@ -48,13 +49,13 @@ export default function TraspasoNuevo() {
       }
       setBuscando(true);
       try {
-        const safe = sanitizeSearch(q.trim());
-        const { data: prods } = await supabase
+        // #32: búsqueda por palabras clave en nombre/referencia.
+        let pq = supabase
           .from("productos")
           .select("id, nombre, referencia, unidad_medida")
-          .eq("activo", true)
-          .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
-          .limit(8);
+          .eq("activo", true);
+        pq = applyKeywordSearch(pq, q, ["nombre", "referencia"]);
+        const { data: prods } = await pq.limit(8);
 
         const ids = (prods ?? []).map((p) => p.id);
         if (!ids.length) {
