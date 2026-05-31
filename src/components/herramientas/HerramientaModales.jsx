@@ -1,5 +1,12 @@
-import { useState, useEffect, useRef } from "react";
-import { Package, Wrench, Check, ChevronDown } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import {
+  Package,
+  Wrench,
+  Check,
+  ChevronDown,
+  Search,
+  Boxes,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
@@ -269,10 +276,19 @@ export function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
 export function ModalNueva({ sedeDefault, onClose, onSaved }) {
   const perfil = useAuthStore((s) => s.perfil);
   const savingRef = useRef(false);
-  const [nombre, setNombre] = useState("");
-  const [codigo, setCodigo] = useState("");
+  // 'insumo' = inventariable (sale del stock de insumo) · 'manual' = no inventariable
+  const [modo, setModo] = useState("insumo");
   const [sedeId, setSedeId] = useState(sedeDefault);
   const [sedes, setSedes] = useState([]);
+  // Modo manual
+  const [nombre, setNombre] = useState("");
+  const [codigo, setCodigo] = useState("");
+  // Modo insumo
+  const [insumos, setInsumos] = useState([]);
+  const [loadingInsumos, setLoadingInsumos] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const [productoSel, setProductoSel] = useState(null);
+  // Común
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -285,14 +301,73 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
       .then(({ data }) => setSedes(data ?? []));
   }, []);
 
+  // Inventario de insumos de la sede (cantidad_insumo > 0). Son pocos (≤ ~30),
+  // así que se traen todos y se filtran en memoria — sin búsqueda server-side.
+  useEffect(() => {
+    if (modo !== "insumo" || !sedeId) return;
+    let cancel = false;
+    setLoadingInsumos(true);
+    setProductoSel(null);
+    setBusqueda("");
+    supabase
+      .from("inventario")
+      .select(
+        "producto_id, cantidad_insumo, producto:productos!inner(id, nombre, referencia, codigo_interno)",
+      )
+      .eq("sede_id", sedeId)
+      .eq("producto.activo", true)
+      .gt("cantidad_insumo", 0)
+      .order("cantidad_insumo", { ascending: false })
+      .limit(200)
+      .then(({ data, error: e }) => {
+        if (cancel) return;
+        setInsumos(e ? [] : (data ?? []));
+        setLoadingInsumos(false);
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [modo, sedeId]);
+
+  const insumosFiltrados = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    const norm = (s) => (s ?? "").toString().toLowerCase();
+    const list = !q
+      ? insumos
+      : insumos.filter((r) => {
+          const p = r.producto ?? {};
+          return (
+            norm(p.nombre).includes(q) ||
+            norm(p.referencia).includes(q) ||
+            norm(p.codigo_interno).includes(q)
+          );
+        });
+    return list.slice(0, 12);
+  }, [insumos, busqueda]);
+
+  const elegirInsumo = (r) => {
+    const p = r.producto ?? {};
+    setProductoSel({
+      producto_id: r.producto_id,
+      nombre: p.nombre,
+      codigo: p.codigo_interno || p.referencia || "",
+      stock: r.cantidad_insumo,
+    });
+    setBusqueda("");
+  };
+
   const guardar = async (e) => {
     e.preventDefault();
     if (perfil?.rol !== "Admin") {
       setError("Solo el Admin puede crear herramientas");
       return;
     }
-    if (!nombre.trim()) {
+    if (modo === "manual" && !nombre.trim()) {
       setError("El nombre es obligatorio");
+      return;
+    }
+    if (modo === "insumo" && !productoSel) {
+      setError("Selecciona un insumo del inventario de la sede");
       return;
     }
     if (savingRef.current) return;
@@ -300,15 +375,25 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
     setSaving(true);
     setError("");
     try {
-      const { error: e2 } = await supabase
-        .from("herramientas_prestamo")
-        .insert({
-          herramienta_nombre: nombre.trim(),
-          herramienta_codigo: codigo.trim() || null,
-          sede_id: sedeId,
-          estado: "disponible",
-        });
-      if (e2) throw e2;
+      if (modo === "insumo") {
+        // Inventariable: sale 1 del stock de insumo (RPC con FOR UPDATE).
+        const { error: e2 } = await supabase.rpc(
+          "fn_crear_herramienta_desde_insumo",
+          { p_producto_id: productoSel.producto_id, p_sede_id: sedeId },
+        );
+        if (e2) throw e2;
+      } else {
+        // Manual: no inventariable, no toca stock.
+        const { error: e2 } = await supabase
+          .from("herramientas_prestamo")
+          .insert({
+            herramienta_nombre: nombre.trim(),
+            herramienta_codigo: codigo.trim() || null,
+            sede_id: sedeId,
+            estado: "disponible",
+          });
+        if (e2) throw e2;
+      }
       await onSaved();
     } catch (err) {
       setError(safeError(err, "Error al crear"));
@@ -318,8 +403,11 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
     }
   };
 
+  const puedeGuardar =
+    !saving && (modo === "manual" ? nombre.trim().length > 0 : !!productoSel);
+
   return (
-    <ModalShell onClose={onClose} maxWidth={480}>
+    <ModalShell onClose={onClose} maxWidth={520}>
       <div className="mb-1.5 flex items-center gap-2.5">
         <div
           className="flex h-9 w-9 items-center justify-center rounded-lg"
@@ -338,36 +426,45 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
         </h2>
       </div>
       <p
-        className="mb-5 text-[13px] leading-[1.5]"
+        className="mb-4 text-[13px] leading-[1.5]"
         style={{ color: "var(--n-500)" }}
       >
-        Registra una herramienta en el catálogo. Quedará disponible para
-        préstamo de inmediato.
+        Sácala del inventario de insumos (inventariable) o regístrala a mano si
+        no existe en el catálogo.
       </p>
 
+      {/* Selector de modo */}
+      <div className="mb-4 flex gap-2">
+        {[
+          { v: "insumo", t: "Desde insumos", Icon: Boxes },
+          { v: "manual", t: "Manual", Icon: Wrench },
+        ].map((m) => {
+          const on = modo === m.v;
+          const Icon = m.Icon;
+          return (
+            <button
+              key={m.v}
+              type="button"
+              onClick={() => {
+                setModo(m.v);
+                setError("");
+              }}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border text-[13px] font-medium transition-colors"
+              style={{
+                minHeight: 40,
+                borderColor: on ? "var(--p-500)" : "var(--n-200)",
+                backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
+                color: on ? "#fff" : "var(--n-700)",
+              }}
+            >
+              <Icon className="h-3.5 w-3.5" strokeWidth={1.9} />
+              {m.t}
+            </button>
+          );
+        })}
+      </div>
+
       <form onSubmit={guardar} className="space-y-4">
-        <Field label="Nombre *">
-          <input
-            type="text"
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            required
-            autoFocus
-            placeholder="Ej. Llave inglesa 12 pulgadas"
-            className="finput sans"
-          />
-        </Field>
-
-        <Field label="Código (opcional)">
-          <input
-            type="text"
-            value={codigo}
-            onChange={(e) => setCodigo(e.target.value)}
-            placeholder="Ej. HER-001"
-            className="finput"
-          />
-        </Field>
-
         <Field label="Sede *">
           <select
             value={sedeId}
@@ -382,6 +479,187 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
             ))}
           </select>
         </Field>
+
+        {modo === "insumo" ? (
+          <Field label="Insumo del inventario *">
+            {productoSel ? (
+              <div
+                className="flex items-center gap-3 rounded-md border-2 p-2.5"
+                style={{
+                  borderColor: "var(--p-600)",
+                  backgroundColor: "var(--p-50)",
+                }}
+              >
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                  style={{
+                    backgroundColor: "var(--p-100)",
+                    color: "var(--p-700)",
+                  }}
+                >
+                  <Boxes className="h-4 w-4" strokeWidth={1.8} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div
+                    className="truncate text-[13px] font-medium"
+                    style={{ color: "var(--n-950)" }}
+                  >
+                    {productoSel.nombre}
+                  </div>
+                  <div
+                    className="mt-0.5 text-[11px]"
+                    style={{ color: "var(--n-500)" }}
+                  >
+                    {productoSel.codigo && (
+                      <span
+                        className="font-mono font-medium"
+                        style={{ color: "var(--n-700)" }}
+                      >
+                        {productoSel.codigo} ·{" "}
+                      </span>
+                    )}
+                    Stock insumo: {productoSel.stock}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setProductoSel(null)}
+                  className="shrink-0 text-[12px] font-medium"
+                  style={{ color: "var(--p-700)" }}
+                >
+                  Cambiar
+                </button>
+              </div>
+            ) : (
+              <>
+                <div
+                  className="flex h-11 items-center gap-2.5 rounded-md border px-3"
+                  style={{
+                    borderColor: "var(--n-150)",
+                    backgroundColor: "var(--n-0)",
+                  }}
+                >
+                  <Search
+                    className="h-4 w-4 shrink-0"
+                    strokeWidth={1.6}
+                    style={{ color: "var(--n-400)" }}
+                  />
+                  <input
+                    type="text"
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    placeholder="Buscar insumo por nombre, referencia o código…"
+                    className="flex-1 border-none bg-transparent text-[13px] outline-none"
+                    style={{ color: "var(--n-900)" }}
+                  />
+                </div>
+                <div
+                  className="mt-2 max-h-[220px] overflow-y-auto rounded-md border"
+                  style={{ borderColor: "var(--n-150)" }}
+                >
+                  {loadingInsumos ? (
+                    <p
+                      className="px-3 py-4 text-center text-[12px]"
+                      style={{ color: "var(--n-500)" }}
+                    >
+                      Cargando insumos…
+                    </p>
+                  ) : insumosFiltrados.length === 0 ? (
+                    <p
+                      className="px-3 py-4 text-center text-[12px]"
+                      style={{ color: "var(--n-500)" }}
+                    >
+                      {insumos.length === 0
+                        ? "No hay insumos con stock en esta sede."
+                        : "Sin coincidencias."}
+                    </p>
+                  ) : (
+                    insumosFiltrados.map((r, idx) => {
+                      const p = r.producto ?? {};
+                      return (
+                        <button
+                          key={r.producto_id}
+                          type="button"
+                          onClick={() => elegirInsumo(r)}
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors"
+                          style={{
+                            borderTop:
+                              idx === 0 ? "none" : "1px solid var(--n-100)",
+                            backgroundColor: "var(--n-0)",
+                          }}
+                          onMouseEnter={(e) =>
+                            (e.currentTarget.style.backgroundColor =
+                              "var(--n-50)")
+                          }
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.backgroundColor =
+                              "var(--n-0)")
+                          }
+                        >
+                          <div className="min-w-0">
+                            <p
+                              className="truncate text-[13px] font-medium"
+                              style={{ color: "var(--n-950)" }}
+                            >
+                              {p.nombre}
+                            </p>
+                            <p
+                              className="font-mono text-[11px]"
+                              style={{ color: "var(--n-500)" }}
+                            >
+                              {p.codigo_interno || p.referencia || "—"}
+                            </p>
+                          </div>
+                          <span
+                            className="shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] font-medium"
+                            style={{
+                              backgroundColor: "var(--p-50)",
+                              color: "var(--p-700)",
+                            }}
+                          >
+                            {r.cantidad_insumo} ud
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+                <p
+                  className="mt-1.5 text-[11px] leading-[1.45]"
+                  style={{ color: "var(--n-500)" }}
+                >
+                  Al crear se descuenta 1 del stock de insumo. Al marcar
+                  devuelta regresa al insumo.
+                </p>
+              </>
+            )}
+          </Field>
+        ) : (
+          <>
+            <Field label="Nombre *">
+              <input
+                type="text"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                autoFocus
+                placeholder="Ej. Llave inglesa 12 pulgadas"
+                className="finput sans"
+              />
+            </Field>
+            <Field label="Código (opcional)">
+              <input
+                type="text"
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value)}
+                placeholder="Ej. HER-001"
+                className="finput"
+              />
+            </Field>
+            <p className="text-[11px]" style={{ color: "var(--n-500)" }}>
+              Herramienta no inventariable: no afecta el stock de insumos.
+            </p>
+          </>
+        )}
 
         {error && (
           <p className="text-xs" style={{ color: "var(--dang-700)" }}>
@@ -401,7 +679,7 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
           </button>
           <button
             type="submit"
-            disabled={saving}
+            disabled={!puedeGuardar}
             className="btn btn-pri flex-1 justify-center disabled:opacity-50"
             style={{ height: 48 }}
           >
