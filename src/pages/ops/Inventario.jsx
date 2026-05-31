@@ -18,7 +18,6 @@ const ESTADOS = [
 ];
 
 const TIPOS = [
-  { v: null, label: "Todos" },
   { v: "nuevo", label: "Nuevo" },
   { v: "segunda_mano", label: "Segunda mano" },
 ];
@@ -29,6 +28,10 @@ const SEDE_LABELS = {
   [SEDES.L3]: "Almacén L3",
   [SEDES.CHV]: "Almacén CHV",
 };
+
+/** #34: suma/quita un valor de un array (multi-selección de filtros). */
+const toggleEn = (arr, v) =>
+  arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
 
 export default function Inventario() {
   const navigate = useNavigate();
@@ -94,7 +97,12 @@ export default function Inventario() {
   const esVendedor = perfil?.rol === "Vendedor";
   // Bloque 1 (#4): crear producto es exclusivo de Admin.
   const esAdmin = perfil?.rol === "Admin";
-  const sedeLabel = filtroSede ? SEDE_LABELS[filtroSede] : "Todas las sedes";
+  const sedeLabel =
+    filtroSede.length === 0
+      ? "Todas las sedes"
+      : filtroSede.length === 1
+        ? (SEDE_LABELS[filtroSede[0]] ?? filtroSede[0])
+        : `${filtroSede.length} sedes`;
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-[18px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
@@ -364,42 +372,44 @@ function FiltrosPanel({
       className="flex flex-col gap-4 self-start rounded-[10px] border p-3.5 text-[12.5px]"
       style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
     >
-      {/* Sede */}
+      {/* Sede — #34: multi-selección */}
       {!esVendedor && (
         <FilterBlock
           title="Sede"
-          clearable={!!filtroSede}
-          onClear={() => setFiltros({ filtroSede: null })}
+          clearable={filtroSede.length > 0}
+          onClear={() => setFiltros({ filtroSede: [] })}
         >
           <FilterRow
-            on={!filtroSede}
-            onClick={() => setFiltros({ filtroSede: null })}
+            on={filtroSede.length === 0}
+            onClick={() => setFiltros({ filtroSede: [] })}
           >
-            <Check on={!filtroSede} />
+            <Check on={filtroSede.length === 0} />
             Todas las sedes
           </FilterRow>
           {Object.entries(SEDE_LABELS).map(([id, label]) => (
             <FilterRow
               key={id}
-              on={filtroSede === id}
-              onClick={() => setFiltros({ filtroSede: id })}
+              on={filtroSede.includes(id)}
+              onClick={() =>
+                setFiltros({ filtroSede: toggleEn(filtroSede, id) })
+              }
             >
-              <Check on={filtroSede === id} />
+              <Check on={filtroSede.includes(id)} />
               {label}
             </FilterRow>
           ))}
         </FilterBlock>
       )}
 
-      {/* Estado de stock */}
+      {/* Estado de stock — #34: multi-selección */}
       <FilterBlock
         title="Estado de stock"
-        clearable={!!filtroEstado}
-        onClear={() => setFiltros({ filtroEstado: null })}
+        clearable={filtroEstado.length > 0}
+        onClear={() => setFiltros({ filtroEstado: [] })}
       >
         <FilterRow
-          on={!filtroEstado}
-          onClick={() => setFiltros({ filtroEstado: null })}
+          on={filtroEstado.length === 0}
+          onClick={() => setFiltros({ filtroEstado: [] })}
         >
           <span className="dot-stk n" />
           Todos
@@ -407,9 +417,9 @@ function FiltrosPanel({
         {ESTADOS.map((e) => (
           <FilterRow
             key={e.v}
-            on={filtroEstado === e.v}
+            on={filtroEstado.includes(e.v)}
             onClick={() =>
-              setFiltros({ filtroEstado: filtroEstado === e.v ? null : e.v })
+              setFiltros({ filtroEstado: toggleEn(filtroEstado, e.v) })
             }
           >
             <span className={`dot-stk ${e.dot}`} />
@@ -418,19 +428,28 @@ function FiltrosPanel({
         ))}
       </FilterBlock>
 
-      {/* Tipo de producto */}
+      {/* Tipo de producto — #34: multi-selección */}
       <FilterBlock
         title="Tipo"
-        clearable={!!filtroTipo}
-        onClear={() => setFiltros({ filtroTipo: null })}
+        clearable={filtroTipo.length > 0}
+        onClear={() => setFiltros({ filtroTipo: [] })}
       >
+        <FilterRow
+          on={filtroTipo.length === 0}
+          onClick={() => setFiltros({ filtroTipo: [] })}
+        >
+          <Check on={filtroTipo.length === 0} />
+          Todos
+        </FilterRow>
         {TIPOS.map((t) => (
           <FilterRow
-            key={t.label}
-            on={(filtroTipo ?? null) === t.v}
-            onClick={() => setFiltros({ filtroTipo: t.v })}
+            key={t.v}
+            on={filtroTipo.includes(t.v)}
+            onClick={() =>
+              setFiltros({ filtroTipo: toggleEn(filtroTipo, t.v) })
+            }
           >
-            <Check on={(filtroTipo ?? null) === t.v} />
+            <Check on={filtroTipo.includes(t.v)} />
             {t.label}
           </FilterRow>
         ))}

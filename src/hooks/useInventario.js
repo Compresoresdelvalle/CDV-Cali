@@ -31,7 +31,7 @@ export function useInventario() {
       // de re-fetch automáticamente. NO llamar fetchInventario aquí
       // (causaría doble fetch).
       useInventarioStore.setState({
-        filtroSede: perfil.sede_id,
+        filtroSede: [perfil.sede_id],
         items: [],
         page: 0,
         hasMore: true,
