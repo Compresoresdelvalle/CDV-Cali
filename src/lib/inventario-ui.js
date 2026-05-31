@@ -43,3 +43,21 @@ export function categoriaClass(categoria) {
   if (c.includes("accesor")) return "acc";
   return "rpt";
 }
+
+/**
+ * Etiqueta de ubicación física en BODEGA a partir de los campos del producto.
+ * - en_piso → "Stand piso" (zona central, sin posición).
+ * - stand (1-9) → "Stand N" o "Stand N · Pos P" si hay posición.
+ * - sin datos → el fallback (por defecto "—").
+ * @param {{stand?: number|null, posicion?: number|null, en_piso?: boolean}|null|undefined} p
+ * @param {string} [fallback]
+ * @returns {string}
+ */
+export function ubicacionLabel(p, fallback = "—") {
+  if (!p) return fallback;
+  if (p.en_piso) return "Stand piso";
+  if (p.stand != null && p.stand !== "") {
+    return `Stand ${p.stand}${p.posicion != null && p.posicion !== "" ? ` · Pos ${p.posicion}` : ""}`;
+  }
+  return fallback;
+}

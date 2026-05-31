@@ -9,7 +9,11 @@ import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
 import QRScanner from "../../components/forms/QRScanner";
 import { SEDES } from "../../lib/constants";
 import { formatCOP } from "../../lib/utils";
-import { categoriaClass, estadoStockClass } from "../../lib/inventario-ui";
+import {
+  categoriaClass,
+  estadoStockClass,
+  ubicacionLabel,
+} from "../../lib/inventario-ui";
 
 const ESTADOS = [
   { v: "OK", label: "Disponible", dot: "s" },
@@ -274,6 +278,7 @@ export default function Inventario() {
                         <Th>Producto</Th>
                         <Th width={130}>Categoría</Th>
                         <Th width={120}>Sede</Th>
+                        <Th width={130}>Ubicación</Th>
                         <Th width={120}>Stock</Th>
                         <Th width={120} right>
                           Precio
@@ -584,6 +589,14 @@ function InventarioFila({ item, onClick }) {
         </span>
       </Td>
       <Td>
+        <span
+          className="whitespace-nowrap font-mono text-[11.5px]"
+          style={{ color: "var(--n-700)" }}
+        >
+          {ubicacionLabel(p)}
+        </span>
+      </Td>
+      <Td>
         <div className="flex items-center gap-1.5">
           <span className={`stk-pill ${estadoStockClass(item.estado_stock)}`}>
             {item.cantidad}
@@ -647,6 +660,14 @@ function InventarioCard({ item, onClick }) {
             <span className="text-[11px]" style={{ color: "var(--n-500)" }}>
               {item.sede?.nombre}
             </span>
+            {ubicacionLabel(p, "") && (
+              <span
+                className="font-mono text-[11px]"
+                style={{ color: "var(--n-500)" }}
+              >
+                · {ubicacionLabel(p)}
+              </span>
+            )}
           </div>
           {p.precio_venta != null && (
             <p
