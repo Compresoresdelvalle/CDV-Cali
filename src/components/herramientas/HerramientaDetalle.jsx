@@ -10,6 +10,7 @@ import {
   BarChart3,
   Settings,
   MessageCircle,
+  Boxes,
 } from "lucide-react";
 import { formatDate } from "../../lib/utils";
 import {
@@ -45,6 +46,7 @@ export default function HerramientaDetalle({
   const esPrestada = h.estado === "prestada";
   const esDisponible = h.estado === "disponible";
   const esMantenimiento = h.estado === "en_mantenimiento";
+  const esInventariable = !!h.producto_id; // vinculada a un insumo del catálogo
   const tono = prestamoTono(h);
   const atrasada = tono === "danger";
   const venc = diasVencida(h);
@@ -100,6 +102,15 @@ export default function HerramientaDetalle({
                 )}{" "}
                 · {sedeLabel(h.sede_id)}
               </p>
+              {esInventariable && (
+                <span className="mt-2 inline-flex">
+                  <Pill
+                    cls="pill-info"
+                    label="Inventariable · vinculada a insumo"
+                    small
+                  />
+                </span>
+              )}
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -126,6 +137,11 @@ export default function HerramientaDetalle({
               disabled={accionando}
               className="btn btn-pri inline-flex items-center gap-1.5 disabled:opacity-50"
               style={{ height: 48 }}
+              title={
+                esInventariable
+                  ? "Al devolverla, su unidad regresa al stock de insumo"
+                  : undefined
+              }
             >
               <Check className="h-3.5 w-3.5" strokeWidth={2} />
               {accionando ? "Procesando…" : "Marcar devuelta"}
@@ -138,6 +154,18 @@ export default function HerramientaDetalle({
               style={{ height: 48 }}
             >
               <UserCheck className="h-3.5 w-3.5" strokeWidth={2} /> Prestar
+            </button>
+          )}
+          {esDisponible && esInventariable && (
+            <button
+              onClick={onDevolver}
+              disabled={accionando}
+              className="btn btn-out inline-flex items-center gap-1.5 disabled:opacity-50"
+              style={{ height: 48 }}
+              title="Devuelve esta unidad al stock de insumo y retira la herramienta"
+            >
+              <Boxes className="h-3.5 w-3.5" strokeWidth={2} />
+              {accionando ? "Procesando…" : "Regresar a insumo"}
             </button>
           )}
           {/* Acciones del diseño Lovable sin backend (reportar daño / enviar a

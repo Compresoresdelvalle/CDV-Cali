@@ -43,7 +43,7 @@ import {
 const SELECT_COLS = `
   id, herramienta_nombre, herramienta_codigo, estado, prestada_a,
   fecha_prestamo, fecha_devolucion_esperada, fecha_devolucion_real,
-  sede_id, observaciones, estado_prestamo,
+  sede_id, observaciones, estado_prestamo, producto_id, activo,
   usuario:prestada_a(nombre, rol)
 `;
 
@@ -88,6 +88,7 @@ export default function Herramientas() {
       let query = supabase
         .from("herramientas_prestamo")
         .select(SELECT_COLS)
+        .eq("activo", true) // las regresadas a insumo (activo=false) se ocultan
         .order("herramienta_nombre", { ascending: true });
 
       if (perfil?.rol !== "Admin" && perfil?.sede_id)
@@ -145,32 +146,22 @@ export default function Herramientas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, perfil?.sede_id]);
 
-  /* ── Acción: devolver (UPDATE con guards anti-race + RBAC) ───────────── */
+  /* ── Acción: devolver (RPC server-authoritative) ─────────────────────────
+     fn_devolver_herramienta resuelve atómicamente el caso según el tipo:
+       · Manual (producto_id null): vuelve a 'disponible'.
+       · Inventariable: regresa 1 al stock de insumo y retira la herramienta
+         (activo=false), por lo que desaparece del catálogo tras recargar.
+     La función valida permiso (Admin o misma sede) y estado con FOR UPDATE. */
   const devolver = async (h) => {
     if (accionandoRef.current) return;
     accionandoRef.current = true;
     setAccionando(h.id);
     setErrorMsg("");
     try {
-      let q = supabase
-        .from("herramientas_prestamo")
-        .update({
-          estado: "disponible",
-          estado_prestamo: "devuelto",
-          fecha_devolucion_real: new Date().toISOString(),
-          prestada_a: null,
-        })
-        .eq("id", h.id)
-        .eq("estado", "prestada");
-      if (perfil?.rol !== "Admin" && perfil?.sede_id)
-        q = q.eq("sede_id", perfil.sede_id);
-      const { data, error } = await q.select("id");
+      const { error } = await supabase.rpc("fn_devolver_herramienta", {
+        p_herramienta_id: h.id,
+      });
       if (error) throw error;
-      if (!data || data.length === 0) {
-        setErrorMsg("Esta herramienta ya estaba devuelta o no tienes permiso");
-        await cargarHerramientas();
-        return;
-      }
       setDetalleId(null);
       await cargarHerramientas();
     } catch (err) {
