@@ -52,7 +52,9 @@ export default function CompraNueva() {
       const safe = sanitizeSearch(q.trim());
       const { data, error: e } = await supabase
         .from("productos")
-        .select("id, nombre, referencia, costo_promedio, unidad_medida")
+        .select(
+          "id, nombre, referencia, costo_promedio, unidad_medida, vendible",
+        )
         .eq("activo", true)
         .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
         .limit(8);
@@ -93,6 +95,9 @@ export default function CompraNueva() {
           cantidad: 1,
           // Vendedor: nunca el costo histórico → arranca en 0 (manual).
           costo_unitario: esVendedor ? 0 : (prod.costo_promedio ?? 0),
+          // Default inteligente: un producto no-vendible (insumo de catálogo)
+          // entra como insumo; el resto, como stock de venta. Editable.
+          destino: prod.vendible === false ? "insumo" : "venta",
         },
       ];
     });
@@ -128,6 +133,12 @@ export default function CompraNueva() {
       prev.map((i) =>
         i.producto_id !== productoId ? i : { ...i, costo_unitario: n },
       ),
+    );
+  };
+
+  const setDestino = (productoId, destino) => {
+    setCarrito((prev) =>
+      prev.map((i) => (i.producto_id !== productoId ? i : { ...i, destino })),
     );
   };
 
@@ -176,6 +187,7 @@ export default function CompraNueva() {
           producto_id: i.producto_id,
           cantidad: i.cantidad,
           costo_unitario: i.costo_unitario,
+          destino: i.destino ?? "venta",
         })),
       });
       if (rpcErr) throw new Error(rpcErr.message);
@@ -458,6 +470,7 @@ export default function CompraNueva() {
                       <thead>
                         <tr>
                           <th>Producto</th>
+                          <th style={{ width: 168 }}>Destino</th>
                           <th className="r" style={{ width: 130 }}>
                             Cantidad
                           </th>
@@ -486,6 +499,14 @@ export default function CompraNueva() {
                               >
                                 {item.referencia}
                               </p>
+                            </td>
+                            <td>
+                              <DestinoToggle
+                                value={item.destino}
+                                onChange={(d) =>
+                                  setDestino(item.producto_id, d)
+                                }
+                              />
                             </td>
                             <td className="text-right">
                               <div className="inline-flex items-center gap-1">
@@ -608,6 +629,10 @@ export default function CompraNueva() {
                             <Trash2 className="h-4 w-4" strokeWidth={1.7} />
                           </button>
                         </div>
+                        <DestinoToggle
+                          value={item.destino}
+                          onChange={(d) => setDestino(item.producto_id, d)}
+                        />
                         <div className="flex flex-wrap items-center gap-3">
                           <div className="flex items-center gap-1">
                             <QtyBtn
@@ -895,5 +920,40 @@ function QtyBtn({ children, onClick, disabled }) {
     >
       {children}
     </button>
+  );
+}
+
+/** Selector Venta/Insumo por producto del carrito (a qué stock entra). */
+function DestinoToggle({ value, onChange }) {
+  const opts = [
+    { v: "venta", t: "Venta" },
+    { v: "insumo", t: "Insumo" },
+  ];
+  return (
+    <div
+      className="inline-flex overflow-hidden rounded-lg border"
+      style={{ borderColor: "var(--n-150)" }}
+      role="group"
+      aria-label="Destino del stock"
+    >
+      {opts.map((o) => {
+        const on = (value ?? "venta") === o.v;
+        return (
+          <button
+            key={o.v}
+            type="button"
+            onClick={() => onChange(o.v)}
+            aria-pressed={on}
+            className="px-2.5 py-1 text-[11px] font-semibold transition-colors"
+            style={{
+              backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
+              color: on ? "#fff" : "var(--n-600)",
+            }}
+          >
+            {o.t}
+          </button>
+        );
+      })}
+    </div>
   );
 }
