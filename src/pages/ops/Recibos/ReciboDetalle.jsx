@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import {
   ArrowLeftCircle,
@@ -15,7 +15,6 @@ import { supabase } from "../../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../../lib/utils";
 import { useConfirm } from "../../../components/ui/ConfirmDialog";
 import { generarReciboPDF } from "../../../lib/pdf/reciboPDF";
-import { MARCA } from "../../../lib/pdf/pdfStyles";
 import {
   metodoPagoLabel,
   cuentaBancariaLabel,
@@ -49,7 +48,7 @@ export default function ReciboDetalle() {
       const { data: r, error } = await supabase
         .from("recibos")
         .select(
-          `id, numero, fecha, cliente_nombre, cliente_nit, concepto,
+          `id, numero, fecha, sede_id, cliente_nombre, cliente_nit, concepto,
            cotizacion_id, orden_id, subtotal, iva_pct, total, abonos_previos,
            monto_pagado, saldo, metodo_pago, observaciones, anulado, abono_id,
            recibidor:recibido_por(nombre),
@@ -75,22 +74,37 @@ export default function ReciboDetalle() {
     cargar();
   }, [cargar]);
 
-  const construirPDF = () =>
-    generarReciboPDF({
+  // #17: un ÚNICO documento PDF alimenta el preview (iframe) Y la impresión,
+  // así lo que se ve en pantalla es exactamente lo que se imprime.
+  const reciboDoc = useMemo(() => {
+    if (!recibo) return null;
+    return generarReciboPDF({
       recibo,
       items,
       cuenta: recibo.cuenta ?? null,
       recibidoPor: recibo.recibidor?.nombre ?? "—",
     });
+  }, [recibo, items]);
 
-  // Envuelve la generación del PDF: si jsPDF falla, muestra el error en vez
-  // de dejar una excepción sin manejar.
+  // URL del blob para el <iframe> de preview (se libera al cambiar/desmontar).
+  const [reciboUrl, setReciboUrl] = useState(null);
+  useEffect(() => {
+    if (!reciboDoc) {
+      setReciboUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(reciboDoc.blob);
+    setReciboUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [reciboDoc]);
+
+  // Imprime / descarga EL MISMO documento que muestra el preview.
   const manejarPDF = (accion) => {
+    if (!reciboDoc) return;
     setErrorMsg("");
     try {
-      const pdf = construirPDF();
-      if (accion === "print") pdf.print();
-      else pdf.download();
+      if (accion === "print") reciboDoc.print();
+      else reciboDoc.download();
     } catch (err) {
       setErrorMsg(safeError(err, "No se pudo generar el PDF del recibo"));
     }
@@ -159,7 +173,6 @@ export default function ReciboDetalle() {
   const ivaMonto = Number(recibo.total) - Number(recibo.subtotal);
   const tipo = reciboTipo(recibo);
   const historial = construirHistorialRecibo(recibo, formatDate);
-  const haySaldo = Number(recibo.saldo) > 0;
 
   return (
     <div className="mx-auto w-full max-w-[1240px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
@@ -396,10 +409,12 @@ export default function ReciboDetalle() {
                 <span>Subtotal</span>
                 <span className="v">{formatCOP(recibo.subtotal)}</span>
               </div>
-              <div className="ln">
-                <span>IVA {Number(recibo.iva_pct)}%</span>
-                <span className="v">{formatCOP(ivaMonto)}</span>
-              </div>
+              {ivaMonto > 0 && (
+                <div className="ln">
+                  <span>IVA {Number(recibo.iva_pct)}%</span>
+                  <span className="v">{formatCOP(ivaMonto)}</span>
+                </div>
+              )}
               <div className="ln tot">
                 <span>Total</span>
                 <span className="v">{formatCOP(recibo.total)}</span>
@@ -517,7 +532,7 @@ export default function ReciboDetalle() {
           </div>
         </div>
 
-        {/* ── Preview del PDF (sticky) ─────────────────────────────────── */}
+        {/* ── Preview del PDF (sticky) — #17: ES el PDF real (mismo blob) ── */}
         <aside className="pdf-wrap lg:sticky lg:top-4">
           <header className="pdf-head">
             <div>
@@ -526,147 +541,25 @@ export default function ReciboDetalle() {
             </div>
           </header>
           <div className="pdf-stage">
-            <div className="pdf-paper">
-              <div className="mb-3 flex items-start justify-between">
-                <div>
-                  <div className="pdf-logo-sq">CHV</div>
-                  <div className="pdf-logo-tag">Compresores del Valle</div>
-                </div>
-                <div className="text-right">
-                  <div className="pdf-co-name">{MARCA.nombre}</div>
-                  <div className="pdf-co-line sans">{MARCA.ciudad}</div>
-                </div>
-              </div>
-
+            {reciboUrl ? (
+              <iframe
+                title={`Recibo de pago #${recibo.numero}`}
+                src={reciboUrl}
+                className="w-full rounded-lg border"
+                style={{
+                  height: 620,
+                  borderColor: "var(--n-150)",
+                  backgroundColor: "var(--n-0)",
+                }}
+              />
+            ) : (
               <div
-                className="my-3 border-y border-dashed py-3 text-center"
-                style={{ borderColor: "#DADCE3" }}
+                className="px-4 py-10 text-center text-sm"
+                style={{ color: "var(--n-500)" }}
               >
-                <div className="pdf-title-main">RECIBO DE PAGO</div>
-                <div className="pdf-title-num">
-                  N° {String(recibo.numero).padStart(5, "0")}
-                </div>
-                <span
-                  className="mt-2 inline-block rounded-full border px-2 py-0.5 font-mono text-[8px] font-bold tracking-wider"
-                  style={
-                    recibo.anulado
-                      ? {
-                          borderColor: "var(--dang-border)",
-                          backgroundColor: "var(--dang-50)",
-                          color: "var(--dang-700)",
-                        }
-                      : {
-                          borderColor: "#9FDDB5",
-                          backgroundColor: "#E8F7EE",
-                          color: "#176B38",
-                        }
-                  }
-                >
-                  {recibo.anulado ? "ANULADO" : "PAGO RECIBIDO"}
-                </span>
+                Generando recibo…
               </div>
-
-              <div
-                className="mb-3 grid grid-cols-[1.2fr_1fr] gap-4 border-b pb-3"
-                style={{ borderColor: "#DADCE3" }}
-              >
-                <div>
-                  <div className="pdf-eyebrow-print">Cliente</div>
-                  <div className="pdf-cli-name">{recibo.cliente_nombre}</div>
-                  {recibo.cliente_nit && (
-                    <div className="pdf-cli-line">NIT {recibo.cliente_nit}</div>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                  <div>
-                    <div className="pdf-eyebrow-print">Fecha</div>
-                    <div className="pdf-meta-val sans">
-                      {formatDate(recibo.fecha)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="pdf-eyebrow-print">Recibido por</div>
-                    <div className="pdf-meta-val sans">
-                      {recibo.recibidor?.nombre ?? "—"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <table className="pdf-table">
-                <thead>
-                  <tr>
-                    <th>Concepto</th>
-                    <th className="r" style={{ width: 90 }}>
-                      Monto
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.length > 0 ? (
-                    items.map((it, idx) => (
-                      <tr key={idx}>
-                        <td>{it.descripcion}</td>
-                        <td className="r sub">{formatCOP(it.subtotal)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td>{recibo.concepto}</td>
-                      <td className="r sub">{formatCOP(recibo.subtotal)}</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-
-              <div className="flex justify-end">
-                <table className="pdf-totals-tbl">
-                  <tbody>
-                    <tr>
-                      <td>Subtotal</td>
-                      <td>{formatCOP(recibo.subtotal)}</td>
-                    </tr>
-                    <tr>
-                      <td>IVA {Number(recibo.iva_pct)}%</td>
-                      <td>{formatCOP(ivaMonto)}</td>
-                    </tr>
-                    {Number(recibo.abonos_previos) > 0 && (
-                      <tr>
-                        <td>Abonos previos</td>
-                        <td>−{formatCOP(recibo.abonos_previos)}</td>
-                      </tr>
-                    )}
-                    <tr className="tot">
-                      <td>{haySaldo ? "Total recibo" : "TOTAL"}</td>
-                      <td>{formatCOP(recibo.total)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div
-                className="mt-3 flex items-center justify-between rounded px-2.5 py-2 text-[9px]"
-                style={{ backgroundColor: "#F5F6F8" }}
-              >
-                <span
-                  className="font-mono font-bold uppercase tracking-wider"
-                  style={{ fontSize: 7.5, color: "#383C4A" }}
-                >
-                  Método de pago
-                </span>
-                <span
-                  className="font-mono font-medium"
-                  style={{ color: "#0E1018" }}
-                >
-                  {metodoPagoLabel(recibo.metodo_pago)} ·{" "}
-                  {formatCOP(recibo.monto_pagado)}
-                </span>
-              </div>
-
-              <div className="pdf-footer-page mt-6">
-                Página 1 de 1 · CHV · Recibo #{recibo.numero}
-              </div>
-            </div>
+            )}
           </div>
         </aside>
       </div>
