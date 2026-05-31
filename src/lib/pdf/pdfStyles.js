@@ -28,6 +28,9 @@ export const SEDE_TELEFONO = {
   CHV: "3174675905",
 };
 
+// #22 — Dirección de la empresa para las órdenes de trabajo.
+export const RECIBO_DIRECCION = "Calle 34 #4b-30";
+
 // Paleta corporativa (sincronizada con tokens CSS hsl(var(--primary)))
 export const COLORES = {
   primario: [36, 90, 140], // #245A8C — azul corporativo
