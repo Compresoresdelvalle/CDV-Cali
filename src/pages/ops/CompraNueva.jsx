@@ -13,7 +13,8 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 
-const IVA_PCT = 19;
+const IVA_DEFAULT = 19;
+const IVA_PRESETS = [0, 19];
 
 export default function CompraNueva() {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export default function CompraNueva() {
   const [facturaProveedor, setFacturaProveedor] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [recibirAhora, setRecibirAhora] = useState(false);
+  const [ivaPct, setIvaPct] = useState(IVA_DEFAULT);
   const [concepto, setConcepto] = useState(""); // #31 caja menor
   const [monto, setMonto] = useState(""); // #31 caja menor (total manual)
   // estado_compra removido del form: se asigna 'completada' en BD por default.
@@ -150,7 +152,7 @@ export default function CompraNueva() {
     (s, i) => s + i.cantidad * i.costo_unitario,
     0,
   );
-  const iva = subtotal * (IVA_PCT / 100);
+  const iva = subtotal * (ivaPct / 100);
   const total = subtotal + iva;
   const totalItems = carrito.reduce((s, i) => s + i.cantidad, 0);
 
@@ -189,6 +191,7 @@ export default function CompraNueva() {
           costo_unitario: i.costo_unitario,
           destino: i.destino ?? "venta",
         })),
+        p_iva_pct: ivaPct,
       });
       if (rpcErr) throw new Error(rpcErr.message);
 
@@ -261,7 +264,7 @@ export default function CompraNueva() {
             <b className="font-medium" style={{ color: "var(--n-700)" }}>
               {perfil?.sede_id ?? "—"}
             </b>{" "}
-            · IVA {IVA_PCT}%
+            · IVA {ivaPct}%{ivaPct === 0 ? " (exento)" : ""}
           </div>
         </div>
         <button
@@ -708,6 +711,50 @@ export default function CompraNueva() {
             </div>
           )}
 
+          {/* IVA de la compra (solo compra normal) — paridad con Ventas */}
+          {modo === "normal" && (
+            <div className="iblock flex flex-col gap-3">
+              <div className="ib-head">
+                <div className="ib-title">IVA de la compra</div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {IVA_PRESETS.map((p) => {
+                  const on = ivaPct === p;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setIvaPct(p)}
+                      className="rounded-md border px-3 text-[13px] font-medium transition-colors"
+                      style={{
+                        minHeight: 36,
+                        borderColor: on ? "var(--p-400)" : "var(--n-200)",
+                        backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
+                        color: on ? "#fff" : "var(--n-700)",
+                      }}
+                    >
+                      {p === 0 ? "Exento (0%)" : `${p}%`}
+                    </button>
+                  );
+                })}
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={ivaPct}
+                  onChange={(e) =>
+                    setIvaPct(
+                      Math.min(100, Math.max(0, Number(e.target.value))),
+                    )
+                  }
+                  className="finput"
+                  style={{ width: 80, textAlign: "center" }}
+                  aria-label="IVA porcentaje"
+                />
+              </div>
+            </div>
+          )}
+
           {/* #31 — Caja menor: concepto + monto (no inventariable) */}
           {modo === "caja_menor" && (
             <div className="iblock flex flex-col gap-3.5">
@@ -822,7 +869,9 @@ export default function CompraNueva() {
                 <span className="v">{formatCOP(subtotal)}</span>
               </div>
               <div className="cart-line">
-                <span>IVA {IVA_PCT}%</span>
+                <span>
+                  IVA {ivaPct}%{ivaPct === 0 ? " (exento)" : ""}
+                </span>
                 <span className="v">{formatCOP(iva)}</span>
               </div>
               <div className="cart-line tot">
