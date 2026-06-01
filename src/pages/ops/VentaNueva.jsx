@@ -82,7 +82,7 @@ export default function VentaNueva() {
           .eq("vendible", true); // Bloque 2: los insumos no se venden
         // #32: búsqueda por palabras clave.
         pq = applyKeywordSearch(pq, q, ["nombre", "referencia"]);
-        const { data: prods, error: e1 } = await pq.limit(10);
+        const { data: prods, error: e1 } = await pq.limit(1000);
         if (e1) throw e1;
         if (!prods?.length) {
           setResultados([]);
@@ -583,7 +583,7 @@ export default function VentaNueva() {
 
           {resultados.length > 0 && (
             <div
-              className="overflow-hidden rounded-lg border"
+              className="max-h-80 overflow-y-auto rounded-lg border"
               style={{ borderColor: "var(--n-150)" }}
             >
               {resultados.map((r, idx) => (

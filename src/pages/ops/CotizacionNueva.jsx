@@ -151,7 +151,7 @@ export default function CotizacionNueva() {
         .eq("activo", true)
         .eq("vendible", true) // Bloque 2: los insumos no se cotizan/venden
         .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
-        .limit(8);
+        .limit(1000);
       if (err) throw err;
       setResultados(data ?? []);
     } catch {
@@ -892,7 +892,7 @@ function PasoProductos({
 
       {resultados.length > 0 && (
         <div
-          className="mt-2 overflow-hidden rounded-lg border"
+          className="mt-2 max-h-80 overflow-y-auto rounded-lg border"
           style={{ borderColor: "var(--n-150)" }}
         >
           {resultados.map((p, idx) => {

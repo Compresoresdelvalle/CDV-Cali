@@ -208,7 +208,7 @@ export default function OrdenDetalle() {
           )
           .eq("activo", true);
         pq = applyKeywordSearch(pq, search, ["referencia", "nombre"]);
-        const { data: prods, error: e1 } = await pq.limit(30);
+        const { data: prods, error: e1 } = await pq.limit(1000);
         if (ac.signal.aborted) return;
         if (e1) throw e1;
 

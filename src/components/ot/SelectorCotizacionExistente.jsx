@@ -71,7 +71,7 @@ export default function SelectorCotizacionExistente({
         .select("id, numero, fecha, cliente_nombre, total, estado")
         .is("ot_id", null)
         .order("fecha", { ascending: false })
-        .limit(20);
+        .limit(1000);
       if (sedeId) query = query.eq("sede_id", sedeId);
       const trimmed = (q ?? "").trim();
       if (trimmed.length >= 2) {
@@ -182,7 +182,10 @@ export default function SelectorCotizacionExistente({
               Sin cotizaciones disponibles para asociar
             </p>
           ) : (
-            <ul className="space-y-1.5" role="list">
+            <ul
+              className="max-h-80 space-y-1.5 overflow-y-auto pr-1"
+              role="list"
+            >
               {resultados.map((c) => {
                 const pill = cotizacionPill(c.estado);
                 return (
