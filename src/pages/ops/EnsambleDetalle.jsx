@@ -108,7 +108,7 @@ export default function EnsambleDetalle() {
           .select("id, referencia, nombre, costo_promedio, vendible")
           .eq("activo", true)
           .or(`referencia.ilike.%${q}%,nombre.ilike.%${q}%`)
-          .limit(30);
+          .limit(1000);
         if (ac.signal.aborted) return;
         if (e1) throw e1;
         const ids = (prods ?? []).map((p) => p.id);

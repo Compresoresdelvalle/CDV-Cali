@@ -60,7 +60,7 @@ export default function ModalAbrirGarantiaVenta({
       .or(
         `nombre.ilike.%${term}%,referencia.ilike.%${term}%,codigo_interno.ilike.%${term}%`,
       )
-      .limit(15);
+      .limit(1000);
     if (mountedRef.current) setResultados(error ? [] : (data ?? []));
   };
   const buscarDebounced = useDebouncedCallback(buscar, 400);
@@ -272,7 +272,7 @@ export default function ModalAbrirGarantiaVenta({
               />
               {resultados.length > 0 && (
                 <ul
-                  className="mt-1 border rounded-lg max-h-40 overflow-y-auto"
+                  className="mt-1 max-h-80 overflow-y-auto rounded-lg border"
                   style={{ borderColor: "hsl(var(--border))" }}
                 >
                   {resultados.map((p) => (

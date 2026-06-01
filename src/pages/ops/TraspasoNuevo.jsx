@@ -57,7 +57,7 @@ export default function TraspasoNuevo() {
           .select("id, nombre, referencia, unidad_medida")
           .eq("activo", true);
         pq = applyKeywordSearch(pq, q, ["nombre", "referencia"]);
-        const { data: prods } = await pq.limit(8);
+        const { data: prods } = await pq.limit(1000);
 
         const ids = (prods ?? []).map((p) => p.id);
         if (!ids.length) {
@@ -309,7 +309,7 @@ export default function TraspasoNuevo() {
 
                 {resultados.length > 0 && (
                   <div
-                    className="mt-2 overflow-hidden rounded-lg border"
+                    className="mt-2 max-h-80 overflow-y-auto rounded-lg border"
                     style={{ borderColor: "var(--n-150)" }}
                   >
                     {resultados.map((p, idx) => (

@@ -94,7 +94,7 @@ export default function EnsambleNuevo() {
           .eq("activo", true)
           .eq("ensamblable", true)
           .or(`referencia.ilike.%${q}%,nombre.ilike.%${q}%`)
-          .limit(15);
+          .limit(1000);
         if (ac.signal.aborted) return;
         if (error) throw error;
         setResultados(data ?? []);
@@ -127,7 +127,7 @@ export default function EnsambleNuevo() {
           .select("id, referencia, nombre, costo_promedio, vendible")
           .eq("activo", true)
           .or(`referencia.ilike.%${q}%,nombre.ilike.%${q}%`)
-          .limit(30);
+          .limit(1000);
         if (ac.signal.aborted) return;
         if (e1) throw e1;
         if (!prods?.length) {
@@ -404,7 +404,7 @@ export default function EnsambleNuevo() {
             )}
             {resultados.length > 0 && (
               <ul
-                className="divide-y overflow-hidden rounded-lg border"
+                className="divide-y max-h-80 overflow-y-auto rounded-lg border"
                 style={{ borderColor: "var(--n-150)" }}
               >
                 {resultados.map((p) => (

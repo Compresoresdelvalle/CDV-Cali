@@ -43,7 +43,7 @@ export default function GlobalSearch() {
         "codigo_interno",
         "codigo_proveedor",
       ]);
-      const { data, error } = await pq.order("nombre").limit(8);
+      const { data, error } = await pq.order("nombre").limit(1000);
       if (error) throw error;
       setResultados(data ?? []);
     } catch {

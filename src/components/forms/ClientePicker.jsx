@@ -59,7 +59,7 @@ export default function ClientePicker({
         .eq("activo", true)
         .or(`nombre.ilike.%${safe}%,identificacion.ilike.%${safe}%`)
         .order("nombre", { ascending: true })
-        .limit(8);
+        .limit(1000);
       if (error) throw error;
       setResultados(data ?? []);
       if (!acabaDeSeleccionar.current) setAbierto(true);

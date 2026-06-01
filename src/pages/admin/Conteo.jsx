@@ -853,7 +853,7 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
           )
           .eq("activo", true);
         pq = applyKeywordSearch(pq, search, ["referencia", "nombre"]);
-        const { data, error } = await pq.limit(10);
+        const { data, error } = await pq.limit(1000);
         if (ac.signal.aborted) return;
         if (error) throw error;
         setResultados(data ?? []);

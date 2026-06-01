@@ -52,7 +52,7 @@ export default function DevolucionNueva() {
         .select("id, nombre, referencia, unidad_medida")
         .eq("activo", true)
         .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
-        .limit(8);
+        .limit(1000);
       if (e) throw e;
       setResultados(data ?? []);
     } catch {
@@ -292,7 +292,7 @@ export default function DevolucionNueva() {
 
               {resultados.length > 0 && (
                 <div
-                  className="overflow-hidden rounded-lg border"
+                  className="max-h-80 overflow-y-auto rounded-lg border"
                   style={{ borderColor: "var(--n-150)" }}
                 >
                   {resultados.map((r, idx) => (
