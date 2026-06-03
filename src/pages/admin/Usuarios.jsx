@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { Plus, Pencil, Shield, Search, Power, Mail } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
+import { usuarioDisplayName } from "../../lib/user-display";
 import { useAuthStore } from "../../stores/authStore";
 import { useDebounce } from "../../hooks/useDebounce";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
@@ -98,7 +99,9 @@ export default function Usuarios() {
         .update(update)
         .eq("id", editando.id);
       if (error) throw error;
-      setOkMsg(`Usuario "${editando.nombre.trim()}" actualizado`);
+      setOkMsg(
+        `Usuario "${usuarioDisplayName({ ...editando, nombre: editando.nombre.trim() })}" actualizado`,
+      );
       setEditando(null);
       await cargar();
     } catch (err) {
@@ -116,7 +119,7 @@ export default function Usuarios() {
     }
     const ok = await confirm({
       titulo: `${u.activo ? "Desactivar" : "Activar"} usuario`,
-      mensaje: `${u.activo ? "Desactivar" : "Activar"} a ${u.nombre}?${u.activo ? " Si tiene sesión activa será cerrada en su próxima request." : ""}`,
+      mensaje: `${u.activo ? "Desactivar" : "Activar"} a ${usuarioDisplayName(u)}?${u.activo ? " Si tiene sesión activa será cerrada en su próxima request." : ""}`,
       confirmLabel: u.activo ? "Desactivar" : "Activar",
       danger: u.activo,
     });
@@ -142,9 +145,12 @@ export default function Usuarios() {
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     if (!q) return usuarios;
-    return usuarios.filter((u) =>
-      `${u.nombre} ${u.rol} ${nombreSede(u.sede_id)}`.toLowerCase().includes(q),
-    );
+    return usuarios.filter((u) => {
+      const displayName = usuarioDisplayName(u);
+      return `${displayName} ${u.nombre} ${u.rol} ${nombreSede(u.sede_id)}`
+        .toLowerCase()
+        .includes(q);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuarios, busqueda, sedes]);
 
@@ -301,6 +307,7 @@ export default function Usuarios() {
                 {filtrados.map((u) => {
                   const token = rolToken(u.rol);
                   const locked = esUnicoAdmin(u) && u.id === perfil?.id;
+                  const displayName = usuarioDisplayName(u);
                   return (
                     <tr
                       key={u.id}
@@ -315,7 +322,7 @@ export default function Usuarios() {
                           className="grid h-8 w-8 place-items-center rounded-full font-mono text-[11px] font-semibold"
                           style={pillStyle(token)}
                         >
-                          {iniciales(u.nombre)}
+                          {iniciales(displayName)}
                         </span>
                       </td>
                       <td className="px-3 py-3">
@@ -323,7 +330,7 @@ export default function Usuarios() {
                           className="text-[13px] font-medium"
                           style={{ color: "hsl(var(--foreground))" }}
                         >
-                          {u.nombre}
+                          {displayName}
                         </p>
                         {/* Email vive en auth.users (no en `usuarios`): estado
                             vacío honesto, no se inventa una dirección. */}
@@ -418,6 +425,7 @@ export default function Usuarios() {
             {filtrados.map((u) => {
               const token = rolToken(u.rol);
               const locked = esUnicoAdmin(u) && u.id === perfil?.id;
+              const displayName = usuarioDisplayName(u);
               return (
                 <li
                   key={u.id}
@@ -432,7 +440,7 @@ export default function Usuarios() {
                       className="grid h-9 w-9 shrink-0 place-items-center rounded-full font-mono text-[12px] font-semibold"
                       style={pillStyle(token)}
                     >
-                      {iniciales(u.nombre)}
+                      {iniciales(displayName)}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -440,7 +448,7 @@ export default function Usuarios() {
                           className="text-sm font-semibold"
                           style={{ color: "hsl(var(--foreground))" }}
                         >
-                          {u.nombre}
+                          {displayName}
                         </p>
                         <span
                           className="inline-flex h-5 items-center gap-1.5 rounded-full border px-2 text-[11px] font-medium leading-none"

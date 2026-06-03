@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 import { EMAIL_MAP } from "../lib/constants";
+import { usuarioDisplayName } from "../lib/user-display";
 
 export const useAuthStore = create((set, get) => ({
   // Estado
@@ -114,7 +115,7 @@ export const useAuthStore = create((set, get) => ({
       await supabase.auth.signOut();
       return null;
     }
-    return data;
+    return { ...data, nombre: usuarioDisplayName(data) };
   },
 
   // Helpers de conveniencia (funciones — Zustand no expone reactivamente
