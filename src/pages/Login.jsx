@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/authStore";
 import { supabase } from "../lib/supabase";
+import { usuarioDisplayName } from "../lib/user-display";
 import loginBg from "../assets/login-bg.jpg";
 import Logo from "../components/ui/Logo";
 
@@ -113,7 +114,8 @@ function UserCard({ usuario, onSelect }) {
   const badge =
     ROLE_BADGE[usuario.rol] ||
     "bg-slate-500/10 text-slate-400 border border-slate-500/20";
-  const initials = getInitials(usuario.nombre);
+  const displayName = usuarioDisplayName(usuario);
+  const initials = getInitials(displayName);
   const sedeDisplay = SEDE_LABEL[usuario.sede_id] || usuario.sede_id || "";
 
   return (
@@ -140,7 +142,7 @@ function UserCard({ usuario, onSelect }) {
         {initials}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white/90">{usuario.nombre}</p>
+        <p className="text-sm font-medium text-white/90">{displayName}</p>
         <div className="flex items-center gap-2 mt-0.5">
           <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${badge}`}>
             {ROLE_LABEL[usuario.rol] || usuario.rol}
@@ -331,6 +333,9 @@ export default function Login() {
     ? ROLE_GRADIENTS[selectedUser.rol] || "from-slate-500 to-slate-700"
     : "";
   const selectedBadge = selectedUser ? ROLE_BADGE[selectedUser.rol] || "" : "";
+  const selectedDisplayName = selectedUser
+    ? usuarioDisplayName(selectedUser)
+    : "";
 
   return (
     <div className="min-h-screen flex relative overflow-hidden">
@@ -473,11 +478,11 @@ export default function Login() {
                   <div
                     className={`w-16 h-16 rounded-full bg-gradient-to-br ${selectedGrad} flex items-center justify-center mx-auto text-xl font-bold text-white shadow-xl`}
                   >
-                    {getInitials(selectedUser.nombre)}
+                    {getInitials(selectedDisplayName)}
                   </div>
                   <div>
                     <h2 className="text-lg font-semibold text-white">
-                      {selectedUser.nombre}
+                      {selectedDisplayName}
                     </h2>
                     <div className="flex items-center justify-center gap-2 mt-1">
                       <span
