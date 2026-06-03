@@ -2,12 +2,9 @@ import { describe, expect, it } from "vitest";
 import { usuarioDisplayName } from "../../src/lib/user-display";
 
 describe("usuarioDisplayName", () => {
-  it("muestra Admin para usuarios con rol Admin", () => {
-    expect(usuarioDisplayName({ nombre: "Carlos Dueño", rol: "Admin" })).toBe(
-      "Admin",
-    );
-    expect(usuarioDisplayName({ nombre: "Admin", rol: "Admin" })).toBe(
-      "Admin",
+  it("muestra el nombre real del Admin (ya no lo enmascara)", () => {
+    expect(usuarioDisplayName({ nombre: "Admin Maritza", rol: "Admin" })).toBe(
+      "Admin Maritza",
     );
   });
 
@@ -15,5 +12,13 @@ describe("usuarioDisplayName", () => {
     expect(usuarioDisplayName({ nombre: "Sofia", rol: "Vendedor" })).toBe(
       "Sofia",
     );
+  });
+
+  it("recorta espacios y devuelve cadena vacía si no hay nombre", () => {
+    expect(usuarioDisplayName({ nombre: "  Edna  ", rol: "Vendedor" })).toBe(
+      "Edna",
+    );
+    expect(usuarioDisplayName({ rol: "Admin" })).toBe("");
+    expect(usuarioDisplayName(null)).toBe("");
   });
 });
