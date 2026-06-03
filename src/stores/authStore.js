@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
-import { EMAIL_MAP } from "../lib/constants";
+import { EMAIL_BY_UID, EMAIL_MAP } from "../lib/constants";
 import { usuarioDisplayName } from "../lib/user-display";
 
 export const useAuthStore = create((set, get) => ({
@@ -64,10 +64,12 @@ export const useAuthStore = create((set, get) => ({
     return () => subscription.unsubscribe();
   },
 
-  // Login con nombre de usuario y PIN (4 dígitos)
-  login: async (nombre, pin) => {
+  // Login con el usuario seleccionado (objeto de la tabla `usuarios`) y PIN.
+  // El email se resuelve por `id` (inmutable) y solo como respaldo por nombre,
+  // para que renombrar usuarios en el panel de Admin no rompa el login.
+  login: async (usuario, pin) => {
     set({ error: null });
-    const email = EMAIL_MAP[nombre];
+    const email = EMAIL_BY_UID[usuario?.id] ?? EMAIL_MAP[usuario?.nombre];
     if (!email) {
       set({ error: "Usuario no encontrado" });
       return false;
