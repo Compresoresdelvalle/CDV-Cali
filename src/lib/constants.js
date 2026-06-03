@@ -23,9 +23,25 @@ export const ROLES = {
   TECNICO: "Tecnico",
 };
 
-// Mapa de nombre → email en Supabase Auth (usuarios reales de producción).
-// El nombre debe coincidir EXACTAMENTE con usuarios.nombre (la pantalla de
-// login arma la lista desde la tabla usuarios).
+// Mapa de uid (usuarios.id === auth.users.id) → email en Supabase Auth.
+// FUENTE DE VERDAD del login: se indexa por el ID, que es INMUTABLE, para que
+// renombrar usuarios en el panel de Admin NUNCA rompa el inicio de sesión.
+// (El comentario al lado es solo referencia humana — no se usa para nada.)
+export const EMAIL_BY_UID = {
+  "8742975c-d3ef-44b7-94ce-372eafbc943b": "compresorescvsas@gmail.com", // Admin (Maritza)
+  "dfc41ee2-2e1d-47e0-9378-741ba277743c":
+    "ventascompresoresdelvalle@hotmail.com", // Bodega
+  "d72f0e68-f2c6-4bee-a834-4134af328f6b": "compresoresdelvalle1@hotmail.com", // Sofía
+  "07765b25-ab57-4ebf-b1af-33996ab149f4": "compresoresdelvallesas@gmail.com", // Deyanira
+  "0c5dc64e-8d13-4c6e-ac27-64663d99c8ed": "compresoresdelvallesas@hotmail.com", // Bladimir
+  "0cbf1692-1570-4ccd-8a0c-6b94b27b5d36": "compresorescv@hotmail.com", // Edna
+  "672d3434-e1aa-4030-a4e4-5ce62ea95006":
+    "tecnico.prueba@compresoresdelvalle.com", // TecPrueba
+};
+
+// Respaldo heredado: nombre → email. Solo se consulta si un usuario aún no está
+// en EMAIL_BY_UID. NO depender de este mapa: el nombre es editable y romperá el
+// login si se renombra. Se conserva por compatibilidad durante la transición.
 export const EMAIL_MAP = {
   Admin: "compresorescvsas@gmail.com",
   Bodega: "ventascompresoresdelvalle@hotmail.com",

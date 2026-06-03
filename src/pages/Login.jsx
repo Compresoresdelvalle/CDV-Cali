@@ -226,7 +226,7 @@ export default function Login() {
   useEffect(() => {
     supabase
       .from("usuarios")
-      .select("nombre, rol, sede_id")
+      .select("id, nombre, rol, sede_id")
       .eq("activo", true)
       .order("nombre")
       .then(({ data, error }) => {
@@ -267,7 +267,7 @@ export default function Login() {
       setCargando(true);
       setLocalError("");
       clearError();
-      const ok = await login(selectedUser.nombre, fullPin);
+      const ok = await login(selectedUser, fullPin);
       setCargando(false);
       if (!ok) {
         setLocalError("PIN incorrecto. Intente de nuevo.");
