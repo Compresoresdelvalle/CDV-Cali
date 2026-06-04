@@ -41,8 +41,14 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
     const ol = probe.splitTextToSize(`Obs: ${venta.observaciones}`, CW);
     obsAlto = ol.length * 3.4 + 4;
   }
-  // header ~58 + items + obs + totales ~50 + footer ~25, mínimo 120
-  const altura = Math.max(58 + itemsAlto + obsAlto + 50 + 25, 120);
+  // B1 (ít 6): la cuenta destino puede envolver — reservar su alto.
+  let ctaAlto = 0;
+  if (venta.cuenta_bancaria) {
+    const cl = probe.splitTextToSize(`Cuenta: ${venta.cuenta_bancaria}`, CW);
+    ctaAlto = cl.length * 3.4 + 1;
+  }
+  // header ~58 + items + obs + cuenta + totales ~50 + footer ~25, mínimo 120
+  const altura = Math.max(58 + itemsAlto + obsAlto + ctaAlto + 50 + 25, 120);
 
   const doc = new jsPDF({
     unit: "mm",
@@ -179,6 +185,15 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
   fila("Forma de pago:", String(venta.metodo_pago ?? "—"));
+
+  // B1 (ít 6): cuenta destino del pago, si se registró (puede envolver).
+  if (venta.cuenta_bancaria) {
+    doc.setFontSize(6.5);
+    const cta = doc.splitTextToSize(`Cuenta: ${venta.cuenta_bancaria}`, CW);
+    doc.text(cta, MX, y);
+    y += cta.length * 3.4 + 1;
+    doc.setFontSize(7);
+  }
 
   // #15: observación de la venta en el recibo (si existe).
   if (venta.observaciones) {
