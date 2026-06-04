@@ -60,6 +60,10 @@ export function generarOrdenPDF({
   doc.text(MARCA.ciudad, LAYOUT.margenIzq, y + 5);
   // #22: dirección de la empresa en la OT.
   doc.text(`Dir: ${RECIBO_DIRECCION}`, LAYOUT.margenIzq, y + 9);
+  // Ítem 2: el teléfono de la sede va DEBAJO de la dirección (en el encabezado),
+  // no en los datos del cliente. Se omite si la sede no tiene teléfono propio.
+  const telSede = SEDE_TELEFONO[orden.sede_id];
+  if (telSede) doc.text(`Tel: ${telSede}`, LAYOUT.margenIzq, y + 13);
 
   const esGarantia = orden.tipo === "garantia";
   const titulo = `Orden de Trabajo N° ${String(orden.numero ?? "—").padStart(5, "0")}`;
@@ -107,12 +111,9 @@ export function generarOrdenPDF({
     orden.cliente_telefono ? `Teléfono: ${orden.cliente_telefono}` : null,
     `Equipo: ${orden.equipo_descripcion ?? "—"}`,
     orden.equipo_serie ? `Serie: ${orden.equipo_serie}` : null,
-    // #23: el campo Sede muestra el teléfono de esa sede.
-    `Sede: ${orden.sede_id ?? "—"}${
-      SEDE_TELEFONO[orden.sede_id]
-        ? `   ·   Tel: ${SEDE_TELEFONO[orden.sede_id]}`
-        : ""
-    }`,
+    // Ítem 2: el teléfono de la sede ahora va en el encabezado (junto a la
+    // dirección), no aquí en los datos del cliente.
+    `Sede: ${orden.sede_id ?? "—"}`,
     orden.fecha_entrega
       ? `Entregado: ${new Date(orden.fecha_entrega).toLocaleDateString("es-CO", { timeZone: "America/Bogota" })}`
       : null,
