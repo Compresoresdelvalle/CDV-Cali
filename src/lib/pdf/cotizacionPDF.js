@@ -252,7 +252,7 @@ export function generarCotizacionPDF({
     for (const c of cuentas) {
       const marca =
         c.marca_iva === "con_iva"
-          ? " (con IVA)"
+          ? " (IVA incluido)"
           : c.marca_iva === "sin_iva"
             ? " (sin IVA)"
             : "";
