@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeftCircle,
@@ -21,7 +21,7 @@ import ClientePicker from "../../components/forms/ClientePicker";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { metodoPagoClass } from "../../lib/ventas-ui";
 import { SEDE_LABELS, sedeLabel } from "../../lib/traspasos-ui";
-import { SEDES, CUENTAS_BANCARIAS } from "../../lib/constants";
+import { SEDES } from "../../lib/constants";
 import { upsertCliente } from "../../lib/clientes";
 
 const METODOS_PAGO = ["Efectivo", "Transferencia", "Tarjeta", "Crédito"];
@@ -47,6 +47,16 @@ export default function VentaNueva() {
   const [clienteDireccion, setClienteDireccion] = useState("");
   const [metodoPago, setMetodoPago] = useState("Efectivo");
   const [cuentaBancaria, setCuentaBancaria] = useState(""); // #13
+  // B1 (ít 6): cuentas bancarias reales para elegir la cuenta destino del pago.
+  const [cuentasBanco, setCuentasBanco] = useState([]);
+  useEffect(() => {
+    supabase
+      .from("cuentas_bancarias")
+      .select("id, banco, tipo, numero, titular")
+      .eq("activo", true)
+      .order("banco")
+      .then(({ data }) => setCuentasBanco(data ?? []));
+  }, []);
   const [descuentoPct, setDescuentoPct] = useState(0);
   const [ivaPct, setIvaPct] = useState(IVA_DEFAULT);
   const [observaciones, setObservaciones] = useState("");
@@ -291,6 +301,15 @@ export default function VentaNueva() {
 
   const confirmarVenta = async () => {
     if (carrito.length === 0) return;
+    // B1 (ít 6): la cuenta destino es obligatoria en pagos electrónicos
+    // (Transferencia/Tarjeta). En Efectivo y Crédito no aplica.
+    if (
+      (metodoPago === "Transferencia" || metodoPago === "Tarjeta") &&
+      !cuentaBancaria
+    ) {
+      setError("Selecciona la cuenta bancaria donde entró el pago.");
+      return;
+    }
     setError(null);
     setConfirmando(true);
     // #10: ítems que dejarán el inventario en negativo (cantidad > disponible).
@@ -783,7 +802,7 @@ export default function VentaNueva() {
             })}
           </div>
 
-          {/* #13 — Cuenta bancaria donde entra el pago (opcional) */}
+          {/* #13 / B1 — Cuenta destino del pago (obligatoria si no es efectivo) */}
           <div className="flex flex-wrap items-center gap-2.5">
             <label
               htmlFor="cuenta-banc"
@@ -791,6 +810,9 @@ export default function VentaNueva() {
               style={{ color: "var(--n-500)" }}
             >
               Cuenta bancaria
+              {(metodoPago === "Transferencia" || metodoPago === "Tarjeta") && (
+                <span style={{ color: "var(--dang-700)" }}> *</span>
+              )}
             </label>
             <select
               id="cuenta-banc"
@@ -800,19 +822,24 @@ export default function VentaNueva() {
               style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
             >
               <option value="">Sin especificar</option>
-              {CUENTAS_BANCARIAS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
+              {cuentasBanco.map((c) => {
+                const ref = `${c.banco} ${c.tipo} ${c.numero}${c.titular ? " · " + c.titular : ""}`;
+                return (
+                  <option key={c.id} value={ref}>
+                    {ref}
+                  </option>
+                );
+              })}
             </select>
             {(metodoPago === "Transferencia" || metodoPago === "Tarjeta") &&
               !cuentaBancaria && (
                 <span
                   className="text-[11.5px]"
-                  style={{ color: "var(--n-500)" }}
+                  style={{ color: "var(--dang-700)" }}
                 >
-                  Indica a qué cuenta entró el pago
+                  {cuentasBanco.length === 0
+                    ? "No hay cuentas activas. El Admin debe crearlas en Configuración."
+                    : "Obligatorio: indica a qué cuenta entró el pago"}
                 </span>
               )}
           </div>
