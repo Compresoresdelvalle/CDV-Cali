@@ -78,8 +78,22 @@ export default function OrdenDetalle() {
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [modalGarantia, setModalGarantia] = useState(false);
   const [imprimiendo, setImprimiendo] = useState(false);
+  // Ítem 5 — asignar/reasignar técnico en revisión (2º momento, no en recepción).
+  const [tecnicosList, setTecnicosList] = useState([]);
+  const [asignandoTecnico, setAsignandoTecnico] = useState(false);
   const agregandoRef = useRef(false);
   const cambiandoRef = useRef(false);
+
+  // Lista de técnicos/admins disponibles para asignar a la OT.
+  useEffect(() => {
+    supabase
+      .from("usuarios")
+      .select("id, nombre, rol")
+      .eq("activo", true)
+      .in("rol", ["Tecnico", "Admin"])
+      .order("nombre")
+      .then(({ data }) => setTecnicosList(data ?? []));
+  }, []);
 
   // Guard anti doble-click: imprime la OT una sola vez por tap
   const imprimirOT = async () => {
@@ -415,6 +429,25 @@ export default function OrdenDetalle() {
     } finally {
       setCambiandoEstado(false);
       cambiandoRef.current = false;
+    }
+  };
+
+  // Ítem 5 — asignar/reasignar el técnico responsable (segundo momento).
+  const asignarTecnico = async (nuevoTecnicoId) => {
+    setAsignandoTecnico(true);
+    setErrorMsg("");
+    try {
+      const { error } = await supabase
+        .from("ordenes_servicio")
+        .update({ tecnico_id: nuevoTecnicoId || null })
+        .eq("id", id);
+      if (error) throw error;
+      await cargar();
+    } catch (err) {
+      console.error("[OrdenDetalle] asignar tecnico:", err);
+      setErrorMsg(safeError(err, "Error al asignar técnico"));
+    } finally {
+      setAsignandoTecnico(false);
     }
   };
 
@@ -1152,6 +1185,28 @@ export default function OrdenDetalle() {
                 {orden.tecnico?.nombre ?? "Sin asignar"}
               </span>
             </div>
+            {puedeEditar && editable && (
+              <select
+                value={orden.tecnico_id ?? ""}
+                onChange={(e) => asignarTecnico(e.target.value)}
+                disabled={asignandoTecnico}
+                aria-label="Asignar técnico"
+                className="mt-2 w-full rounded-lg border px-2 text-[13px] outline-none disabled:opacity-50"
+                style={{
+                  minHeight: 44,
+                  backgroundColor: "var(--n-0)",
+                  borderColor: "var(--n-200)",
+                  color: "var(--n-950)",
+                }}
+              >
+                <option value="">— Sin asignar —</option>
+                {tecnicosList.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nombre} ({t.rol})
+                  </option>
+                ))}
+              </select>
+            )}
             <div className="row mono">
               Recepción: <span className="val">{formatDate(orden.fecha)}</span>
             </div>
@@ -1210,7 +1265,7 @@ export default function OrdenDetalle() {
                 Costos · Solo Admin
               </div>
               <div className="cost-row">
-                <span>Mano de obra</span>
+                <span>Revisión servicio</span>
                 <span className="v">
                   {formatCOP(orden.costo_mano_obra ?? 0)}
                 </span>

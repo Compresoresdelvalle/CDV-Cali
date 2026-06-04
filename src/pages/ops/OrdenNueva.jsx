@@ -120,8 +120,8 @@ export default function OrdenNueva() {
 
   const guardar = async (e) => {
     e.preventDefault();
-    if (!clienteNombre.trim() || !equipoDescripcion.trim() || !tecnicoId) {
-      setError("Cliente, equipo y técnico son obligatorios");
+    if (!clienteNombre.trim() || !equipoDescripcion.trim()) {
+      setError("Cliente y equipo son obligatorios");
       return;
     }
     if (savingRef.current) return;
@@ -168,7 +168,7 @@ export default function OrdenNueva() {
           equipo_descripcion: equipoDescripcion.trim(),
           equipo_serie: equipoSerie.trim() || null,
           diagnostico: diagnostico.trim() || null,
-          tecnico_id: tecnicoId,
+          tecnico_id: tecnicoId || null,
           sede_id: sedeOrden,
           estado: "abierta",
           costo_mano_obra: costo,
@@ -407,15 +407,14 @@ export default function OrdenNueva() {
             <div className="ib-title">Asignación</div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Técnico *">
+            <Field label="Técnico (se asigna en revisión — opcional)">
               <select
                 value={tecnicoId}
                 onChange={(e) => setTecnicoId(e.target.value)}
-                required
                 className="w-full rounded-lg border px-3 text-sm outline-none"
                 style={{ ...fieldStyle, height: 48 }}
               >
-                <option value="">— Seleccionar —</option>
+                <option value="">— Asignar después —</option>
                 {tecnicos.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.nombre} ({t.rol})
@@ -423,7 +422,7 @@ export default function OrdenNueva() {
                 ))}
               </select>
             </Field>
-            <Field label="Mano de obra (COP)">
+            <Field label="Revisión servicio (COP)">
               <Input
                 type="number"
                 value={costoManoObra}
