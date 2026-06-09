@@ -33,6 +33,8 @@ import {
 } from "../../lib/ordenes-ui";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
+import { SEDES } from "../../lib/constants";
+import { SEDE_LABELS } from "../../lib/traspasos-ui";
 import AbonosPanel from "../../components/ot/AbonosPanel";
 import AutorizacionPanel from "../../components/ot/AutorizacionPanel";
 import CotizacionesAsociadasOT from "../../components/ot/CotizacionesAsociadasOT";
@@ -77,6 +79,7 @@ export default function OrdenDetalle() {
   const [savingTrabajo, setSavingTrabajo] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [modalGarantia, setModalGarantia] = useState(false);
+  const [modalSegunda, setModalSegunda] = useState(false); // B7: inventario 2da
   const [imprimiendo, setImprimiendo] = useState(false);
   // Ítem 5 — asignar/reasignar técnico en revisión (2º momento, no en recepción).
   const [tecnicosList, setTecnicosList] = useState([]);
@@ -549,6 +552,12 @@ export default function OrdenDetalle() {
     orden.tecnico_id === perfil?.id ||
     (esVendedor && orden.sede_id === perfil?.sede_id);
 
+  // B7: generar inventario de SEGUNDA desde una OT terminada (Admin/Bodeguero/
+  // técnico asignado). El RPC revalida rol + sede + estado.
+  const puedeGenerarSegunda =
+    ["completada", "pendiente_recogida", "entregada"].includes(orden.estado) &&
+    (isAdmin || perfil?.rol === "Bodeguero" || orden.tecnico_id === perfil?.id);
+
   const pill = ordenEstadoPill(orden.estado);
   const aPill = autorizacionPill(orden.estado_autorizacion);
   const tec = tecnicoAvatar(orden.tecnico?.nombre);
@@ -689,6 +698,21 @@ export default function OrdenDetalle() {
             Cliente reclama garantía
           </button>
         )}
+        {puedeGenerarSegunda && (
+          <button
+            onClick={() => setModalSegunda(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium"
+            style={{
+              height: 48,
+              borderColor: "var(--p-400)",
+              color: "var(--p-700)",
+              backgroundColor: "var(--p-50)",
+            }}
+          >
+            <Package className="h-3.5 w-3.5" strokeWidth={1.7} />
+            Generar inventario de segunda
+          </button>
+        )}
       </div>
 
       {modalGarantia && (
@@ -703,6 +727,17 @@ export default function OrdenDetalle() {
           onCreated={(gid) => {
             setModalGarantia(false);
             navigate(`/ops/garantias/venta/${gid}`);
+          }}
+        />
+      )}
+
+      {modalSegunda && (
+        <ModalGenerarSegunda
+          orden={orden}
+          onClose={() => setModalSegunda(false)}
+          onCreated={(prodId) => {
+            setModalSegunda(false);
+            navigate(`/ops/inventario?producto=${prodId}`);
           }}
         />
       )}
@@ -1448,5 +1483,207 @@ export default function OrdenDetalle() {
 
       <ConfirmDialog />
     </div>
+  );
+}
+
+/* ───────────── B7 · Generar producto de SEGUNDA desde la OT ───────────── */
+
+function ModalGenerarSegunda({ orden, onClose, onCreated }) {
+  const [nombre, setNombre] = useState(orden.equipo_descripcion ?? "");
+  const [categoria, setCategoria] = useState("COMPRESORES");
+  const [categorias, setCategorias] = useState([]);
+  const [precio, setPrecio] = useState("");
+  const [costo, setCosto] = useState("");
+  const [cantidad, setCantidad] = useState("1");
+  const [sede, setSede] = useState(orden.sede_id ?? "");
+  const [referencia, setReferencia] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    supabase
+      .from("productos")
+      .select("categoria")
+      .eq("activo", true)
+      .then(({ data }) => {
+        const set = [
+          ...new Set((data ?? []).map((p) => p.categoria).filter(Boolean)),
+        ].sort();
+        setCategorias(set);
+      });
+  }, []);
+
+  const soloDigitos = (v) => Number(String(v).replace(/[^\d]/g, "")) || 0;
+
+  const generar = async () => {
+    const n = soloDigitos(cantidad);
+    if (!nombre.trim()) return setErr("El nombre es obligatorio.");
+    if (!categoria.trim()) return setErr("La categoría es obligatoria.");
+    if (!n || n <= 0) return setErr("La cantidad debe ser mayor a 0.");
+    setErr(null);
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.rpc(
+        "fn_generar_producto_segunda_ot",
+        {
+          p_orden_id: orden.id,
+          p_nombre: nombre.trim(),
+          p_categoria: categoria.trim(),
+          p_precio: soloDigitos(precio),
+          p_costo: soloDigitos(costo),
+          p_cantidad: n,
+          p_sede: sede || null,
+          p_referencia: referencia.trim() || null,
+        },
+      );
+      if (error) throw new Error(error.message);
+      onCreated(data?.producto_id);
+    } catch (e) {
+      setErr(safeError(e, "No se pudo generar el inventario de segunda"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+      onClick={() => !saving && onClose()}
+    >
+      <div
+        className="w-full max-w-md space-y-3 rounded-xl border p-5"
+        style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-200)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold" style={{ color: "var(--n-950)" }}>
+          Generar inventario de segunda
+        </h3>
+        <p className="text-xs" style={{ color: "var(--n-500)" }}>
+          Crea un producto <b>de segunda mano</b> a partir de la OT #
+          {orden.numero} y le da stock en la sede elegida.
+        </p>
+
+        {err && (
+          <div
+            role="alert"
+            className="rounded-lg border px-3 py-2 text-xs"
+            style={{
+              backgroundColor: "var(--dang-50)",
+              borderColor: "var(--dang-200)",
+              color: "var(--dang-700)",
+            }}
+          >
+            {err}
+          </div>
+        )}
+
+        <div className="space-y-2.5">
+          <FieldS label="Nombre del producto">
+            <input
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              className="finput sans"
+              placeholder="Ej. Compresor 2HP (segunda)"
+            />
+          </FieldS>
+          <div className="grid grid-cols-2 gap-2.5">
+            <FieldS label="Categoría">
+              <input
+                list="cats-segunda"
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                className="finput sans"
+              />
+              <datalist id="cats-segunda">
+                {categorias.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </FieldS>
+            <FieldS label="Sede destino">
+              <select
+                value={sede}
+                onChange={(e) => setSede(e.target.value)}
+                className="finput"
+              >
+                {Object.values(SEDES).map((s) => (
+                  <option key={s} value={s}>
+                    {SEDE_LABELS[s] ?? s}
+                  </option>
+                ))}
+              </select>
+            </FieldS>
+            <FieldS label="Precio de venta $">
+              <input
+                inputMode="numeric"
+                value={precio}
+                onChange={(e) => setPrecio(e.target.value)}
+                className="finput"
+                placeholder="0"
+              />
+            </FieldS>
+            <FieldS label="Costo $">
+              <input
+                inputMode="numeric"
+                value={costo}
+                onChange={(e) => setCosto(e.target.value)}
+                className="finput"
+                placeholder="0"
+              />
+            </FieldS>
+            <FieldS label="Cantidad">
+              <input
+                inputMode="numeric"
+                value={cantidad}
+                onChange={(e) => setCantidad(e.target.value)}
+                className="finput"
+              />
+            </FieldS>
+            <FieldS label="Referencia (opcional)">
+              <input
+                value={referencia}
+                onChange={(e) => setReferencia(e.target.value)}
+                className="finput sans"
+                placeholder="Auto si se deja vacío"
+              />
+            </FieldS>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="min-h-[44px] rounded-lg border px-4 py-2 text-sm disabled:opacity-50"
+            style={{ borderColor: "var(--n-200)", color: "var(--n-500)" }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={generar}
+            disabled={saving}
+            className="min-h-[44px] rounded-lg px-5 py-2 text-sm font-medium disabled:opacity-50"
+            style={{ backgroundColor: "var(--p-700)", color: "#fff" }}
+          >
+            {saving ? "Generando…" : "Generar producto"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FieldS({ label, children }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span
+        className="font-mono text-[10.5px] uppercase tracking-[0.08em]"
+        style={{ color: "var(--n-500)" }}
+      >
+        {label}
+      </span>
+      {children}
+    </label>
   );
 }
