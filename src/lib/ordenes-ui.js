@@ -41,6 +41,8 @@ export function ordenEstadoPill(estado) {
       return { cls: "s-pill s-recogida", label: "Pend. recogida" };
     case "entregada":
       return { cls: "s-pill s-entregada", label: "Entregada" };
+    case "cancelada":
+      return { cls: "s-pill s-entregada", label: "Cancelada" };
     default:
       return { cls: "s-pill s-abierta", label: estado ?? "—" };
   }
@@ -313,4 +315,5 @@ export const OT_ESTADO_LABELS = {
   completada: "Completada",
   pendiente_recogida: "Pendiente de recogida",
   entregada: "Entregada",
+  cancelada: "Cancelada",
 };

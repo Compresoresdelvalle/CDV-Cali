@@ -11,6 +11,7 @@ import {
   PackageCheck,
   Check,
   Printer,
+  X,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -42,6 +43,7 @@ export default function CompraDetalle() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
   const puedeRecibir = perfil?.rol === "Admin" || perfil?.rol === "Bodeguero";
+  const esAdmin = perfil?.rol === "Admin";
 
   const [compra, setCompra] = useState(null);
   const [items, setItems] = useState([]);
@@ -50,6 +52,7 @@ export default function CompraDetalle() {
   const [error, setError] = useState(null);
   const [modalAbrir, setModalAbrir] = useState(false);
   const [recibiendo, setRecibiendo] = useState(false);
+  const [cancelando, setCancelando] = useState(false); // B1: cancelar compra (Admin)
   const recibiendoRef = useRef(false);
 
   const cargar = useCallback(async () => {
@@ -126,14 +129,40 @@ export default function CompraDetalle() {
     }
   };
 
+  // B1 — Cancelar la compra (solo Admin). Si ya estaba recibida, la RPC revierte
+  // del inventario el stock que había ingresado (bloquea si ya no alcanza).
+  const cancelarCompra = async () => {
+    if (cancelando) return;
+    const ok = window.confirm(
+      compra.recibida
+        ? "Se cancelará la compra y se REVERTIRÁ del inventario el stock que ingresó. Esta acción no se puede deshacer. ¿Continuar?"
+        : "Se cancelará la compra. Esta acción no se puede deshacer. ¿Continuar?",
+    );
+    if (!ok) return;
+    setCancelando(true);
+    setError(null);
+    try {
+      const { error: e } = await supabase.rpc("fn_cancelar_compra", {
+        p_compra_id: id,
+      });
+      if (e) throw e;
+      await cargar();
+    } catch (e) {
+      setError(safeError(e, "No se pudo cancelar la compra"));
+    } finally {
+      setCancelando(false);
+    }
+  };
+
   if (loading) return <LoadingView />;
   if (!compra)
     return (
       <NotFoundView error={error} onBack={() => navigate("/ops/compras")} />
     );
 
-  const puedeAbrirGarantia = compra.recibida === true;
-  const pendienteRecepcion = !compra.recibida;
+  const cancelada = compra.estado === "cancelada";
+  const puedeAbrirGarantia = compra.recibida === true && !cancelada;
+  const pendienteRecepcion = !compra.recibida && !cancelada;
   const pill = compraEstadoPill(compra);
   const timeline = construirTimelineCompra(compra, garantias, formatDate);
 
@@ -206,6 +235,17 @@ export default function CompraDetalle() {
           <Printer className="h-3.5 w-3.5" strokeWidth={2} />
           Imprimir orden
         </button>
+        {esAdmin && !cancelada && (
+          <button
+            onClick={cancelarCompra}
+            disabled={cancelando}
+            className="btn btn-out disabled:opacity-50"
+            style={{ height: 48, color: "var(--dang-700)" }}
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={2} />
+            {cancelando ? "Cancelando…" : "Cancelar compra"}
+          </button>
+        )}
         {puedeAbrirGarantia && (
           <button
             onClick={() => setModalAbrir(true)}

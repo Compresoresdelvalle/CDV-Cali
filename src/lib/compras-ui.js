@@ -25,6 +25,9 @@ export const COMPRAS_TABS = ["Todas", "Registrada", "Recibida", "Garantía"];
  * @returns {{ cls: string, label: string }}
  */
 export function compraEstadoPill({ recibida, estado }) {
+  if (estado === "cancelada") {
+    return { cls: "s-pill s-entregada", label: "Cancelada" };
+  }
   if (estado === "devolucion_garantia") {
     return { cls: "s-pill s-conv", label: "Dev. garantía" };
   }

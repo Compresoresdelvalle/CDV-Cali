@@ -81,6 +81,7 @@ export default function OrdenDetalle() {
   // Ítem 5 — asignar/reasignar técnico en revisión (2º momento, no en recepción).
   const [tecnicosList, setTecnicosList] = useState([]);
   const [asignandoTecnico, setAsignandoTecnico] = useState(false);
+  const [cancelando, setCancelando] = useState(false); // B1: cancelar OT (Admin)
   const agregandoRef = useRef(false);
   const cambiandoRef = useRef(false);
 
@@ -432,6 +433,33 @@ export default function OrdenDetalle() {
     }
   };
 
+  // B1 — Cancelar la OT (solo Admin). Devuelve los repuestos consumidos al
+  // inventario (la RPC borra los detalles y el trigger restaura el insumo).
+  const cancelarOrden = async () => {
+    const ok = await confirm({
+      titulo: "Cancelar orden de trabajo",
+      mensaje:
+        "Se cancelará la OT y se devolverán al inventario los repuestos consumidos. Esta acción no se puede deshacer.",
+      confirmLabel: "Cancelar OT",
+      danger: true,
+    });
+    if (!ok) return;
+    setCancelando(true);
+    setErrorMsg("");
+    try {
+      const { error } = await supabase.rpc("fn_cancelar_orden", {
+        p_orden_id: id,
+      });
+      if (error) throw error;
+      await cargar();
+    } catch (err) {
+      console.error("[OrdenDetalle] cancelar:", err);
+      setErrorMsg(safeError(err, "No se pudo cancelar la orden"));
+    } finally {
+      setCancelando(false);
+    }
+  };
+
   // Ítem 5 — asignar/reasignar el técnico responsable (segundo momento).
   const asignarTecnico = async (nuevoTecnicoId) => {
     setAsignandoTecnico(true);
@@ -506,7 +534,7 @@ export default function OrdenDetalle() {
       </div>
     );
 
-  const editable = orden.estado !== "entregada";
+  const editable = orden.estado !== "entregada" && orden.estado !== "cancelada";
   const isAdmin = perfil?.rol === "Admin";
   const esVendedor = perfil?.rol === "Vendedor";
   // Solo Admin, el técnico ASIGNADO específicamente, o un Vendedor pueden editar.
@@ -628,6 +656,22 @@ export default function OrdenDetalle() {
           <Printer className="h-3.5 w-3.5" strokeWidth={1.7} />
           {imprimiendo ? "Generando…" : "Imprimir OT"}
         </button>
+        {isAdmin && editable && (
+          <button
+            onClick={cancelarOrden}
+            disabled={cancelando}
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium disabled:opacity-50"
+            style={{
+              height: 48,
+              borderColor: "var(--dang-border)",
+              color: "var(--dang-700)",
+              backgroundColor: "var(--dang-50)",
+            }}
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={1.7} />
+            {cancelando ? "Cancelando…" : "Cancelar OT"}
+          </button>
+        )}
         {orden.estado === "entregada" && orden.tipo !== "garantia" && (
           <button
             onClick={() => setModalGarantia(true)}
