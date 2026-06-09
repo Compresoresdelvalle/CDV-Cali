@@ -120,24 +120,31 @@ export function generarCotizacionPDF({
 
   // ── Tabla de ítems ─────────────────────────────────────────────────────
   const ivaPct = Number(cotizacion.iva_pct ?? 19);
-  const descPct = Number(cotizacion.descuento_pct ?? 0);
   const subtotal = Number(cotizacion.subtotal ?? 0);
-  const descuento = subtotal * (descPct / 100);
+  // B4: descuento en $ (cae al % legado si no hay valor); domicilio tras el IVA.
+  const descuento =
+    cotizacion.descuento_valor != null
+      ? Math.min(Math.max(0, Number(cotizacion.descuento_valor)), subtotal)
+      : subtotal * (Number(cotizacion.descuento_pct ?? 0) / 100);
   const baseIva = subtotal - descuento;
   const ivaMonto = baseIva * (ivaPct / 100);
-  const total = Number(cotizacion.total ?? baseIva + ivaMonto);
+  const domicilio = Math.max(0, Number(cotizacion.domicilio ?? 0));
+  const total = Number(cotizacion.total ?? baseIva + ivaMonto + domicilio);
 
   autoTable(doc, {
     startY: y,
     head: [["#", "Referencia", "Descripción", "Cant.", "P. Unit.", "Total"]],
-    body: items.map((it, i) => [
-      String(i + 1),
-      it.producto?.referencia ?? "—",
-      it.producto?.nombre ?? "—",
-      `${it.cantidad} ${it.producto?.unidad_medida ?? ""}`.trim(),
-      formatCOP(it.precio_unitario),
-      formatCOP(it.subtotal),
-    ]),
+    body: items.map((it, i) => {
+      const esServicio = it.servicio_id != null;
+      return [
+        String(i + 1),
+        esServicio ? "Servicio" : (it.producto?.referencia ?? "—"),
+        it.descripcion ?? it.producto?.nombre ?? "—",
+        `${it.cantidad} ${esServicio ? "" : (it.producto?.unidad_medida ?? "")}`.trim(),
+        formatCOP(it.precio_unitario),
+        formatCOP(it.subtotal),
+      ];
+    }),
     theme: "grid",
     headStyles: {
       fillColor: COLORES.primario,
@@ -171,9 +178,9 @@ export function generarCotizacionPDF({
   doc.setTextColor(...COLORES.textoOscuro);
   doc.text(formatCOP(subtotal), valuesX, y, { align: "right" });
   y += 4.5;
-  if (descPct > 0) {
+  if (descuento > 0) {
     doc.setTextColor(...COLORES.textoMedio);
-    doc.text(`Descuento (${descPct}%):`, totalsX, y);
+    doc.text("Descuento:", totalsX, y);
     doc.setTextColor(...COLORES.textoOscuro);
     doc.text(`-${formatCOP(descuento)}`, valuesX, y, { align: "right" });
     y += 4.5;
@@ -182,7 +189,15 @@ export function generarCotizacionPDF({
   doc.text(`IVA ${ivaPct}%:`, totalsX, y);
   doc.setTextColor(...COLORES.textoOscuro);
   doc.text(formatCOP(ivaMonto), valuesX, y, { align: "right" });
-  y += 6;
+  y += 4.5;
+  if (domicilio > 0) {
+    doc.setTextColor(...COLORES.textoMedio);
+    doc.text("Domicilio:", totalsX, y);
+    doc.setTextColor(...COLORES.textoOscuro);
+    doc.text(formatCOP(domicilio), valuesX, y, { align: "right" });
+    y += 4.5;
+  }
+  y += 1.5;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(...COLORES.primario);
