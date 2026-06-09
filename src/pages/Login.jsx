@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/authStore";
 import { supabase } from "../lib/supabase";
@@ -31,6 +31,8 @@ const SEDE_LABEL = {
   L3: "Almacén L3",
   CHV: "Almacén CHV",
 };
+/** Orden de presentación de los roles en el paso de selección. */
+const ROLE_ORDER = ["Admin", "Vendedor", "Bodeguero", "Tecnico"];
 
 const getInitials = (name = "") =>
   name
@@ -105,6 +107,95 @@ function ChevronRightIcon() {
     >
       <path d="M9 18l6-6-6-6" />
     </svg>
+  );
+}
+
+/* ── Role glyph (icono por rol) ────────────────────────────────────────── */
+function RoleGlyph({ rol }) {
+  const p = {
+    width: 22,
+    height: 22,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  };
+  if (rol === "Admin")
+    return (
+      <svg {...p}>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      </svg>
+    );
+  if (rol === "Vendedor")
+    return (
+      <svg {...p}>
+        <circle cx="9" cy="21" r="1" />
+        <circle cx="20" cy="21" r="1" />
+        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+      </svg>
+    );
+  if (rol === "Bodeguero")
+    return (
+      <svg {...p}>
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <path d="M3.27 6.96 12 12.01l8.73-5.05" />
+        <path d="M12 22.08V12" />
+      </svg>
+    );
+  if (rol === "Tecnico")
+    return (
+      <svg {...p}>
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+      </svg>
+    );
+  return (
+    <svg {...p}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+    </svg>
+  );
+}
+
+/* ── Role card (step 0) ────────────────────────────────────────────────── */
+function RoleCard({ rol, count, onSelect }) {
+  const grad = ROLE_GRADIENTS[rol] || "from-slate-500 to-slate-700";
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(rol)}
+      className="w-full flex items-center gap-3 p-4 rounded-xl transition-all text-left group cursor-pointer"
+      style={{
+        border: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(255,255,255,0.03)",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+        e.currentTarget.style.borderColor = "rgba(59,130,246,0.3)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+        e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+      }}
+    >
+      <div
+        className={`w-11 h-11 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center text-white shadow-lg flex-shrink-0`}
+      >
+        <RoleGlyph rol={rol} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-white/90">
+          {ROLE_LABEL[rol] || rol}
+        </p>
+        <p className="text-[11px] text-white/40 mt-0.5">
+          {count} usuario{count === 1 ? "" : "s"}
+        </p>
+      </div>
+      <span className="text-white/30 opacity-0 group-hover:opacity-100 transition-opacity">
+        <ChevronRightIcon />
+      </span>
+    </button>
   );
 }
 
@@ -207,6 +298,7 @@ export default function Login() {
 
   const [usuarios, setUsuarios] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [selectedRole, setSelectedRole] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [pin, setPin] = useState(["", "", "", ""]);
   const [localError, setLocalError] = useState("");
@@ -214,6 +306,21 @@ export default function Login() {
   const [cargando, setCargando] = useState(false);
 
   const inputRefs = useRef([]);
+
+  /* Roles disponibles (con conteo) derivados de los usuarios cargados */
+  const rolesDisponibles = useMemo(() => {
+    const counts = {};
+    for (const u of usuarios) counts[u.rol] = (counts[u.rol] || 0) + 1;
+    const ordenados = ROLE_ORDER.filter((r) => counts[r]);
+    const otros = Object.keys(counts).filter((r) => !ROLE_ORDER.includes(r));
+    return [...ordenados, ...otros].map((rol) => ({ rol, count: counts[rol] }));
+  }, [usuarios]);
+
+  /* Usuarios del rol seleccionado */
+  const usuariosDelRol = useMemo(
+    () => usuarios.filter((u) => u.rol === selectedRole),
+    [usuarios, selectedRole],
+  );
 
   /* Redirect if already authed */
   useEffect(() => {
@@ -302,6 +409,22 @@ export default function Login() {
     if (e.key === "Backspace" && !pin[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
+  };
+
+  const selectRole = (rol) => {
+    setSelectedRole(rol);
+    setSelectedUser(null);
+    setPin(["", "", "", ""]);
+    setLocalError("");
+    clearError();
+  };
+
+  const backToRole = () => {
+    setSelectedRole(null);
+    setSelectedUser(null);
+    setPin(["", "", "", ""]);
+    setLocalError("");
+    clearError();
   };
 
   const selectUser = (u) => {
@@ -423,8 +546,8 @@ export default function Login() {
               </p>
             </div>
 
-            {/* ── STEP 1: Select user ─────────────────────────────────── */}
-            {!selectedUser && (
+            {/* ── STEP 0: Select role ─────────────────────────────────── */}
+            {!selectedRole && (
               <div className="space-y-6 animate-fade-in">
                 <div className="text-center space-y-2">
                   <div
@@ -440,9 +563,7 @@ export default function Login() {
                   <h2 className="text-lg font-semibold text-white">
                     Iniciar sesión
                   </h2>
-                  <p className="text-sm text-white/50">
-                    Seleccione su usuario para continuar
-                  </p>
+                  <p className="text-sm text-white/50">¿Cuál es tu rol?</p>
                 </div>
 
                 <div className="space-y-2">
@@ -450,15 +571,54 @@ export default function Login() {
                     <div className="flex items-center justify-center py-10">
                       <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                     </div>
+                  ) : rolesDisponibles.length === 0 ? (
+                    <p className="text-center text-sm text-white/40 py-6">
+                      No hay usuarios disponibles.
+                    </p>
                   ) : (
-                    usuarios.map((u) => (
-                      <UserCard
-                        key={u.nombre}
-                        usuario={u}
-                        onSelect={selectUser}
+                    rolesDisponibles.map(({ rol, count }) => (
+                      <RoleCard
+                        key={rol}
+                        rol={rol}
+                        count={count}
+                        onSelect={selectRole}
                       />
                     ))
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* ── STEP 1: Select user (filtrado por rol) ──────────────── */}
+            {selectedRole && !selectedUser && (
+              <div className="space-y-6 animate-fade-in">
+                <button
+                  type="button"
+                  onClick={backToRole}
+                  className="text-sm flex items-center gap-1 text-white/40 hover:text-white/80 transition-colors cursor-pointer"
+                >
+                  ← Cambiar rol
+                </button>
+
+                <div className="text-center space-y-2">
+                  <div
+                    className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${
+                      ROLE_GRADIENTS[selectedRole] ||
+                      "from-slate-500 to-slate-700"
+                    } flex items-center justify-center mx-auto text-white shadow-lg`}
+                  >
+                    <RoleGlyph rol={selectedRole} />
+                  </div>
+                  <h2 className="text-lg font-semibold text-white">
+                    {ROLE_LABEL[selectedRole] || selectedRole}
+                  </h2>
+                  <p className="text-sm text-white/50">Selecciona tu usuario</p>
+                </div>
+
+                <div className="space-y-2">
+                  {usuariosDelRol.map((u) => (
+                    <UserCard key={u.id} usuario={u} onSelect={selectUser} />
+                  ))}
                 </div>
               </div>
             )}
