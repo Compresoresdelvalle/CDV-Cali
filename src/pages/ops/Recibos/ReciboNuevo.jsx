@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeftCircle,
-  Search,
   Sparkles,
   Link2,
   Info,
@@ -14,23 +13,21 @@ import { supabase } from "../../../lib/supabase";
 import { formatCOP, safeError } from "../../../lib/utils";
 import { useAuthStore } from "../../../stores/authStore";
 import {
-  RECIBO_MODOS,
   RECIBO_METODOS_PAGO,
   metodoPagoLabel,
   cuentaBancariaLabel,
 } from "../../../lib/recibos-ui";
 
 /**
- * Crear recibo de pago — Fase 14 (re-vestido con diseño Lovable).
- * Lógica intacta: dos modos (desde cero / desde cotización pre-llena),
- * vínculo opcional a OT con abonos previos, server-authoritative vía
- * fn_registrar_recibo, guard síncrono anti doble-submit.
+ * Crear recibo de pago — Fase 14 (B5: se eliminó el modo "desde cotización").
+ * Recibo manual con vínculo opcional a una OT (que pre-llena cliente y concepto
+ * y suma sus abonos previos); server-authoritative vía fn_registrar_recibo,
+ * guard síncrono anti doble-submit.
  */
 export default function ReciboNuevo() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
 
-  const [modo, setModo] = useState("cero"); // cero | cotizacion
   const [cuentas, setCuentas] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -47,10 +44,7 @@ export default function ReciboNuevo() {
   const [cuentaId, setCuentaId] = useState("");
   const [observaciones, setObservaciones] = useState("");
 
-  // Vínculos
-  const [cotizacionNum, setCotizacionNum] = useState("");
-  const [cotizacion, setCotizacion] = useState(null);
-  const [items, setItems] = useState([]);
+  // Vínculo con OT (mecanismo de generación del recibo)
   const [ordenNum, setOrdenNum] = useState("");
   const [orden, setOrden] = useState(null);
   const [abonosPrevios, setAbonosPrevios] = useState(0);
@@ -72,44 +66,6 @@ export default function ReciboNuevo() {
   const pagadoN = Number(montoPagado) || 0;
   const saldo = total - abonosPrevios - pagadoN;
 
-  const buscarCotizacion = async () => {
-    setErrorMsg("");
-    const num = parseInt(cotizacionNum, 10);
-    if (!num) return;
-    try {
-      const { data: cot, error } = await supabase
-        .from("cotizaciones")
-        .select(
-          "id, numero, cliente_nombre, cliente_nit, subtotal, iva_pct, total",
-        )
-        .eq("numero", num)
-        .single();
-      if (error || !cot) throw new Error("Cotización no encontrada");
-      const { data: det } = await supabase
-        .from("detalle_cotizacion")
-        .select(
-          "cantidad, precio_unitario, subtotal, producto:producto_id(nombre)",
-        )
-        .eq("cotizacion_id", cot.id);
-      setCotizacion(cot);
-      setClienteNombre(cot.cliente_nombre ?? "");
-      setClienteNit(cot.cliente_nit ?? "");
-      setConcepto(`Pago de cotización #${cot.numero}`);
-      setSubtotal(String(cot.subtotal ?? 0));
-      setIvaPct(String(cot.iva_pct ?? 19));
-      setItems(
-        (det ?? []).map((d) => ({
-          descripcion: d.producto?.nombre ?? "Ítem",
-          cantidad: d.cantidad,
-          precio_unitario: d.precio_unitario,
-          subtotal: d.subtotal,
-        })),
-      );
-    } catch (err) {
-      setErrorMsg(safeError(err, "Error al buscar cotización"));
-    }
-  };
-
   const buscarOrden = async () => {
     setErrorMsg("");
     const num = parseInt(ordenNum, 10);
@@ -121,7 +77,7 @@ export default function ReciboNuevo() {
     try {
       const { data: ot, error } = await supabase
         .from("ordenes_servicio")
-        .select("id, numero, cliente_nombre, total")
+        .select("id, numero, cliente_nombre, cliente_nit, total")
         .eq("numero", num)
         .single();
       if (error || !ot) throw new Error("OT no encontrada");
@@ -130,7 +86,10 @@ export default function ReciboNuevo() {
       });
       setOrden(ot);
       setAbonosPrevios(Number(tot) || 0);
+      // Al vincular la OT se pre-llenan los datos del recibo (editables).
       if (!clienteNombre) setClienteNombre(ot.cliente_nombre ?? "");
+      if (!clienteNit && ot.cliente_nit) setClienteNit(ot.cliente_nit);
+      if (!concepto.trim()) setConcepto(`Pago de OT #${ot.numero}`);
     } catch (err) {
       setErrorMsg(safeError(err, "Error al buscar OT"));
     }
@@ -159,7 +118,7 @@ export default function ReciboNuevo() {
         cliente_nombre: clienteNombre.trim(),
         cliente_nit: clienteNit.trim() || null,
         concepto: concepto.trim(),
-        cotizacion_id: cotizacion?.id ?? null,
+        cotizacion_id: null,
         orden_id: orden?.id ?? null,
         subtotal: subN,
         iva_pct: ivaN,
@@ -171,7 +130,6 @@ export default function ReciboNuevo() {
         cuenta_bancaria_id: cuentaId || null,
         observaciones: observaciones.trim() || null,
         crear_abono: !!orden && crearAbono,
-        items: modo === "cotizacion" ? items : undefined,
       };
       const { data, error } = await supabase.rpc("fn_registrar_recibo", {
         p_payload: payload,
@@ -193,9 +151,9 @@ export default function ReciboNuevo() {
         Volver a Recibos
       </button>
 
-      {/* ── Encabezado + subtabs de modo ───────────────────────────── */}
+      {/* ── Encabezado ─────────────────────────────────────────────── */}
       <div
-        className="mt-4 flex flex-col items-start gap-3 border-b pb-4 md:flex-row md:items-end md:justify-between"
+        className="mt-4 flex flex-col items-start gap-3 border-b pb-4"
         style={{ borderColor: "var(--n-150)" }}
       >
         <div className="min-w-0">
@@ -204,26 +162,12 @@ export default function ReciboNuevo() {
             className="m-0 text-[22px] font-semibold tracking-[-0.01em]"
             style={{ color: "var(--n-900)" }}
           >
-            {modo === "cotizacion"
-              ? "Recibo desde cotización"
-              : "Recibo manual"}
+            Nuevo recibo
           </h1>
           <p className="mt-1.5 text-[13px]" style={{ color: "var(--n-500)" }}>
-            {modo === "cotizacion"
-              ? "Busca una cotización para pre-cargar cliente, montos y detalle."
-              : "Para anticipos, pagos sin venta asociada o ajustes contables."}
+            Para anticipos, abonos a una OT o pagos sin venta asociada. Vincula
+            una OT para pre-cargar el cliente y registrar el abono.
           </p>
-        </div>
-        <div className="subtabs">
-          {RECIBO_MODOS.map((m) => (
-            <button
-              key={m.v}
-              className={`stab ${modo === m.v ? "active" : ""}`}
-              onClick={() => setModo(m.v)}
-            >
-              {m.label}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -244,68 +188,6 @@ export default function ReciboNuevo() {
       {/* ── Layout: formulario + resumen sticky ────────────────────── */}
       <div className="mt-4 grid items-start gap-4 lg:grid-cols-[1fr_360px]">
         <div className="flex flex-col gap-4">
-          {/* Buscar cotización (solo modo cotización) */}
-          {modo === "cotizacion" && (
-            <div className="iblock">
-              <div className="ib-head">
-                <div className="ib-ico">
-                  <Search className="size-3.5" strokeWidth={2} />
-                </div>
-                <div className="ib-title">Cotización</div>
-              </div>
-              <div className="flex gap-2">
-                <div
-                  className="flex h-12 flex-1 items-center gap-2.5 rounded-lg border px-3.5"
-                  style={{
-                    borderColor: "var(--n-200)",
-                    backgroundColor: "var(--n-0)",
-                  }}
-                >
-                  <Search
-                    className="size-4 shrink-0"
-                    strokeWidth={1.5}
-                    style={{ color: "var(--n-500)" }}
-                  />
-                  <input
-                    type="number"
-                    value={cotizacionNum}
-                    onChange={(e) => setCotizacionNum(e.target.value)}
-                    placeholder="N° de cotización (ej. 57)"
-                    className="min-w-0 flex-1 border-none bg-transparent text-[14px] outline-none"
-                    style={{ color: "var(--n-900)" }}
-                  />
-                </div>
-                <button
-                  onClick={buscarCotizacion}
-                  className="btn btn-pri shrink-0"
-                  style={{ height: 48 }}
-                >
-                  Buscar
-                </button>
-              </div>
-              {cotizacion && (
-                <div
-                  className="cot-result sel mt-3"
-                  style={{ cursor: "default" }}
-                >
-                  <span className="cnum">#{cotizacion.numero}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="ccli">{cotizacion.cliente_nombre}</div>
-                    <div className="cmeta">
-                      {items.length} ítem{items.length === 1 ? "" : "s"}{" "}
-                      cargados
-                    </div>
-                  </div>
-                  <div className="ctot">{formatCOP(cotizacion.total)}</div>
-                  <span className="csel-tag">
-                    <Check className="size-3" strokeWidth={3} />
-                    Cargada
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Datos del recibo */}
           <div className="iblock">
             <div className="ib-head">
@@ -324,11 +206,7 @@ export default function ReciboNuevo() {
                 />
               </Field>
               <div className="field-row">
-                <Field
-                  label="Cliente"
-                  req
-                  badge={modo === "cotizacion" ? "sugg" : undefined}
-                >
+                <Field label="Cliente" req>
                   <input
                     type="text"
                     value={clienteNombre}
@@ -347,11 +225,7 @@ export default function ReciboNuevo() {
                   />
                 </Field>
               </div>
-              <Field
-                label="Concepto"
-                req
-                badge={modo === "cotizacion" ? "sugg" : undefined}
-              >
+              <Field label="Concepto" req>
                 <textarea
                   value={concepto}
                   onChange={(e) => setConcepto(e.target.value)}
@@ -514,9 +388,7 @@ export default function ReciboNuevo() {
           <span className="cart-eyebrow">Resumen · Nuevo recibo</span>
           <div className="cart-line">
             <span>Tipo</span>
-            <span className="v">
-              {modo === "cotizacion" ? "Por cotización" : "Manual"}
-            </span>
+            <span className="v">{orden ? "Vinculado a OT" : "Manual"}</span>
           </div>
           <div className="cart-line">
             <span>Consecutivo</span>
@@ -527,15 +399,9 @@ export default function ReciboNuevo() {
             <span className="v">{clienteNombre || "—"}</span>
           </div>
           <div className="cart-line">
-            <span>Vínculos</span>
+            <span>Vínculo</span>
             <span className="v">
-              {orden
-                ? cotizacion
-                  ? "Cot · OT"
-                  : "OT"
-                : cotizacion
-                  ? "Cotización"
-                  : "Opcional"}
+              {orden ? `OT #${orden.numero}` : "Ninguno"}
             </span>
           </div>
           <div className="cart-line">
