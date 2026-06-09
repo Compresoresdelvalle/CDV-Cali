@@ -59,7 +59,10 @@ export default function OrdenHistorial() {
         .order("fecha", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
-      if (perfil?.rol !== "Admin" && perfil?.sede_id)
+      // B1: Admin y Vendedor ven las OT de todas las sedes; Técnico y Bodeguero
+      // siguen viendo solo su sede. (La edición sigue restringida por sede.)
+      const veTodas = perfil?.rol === "Admin" || perfil?.rol === "Vendedor";
+      if (!veTodas && perfil?.sede_id)
         query = query.eq("sede_id", perfil.sede_id);
 
       if (tab) query = query.eq("estado", tab);
