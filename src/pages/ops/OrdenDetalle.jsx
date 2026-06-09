@@ -512,7 +512,12 @@ export default function OrdenDetalle() {
   // Solo Admin, el técnico ASIGNADO específicamente, o un Vendedor pueden editar.
   // Bloque 1 (#6): el Vendedor gestiona la OT como un técnico; la RLS os_update
   // ya lo limita a OT no entregadas de su sede. Borrar OT sigue solo-Admin.
-  const puedeEditar = isAdmin || orden.tecnico_id === perfil?.id || esVendedor;
+  // B1: el Vendedor ve OT de todas las sedes pero solo EDITA las de su sede
+  // (coincide con os_update). El técnico asignado edita la suya; Admin todo.
+  const puedeEditar =
+    isAdmin ||
+    orden.tecnico_id === perfil?.id ||
+    (esVendedor && orden.sede_id === perfil?.sede_id);
 
   const pill = ordenEstadoPill(orden.estado);
   const aPill = autorizacionPill(orden.estado_autorizacion);
