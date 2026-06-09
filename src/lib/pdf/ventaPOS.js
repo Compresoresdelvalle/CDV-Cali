@@ -10,7 +10,13 @@
  *   r.download(); // descarga el PDF
  */
 import { jsPDF } from "jspdf";
-import { MARCA, RECIBO_NOMBRE, SEDE_TELEFONO, formatCOP } from "./pdfStyles";
+import {
+  MARCA,
+  RECIBO_NOMBRE,
+  SEDE_TELEFONO,
+  RECIBO_DIRECCION,
+  formatCOP,
+} from "./pdfStyles";
 
 const W = 80; // ancho tirilla en mm
 const MX = 5; // margen lateral
@@ -70,7 +76,9 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
   y += 4.5;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  doc.text(MARCA.ciudad, center, y, { align: "center" });
+  doc.text(`${RECIBO_DIRECCION} · ${MARCA.ciudad}`, center, y, {
+    align: "center",
+  });
   y += 3.8;
   const telSede = SEDE_TELEFONO[venta.sede_id];
   if (telSede) {

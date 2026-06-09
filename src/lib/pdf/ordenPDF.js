@@ -230,7 +230,7 @@ export function generarOrdenPDF({
     doc.text(valor, valuesX, y, { align: "right" });
     y += 4.5;
   };
-  filaT("Mano de obra:", formatCOP(manoObra));
+  filaT("Revisión de servicio:", formatCOP(manoObra));
   filaT("Repuestos:", formatCOP(costoRep));
   if (valorRev > 0) filaT("Valor de revisión:", formatCOP(valorRev));
   y += 1.5;
