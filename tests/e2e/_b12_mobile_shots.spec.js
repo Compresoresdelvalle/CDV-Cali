@@ -37,10 +37,15 @@ async function loginEnv(page) {
 const ROUTES = [
   ["dashboard", "/ops"],
   ["inventario", "/ops/inventario"],
+  ["ventas-lista", "/ops/ventas"],
   ["venta-nueva", "/ops/ventas/nueva"],
+  ["cotizaciones-lista", "/ops/cotizaciones"],
   ["cotizacion-nueva", "/ops/cotizaciones/nueva"],
+  ["compras-lista", "/ops/compras"],
   ["compra-nueva", "/ops/compras/nueva"],
+  ["ordenes-lista", "/ops/ordenes"],
   ["orden-nueva", "/ops/ordenes/nueva"],
+  ["recibos-lista", "/ops/recibos"],
   ["recibo-nuevo", "/ops/recibos/nuevo"],
   ["traspasos", "/ops/traspasos"],
   ["herramientas", "/ops/herramientas"],
@@ -75,7 +80,8 @@ test("capturas móvil B12", async ({ page }) => {
   for (const [name, route] of ROUTES) {
     await shoot(page, name, route, 375);
   }
-  // 320px solo para los formularios más propensos a desbordar.
+  // 320px para los más propensos a desbordar (formularios densos + toolbar traspasos).
   await shoot(page, "venta-nueva", "/ops/ventas/nueva", 320);
   await shoot(page, "cotizacion-nueva", "/ops/cotizaciones/nueva", 320);
+  await shoot(page, "traspasos", "/ops/traspasos", 320);
 });
