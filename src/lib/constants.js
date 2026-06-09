@@ -37,6 +37,12 @@ export const EMAIL_BY_UID = {
   "0cbf1692-1570-4ccd-8a0c-6b94b27b5d36": "compresorescv@hotmail.com", // Edna
   "672d3434-e1aa-4030-a4e4-5ce62ea95006":
     "tecnico.prueba@compresoresdelvalle.com", // TecPrueba
+  // Bloque 0 — 5 usuarios nuevos (4 técnicos + 1 bodeguero), sede BODEGA.
+  "227b9209-a9da-4a66-bcba-e47d8e052553": "servteccompresores@hotmail.com", // Paolo (Técnico)
+  "16fbc125-8644-4c53-8d29-a0320fb9f0a1": "servtec1compresores@hotmail.com", // Carlos A (Técnico)
+  "43a3add6-4bb7-4a99-bedd-f63e2decf27b": "servtec2compresores@hotmail.com", // Dario (Técnico)
+  "2b002595-31b0-4066-bff9-38a9f8a68c47": "servtec3compresores@hotmail.com", // Fabián A (Técnico)
+  "bfc400ec-93f6-4a0a-83f0-7f16155aa49a": "bodegacompresores@hotmail.com", // Bodega2 (Bodeguero)
 };
 
 // Respaldo heredado: nombre → email. Solo se consulta si un usuario aún no está
@@ -50,6 +56,12 @@ export const EMAIL_MAP = {
   Bladimir: "compresoresdelvallesas@hotmail.com",
   Edna: "compresorescv@hotmail.com",
   TecPrueba: "tecnico.prueba@compresoresdelvalle.com",
+  // Bloque 0 — usuarios nuevos (respaldo por nombre; el primario es EMAIL_BY_UID).
+  Paolo: "servteccompresores@hotmail.com",
+  "Carlos A": "servtec1compresores@hotmail.com",
+  Dario: "servtec2compresores@hotmail.com",
+  "Fabián A": "servtec3compresores@hotmail.com",
+  Bodega2: "bodegacompresores@hotmail.com",
 };
 
 // Módulos visibles por rol (orden importa para el menú)
