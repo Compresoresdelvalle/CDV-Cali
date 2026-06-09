@@ -57,7 +57,8 @@ export default function VentaNueva() {
       .order("banco")
       .then(({ data }) => setCuentasBanco(data ?? []));
   }, []);
-  const [descuentoPct, setDescuentoPct] = useState(0);
+  const [descuentoValor, setDescuentoValor] = useState(0); // B3: descuento en $
+  const [domicilio, setDomicilio] = useState(0); // B3: valor de domicilio en $
   const [ivaPct, setIvaPct] = useState(IVA_DEFAULT);
   const [observaciones, setObservaciones] = useState("");
   const [confirmando, setConfirmando] = useState(false);
@@ -287,10 +288,12 @@ export default function VentaNueva() {
     (s, i) => s + i.cantidad * i.precio_unitario,
     0,
   );
-  const descuento = subtotal * (descuentoPct / 100);
+  // B3: descuento en valor absoluto ($), clamp a [0, subtotal]. El domicilio se
+  // suma DESPUÉS del IVA (no se grava). Debe coincidir con trg_recalcular_total_venta.
+  const descuento = Math.min(Math.max(0, descuentoValor), subtotal);
   const baseIva = subtotal - descuento;
   const iva = baseIva * (ivaPct / 100);
-  const total = subtotal * (1 - descuentoPct / 100) * (1 + ivaPct / 100);
+  const total = baseIva * (1 + ivaPct / 100) + Math.max(0, domicilio);
 
   // Paso activo del stepper, derivado del estado real de la venta en curso.
   const pasoActivo = useMemo(() => {
@@ -331,7 +334,8 @@ export default function VentaNueva() {
         p_cliente_nombre: clienteNombre || null,
         p_cliente_nit: clienteNit || null,
         p_metodo_pago: metodoPago,
-        p_descuento_pct: descuentoPct,
+        p_descuento_valor: descuento,
+        p_domicilio: Math.max(0, domicilio),
         p_iva_pct: ivaPct,
         p_cuenta_bancaria: cuentaBancaria || null,
         p_observaciones: observaciones || null,
@@ -862,22 +866,36 @@ export default function VentaNueva() {
             </div>
           )}
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm" style={{ color: "var(--n-500)" }}>
-              Descuento %
+              Descuento $
             </label>
             <input
               type="number"
               min="0"
-              max="100"
-              value={descuentoPct}
+              step="1000"
+              value={descuentoValor}
               onChange={(e) =>
-                setDescuentoPct(
-                  Math.min(100, Math.max(0, Number(e.target.value))),
-                )
+                setDescuentoValor(Math.max(0, Number(e.target.value) || 0))
               }
               className="finput"
-              style={{ width: 80, textAlign: "center" }}
+              style={{ width: 120, textAlign: "center" }}
+              aria-label="Descuento en pesos"
+            />
+            <label className="text-sm" style={{ color: "var(--n-500)" }}>
+              Domicilio $
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="1000"
+              value={domicilio}
+              onChange={(e) =>
+                setDomicilio(Math.max(0, Number(e.target.value) || 0))
+              }
+              className="finput"
+              style={{ width: 120, textAlign: "center" }}
+              aria-label="Valor del domicilio"
             />
           </div>
 
@@ -944,9 +962,9 @@ export default function VentaNueva() {
             <span>Subtotal</span>
             <span className="v">{formatCOP(subtotal)}</span>
           </div>
-          {descuentoPct > 0 && (
+          {descuento > 0 && (
             <div className="cart-line" style={{ color: "var(--warn-700)" }}>
-              <span>Descuento ({descuentoPct}%)</span>
+              <span>Descuento</span>
               <span className="v" style={{ color: "var(--warn-700)" }}>
                 −{formatCOP(descuento)}
               </span>
@@ -958,6 +976,12 @@ export default function VentaNueva() {
             </span>
             <span className="v">{formatCOP(iva)}</span>
           </div>
+          {domicilio > 0 && (
+            <div className="cart-line">
+              <span>Domicilio</span>
+              <span className="v">{formatCOP(domicilio)}</span>
+            </div>
+          )}
           <div className="cart-line tot">
             <span>Total</span>
             <span className="v">{formatCOP(total)}</span>
