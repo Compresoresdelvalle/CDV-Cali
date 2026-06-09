@@ -184,10 +184,17 @@ export default function VentaDetalle() {
           (s, i) => s + (i.subtotal ?? i.cantidad * i.precio_unitario),
           0,
         );
-  const descuento = subtotalCalc * ((venta.descuento_pct ?? 0) / 100);
+  // B3: descuento en $ (cae al % legado); domicilio tras el IVA.
+  const descBruto =
+    venta.descuento_valor != null
+      ? Number(venta.descuento_valor)
+      : subtotalCalc * ((venta.descuento_pct ?? 0) / 100);
+  const descuento = Math.min(Math.max(0, descBruto), subtotalCalc);
   const baseIva = subtotalCalc - descuento;
   const iva = baseIva * ((venta.iva_pct ?? 19) / 100);
-  const totalCalc = venta.total > 0 ? venta.total : baseIva + iva;
+  const domicilioVenta = Math.max(0, Number(venta.domicilio ?? 0));
+  const totalCalc =
+    venta.total > 0 ? venta.total : baseIva + iva + domicilioVenta;
 
   const historial = construirHistorialVenta(
     venta,
@@ -426,9 +433,9 @@ export default function VentaDetalle() {
                 <span>Subtotal</span>
                 <span className="v">{formatCOP(subtotalCalc)}</span>
               </div>
-              {venta.descuento_pct > 0 && (
+              {descuento > 0 && (
                 <div className="ln">
-                  <span>Descuento ({venta.descuento_pct}%)</span>
+                  <span>Descuento</span>
                   <span className="v">−{formatCOP(descuento)}</span>
                 </div>
               )}
@@ -436,6 +443,12 @@ export default function VentaDetalle() {
                 <span>IVA {venta.iva_pct ?? 19}%</span>
                 <span className="v">{formatCOP(iva)}</span>
               </div>
+              {domicilioVenta > 0 && (
+                <div className="ln">
+                  <span>Domicilio</span>
+                  <span className="v">{formatCOP(domicilioVenta)}</span>
+                </div>
+              )}
               <div className="ln tot">
                 <span>Total</span>
                 <span className="v">{formatCOP(totalCalc)}</span>

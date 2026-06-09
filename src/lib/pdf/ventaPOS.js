@@ -161,12 +161,20 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
       ? venta.subtotal
       : items.reduce((s, it) => s + Number(it.subtotal ?? 0), 0),
   );
+  // B3: descuento en $ (cae al % legado si no hay valor); domicilio tras el IVA.
   const descPct = Number(venta.descuento_pct ?? 0);
-  const descuento = subtotal * (descPct / 100);
+  const descValor =
+    venta.descuento_valor != null
+      ? Number(venta.descuento_valor)
+      : subtotal * (descPct / 100);
+  const descuento = Math.min(Math.max(0, descValor), subtotal);
   const baseIva = subtotal - descuento;
   const ivaPct = Number(venta.iva_pct ?? 19);
   const iva = baseIva * (ivaPct / 100);
-  const total = Number(venta.total > 0 ? venta.total : baseIva + iva);
+  const domicilio = Math.max(0, Number(venta.domicilio ?? 0));
+  const total = Number(
+    venta.total > 0 ? venta.total : baseIva + iva + domicilio,
+  );
 
   doc.setFontSize(7.5);
   const fila = (label, valor, bold = false) => {
@@ -176,9 +184,10 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
     y += bold ? 5 : 3.8;
   };
   fila("Subtotal:", formatCOP(subtotal));
-  if (descPct > 0) fila(`Descuento (${descPct}%):`, `-${formatCOP(descuento)}`);
+  if (descuento > 0) fila("Descuento:", `-${formatCOP(descuento)}`);
   // #16: IVA condicional — si la venta es exenta (0%) no se imprime la línea.
   if (ivaPct > 0) fila(`IVA ${ivaPct}%:`, formatCOP(iva));
+  if (domicilio > 0) fila("Domicilio:", formatCOP(domicilio));
   doc.setFontSize(9);
   fila("TOTAL:", formatCOP(total), true);
 
