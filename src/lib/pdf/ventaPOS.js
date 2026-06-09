@@ -31,7 +31,11 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
   probe.setFontSize(7);
   let itemsAlto = 0;
   for (const it of items) {
-    const lineas = probe.splitTextToSize(it.producto?.nombre ?? "—", CW - 18);
+    // B3: las líneas de servicio no tienen producto; usan `descripcion`.
+    const lineas = probe.splitTextToSize(
+      it.descripcion ?? it.producto?.nombre ?? "—",
+      CW - 18,
+    );
     // 3.6 primera línea + 3.6 por cada línea extra del nombre + 4.2 precio c/u
     itemsAlto += 3.6 + Math.max(0, lineas.length - 1) * 3.6 + 4.2;
   }
@@ -126,7 +130,7 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
   doc.setFont("helvetica", "normal");
 
   for (const it of items) {
-    const nombre = it.producto?.nombre ?? "—";
+    const nombre = it.descripcion ?? it.producto?.nombre ?? "—";
     const cant = it.cantidad ?? 0;
     const precio = Number(it.precio_unitario ?? 0);
     const sub = Number(it.subtotal ?? cant * precio);
