@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { CreditCard, ClipboardList, Sliders } from "lucide-react";
+import { CreditCard, ClipboardList, Sliders, Wrench } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import CuentasBancarias from "./CuentasBancarias";
 import ChecklistOT from "./ChecklistOT";
 import Parametros from "./Parametros";
+import Servicios from "./Servicios";
 
 const TABS = [
   {
@@ -12,6 +13,12 @@ const TABS = [
     label: "Cuentas bancarias",
     icon: CreditCard,
     desc: "Cuentas para recaudo y datos de pago en cotizaciones",
+  },
+  {
+    id: "servicios",
+    label: "Servicios",
+    icon: Wrench,
+    desc: "Catálogo de servicios vendibles (mano de obra) con precio e IVA",
   },
   {
     id: "checklist",
@@ -49,6 +56,7 @@ export default function Configuracion() {
   // Lovable: "4", "24 ítems"). Usa COUNT en cabecera (head:true) — sin filas.
   const [counts, setCounts] = useState({
     cuentas: null,
+    servicios: null,
     checklist: null,
   });
   useEffect(() => {
@@ -57,14 +65,16 @@ export default function Configuracion() {
       supabase
         .from("cuentas_bancarias")
         .select("id", { count: "exact", head: true }),
+      supabase.from("servicios").select("id", { count: "exact", head: true }),
       supabase
         .from("checklist_componentes")
         .select("id", { count: "exact", head: true }),
     ])
-      .then(([c, k]) => {
+      .then(([c, sv, k]) => {
         if (!activo) return;
         setCounts({
           cuentas: c.error ? null : (c.count ?? 0),
+          servicios: sv.error ? null : (sv.count ?? 0),
           checklist: k.error ? null : (k.count ?? 0),
         });
       })
@@ -79,6 +89,8 @@ export default function Configuracion() {
   const badgeFor = (id) => {
     if (id === "cuentas" && counts.cuentas != null)
       return String(counts.cuentas);
+    if (id === "servicios" && counts.servicios != null)
+      return String(counts.servicios);
     if (id === "checklist" && counts.checklist != null)
       return `${counts.checklist} ítems`;
     return null;
@@ -155,6 +167,7 @@ export default function Configuracion() {
 
       <div role="tabpanel">
         {tab === "cuentas" && <CuentasBancarias />}
+        {tab === "servicios" && <Servicios />}
         {tab === "checklist" && <ChecklistOT />}
         {tab === "parametros" && <Parametros />}
       </div>
