@@ -162,6 +162,7 @@ export default function ProductoForm({
             >
               <option value="nuevo">Nuevo</option>
               <option value="segunda_mano">Segunda mano</option>
+              <option value="chatarra">Chatarra (no vendible)</option>
             </select>
           </Field>
         </Row>

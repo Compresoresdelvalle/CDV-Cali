@@ -445,9 +445,9 @@ export default function ModalAbrirGarantiaVenta({
                 className="text-[11px] mb-1"
                 style={{ color: "hsl(var(--muted-foreground))" }}
               >
-                Lo que entregue el cliente reingresa al inventario como{" "}
-                <strong>segunda mano</strong> (precio/costo en 0, ajústalos
-                luego).
+                Lo que entregue el cliente se registra como{" "}
+                <strong>chatarra</strong> (no vendible, precio/costo en 0) —
+                solo para control, no se puede vender.
               </p>
               <input
                 type="text"
