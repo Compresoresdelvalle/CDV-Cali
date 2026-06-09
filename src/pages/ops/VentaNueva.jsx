@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   ChevronRight,
   MapPin,
+  Wrench,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -56,6 +57,16 @@ export default function VentaNueva() {
       .eq("activo", true)
       .order("banco")
       .then(({ data }) => setCuentasBanco(data ?? []));
+  }, []);
+  // B3 (vender servicio): catálogo de servicios activos para agregar al carrito.
+  const [servicios, setServicios] = useState([]);
+  useEffect(() => {
+    supabase
+      .from("servicios")
+      .select("id, nombre, precio, iva_pct")
+      .eq("activo", true)
+      .order("nombre")
+      .then(({ data }) => setServicios(data ?? []));
   }, []);
   const [descuentoValor, setDescuentoValor] = useState(0); // B3: descuento en $
   const [domicilio, setDomicilio] = useState(0); // B3: valor de domicilio en $
@@ -197,6 +208,11 @@ export default function VentaNueva() {
     [sedeConsulta],
   );
 
+  // Identidad de cada línea del carrito (producto o servicio). Se usa como key
+  // de React y para localizar la línea en los handlers de cantidad/precio.
+  const lineKey = (i) =>
+    i.tipo === "servicio" ? `s:${i.servicio_id}` : `p:${i.producto_id}`;
+
   const agregarAlCarrito = (prod) => {
     // #11: el vendedor solo vende desde su sede. Si está consultando otra,
     // no deja agregar y muestra el popup informativo.
@@ -207,7 +223,9 @@ export default function VentaNueva() {
     setBusqueda("");
     setResultados([]);
     setCarrito((prev) => {
-      const idx = prev.findIndex((i) => i.producto_id === prod.id);
+      const idx = prev.findIndex(
+        (i) => i.tipo !== "servicio" && i.producto_id === prod.id,
+      );
       if (idx >= 0) {
         const updated = [...prev];
         const item = { ...updated[idx] };
@@ -219,6 +237,7 @@ export default function VentaNueva() {
       return [
         ...prev,
         {
+          tipo: "producto",
           producto_id: prod.id,
           nombre: prod.nombre,
           referencia: prod.referencia,
@@ -231,25 +250,55 @@ export default function VentaNueva() {
     });
   };
 
-  const actualizarCantidad = (productoId, delta) => {
+  // B3 (vender servicio): los servicios no dependen de sede ni de stock.
+  const agregarServicioAlCarrito = (serv) => {
+    const vacio = carrito.length === 0;
+    setCarrito((prev) => {
+      const idx = prev.findIndex(
+        (i) => i.tipo === "servicio" && i.servicio_id === serv.id,
+      );
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], cantidad: updated[idx].cantidad + 1 };
+        return updated;
+      }
+      return [
+        ...prev,
+        {
+          tipo: "servicio",
+          servicio_id: serv.id,
+          nombre: serv.nombre,
+          precio_unitario: Number(serv.precio) || 0,
+          cantidad: 1,
+        },
+      ];
+    });
+    // Conveniencia: si el carrito estaba vacío, alinear el IVA de la venta al
+    // del servicio (el IVA sigue siendo a nivel de venta, igual que productos).
+    if (vacio && serv.iva_pct != null) {
+      setIvaPct(Math.min(100, Math.max(0, Number(serv.iva_pct))));
+    }
+  };
+
+  const actualizarCantidad = (key, delta) => {
     // #12: sin tope por stock (la venta puede exceder el disponible → negativo).
     setCarrito((prev) =>
       prev
         .map((i) => {
-          if (i.producto_id !== productoId) return i;
+          if (lineKey(i) !== key) return i;
           return { ...i, cantidad: Math.max(0, i.cantidad + delta) };
         })
         .filter((i) => i.cantidad > 0),
     );
   };
 
-  const setCantidadDirecta = (productoId, valor) => {
+  const setCantidadDirecta = (key, valor) => {
     const n = parseInt(valor, 10);
     if (isNaN(n)) return;
     setCarrito((prev) =>
       prev
         .map((i) => {
-          if (i.producto_id !== productoId) return i;
+          if (lineKey(i) !== key) return i;
           return { ...i, cantidad: Math.max(0, n) };
         })
         .filter((i) => i.cantidad > 0),
@@ -257,19 +306,17 @@ export default function VentaNueva() {
   };
 
   // #9: editar el precio de venta por línea. Solo dígitos; vacío = 0.
-  const setPrecioDirecto = (productoId, valor) => {
+  const setPrecioDirecto = (key, valor) => {
     const limpio = String(valor).replace(/[^\d]/g, "");
     const n = limpio === "" ? 0 : Number(limpio);
     if (isNaN(n) || n < 0) return;
     setCarrito((prev) =>
-      prev.map((i) =>
-        i.producto_id === productoId ? { ...i, precio_unitario: n } : i,
-      ),
+      prev.map((i) => (lineKey(i) === key ? { ...i, precio_unitario: n } : i)),
     );
   };
 
-  const eliminarItem = (productoId) => {
-    setCarrito((prev) => prev.filter((i) => i.producto_id !== productoId));
+  const eliminarItem = (key) => {
+    setCarrito((prev) => prev.filter((i) => lineKey(i) !== key));
   };
 
   // #11: cambiar la sede a consultar. Limpia la búsqueda; si el Admin cambia la
@@ -313,9 +360,11 @@ export default function VentaNueva() {
       setError("Selecciona la cuenta bancaria donde entró el pago.");
       return;
     }
-    // B3: NO se permite vender sin stock. Bloquear si algún ítem excede lo
-    // disponible (antes solo se avisaba después de la venta).
-    const sinStock = carrito.filter((i) => i.cantidad > i.stock_disponible);
+    // B3: NO se permite vender sin stock. Bloquear si algún PRODUCTO excede lo
+    // disponible (los servicios no tienen stock). Antes solo se avisaba después.
+    const sinStock = carrito.filter(
+      (i) => i.tipo !== "servicio" && i.cantidad > i.stock_disponible,
+    );
     if (sinStock.length > 0) {
       setError(
         `Sin stock suficiente: ${sinStock
@@ -339,11 +388,19 @@ export default function VentaNueva() {
         p_iva_pct: ivaPct,
         p_cuenta_bancaria: cuentaBancaria || null,
         p_observaciones: observaciones || null,
-        p_items: carrito.map((i) => ({
-          producto_id: i.producto_id,
-          cantidad: i.cantidad,
-          precio_unitario: i.precio_unitario,
-        })),
+        p_items: carrito.map((i) =>
+          i.tipo === "servicio"
+            ? {
+                servicio_id: i.servicio_id,
+                cantidad: i.cantidad,
+                precio_unitario: i.precio_unitario,
+              }
+            : {
+                producto_id: i.producto_id,
+                cantidad: i.cantidad,
+                precio_unitario: i.precio_unitario,
+              },
+        ),
       });
       if (rpcErr) throw new Error(rpcErr.message);
       // Bloque 0 #2: guardar/reutilizar cliente para el autocompletado. NO toca
@@ -607,6 +664,41 @@ export default function VentaNueva() {
             </button>
           </div>
 
+          {/* B3 — Agregar un servicio (catálogo que solo crea el Admin). El
+              servicio no depende de sede ni stock; su precio es editable por
+              línea, igual que un producto. */}
+          {servicios.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2.5">
+              <label
+                htmlFor="serv-add"
+                className="inline-flex items-center gap-1.5 text-[12px]"
+                style={{ color: "var(--n-500)" }}
+              >
+                <Wrench className="h-3.5 w-3.5" strokeWidth={1.7} />
+                Servicio
+              </label>
+              <select
+                id="serv-add"
+                value=""
+                onChange={(e) => {
+                  const s = servicios.find(
+                    (x) => String(x.id) === e.target.value,
+                  );
+                  if (s) agregarServicioAlCarrito(s);
+                }}
+                className="h-10 min-w-[220px] cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+                style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
+              >
+                <option value="">Agregar un servicio…</option>
+                {servicios.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nombre} · {formatCOP(s.precio)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {buscando && (
             <p className="text-xs" style={{ color: "var(--n-500)" }}>
               Buscando…
@@ -706,18 +798,35 @@ export default function VentaNueva() {
                 </thead>
                 <tbody>
                   {carrito.map((item) => {
-                    // #12: ya no topamos por stock. Avisamos si está sin stock
-                    // o si la cantidad excede el disponible (quedará negativo).
-                    const sinStock = item.stock_disponible <= 0;
-                    const excede = item.cantidad > item.stock_disponible;
+                    const key = lineKey(item);
+                    const esServicio = item.tipo === "servicio";
+                    // #12: los productos no topan por stock; avisamos si está
+                    // sin stock o si excede (quedará negativo). Servicios: nunca.
+                    const sinStock = !esServicio && item.stock_disponible <= 0;
+                    const excede =
+                      !esServicio && item.cantidad > item.stock_disponible;
                     const aviso = sinStock || excede;
                     return (
-                      <tr key={item.producto_id}>
+                      <tr key={key}>
                         <td>
-                          <span className="p-sku">
-                            {item.referencia ?? "—"}
-                          </span>
-                          <div className="p-meta">{item.unidad ?? ""}</div>
+                          {esServicio ? (
+                            <>
+                              <span
+                                className="p-sku"
+                                style={{ color: "var(--p-600)" }}
+                              >
+                                Servicio
+                              </span>
+                              <div className="p-meta">—</div>
+                            </>
+                          ) : (
+                            <>
+                              <span className="p-sku">
+                                {item.referencia ?? "—"}
+                              </span>
+                              <div className="p-meta">{item.unidad ?? ""}</div>
+                            </>
+                          )}
                         </td>
                         <td>
                           <div className="p-nm">{item.nombre}</div>
@@ -726,15 +835,9 @@ export default function VentaNueva() {
                           <QtyControl
                             value={item.cantidad}
                             danger={aviso}
-                            onDec={() =>
-                              actualizarCantidad(item.producto_id, -1)
-                            }
-                            onInc={() =>
-                              actualizarCantidad(item.producto_id, 1)
-                            }
-                            onSet={(v) =>
-                              setCantidadDirecta(item.producto_id, v)
-                            }
+                            onDec={() => actualizarCantidad(key, -1)}
+                            onInc={() => actualizarCantidad(key, 1)}
+                            onSet={(v) => setCantidadDirecta(key, v)}
                             incDisabled={false}
                           />
                           {aviso && (
@@ -752,7 +855,7 @@ export default function VentaNueva() {
                         <td className="p-pr">
                           <PriceInput
                             value={item.precio_unitario}
-                            onSet={(v) => setPrecioDirecto(item.producto_id, v)}
+                            onSet={(v) => setPrecioDirecto(key, v)}
                           />
                         </td>
                         <td className="p-sub">
@@ -760,7 +863,7 @@ export default function VentaNueva() {
                         </td>
                         <td>
                           <button
-                            onClick={() => eliminarItem(item.producto_id)}
+                            onClick={() => eliminarItem(key)}
                             className="flex size-7 items-center justify-center rounded-md transition-colors"
                             style={{ color: "var(--n-500)" }}
                             onMouseEnter={(e) =>
@@ -769,7 +872,7 @@ export default function VentaNueva() {
                             onMouseLeave={(e) =>
                               (e.currentTarget.style.color = "var(--n-500)")
                             }
-                            aria-label="Eliminar producto"
+                            aria-label="Eliminar línea"
                           >
                             <Trash2 className="size-3.5" />
                           </button>
@@ -956,7 +1059,7 @@ export default function VentaNueva() {
         <aside className="cart">
           <span className="cart-eyebrow">Resumen</span>
           <div className="text-[12px]" style={{ color: "var(--n-500)" }}>
-            {carrito.length} producto{carrito.length !== 1 ? "s" : ""}
+            {carrito.length} ítem{carrito.length !== 1 ? "s" : ""}
           </div>
           <div className="cart-line">
             <span>Subtotal</span>

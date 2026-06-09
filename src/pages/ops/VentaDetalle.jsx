@@ -404,27 +404,43 @@ export default function VentaDetalle() {
             <div className="overflow-x-auto">
               <table className="prod-tbl">
                 <tbody>
-                  {items.map((item) => (
-                    <tr key={item.id}>
-                      <td style={{ width: 140 }}>
-                        <span className="p-sku">
-                          {item.producto?.referencia ?? "—"}
-                        </span>
-                        <div className="p-meta">
-                          {item.producto?.unidad_medida ?? ""}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="p-nm">{item.producto?.nombre}</div>
-                      </td>
-                      <td className="p-pr" style={{ width: 170 }}>
-                        ×{item.cantidad} · {formatCOP(item.precio_unitario)}
-                      </td>
-                      <td className="p-sub" style={{ width: 130 }}>
-                        {formatCOP(item.subtotal)}
-                      </td>
-                    </tr>
-                  ))}
+                  {items.map((item) => {
+                    // B3: las líneas de servicio no tienen producto; usan
+                    // `descripcion` y se marcan como "Servicio".
+                    const esServicio = item.servicio_id != null;
+                    return (
+                      <tr key={item.id}>
+                        <td style={{ width: 140 }}>
+                          <span
+                            className="p-sku"
+                            style={
+                              esServicio ? { color: "var(--p-600)" } : undefined
+                            }
+                          >
+                            {esServicio
+                              ? "Servicio"
+                              : (item.producto?.referencia ?? "—")}
+                          </span>
+                          <div className="p-meta">
+                            {esServicio
+                              ? "—"
+                              : (item.producto?.unidad_medida ?? "")}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="p-nm">
+                            {item.descripcion ?? item.producto?.nombre ?? "—"}
+                          </div>
+                        </td>
+                        <td className="p-pr" style={{ width: 170 }}>
+                          ×{item.cantidad} · {formatCOP(item.precio_unitario)}
+                        </td>
+                        <td className="p-sub" style={{ width: 130 }}>
+                          {formatCOP(item.subtotal)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
