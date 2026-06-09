@@ -172,6 +172,27 @@ export default function Herramientas() {
     }
   };
 
+  /* ── B11 — Acción: consumir (NO regresa al inventario; desaparece) ──── */
+  const consumir = async (h) => {
+    if (accionandoRef.current) return;
+    accionandoRef.current = true;
+    setAccionando(h.id);
+    setErrorMsg("");
+    try {
+      const { error } = await supabase.rpc("fn_consumir_herramienta", {
+        p_herramienta_id: h.id,
+      });
+      if (error) throw error;
+      setDetalleId(null);
+      await cargarHerramientas();
+    } catch (err) {
+      setErrorMsg(safeError(err, "Error al consumir herramienta"));
+    } finally {
+      setAccionando(null);
+      accionandoRef.current = false;
+    }
+  };
+
   /* ── Derivaciones de presentación (todas sobre datos reales) ─────────── */
   const prestadas = useMemo(
     () => herramientas.filter((h) => h.estado === "prestada"),
@@ -405,6 +426,7 @@ export default function Herramientas() {
           accionando={accionando === detalle.id}
           onClose={() => setDetalleId(null)}
           onDevolver={() => devolver(detalle)}
+          onConsumir={() => consumir(detalle)}
           onPrestar={() => {
             setDetalleId(null);
             setModalPrestar(detalle);

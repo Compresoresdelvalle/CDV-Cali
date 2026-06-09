@@ -11,6 +11,7 @@ import {
   Settings,
   MessageCircle,
   Boxes,
+  X,
 } from "lucide-react";
 import { formatDate } from "../../lib/utils";
 import {
@@ -39,6 +40,7 @@ export default function HerramientaDetalle({
   accionando,
   onClose,
   onDevolver,
+  onConsumir,
   onPrestar,
 }) {
   const h = herramienta;
@@ -145,6 +147,30 @@ export default function HerramientaDetalle({
             >
               <Check className="h-3.5 w-3.5" strokeWidth={2} />
               {accionando ? "Procesando…" : "Marcar devuelta"}
+            </button>
+          )}
+          {/* B11: consumido — no regresa al inventario; la herramienta desaparece. */}
+          {esPrestada && onConsumir && (
+            <button
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `¿Marcar "${h.herramienta_nombre}" como CONSUMIDA? No regresa al inventario y desaparece del listado. Esta acción no se puede deshacer.`,
+                  )
+                )
+                  onConsumir();
+              }}
+              disabled={accionando}
+              className="btn btn-out inline-flex items-center gap-1.5 disabled:opacity-50"
+              style={{
+                height: 48,
+                borderColor: "var(--dang-border)",
+                color: "var(--dang-700)",
+              }}
+              title="No regresa al inventario; se retira definitivamente"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={2} />
+              Consumido
             </button>
           )}
           {esDisponible && onPrestar && (

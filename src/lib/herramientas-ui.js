@@ -55,6 +55,8 @@ export function estadoPill(estado) {
       return { cls: "pill-neutral", label: "Mantenimiento", tone: "neut" };
     case "extraviada":
       return { cls: "pill-danger", label: "Extraviada", tone: "dang" };
+    case "consumido":
+      return { cls: "pill-neutral", label: "Consumida", tone: "neut" };
     default:
       return { cls: "pill-neutral", label: estado ?? "—", tone: "neut" };
   }
