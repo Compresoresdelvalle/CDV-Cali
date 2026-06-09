@@ -24,6 +24,7 @@ const ESTADOS = [
 const TIPOS = [
   { v: "nuevo", label: "Nuevo" },
   { v: "segunda_mano", label: "Segunda mano" },
+  { v: "chatarra", label: "Chatarra" },
 ];
 
 /** #34: suma/quita un valor de un array (multi-selección de filtros). */
