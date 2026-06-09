@@ -426,7 +426,6 @@ export default function TraspasoDetalle() {
             onIniciarPicking={iniciarPicking}
             onEnviar={enviarTraspaso}
             onIrPicking={() => navigate(`/ops/traspasos/${id}/picking`)}
-            onVerificar={() => navigate(`/ops/traspasos/${id}/verificar`)}
             onRecibir={() => navigate(`/ops/traspasos/${id}/recibir`)}
             onCancelar={cancelarTraspaso}
           />
@@ -883,7 +882,6 @@ function construirConfig(p) {
     onIniciarPicking,
     onEnviar,
     onIrPicking,
-    onVerificar,
     onRecibir,
   } = p;
   const pctPicking = totalItems > 0 ? (itemsCompletos / totalItems) * 100 : 0;
@@ -921,39 +919,42 @@ function construirConfig(p) {
       ],
     };
   }
-  if (estado === "picking" && yoSoyPicker && pickingCompleto) {
+  // B6: simplificado — sin verificación por un tercero. El picker (o Admin /
+  // Bodeguero de la sede origen) envía directo cuando el picking está completo.
+  if (
+    estado === "picking" &&
+    pickingCompleto &&
+    (yoSoyPicker || esAdmin || esBodeguero)
+  ) {
     return {
-      icon: <Clock className="h-4 w-4" strokeWidth={2} />,
-      title: "Picking completo",
-      desc: "Terminaste de pickear. Por segregación de funciones, otra persona (Admin u otro Bodeguero) debe verificarlo.",
+      icon: <Truck className="h-4 w-4" strokeWidth={2} />,
+      title: "Enviar traspaso",
+      desc: "Picking completo. Al confirmar el envío, el stock saldrá de la sede origen.",
       progreso: 100,
       actions: [
         {
-          label: "Revisar mi picking",
+          label: "Revisar picking",
           onClick: onIrPicking,
           variant: "outline",
           icon: <PlayCircle className="h-3.5 w-3.5" strokeWidth={2} />,
+        },
+        {
+          label: accionando ? "Enviando…" : "Confirmar envío",
+          onClick: onEnviar,
+          disabled: accionando,
+          variant: "primary",
+          icon: <Truck className="h-3.5 w-3.5" strokeWidth={2} />,
         },
       ],
     };
   }
   if (estado === "picking" && !yoSoyPicker && (esAdmin || esBodeguero)) {
     return {
-      icon: <CheckCircle2 className="h-4 w-4" strokeWidth={2} />,
-      title: "Verificar traspaso",
-      desc: pickingCompleto
-        ? "Todos los ítems fueron pickeados. Puedes verificar el traspaso."
-        : `Picking en progreso: ${itemsCompletos}/${totalItems} ítems.`,
+      icon: <Package className="h-4 w-4" strokeWidth={2} />,
+      title: "Picking en progreso",
+      desc: `Picking en progreso: ${itemsCompletos}/${totalItems} ítems.`,
       progreso: pctPicking,
-      actions: [
-        {
-          label: "Verificar cantidades",
-          onClick: onVerificar,
-          disabled: !pickingCompleto,
-          variant: "primary",
-          icon: <Check className="h-3.5 w-3.5" strokeWidth={2.5} />,
-        },
-      ],
+      actions: [],
     };
   }
   if (estado === "verificado" && (esAdmin || esBodeguero)) {
