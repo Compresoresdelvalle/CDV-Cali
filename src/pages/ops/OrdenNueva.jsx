@@ -213,7 +213,7 @@ export default function OrdenNueva() {
       </button>
 
       <div className="border-b pb-4" style={{ borderColor: "var(--n-100)" }}>
-        <div className="ph-eyebrow">Nueva orden de servicio</div>
+        <div className="ph-eyebrow">Nueva orden de trabajo</div>
         <h1 className="ph-client" style={{ marginBottom: 0 }}>
           Registrar OT
         </h1>

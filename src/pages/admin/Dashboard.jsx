@@ -410,7 +410,7 @@ export default function Dashboard() {
           title="OTs en proceso"
           count={k.ordenes_abiertas ?? 0}
           countTone="--info"
-          footer={{ label: "Ver Órdenes de Servicio", to: "/ops/ordenes" }}
+          footer={{ label: "Ver Órdenes de Trabajo", to: "/ops/ordenes" }}
           emptyText="Sin órdenes en proceso"
           items={bloques.ot}
           renderItem={(it) => {

@@ -610,7 +610,7 @@ export default function OrdenDetalle() {
         style={{ borderColor: "var(--n-150)" }}
       >
         <div className="min-w-0 flex-1">
-          <div className="ph-eyebrow">Orden de servicio</div>
+          <div className="ph-eyebrow">Orden de trabajo</div>
           <div className="ph-num">#{orden.numero}</div>
           <div className="ph-client">{orden.cliente_nombre}</div>
           <div className="ph-sub">

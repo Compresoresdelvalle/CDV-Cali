@@ -820,7 +820,7 @@ function DetalleContenido({
               </div>
               <p className="text-[12.5px]" style={{ color: "var(--n-500)" }}>
                 {convertida
-                  ? "Esta cotización fue convertida en venta directa (sin orden de servicio vinculada)."
+                  ? "Esta cotización fue convertida en venta directa (sin orden de trabajo vinculada)."
                   : "Sin vinculaciones todavía. Al aprobarse puede convertirse en venta o asociarse a una OT."}
               </p>
             </section>

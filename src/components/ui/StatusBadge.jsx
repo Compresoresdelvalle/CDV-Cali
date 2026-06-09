@@ -48,7 +48,7 @@ const MODIFIER = {
   // Préstamo states
   activo: "status-warning",
   devuelto: "status-success",
-  // Orden de servicio states
+  // Orden de trabajo states
   abierta: "status-info",
   en_proceso: "status-warning",
   esperando_repuesto: "status-warning",
@@ -75,7 +75,7 @@ const DEFAULT_LABEL = {
   // Compra states
   recibida: "Recibida",
   pendiente: "Pendiente",
-  // Orden de servicio
+  // Orden de trabajo
   abierta: "Abierta",
   en_proceso: "En proceso",
   esperando_repuesto: "Esperando repuesto",

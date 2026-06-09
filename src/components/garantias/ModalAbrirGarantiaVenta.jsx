@@ -210,7 +210,7 @@ export default function ModalAbrirGarantiaVenta({
           style={{ color: "hsl(var(--muted-foreground))" }}
         >
           Cliente: <strong>{origen?.cliente_nombre ?? "—"}</strong>. Origen:{" "}
-          {origen?.tipo === "venta" ? "Venta" : "Orden de servicio"}
+          {origen?.tipo === "venta" ? "Venta" : "Orden de trabajo"}
         </p>
 
         {errorMsg && (
