@@ -52,7 +52,6 @@ export default function TraspasoDetalle() {
   const [error, setError] = useState(null);
 
   const esAdmin = perfil?.rol === "Admin";
-  const esBodeguero = perfil?.rol === "Bodeguero";
   const accionandoRef = useRef(false);
 
   // `silent`: re-fetch en segundo plano (Realtime) sin parpadear el skeleton
@@ -212,6 +211,10 @@ export default function TraspasoDetalle() {
   const yoSoyPicker = traspaso.picker_id === perfil?.id;
   const yoSoyDeSedeDestino =
     perfil?.sede_id === traspaso.sede_destino_id || esAdmin;
+  // B6: en tiendas con un solo vendedor, el personal de la sede ORIGEN (incluido
+  // el Vendedor) hace todo el lado de salida: iniciar picking, pickear y enviar.
+  const yoSoyDeSedeOrigen =
+    perfil?.sede_id === traspaso.sede_origen_id || esAdmin;
 
   const totalItems = items.length;
   const itemsCompletos = items.filter((i) => i.picking_completado).length;
@@ -421,7 +424,7 @@ export default function TraspasoDetalle() {
             yoSoyPicker={yoSoyPicker}
             yoSoyDeSedeDestino={yoSoyDeSedeDestino}
             esAdmin={esAdmin}
-            esBodeguero={esBodeguero}
+            yoSoyDeSedeOrigen={yoSoyDeSedeOrigen}
             accionando={accionando}
             onIniciarPicking={iniciarPicking}
             onEnviar={enviarTraspaso}
@@ -694,7 +697,7 @@ function AccionPanel(props) {
     yoSoyPicker,
     yoSoyDeSedeDestino,
     esAdmin,
-    esBodeguero,
+    yoSoyDeSedeOrigen,
     accionando,
     onIniciarPicking,
     onEnviar,
@@ -713,7 +716,7 @@ function AccionPanel(props) {
     yoSoyPicker,
     yoSoyDeSedeDestino,
     esAdmin,
-    esBodeguero,
+    yoSoyDeSedeOrigen,
     accionando,
     onIniciarPicking,
     onEnviar,
@@ -876,8 +879,7 @@ function construirConfig(p) {
     pickingCompleto,
     yoSoyPicker,
     yoSoyDeSedeDestino,
-    esAdmin,
-    esBodeguero,
+    yoSoyDeSedeOrigen,
     accionando,
     onIniciarPicking,
     onEnviar,
@@ -886,7 +888,7 @@ function construirConfig(p) {
   } = p;
   const pctPicking = totalItems > 0 ? (itemsCompletos / totalItems) * 100 : 0;
 
-  if (estado === "borrador" && (esAdmin || esBodeguero)) {
+  if (estado === "borrador" && yoSoyDeSedeOrigen) {
     return {
       icon: <Package className="h-4 w-4" strokeWidth={2} />,
       title: "Iniciar picking",
@@ -924,7 +926,7 @@ function construirConfig(p) {
   if (
     estado === "picking" &&
     pickingCompleto &&
-    (yoSoyPicker || esAdmin || esBodeguero)
+    (yoSoyPicker || yoSoyDeSedeOrigen)
   ) {
     return {
       icon: <Truck className="h-4 w-4" strokeWidth={2} />,
@@ -948,7 +950,7 @@ function construirConfig(p) {
       ],
     };
   }
-  if (estado === "picking" && !yoSoyPicker && (esAdmin || esBodeguero)) {
+  if (estado === "picking" && !yoSoyPicker && yoSoyDeSedeOrigen) {
     return {
       icon: <Package className="h-4 w-4" strokeWidth={2} />,
       title: "Picking en progreso",
@@ -957,7 +959,7 @@ function construirConfig(p) {
       actions: [],
     };
   }
-  if (estado === "verificado" && (esAdmin || esBodeguero)) {
+  if (estado === "verificado" && yoSoyDeSedeOrigen) {
     return {
       icon: <Truck className="h-4 w-4" strokeWidth={2} />,
       title: "Enviar traspaso",

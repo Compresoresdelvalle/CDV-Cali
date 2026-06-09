@@ -13,8 +13,9 @@ import { safeError } from "../../lib/utils";
  *   - Solo el picker asignado (o Admin) accede; estado debe ser 'picking'.
  *   - Orden por prioridad_picking ASC.
  *   - Autosave debounce 1500ms vía RPC fn_procesar_traspaso (actualizar_items).
- *   - Finalizar NO cambia estado: la transición picking→verificado la hace
- *     otra persona (segregación de funciones).
+ *   - Finalizar guarda el progreso y vuelve al detalle, donde el MISMO picker
+ *     (o personal de la sede origen) confirma el envío — B6: sin verificación
+ *     por un tercero.
  */
 export default function PickingPage() {
   const { id } = useParams();
@@ -173,14 +174,8 @@ export default function PickingPage() {
   const handleFinalizar = async () => {
     clearTimeout(autoSaveRef.current);
     await guardarProgreso(local);
-    // El picking no cambia estado por sí solo. La transición picking→verificado
-    // la hace OTRA persona (Admin u otro Bodeguero) por segregación de
-    // funciones (regla en fn_procesar_traspaso).
-    alert(
-      "Picking guardado. Lo siguiente:\n\n" +
-        'Una persona DISTINTA al picker (Admin u otro Bodeguero) entra a este traspaso y le da "Verificar".\n\n' +
-        "Luego: Verificado → Enviar → En tránsito → Recibir en sede destino.",
-    );
+    // B6: el picking ya no requiere verificación por un tercero. Volvemos al
+    // detalle, donde el mismo picker confirma el envío (picking → en tránsito).
     navigate(`/ops/traspasos/${id}`);
   };
 
@@ -248,7 +243,7 @@ export default function PickingPage() {
           </h2>
           <p className="pk-done-sub">
             {pickedCount === total
-              ? `Traspaso #${traspaso?.numero ?? ""} listo para verificación`
+              ? `Traspaso #${traspaso?.numero ?? ""} listo para enviar`
               : `${total - pickedCount} item(s) sin recoger — puedes revisarlos antes de finalizar`}
           </p>
           <button
