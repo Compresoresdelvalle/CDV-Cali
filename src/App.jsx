@@ -59,6 +59,7 @@ import AnalisisABC from "./pages/admin/AnalisisABC";
 import Auditoria from "./pages/admin/Auditoria";
 import Usuarios from "./pages/admin/Usuarios";
 import Conteo from "./pages/admin/Conteo";
+import Cuentas from "./pages/admin/Cuentas";
 
 // Placeholder genérico para módulos aún no implementados
 function Placeholder({ name }) {
@@ -441,6 +442,7 @@ export default function App() {
           <Route path="top10" element={<Top10 />} />
           <Route path="configuracion" element={<Configuracion />} />
           <Route path="notas-credito" element={<NotasCredito />} />
+          <Route path="cuentas" element={<Cuentas />} />
         </Route>
 
         {/* Fallback → login */}
