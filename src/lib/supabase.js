@@ -8,11 +8,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // sessionStorage: el token se borra al cerrar la pestaña — protege
-    // contra XSS persistente y robo via extensiones; el operario tendrá
-    // que volver a hacer login al cerrar la ventana, pero es aceptable
-    // para una app industrial con datos sensibles.
-    storage: window.sessionStorage,
+    // localStorage: la sesión se COMPARTE entre pestañas de la misma ventana.
+    // Es necesario para poder tener el mismo usuario abierto en varias pestañas
+    // a la vez. Con sessionStorage cada pestaña quedaba aislada: la segunda
+    // forzaba un re-login que rotaba el refresh token y tumbaba la sesión de la
+    // primera ("refresh token already used"). Con localStorage la 2ª pestaña
+    // reutiliza la misma sesión y Supabase sincroniza el refresh entre pestañas.
+    // Tradeoff: el token sobrevive al cerrar la pestaña hasta que expira el JWT
+    // (no es un riesgo nuevo relevante para estos 6 operarios; el JWT igual
+    // caduca). Si más adelante se quiere cierre por inactividad, se agrega un
+    // idle-timeout que llame a logout(), no se vuelve a sessionStorage.
+    storage: window.localStorage,
     storageKey: "compresores-auth",
     flowType: "pkce",
   },
