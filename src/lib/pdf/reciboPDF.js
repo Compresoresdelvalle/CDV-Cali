@@ -1,30 +1,37 @@
 /**
- * Generador PDF de recibos de pago — Fase 14.
- *
- * Formato carta. Reusa pdfStyles.js. Documento de "recibí de [cliente] la
- * suma de [monto]" con concepto multi-línea, montos, abonos previos y saldo.
+ * Generador PDF de recibos de pago (BLANCO Y NEGRO) — MISMO modelo que el de
+ * cotizaciones (src/lib/pdf/cotizacionPDF.js). Un ÚNICO documento alimenta el
+ * preview (iframe) y la impresión/descarga, así lo que se ve es exactamente lo
+ * que se imprime.
  *
  * Uso:
  *   const r = generarReciboPDF({ recibo, items, cuenta, recibidoPor });
- *   r.print();
+ *   r.blob;       // para el <iframe> del preview
+ *   r.print();    // imprime
+ *   r.download(); // descarga
  */
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import {
-  MARCA,
-  RECIBO_NOMBRE,
-  SEDE_TELEFONO,
-  RECIBO_DIRECCION,
-  COLORES,
-  LAYOUT,
-  formatCOP,
-} from "./pdfStyles";
+import { MARCA, RECIBO_DIRECCION, SEDE_TELEFONO, formatCOP } from "./pdfStyles";
+
+/* Paleta B/N (sin azul) — idéntica al generador de cotizaciones. */
+const INK = [16, 24, 40]; // casi negro
+const DARK = [31, 41, 55]; // texto cuerpo
+const GRAY = [107, 114, 128]; // etiquetas / secundario
+const LIGHT = [156, 163, 175]; // etiquetas muy tenues
+const RULE = [230, 232, 237]; // líneas (#E6E8ED)
+
+const PAGE_H = 279;
+const L = 15; // margen izquierdo
+const R = 201; // borde derecho (216 - 15)
+const W = R - L; // 186mm
+const CX = 108; // centro
 
 /**
  * Args:
- *   recibo: { numero, fecha, cliente_nombre, cliente_nit, concepto,
- *             subtotal, iva_pct, total, abonos_previos, monto_pagado,
- *             saldo, metodo_pago, observaciones, anulado }
+ *   recibo: { numero, fecha, sede_id, cliente_nombre, cliente_nit, concepto,
+ *             subtotal, iva_pct, total, abonos_previos, monto_pagado, saldo,
+ *             metodo_pago, observaciones, anulado }
  *   items:  [{ descripcion, cantidad, precio_unitario, subtotal }] (opcional)
  *   cuenta: { banco, tipo, numero, titular } | null
  *   recibidoPor: string
@@ -36,210 +43,305 @@ export function generarReciboPDF({
   recibidoPor = "—",
 }) {
   const doc = new jsPDF({ unit: "mm", format: "letter", compress: true });
-  let y = LAYOUT.margenSup;
 
-  // ── Header (#14: nombre comercial + dirección + teléfono de la sede) ──
+  /* Helpers de dibujo (idénticos a cotizacionPDF) ------------------------- */
+  const rule = (y, color = RULE, w = 0.2) => {
+    doc.setDrawColor(...color);
+    doc.setLineWidth(w);
+    doc.line(L, y, R, y);
+  };
+  const label = (text, x, y, align = "left", color = LIGHT) => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(...color);
+    doc.text(String(text).toUpperCase(), x, y, { align, charSpace: 0.25 });
+  };
+  const pageBreak = (y, reserva = 30) => {
+    if (y > PAGE_H - reserva) {
+      doc.addPage();
+      return 18;
+    }
+    return y;
+  };
+
+  const numero = String(recibo?.numero ?? "—").padStart(5, "0");
+  let y = 16;
+
+  /* ── Encabezado ───────────────────────────────────────────── */
+  doc.setFillColor(...INK);
+  doc.roundedRect(L, y, 13, 13, 1.4, 1.4, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.setTextColor(...COLORES.primario);
-  doc.text(RECIBO_NOMBRE, LAYOUT.margenIzq, y);
+  doc.setFontSize(8.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text("CHV", L + 6.5, y + 8.2, { align: "center" });
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6);
+  doc.setTextColor(...GRAY);
+  doc.text("COMPRESORES DEL VALLE", L, y + 17, { charSpace: 0.2 });
 
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(...INK);
+  doc.text(MARCA.nombre, R, y + 2, { align: "right" });
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...COLORES.textoMedio);
-  doc.text(`${RECIBO_DIRECCION} · ${MARCA.ciudad}`, LAYOUT.margenIzq, y + 5);
-  const telSede = SEDE_TELEFONO[recibo.sede_id];
-  if (telSede) {
-    doc.text(`Tel: ${telSede}`, LAYOUT.margenIzq, y + 9.5);
+  doc.setFontSize(8);
+  doc.setTextColor(...GRAY);
+  doc.text(RECIBO_DIRECCION, R, y + 6.5, { align: "right" });
+  const tel = SEDE_TELEFONO[recibo?.sede_id];
+  doc.text(`${MARCA.ciudad}${tel ? ` · Tel: ${tel}` : ""}`, R, y + 10.5, {
+    align: "right",
+  });
+
+  y += 22;
+  rule(y);
+  y += 9.5;
+
+  /* ── Título ───────────────────────────────────────────────── */
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(22);
+  doc.setTextColor(...INK);
+  doc.text("RECIBO DE PAGO", CX, y, { align: "center", charSpace: 1.2 });
+  y += 6.5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(...GRAY);
+  doc.text(`#${numero}`, CX, y, { align: "center" });
+  y += 5;
+  if (recibo?.anulado) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...GRAY);
+    doc.text("· RECIBO ANULADO ·", CX, y, { align: "center", charSpace: 0.5 });
+    y += 5;
+  }
+  rule(y);
+  y += 8;
+
+  /* ── Recibí de + meta ─────────────────────────────────────── */
+  const metaTop = y;
+  label("Recibí de", L, y);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(...INK);
+  doc.text(recibo?.cliente_nombre || "Sin nombre", L, y + 6);
+  let cy = y + 11;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...GRAY);
+  if (recibo?.cliente_nit) {
+    doc.text(`NIT/CC ${recibo.cliente_nit}`, L, cy);
+    cy += 4;
   }
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.setTextColor(...COLORES.textoOscuro);
-  doc.text(
-    `RECIBO DE PAGO N° ${String(recibo.numero ?? "—").padStart(5, "0")}`,
-    LAYOUT.pageWidth - LAYOUT.margenDer,
-    y,
-    { align: "right" },
-  );
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...COLORES.textoMedio);
-  const fecha = recibo.fecha
+  const mcolA = 120;
+  const mcolB = 165;
+  const fecha = recibo?.fecha
     ? new Date(recibo.fecha).toLocaleDateString("es-CO", {
         timeZone: "America/Bogota",
       })
     : "—";
-  doc.text(`Fecha: ${fecha}`, LAYOUT.pageWidth - LAYOUT.margenDer, y + 5, {
-    align: "right",
-  });
-  y += telSede ? 17 : 13;
+  const metaCell = (lab, val, x, yy, valBold = false) => {
+    label(lab, x, yy);
+    doc.setFont("helvetica", valBold ? "bold" : "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...DARK);
+    doc.text(String(val), x, yy + 4.5);
+  };
+  metaCell("Fecha", fecha, mcolA, metaTop);
+  metaCell("Forma de pago", recibo?.metodo_pago ?? "—", mcolB, metaTop, true);
+  metaCell("Recibido por", recibidoPor, mcolA, metaTop + 11);
+  metaCell("Sede", recibo?.sede_id ?? "—", mcolB, metaTop + 11, true);
 
-  // Marca de anulado
-  if (recibo.anulado) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(...COLORES.textoMedio);
-    doc.text("*** RECIBO ANULADO ***", LAYOUT.pageWidth / 2, y, {
-      align: "center",
-    });
-    y += 6;
-  }
+  y = Math.max(cy, metaTop + 22);
+  rule(y);
+  y += 8;
 
-  doc.setDrawColor(...COLORES.primario);
-  doc.setLineWidth(0.5);
-  doc.line(LAYOUT.margenIzq, y, LAYOUT.pageWidth - LAYOUT.margenDer, y);
-  y += 7;
-
-  // ── Recibí de ────────────────────────────────────────────────────────
+  /* ── Concepto ─────────────────────────────────────────────── */
+  label("Concepto", L, y, "left", GRAY);
+  rule(y + 1.6, RULE, 0.15);
+  y += 6;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(...COLORES.textoOscuro);
-  const recibiLine = `Recibí de: ${recibo.cliente_nombre ?? "—"}${
-    recibo.cliente_nit ? `   ·   NIT/CC: ${recibo.cliente_nit}` : ""
-  }`;
-  doc.text(recibiLine, LAYOUT.margenIzq, y);
-  y += 7;
+  doc.setFontSize(9.5);
+  doc.setTextColor(...DARK);
+  const conc = doc.splitTextToSize(recibo?.concepto || "—", W);
+  doc.text(conc, L, y);
+  y += conc.length * 4.8 + 5;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text("Por concepto de:", LAYOUT.margenIzq, y);
-  y += 5;
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(...COLORES.textoMedio);
-  const conceptoWrap = doc.splitTextToSize(
-    recibo.concepto ?? "—",
-    LAYOUT.contentWidth,
-  );
-  doc.text(conceptoWrap, LAYOUT.margenIzq, y);
-  y += conceptoWrap.length * 4.8 + 4;
-
-  // ── Detalle de ítems (opcional, desde cotización) ────────────────────
+  /* ── Detalle de ítems (opcional) ──────────────────────────── */
   if (items.length > 0) {
+    y = pageBreak(y, 40);
     autoTable(doc, {
       startY: y,
-      head: [["Descripción", "Cant.", "P. Unit.", "Total"]],
+      head: [["DESCRIPCIÓN", "CANT", "PRECIO UNIT", "SUBTOTAL"]],
       body: items.map((it) => [
         it.descripcion ?? "—",
-        String(it.cantidad ?? 0),
+        String(it.cantidad ?? ""),
         formatCOP(it.precio_unitario),
         formatCOP(it.subtotal),
       ]),
-      theme: "grid",
-      headStyles: {
-        fillColor: COLORES.primario,
-        textColor: 255,
-        fontStyle: "bold",
+      theme: "plain",
+      styles: {
         fontSize: 9,
+        textColor: DARK,
+        cellPadding: { top: 2.4, bottom: 2.4, left: 1, right: 1 },
+        lineWidth: 0,
       },
-      bodyStyles: { fontSize: 9, textColor: COLORES.textoOscuro },
+      headStyles: { textColor: GRAY, fontStyle: "bold", fontSize: 7.5 },
       columnStyles: {
-        0: { cellWidth: 100 },
-        1: { cellWidth: 22, halign: "right" },
+        0: { cellWidth: "auto" },
+        1: { cellWidth: 16, halign: "center" },
         2: { cellWidth: 32, halign: "right" },
         3: { cellWidth: 32, halign: "right" },
       },
-      margin: { left: LAYOUT.margenIzq, right: LAYOUT.margenDer },
+      margin: { left: L, right: L },
+      didDrawCell: (data) => {
+        const { x, y: cyy, width, height } = data.cell;
+        if (data.section === "head") {
+          doc.setDrawColor(...INK);
+          doc.setLineWidth(0.3);
+          doc.line(x, cyy + height, x + width, cyy + height);
+        } else if (data.section === "body") {
+          doc.setDrawColor(...RULE);
+          doc.setLineWidth(0.1);
+          doc.line(x, cyy + height, x + width, cyy + height);
+        }
+      },
     });
-    y = doc.lastAutoTable.finalY + 5;
+    y = doc.lastAutoTable.finalY + 6;
   }
 
-  // ── Totales ──────────────────────────────────────────────────────────
-  const totalsX = LAYOUT.pageWidth - LAYOUT.margenDer - 65;
-  const valuesX = LAYOUT.pageWidth - LAYOUT.margenDer;
-  const subtotal = Number(recibo.subtotal ?? 0);
-  const ivaPct = Number(recibo.iva_pct ?? 19);
+  /* ── Totales ──────────────────────────────────────────────── */
+  const subtotal = Number(recibo?.subtotal ?? 0);
+  const ivaPct = Number(recibo?.iva_pct ?? 19);
   const ivaMonto = subtotal * (ivaPct / 100);
-  const total = Number(recibo.total ?? subtotal + ivaMonto);
-  const abonosPrev = Number(recibo.abonos_previos ?? 0);
-  const montoPagado = Number(recibo.monto_pagado ?? 0);
-  const saldo = Number(recibo.saldo ?? total - abonosPrev - montoPagado);
+  const total = Number(recibo?.total ?? subtotal + ivaMonto);
+  const abonosPrev = Number(recibo?.abonos_previos ?? 0);
+  const montoPagado = Number(recibo?.monto_pagado ?? 0);
+  const saldo = Number(recibo?.saldo ?? total - abonosPrev - montoPagado);
 
-  doc.setFontSize(9);
-  const fila = (label, valor, bold = false, color = COLORES.textoOscuro) => {
+  const tLabel = R - 55;
+  const totRow = (lab, val, opts = {}) => {
+    const { bold = false, color = DARK, labColor = GRAY } = opts;
     doc.setFont("helvetica", bold ? "bold" : "normal");
-    doc.setTextColor(...COLORES.textoMedio);
-    doc.text(label, totalsX, y);
+    doc.setFontSize(bold ? 11 : 9);
+    doc.setTextColor(...labColor);
+    doc.text(lab, tLabel, y);
     doc.setTextColor(...color);
-    doc.text(valor, valuesX, y, { align: "right" });
-    y += bold ? 6 : 4.6;
+    doc.text(val, R, y, { align: "right" });
+    y += bold ? 6 : 4.8;
   };
-  fila("Subtotal:", formatCOP(subtotal));
+  totRow("Subtotal", formatCOP(subtotal));
   // #16: IVA condicional — si el recibo es exento (0%) no se imprime la línea.
-  if (ivaPct > 0) fila(`IVA ${ivaPct}%:`, formatCOP(ivaMonto));
-  doc.setDrawColor(...COLORES.borde);
-  doc.line(totalsX, y - 1, valuesX, y - 1);
+  if (ivaPct > 0) totRow(`IVA ${ivaPct}%`, formatCOP(ivaMonto));
+  doc.setDrawColor(...RULE);
+  doc.setLineWidth(0.2);
+  doc.line(tLabel, y - 1.5, R, y - 1.5);
   y += 1.5;
-  fila("Total:", formatCOP(total), true, COLORES.textoOscuro);
-  if (abonosPrev > 0) fila("Abonos previos:", `-${formatCOP(abonosPrev)}`);
-  fila("Monto recibido:", formatCOP(montoPagado));
-  doc.setFontSize(11);
-  fila("SALDO PENDIENTE:", formatCOP(saldo), true, COLORES.primario);
-  y += 4;
+  totRow("Total", formatCOP(total), { bold: true, color: INK, labColor: INK });
+  if (abonosPrev > 0) totRow("Abonos previos", `−${formatCOP(abonosPrev)}`);
+  totRow("Monto recibido", formatCOP(montoPagado));
+  doc.setDrawColor(...RULE);
+  doc.setLineWidth(0.2);
+  doc.line(tLabel, y - 1.5, R, y - 1.5);
+  y += 1.5;
+  totRow("Saldo pendiente", formatCOP(saldo), {
+    bold: true,
+    color: INK,
+    labColor: INK,
+  });
+  y += 6;
 
-  // ── Forma de pago + cuenta ───────────────────────────────────────────
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...COLORES.textoMedio);
-  doc.text(`Forma de pago: ${recibo.metodo_pago ?? "—"}`, LAYOUT.margenIzq, y);
-  y += 4.6;
+  /* ── Secciones (cuenta / observaciones) ───────────────────── */
+  const sectionHeader = (titulo, yy) => {
+    yy = pageBreak(yy);
+    label(titulo, L, yy, "left", GRAY);
+    rule(yy + 1.6, RULE, 0.15);
+    return yy + 6;
+  };
+  const termLine = (lab, val, yy) => {
+    yy = pageBreak(yy);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...DARK);
+    doc.text(lab, L, yy);
+    const lw = doc.getTextWidth(lab);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...GRAY);
+    const wrapped = doc.splitTextToSize(String(val), W - lw - 2);
+    doc.text(wrapped, L + lw + 1.5, yy);
+    return yy + wrapped.length * 4.6 + 1.6;
+  };
+
   if (cuenta) {
-    doc.text(
-      `Cuenta: ${cuenta.banco} ${cuenta.tipo} ${cuenta.numero}` +
-        (cuenta.titular ? ` · ${cuenta.titular}` : ""),
-      LAYOUT.margenIzq,
-      y,
-    );
-    y += 4.6;
-  }
-  if (recibo.observaciones) {
-    const obsWrap = doc.splitTextToSize(
-      `Observaciones: ${recibo.observaciones}`,
-      LAYOUT.contentWidth,
-    );
-    doc.text(obsWrap, LAYOUT.margenIzq, y);
-    y += obsWrap.length * 4.6;
+    y = sectionHeader("Cuenta de consignación", y);
+    const resto =
+      `${cuenta.tipo ? ` · ${cuenta.tipo}` : ""} · ${cuenta.numero}` +
+      (cuenta.titular ? ` · A nombre de ${cuenta.titular}` : "");
+    y = termLine(cuenta.banco ?? "—", resto, y);
+    y += 3;
   }
 
-  // ── Firma ────────────────────────────────────────────────────────────
-  const firmaY = Math.max(y + 20, LAYOUT.pageHeight - 38);
-  doc.setDrawColor(...COLORES.textoMedio);
+  if (recibo?.observaciones) {
+    y = sectionHeader("Observaciones", y);
+    y = pageBreak(y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...GRAY);
+    const obs = doc.splitTextToSize(String(recibo.observaciones), W);
+    doc.text(obs, L, y);
+    y += obs.length * 4.4 + 5;
+  }
+
+  /* ── Firma (fluye con el contenido) ───────────────────────── */
+  y = pageBreak(y, 40);
+  y += 14; // espacio para firmar
+  const firmaY = y;
+  doc.setDrawColor(...DARK);
   doc.setLineWidth(0.3);
-  doc.line(LAYOUT.margenIzq + 20, firmaY, LAYOUT.margenIzq + 90, firmaY);
+  doc.line(L + 18, firmaY, L + 78, firmaY);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...INK);
+  doc.text(recibidoPor, L + 48, firmaY - 2, { align: "center" });
   doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...GRAY);
+  doc.text("Recibido por", L + 48, firmaY + 4, { align: "center" });
+  y = firmaY + 12;
+
+  /* ── Pie (fluye con el contenido) ─────────────────────────── */
+  y = pageBreak(y, 24);
+  rule(y, RULE, 0.2);
+  y += 5;
+  doc.setFont("helvetica", "italic");
   doc.setFontSize(8);
-  doc.setTextColor(...COLORES.textoMedio);
-  doc.text("Recibido por", LAYOUT.margenIzq + 55, firmaY + 4, {
-    align: "center",
-  });
-  doc.text(recibidoPor, LAYOUT.margenIzq + 55, firmaY - 2, {
-    align: "center",
-  });
-
-  // ── Pie ──────────────────────────────────────────────────────────────
-  doc.setDrawColor(...COLORES.borde);
-  doc.line(
-    LAYOUT.margenIzq,
-    LAYOUT.pageHeight - 14,
-    LAYOUT.pageWidth - LAYOUT.margenDer,
-    LAYOUT.pageHeight - 14,
+  doc.setTextColor(...GRAY);
+  const legal = doc.splitTextToSize(
+    `Este recibo no es una factura electrónica. Documento soporte de pago emitido por ${MARCA.nombre}.`,
+    W,
   );
-  doc.setFontSize(7);
-  doc.setTextColor(...COLORES.textoMedio);
+  doc.text(legal, L, y);
+  y += legal.length * 4 + 3;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...LIGHT);
+  const totalPages = doc.getNumberOfPages();
   doc.text(
-    "Este recibo no es una factura electrónica.",
-    LAYOUT.pageWidth / 2,
-    LAYOUT.pageHeight - 9,
-    { align: "center" },
+    `Página ${totalPages} de ${totalPages} · Recibo #${numero} · ${MARCA.nombre}`,
+    L,
+    y,
   );
 
-  // ── API ──────────────────────────────────────────────────────────────
+  /* ── API de retorno (igual que antes) ─────────────────────── */
   const blob = doc.output("blob");
-  const filename = `Recibo_${String(recibo.numero ?? "draft").padStart(5, "0")}.pdf`;
+  const filename = `Recibo_${numero}.pdf`;
 
   return {
     blob,
     filename,
+    get dataUri() {
+      return doc.output("datauristring");
+    },
     download() {
       doc.save(filename);
     },
