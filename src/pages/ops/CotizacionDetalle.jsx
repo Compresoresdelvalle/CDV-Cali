@@ -19,11 +19,7 @@ import {
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
-import {
-  MARCA,
-  RECIBO_DIRECCION,
-  SEDE_TELEFONO,
-} from "../../lib/pdf/pdfStyles";
+import { MARCA } from "../../lib/pdf/pdfStyles";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import EstadoCotizacionPanel from "../../components/cotizaciones/EstadoCotizacionPanel";
 import { useAuthStore } from "../../stores/authStore";
@@ -34,11 +30,6 @@ import {
   descomponerObservaciones,
   construirHistorialCotizacion,
 } from "../../lib/cotizaciones-ui";
-
-const PDF_TEXTO_ENTREGA =
-  "El producto se entrega únicamente en nuestras instalaciones sin ningún costo. " +
-  "Fuera de nuestras instalaciones el flete corre por cuenta del cliente. " +
-  "Las garantías aplican según política de fábrica del producto.";
 
 export default function CotizacionDetalle() {
   const rolUsuario = useAuthStore((s) => s.perfil?.rol ?? null);
@@ -904,10 +895,6 @@ function DetalleContenido({
             cotizacion={cotizacion}
             items={items}
             cuentasPDF={cuentasPDF}
-            extra={extra}
-            descuento={descuento}
-            iva={iva}
-            domicilio={domicilio}
             onPDF={onPDF}
           />
         </div>
@@ -961,18 +948,22 @@ function AbonoBar({ abonado, total }) {
 
 /* ─────────────────────────── PDF preview ─────────────────────────── */
 
-function PdfPreview({
-  cotizacion,
-  items,
-  cuentasPDF,
-  extra,
-  descuento,
-  iva,
-  domicilio,
-  onPDF,
-}) {
-  const fechaEmision = cotizacion.fecha ? formatDate(cotizacion.fecha) : "—";
-  const direccionPDF = extra.direccion || "—";
+function PdfPreview({ cotizacion, items, cuentasPDF, onPDF }) {
+  // B5: un MISMO documento PDF alimenta el preview (iframe) y la impresion, asi
+  // lo que se ve en pantalla es exactamente lo que se imprime.
+  const doc = useMemo(
+    () =>
+      generarCotizacionPDF({
+        cotizacion,
+        items,
+        cuentas: cuentasPDF,
+        vendedor: cotizacion.vendedor?.nombre ?? "—",
+      }),
+    [cotizacion, items, cuentasPDF],
+  );
+  // URL del blob para el <iframe> (derivada del doc; se revoca al cambiar/desmontar).
+  const pdfUrl = useMemo(() => URL.createObjectURL(doc.blob), [doc]);
+  useEffect(() => () => URL.revokeObjectURL(pdfUrl), [pdfUrl]);
 
   return (
     <div className="pdf-wrap">
@@ -1002,207 +993,25 @@ function PdfPreview({
         </div>
       </header>
       <div className="pdf-stage">
-        <div className="pdf-paper">
-          {/* Head */}
-          <div className="mb-3.5 grid grid-cols-2 gap-6 pb-3.5">
-            <div className="flex flex-col gap-1">
-              <div className="pdf-logo-sq">CHV</div>
-              <div className="pdf-logo-tag">Compresores del Valle</div>
-            </div>
-            <div className="flex flex-col gap-px text-right leading-[1.45]">
-              <div className="pdf-co-name">{MARCA.nombre}</div>
-              <div className="pdf-co-line sans">{RECIBO_DIRECCION}</div>
-              <div className="pdf-co-line sans">
-                {MARCA.ciudad}
-                {SEDE_TELEFONO[cotizacion.sede_id]
-                  ? ` · Tel: ${SEDE_TELEFONO[cotizacion.sede_id]}`
-                  : ""}
-              </div>
-            </div>
-          </div>
-
-          {/* Title */}
+        {pdfUrl ? (
+          <iframe
+            title={`Cotización #${cotizacion.numero}`}
+            src={pdfUrl}
+            className="w-full rounded-lg border"
+            style={{
+              height: 720,
+              borderColor: "var(--n-150)",
+              backgroundColor: "var(--n-0)",
+            }}
+          />
+        ) : (
           <div
-            className="mb-4 border-y py-4 text-center"
-            style={{ borderColor: "#E6E8ED" }}
+            className="px-4 py-10 text-center text-sm"
+            style={{ color: "var(--n-500)" }}
           >
-            <div className="pdf-title-main">COTIZACIÓN</div>
-            <div className="pdf-title-num">#{cotizacion.numero}</div>
+            Generando PDF…
           </div>
-
-          {/* Cliente + meta */}
-          <div
-            className="mb-3.5 grid grid-cols-[1.2fr_1fr] gap-6 border-b pb-4"
-            style={{ borderColor: "#E6E8ED" }}
-          >
-            <div>
-              <div className="pdf-eyebrow-print">Cliente</div>
-              <div className="pdf-cli-name">
-                {cotizacion.cliente_nombre || "Sin nombre"}
-              </div>
-              {cotizacion.cliente_nit && (
-                <div className="pdf-cli-line">NIT {cotizacion.cliente_nit}</div>
-              )}
-              <div className="pdf-cli-line sans">{direccionPDF}</div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-              <div>
-                <div className="pdf-eyebrow-print">Fecha emisión</div>
-                <div className="pdf-meta-val sans">{fechaEmision}</div>
-              </div>
-              <div>
-                <div className="pdf-eyebrow-print">Validez</div>
-                <div className="pdf-meta-val">
-                  {cotizacion.vigencia_dias} días
-                </div>
-              </div>
-              <div>
-                <div className="pdf-eyebrow-print">Cotizado por</div>
-                <div className="pdf-meta-val sans">
-                  {cotizacion.vendedor?.nombre ?? "—"}
-                </div>
-              </div>
-              <div>
-                <div className="pdf-eyebrow-print">Sede</div>
-                <div className="pdf-meta-val">{cotizacion.sede_id}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Tabla */}
-          <table className="pdf-table">
-            <thead>
-              <tr>
-                <th style={{ width: 90 }}>Ref.</th>
-                <th>Descripción</th>
-                <th className="c" style={{ width: 50 }}>
-                  Cant
-                </th>
-                <th className="r" style={{ width: 80 }}>
-                  Precio Unit
-                </th>
-                <th className="r" style={{ width: 90 }}>
-                  Subtotal
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((p) => {
-                const esServicio = p.servicio_id != null;
-                return (
-                  <tr key={p.id}>
-                    <td className="mono">
-                      {esServicio
-                        ? "Servicio"
-                        : (p.producto?.referencia ?? "—")}
-                    </td>
-                    <td>{p.descripcion ?? p.producto?.nombre ?? "—"}</td>
-                    <td className="c">{p.cantidad}</td>
-                    <td className="r">{formatCOP(p.precio_unitario)}</td>
-                    <td className="r sub">{formatCOP(p.subtotal)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          {/* Totals */}
-          <div className="mb-4 flex justify-end">
-            <table className="pdf-totals-tbl">
-              <tbody>
-                <tr>
-                  <td>Subtotal</td>
-                  <td>{formatCOP(cotizacion.subtotal)}</td>
-                </tr>
-                {descuento > 0 && (
-                  <tr>
-                    <td>Descuento</td>
-                    <td>−{formatCOP(descuento)}</td>
-                  </tr>
-                )}
-                <tr>
-                  <td>IVA {cotizacion.iva_pct ?? 19}%</td>
-                  <td>{formatCOP(iva)}</td>
-                </tr>
-                {domicilio > 0 && (
-                  <tr>
-                    <td>Domicilio</td>
-                    <td>{formatCOP(domicilio)}</td>
-                  </tr>
-                )}
-                <tr className="tot">
-                  <td>TOTAL</td>
-                  <td>{formatCOP(cotizacion.total)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Sections */}
-          <div className="mb-3.5">
-            <div className="pdf-section-h">Términos comerciales</div>
-            <div className="pdf-section-list">
-              <div>
-                <b>Validez:</b> {cotizacion.vigencia_dias} días a partir de la
-                fecha de emisión.
-              </div>
-              {cotizacion.condiciones_pago && (
-                <div>
-                  <b>Condiciones de pago:</b> {cotizacion.condiciones_pago}
-                </div>
-              )}
-              {cotizacion.tiempo_entrega_nota && (
-                <div>
-                  <b>Tiempo de entrega:</b> {cotizacion.tiempo_entrega_nota}
-                </div>
-              )}
-              <div>
-                <b>IVA incluido:</b>{" "}
-                {(cotizacion.iva_pct ?? 19) > 0
-                  ? `Sí, ${cotizacion.iva_pct ?? 19}%`
-                  : "No aplica"}
-                .
-              </div>
-            </div>
-          </div>
-
-          {cuentasPDF.length > 0 && (
-            <div className="mb-3.5">
-              <div className="pdf-section-h">Cuentas para pago</div>
-              <div className="pdf-section-list">
-                {cuentasPDF.map((b) => (
-                  <div key={b.id}>
-                    <b>{b.banco}</b>
-                    {b.tipo ? ` · ${b.tipo}` : ""} · {b.numero} · A nombre de{" "}
-                    {b.titular || MARCA.nombre}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="mb-3.5">
-            <div className="pdf-section-h">Condiciones de entrega</div>
-            <div className="pdf-section-list" style={{ fontSize: 8.5 }}>
-              {PDF_TEXTO_ENTREGA}
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div
-            className="mt-4 flex flex-col gap-2 border-t pt-3.5"
-            style={{ borderColor: "#E6E8ED" }}
-          >
-            <div className="pdf-footer-legal">
-              Esta cotización es válida hasta la fecha indicada. Los precios
-              incluyen embalaje estándar. Las garantías aplican según política
-              de fábrica del producto.
-            </div>
-            <div className="pdf-footer-page">
-              Página 1 de 1 · #{cotizacion.numero} · {MARCA.nombre}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

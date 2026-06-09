@@ -10,6 +10,13 @@ export const TEXTO_CONDICIONES_ENTREGA =
   "El producto se entrega únicamente en nuestras instalaciones sin ningún " +
   "costo. Fuera de nuestras instalaciones el flete corre por cuenta del cliente.";
 
+// Texto fijo de "Condiciones de entrega" que va en el PDF de cotización
+// (incluye la nota de garantías). Fuente única para el generador y el preview.
+export const TEXTO_ENTREGA_COTIZACION =
+  "El producto se entrega únicamente en nuestras instalaciones sin ningún costo. " +
+  "Fuera de nuestras instalaciones el flete corre por cuenta del cliente. " +
+  "Las garantías aplican según política de fábrica del producto.";
+
 // Marca de la empresa
 export const MARCA = {
   nombre: "Compresores del Valle S.A.S.",
