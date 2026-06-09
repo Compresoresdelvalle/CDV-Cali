@@ -310,12 +310,21 @@ export default function VentaNueva() {
       setError("Selecciona la cuenta bancaria donde entró el pago.");
       return;
     }
+    // B3: NO se permite vender sin stock. Bloquear si algún ítem excede lo
+    // disponible (antes solo se avisaba después de la venta).
+    const sinStock = carrito.filter((i) => i.cantidad > i.stock_disponible);
+    if (sinStock.length > 0) {
+      setError(
+        `Sin stock suficiente: ${sinStock
+          .map((i) => i.nombre ?? i.referencia ?? "producto")
+          .join(", ")}. Ajusta las cantidades antes de vender.`,
+      );
+      return;
+    }
     setError(null);
     setConfirmando(true);
-    // #10: ítems que dejarán el inventario en negativo (cantidad > disponible).
-    const negativos = carrito.filter(
-      (i) => i.cantidad > i.stock_disponible,
-    ).length;
+    // Tras el bloqueo de arriba esto es 0; se conserva como red de seguridad.
+    const negativos = sinStock.length;
     try {
       const { error: rpcErr } = await supabase.rpc("fn_registrar_venta", {
         p_sede_id: sedeVenta,
@@ -783,7 +792,12 @@ export default function VentaNueva() {
               return (
                 <button
                   key={m}
-                  onClick={() => setMetodoPago(m)}
+                  onClick={() => {
+                    setMetodoPago(m);
+                    // B3: en Efectivo/Crédito no hay cuenta destino.
+                    if (m === "Efectivo" || m === "Crédito")
+                      setCuentaBancaria("");
+                  }}
                   className={`pay-pill ${metodoPagoClass(m)}`}
                   style={{
                     minHeight: 36,
@@ -802,47 +816,51 @@ export default function VentaNueva() {
             })}
           </div>
 
-          {/* #13 / B1 — Cuenta destino del pago (obligatoria si no es efectivo) */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <label
-              htmlFor="cuenta-banc"
-              className="text-sm"
-              style={{ color: "var(--n-500)" }}
-            >
-              Cuenta bancaria
-              {(metodoPago === "Transferencia" || metodoPago === "Tarjeta") && (
-                <span style={{ color: "var(--dang-700)" }}> *</span>
-              )}
-            </label>
-            <select
-              id="cuenta-banc"
-              value={cuentaBancaria}
-              onChange={(e) => setCuentaBancaria(e.target.value)}
-              className="h-10 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
-              style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
-            >
-              <option value="">Sin especificar</option>
-              {cuentasBanco.map((c) => {
-                const ref = `${c.banco} ${c.tipo} ${c.numero}${c.titular ? " · " + c.titular : ""}`;
-                return (
-                  <option key={c.id} value={ref}>
-                    {ref}
-                  </option>
-                );
-              })}
-            </select>
-            {(metodoPago === "Transferencia" || metodoPago === "Tarjeta") &&
-              !cuentaBancaria && (
-                <span
-                  className="text-[11.5px]"
-                  style={{ color: "var(--dang-700)" }}
-                >
-                  {cuentasBanco.length === 0
-                    ? "No hay cuentas activas. El Admin debe crearlas en Configuración."
-                    : "Obligatorio: indica a qué cuenta entró el pago"}
-                </span>
-              )}
-          </div>
+          {/* #13 / B1 / B3 — Cuenta destino del pago. Solo se muestra para pagos
+              electrónicos (Transferencia/Tarjeta); en Efectivo/Crédito se oculta. */}
+          {(metodoPago === "Transferencia" || metodoPago === "Tarjeta") && (
+            <div className="flex flex-wrap items-center gap-2.5">
+              <label
+                htmlFor="cuenta-banc"
+                className="text-sm"
+                style={{ color: "var(--n-500)" }}
+              >
+                Cuenta bancaria
+                {(metodoPago === "Transferencia" ||
+                  metodoPago === "Tarjeta") && (
+                  <span style={{ color: "var(--dang-700)" }}> *</span>
+                )}
+              </label>
+              <select
+                id="cuenta-banc"
+                value={cuentaBancaria}
+                onChange={(e) => setCuentaBancaria(e.target.value)}
+                className="h-10 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+                style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
+              >
+                <option value="">Sin especificar</option>
+                {cuentasBanco.map((c) => {
+                  const ref = `${c.banco} ${c.tipo} ${c.numero}${c.titular ? " · " + c.titular : ""}`;
+                  return (
+                    <option key={c.id} value={ref}>
+                      {ref}
+                    </option>
+                  );
+                })}
+              </select>
+              {(metodoPago === "Transferencia" || metodoPago === "Tarjeta") &&
+                !cuentaBancaria && (
+                  <span
+                    className="text-[11.5px]"
+                    style={{ color: "var(--dang-700)" }}
+                  >
+                    {cuentasBanco.length === 0
+                      ? "No hay cuentas activas. El Admin debe crearlas en Configuración."
+                      : "Obligatorio: indica a qué cuenta entró el pago"}
+                  </span>
+                )}
+            </div>
+          )}
 
           <div className="flex items-center gap-3">
             <label className="text-sm" style={{ color: "var(--n-500)" }}>
