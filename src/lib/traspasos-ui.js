@@ -123,7 +123,6 @@ export const KANBAN_COLS = [
     dotVar: "var(--n-400)",
     pulse: false,
   },
-  { key: "enviado", label: "Enviado", dotVar: "var(--info-500)", pulse: false },
   {
     key: "transito",
     label: "En tránsito",
@@ -149,12 +148,12 @@ export const KANBAN_COLS = [
  *   recibido      → recibido
  *   con_diferencia→ recibido    (cerrado con diferencias; matiz vía badge)
  *
- * La columna "enviado" de Lovable NO tiene estado propio en nuestro backend
- * (la acción `enviar` salta verificado→en_transito), por eso queda vacía: se
- * conserva la columna para fidelidad visual 1:1 con el diseño.
+ * (B6) Ya NO hay columna "Enviado": el flujo va picking → en_transito directo
+ * (la acción `enviar` no pasa por un estado intermedio), así que esa columna se
+ * quitó del tablero por estar siempre vacía y resultar confusa.
  *
  * @param {string|null|undefined} estado
- * @returns {"pendiente"|"enviado"|"transito"|"recibido"}
+ * @returns {"pendiente"|"transito"|"recibido"}
  */
 export function estadoToKanban(estado) {
   switch (estado) {

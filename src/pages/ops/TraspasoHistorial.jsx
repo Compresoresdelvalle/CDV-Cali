@@ -165,7 +165,7 @@ export default function TraspasoHistorial() {
 
   /* Agrupación por columna Kanban. */
   const grupos = useMemo(() => {
-    const g = { pendiente: [], enviado: [], transito: [], recibido: [] };
+    const g = { pendiente: [], transito: [], recibido: [] };
     for (const t of filtrados) g[estadoToKanban(t.estado)].push(t);
     return g;
   }, [filtrados]);
@@ -299,7 +299,7 @@ export default function TraspasoHistorial() {
         ) : filtrados.length === 0 ? (
           <EmptyState />
         ) : vista === "board" ? (
-          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:grid-cols-3">
             {KANBAN_COLS.map((col) => (
               <BoardColumn
                 key={col.key}
