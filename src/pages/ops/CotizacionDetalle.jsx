@@ -19,7 +19,11 @@ import {
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
-import { MARCA } from "../../lib/pdf/pdfStyles";
+import {
+  MARCA,
+  RECIBO_DIRECCION,
+  SEDE_TELEFONO,
+} from "../../lib/pdf/pdfStyles";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import EstadoCotizacionPanel from "../../components/cotizaciones/EstadoCotizacionPanel";
 import { useAuthStore } from "../../stores/authStore";
@@ -744,7 +748,9 @@ function DetalleContenido({
                         {b.titular ? ` · ${b.titular}` : ""}
                       </span>
                     </div>
-                    {b.marca_iva && <span className="bank-iva">Con IVA</span>}
+                    {b.marca_iva && (
+                      <span className="bank-iva">IVA incluido</span>
+                    )}
                   </div>
                 ))
               ) : (
@@ -1005,7 +1011,13 @@ function PdfPreview({
             </div>
             <div className="flex flex-col gap-px text-right leading-[1.45]">
               <div className="pdf-co-name">{MARCA.nombre}</div>
-              <div className="pdf-co-line sans">{MARCA.ciudad}</div>
+              <div className="pdf-co-line sans">{RECIBO_DIRECCION}</div>
+              <div className="pdf-co-line sans">
+                {MARCA.ciudad}
+                {SEDE_TELEFONO[cotizacion.sede_id]
+                  ? ` · Tel: ${SEDE_TELEFONO[cotizacion.sede_id]}`
+                  : ""}
+              </div>
             </div>
           </div>
 

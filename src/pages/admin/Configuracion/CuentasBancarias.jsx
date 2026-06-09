@@ -516,7 +516,7 @@ export default function CuentasBancarias() {
                 style={surfaceInputStyle}
               >
                 <option value="">— Sin marca —</option>
-                <option value="con_iva">Con IVA</option>
+                <option value="con_iva">IVA incluido</option>
                 <option value="sin_iva">Sin IVA</option>
               </select>
             </Field>
@@ -595,7 +595,7 @@ function IvaPill({ marca }) {
         className="h-1.5 w-1.5 rounded-full"
         style={{ backgroundColor: `hsl(var(${token}))` }}
       />
-      {marca === "con_iva" ? "Con IVA" : "Sin IVA"}
+      {marca === "con_iva" ? "IVA incluido" : "Sin IVA"}
     </span>
   );
 }

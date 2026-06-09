@@ -93,7 +93,10 @@ export default function SelectorCuentasBancarias({
             Como esta cotización lleva{" "}
             <strong>{ivaPct === 0 ? "sin IVA" : `IVA ${ivaPct}%`}</strong>,
             idealmente seleccionas cuentas marcadas como
-            <strong> {sugerencia === "con_iva" ? "Con IVA" : "Sin IVA"}</strong>
+            <strong>
+              {" "}
+              {sugerencia === "con_iva" ? "IVA incluido" : "Sin IVA"}
+            </strong>
             .
           </>
         )}
@@ -191,7 +194,9 @@ export default function SelectorCuentasBancarias({
                                 : "hsl(var(--warning))",
                           }}
                         >
-                          {c.marca_iva === "con_iva" ? "Con IVA" : "Sin IVA"}
+                          {c.marca_iva === "con_iva"
+                            ? "IVA incluido"
+                            : "Sin IVA"}
                         </span>
                       )}
                     </div>

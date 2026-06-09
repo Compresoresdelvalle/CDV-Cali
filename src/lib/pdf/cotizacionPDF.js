@@ -23,6 +23,8 @@ import {
   COLORES,
   LAYOUT,
   formatCOP,
+  RECIBO_DIRECCION,
+  SEDE_TELEFONO,
 } from "./pdfStyles";
 
 /**
@@ -63,6 +65,14 @@ export function generarCotizacionPDF({
   doc.setFontSize(9);
   doc.setTextColor(...COLORES.textoMedio);
   doc.text(MARCA.ciudad, LAYOUT.margenIzq, y + 5);
+  // B5: dirección + teléfono de la sede en el documento de cotización.
+  doc.setFontSize(8);
+  doc.text(`${RECIBO_DIRECCION}`, LAYOUT.margenIzq, y + 9);
+  const telCotSede = SEDE_TELEFONO[cotizacion.sede_id];
+  if (telCotSede) {
+    doc.text(`Tel: ${telCotSede}`, LAYOUT.margenIzq, y + 12.5);
+  }
+  doc.setFontSize(9);
 
   // Bloque número/fecha derecha
   const numeroStr = `Cotización N° ${String(cotizacion.numero ?? "—").padStart(5, "0")}`;
