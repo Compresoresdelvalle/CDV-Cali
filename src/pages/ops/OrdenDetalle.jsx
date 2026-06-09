@@ -149,7 +149,9 @@ export default function OrdenDetalle() {
     try {
       const { data: o, error: e1 } = await supabase
         .from("ordenes_servicio")
-        .select(`*, tecnico:tecnico_id(nombre, rol)`)
+        .select(
+          `*, tecnico:tecnico_id(nombre, rol), creador:creado_por(nombre, rol)`,
+        )
         .eq("id", id)
         .maybeSingle();
       if (e1) throw e1;
@@ -1256,6 +1258,11 @@ export default function OrdenDetalle() {
                 ))}
               </select>
             )}
+            {/* B7: quién creó la OT (independiente del técnico asignado). */}
+            <div className="row mono">
+              Creada por:{" "}
+              <span className="val">{orden.creador?.nombre ?? "—"}</span>
+            </div>
             <div className="row mono">
               Recepción: <span className="val">{formatDate(orden.fecha)}</span>
             </div>

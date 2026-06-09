@@ -169,6 +169,8 @@ export default function OrdenNueva() {
           equipo_serie: equipoSerie.trim() || null,
           diagnostico: diagnostico.trim() || null,
           tecnico_id: tecnicoId || null,
+          // B7: registrar quién creó la OT (independiente del técnico asignado).
+          creado_por: perfil?.id || null,
           sede_id: sedeOrden,
           estado: "abierta",
           costo_mano_obra: costo,
