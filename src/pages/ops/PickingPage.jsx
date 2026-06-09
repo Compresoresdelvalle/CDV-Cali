@@ -340,14 +340,6 @@ export default function PickingPage() {
                 </span>
               )}
             </div>
-
-            {/* Panel QR del producto (desktop ancho) — fiel a Lovable */}
-            <div className="pk-qr hidden lg:flex">
-              <div className="pk-qr-img">
-                <QrGlyph />
-              </div>
-              <span className="pk-qr-lbl">QR del producto</span>
-            </div>
           </div>
 
           {/* Acciones — botones de 64px */}
@@ -371,70 +363,6 @@ export default function PickingPage() {
 }
 
 /* ─────────────────────────── Subcomponentes ─────────────────────────── */
-
-/** Glifo QR decorativo (idéntico al de Lovable `picking.$id`). */
-function QrGlyph() {
-  return (
-    <svg
-      viewBox="0 0 21 21"
-      shapeRendering="crispEdges"
-      className="h-full w-full"
-      aria-hidden="true"
-    >
-      <rect width="21" height="21" fill="#fff" />
-      <g fill="#101828">
-        <rect x="0" y="0" width="7" height="1" />
-        <rect x="0" y="6" width="7" height="1" />
-        <rect x="0" y="0" width="1" height="7" />
-        <rect x="6" y="0" width="1" height="7" />
-        <rect x="2" y="2" width="3" height="3" />
-        <rect x="14" y="0" width="7" height="1" />
-        <rect x="14" y="6" width="7" height="1" />
-        <rect x="14" y="0" width="1" height="7" />
-        <rect x="20" y="0" width="1" height="7" />
-        <rect x="16" y="2" width="3" height="3" />
-        <rect x="0" y="14" width="7" height="1" />
-        <rect x="0" y="20" width="7" height="1" />
-        <rect x="0" y="14" width="1" height="7" />
-        <rect x="6" y="14" width="1" height="7" />
-        <rect x="2" y="16" width="3" height="3" />
-        <rect x="8" y="0" width="1" height="2" />
-        <rect x="10" y="1" width="2" height="1" />
-        <rect x="9" y="3" width="1" height="2" />
-        <rect x="11" y="3" width="2" height="1" />
-        <rect x="8" y="5" width="2" height="1" />
-        <rect x="0" y="8" width="2" height="1" />
-        <rect x="3" y="8" width="1" height="2" />
-        <rect x="5" y="9" width="2" height="1" />
-        <rect x="8" y="8" width="1" height="2" />
-        <rect x="10" y="8" width="2" height="1" />
-        <rect x="13" y="9" width="3" height="1" />
-        <rect x="17" y="8" width="1" height="2" />
-        <rect x="19" y="9" width="2" height="1" />
-        <rect x="2" y="10" width="2" height="1" />
-        <rect x="5" y="11" width="1" height="2" />
-        <rect x="8" y="11" width="3" height="1" />
-        <rect x="12" y="10" width="1" height="3" />
-        <rect x="14" y="11" width="2" height="1" />
-        <rect x="17" y="10" width="2" height="1" />
-        <rect x="20" y="11" width="1" height="2" />
-        <rect x="9" y="13" width="2" height="1" />
-        <rect x="13" y="14" width="1" height="2" />
-        <rect x="15" y="14" width="2" height="1" />
-        <rect x="18" y="13" width="1" height="3" />
-        <rect x="8" y="15" width="1" height="2" />
-        <rect x="11" y="16" width="3" height="1" />
-        <rect x="15" y="17" width="1" height="2" />
-        <rect x="17" y="16" width="2" height="1" />
-        <rect x="20" y="17" width="1" height="2" />
-        <rect x="9" y="18" width="2" height="1" />
-        <rect x="12" y="19" width="1" height="2" />
-        <rect x="14" y="20" width="3" height="1" />
-        <rect x="19" y="20" width="2" height="1" />
-      </g>
-    </svg>
-  );
-}
 
 function QtyBtn({ children, onClick }) {
   return (
