@@ -16,6 +16,7 @@ import {
   Save,
   Pencil,
   AlertCircle,
+  Wrench,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -69,8 +70,20 @@ export default function CotizacionNueva() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [carrito, setCarrito] = useState([]);
 
-  // Paso 3 · ajustes
-  const [descuentoPct, setDescuentoPct] = useState(0);
+  // B4 · catálogo de servicios activos (vender servicio en la cotización).
+  const [servicios, setServicios] = useState([]);
+  useEffect(() => {
+    supabase
+      .from("servicios")
+      .select("id, nombre, precio, iva_pct")
+      .eq("activo", true)
+      .order("nombre")
+      .then(({ data }) => setServicios(data ?? []));
+  }, []);
+
+  // Paso 3 · ajustes (B4: descuento en $ + domicilio, reemplazan al % legado)
+  const [descuentoValor, setDescuentoValor] = useState(0);
+  const [domicilio, setDomicilio] = useState(0);
   const [vigenciaDias, setVigenciaDias] = useState(15);
   const [ivaPct, setIvaPct] = useState(19);
   const [observaciones, setObservaciones] = useState("");
@@ -187,11 +200,17 @@ export default function CotizacionNueva() {
     }
   }, []);
 
+  // Identidad de línea (producto o servicio) — key de React y de los handlers.
+  const lineKey = (i) =>
+    i.tipo === "servicio" ? `s:${i.servicio_id}` : `p:${i.producto_id}`;
+
   const agregarAlCarrito = (prod) => {
     setBusqueda("");
     setResultados([]);
     setCarrito((prev) => {
-      const idx = prev.findIndex((i) => i.producto_id === prod.id);
+      const idx = prev.findIndex(
+        (i) => i.tipo !== "servicio" && i.producto_id === prod.id,
+      );
       if (idx >= 0) {
         const updated = [...prev];
         updated[idx] = { ...updated[idx], cantidad: updated[idx].cantidad + 1 };
@@ -200,6 +219,7 @@ export default function CotizacionNueva() {
       return [
         ...prev,
         {
+          tipo: "producto",
           producto_id: prod.id,
           nombre: prod.nombre,
           referencia: prod.referencia,
@@ -213,11 +233,35 @@ export default function CotizacionNueva() {
     });
   };
 
-  const actualizarCantidad = (productoId, delta) => {
+  // B4: agregar un servicio a la cotización (no depende de stock ni sede).
+  const agregarServicioAlCarrito = (serv) => {
+    setCarrito((prev) => {
+      const idx = prev.findIndex(
+        (i) => i.tipo === "servicio" && i.servicio_id === serv.id,
+      );
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], cantidad: updated[idx].cantidad + 1 };
+        return updated;
+      }
+      return [
+        ...prev,
+        {
+          tipo: "servicio",
+          servicio_id: serv.id,
+          nombre: serv.nombre,
+          precio_unitario: Number(serv.precio) || 0,
+          cantidad: 1,
+        },
+      ];
+    });
+  };
+
+  const actualizarCantidad = (key, delta) => {
     setCarrito((prev) =>
       prev
         .map((i) =>
-          i.producto_id !== productoId
+          lineKey(i) !== key
             ? i
             : { ...i, cantidad: Math.max(0, i.cantidad + delta) },
         )
@@ -225,31 +269,39 @@ export default function CotizacionNueva() {
     );
   };
 
-  const setCantidadDirecta = (productoId, valor) => {
+  const setCantidadDirecta = (key, valor) => {
     const n = parseInt(valor, 10);
     if (isNaN(n)) return;
     // Clamp [1, 100000]; teclear 0 NO elimina la fila (eso es la X).
     const clamped = Math.min(100000, Math.max(1, n));
     setCarrito((prev) =>
-      prev.map((i) =>
-        i.producto_id !== productoId ? i : { ...i, cantidad: clamped },
-      ),
+      prev.map((i) => (lineKey(i) !== key ? i : { ...i, cantidad: clamped })),
     );
   };
 
-  const eliminarItem = (productoId) => {
-    setCarrito((prev) => prev.filter((i) => i.producto_id !== productoId));
+  // B4: precio editable por línea (igual que en ventas). Solo dígitos; vacío = 0.
+  const setPrecioDirecto = (key, valor) => {
+    const limpio = String(valor).replace(/[^\d]/g, "");
+    const n = limpio === "" ? 0 : Number(limpio);
+    if (isNaN(n) || n < 0) return;
+    setCarrito((prev) =>
+      prev.map((i) => (lineKey(i) === key ? { ...i, precio_unitario: n } : i)),
+    );
   };
 
-  /* ── Totales (fórmula consistente con el servidor · IVA dinámico) ───── */
+  const eliminarItem = (key) => {
+    setCarrito((prev) => prev.filter((i) => lineKey(i) !== key));
+  };
+
+  /* ── Totales (misma fórmula que el RPC · descuento $ + domicilio) ───── */
   const subtotal = carrito.reduce(
     (s, i) => s + i.cantidad * i.precio_unitario,
     0,
   );
-  const descuento = subtotal * (descuentoPct / 100);
+  const descuento = Math.min(Math.max(0, descuentoValor), subtotal);
   const baseIva = subtotal - descuento;
   const iva = baseIva * (ivaPct / 100);
-  const total = subtotal * (1 - descuentoPct / 100) * (1 + ivaPct / 100);
+  const total = baseIva * (1 + ivaPct / 100) + Math.max(0, domicilio);
 
   /* ── Validación por paso ────────────────────────────────────────────── */
   const validarPaso1 = () => {
@@ -333,17 +385,28 @@ export default function CotizacionNueva() {
           p_cliente_nit: clienteNit || null,
           p_cliente_email: clienteEmail || null,
           p_cliente_telefono: clienteTelefono || null,
-          p_descuento_pct: descuentoPct,
+          // B4: descuento ahora en $ (el % legado se manda en 0).
+          p_descuento_pct: 0,
+          p_descuento_valor: descuento,
+          p_domicilio: Math.max(0, domicilio),
           p_vigencia_dias: vigenciaDias,
           p_iva_pct: ivaPct,
           p_observaciones: observacionesFinal,
           p_condiciones_pago: condicionesPago || null,
           p_tiempo_entrega_nota: tiempoEntregaNota || null,
-          p_items: carrito.map((i) => ({
-            producto_id: i.producto_id,
-            cantidad: i.cantidad,
-            precio_unitario: i.precio_unitario,
-          })),
+          p_items: carrito.map((i) =>
+            i.tipo === "servicio"
+              ? {
+                  servicio_id: i.servicio_id,
+                  cantidad: i.cantidad,
+                  precio_unitario: i.precio_unitario,
+                }
+              : {
+                  producto_id: i.producto_id,
+                  cantidad: i.cantidad,
+                  precio_unitario: i.precio_unitario,
+                },
+          ),
           p_cuentas_ids: cuentasLimpias,
           // Solo pasar ot_id si la pre-carga validó (anti privilege escalation).
           p_ot_id: otIdValido || null,
@@ -501,17 +564,23 @@ export default function CotizacionNueva() {
               onAgregar={agregarAlCarrito}
               onScan={() => setScannerOpen(true)}
               carrito={carrito}
-              onDec={(id) => actualizarCantidad(id, -1)}
-              onInc={(id) => actualizarCantidad(id, 1)}
+              servicios={servicios}
+              onAgregarServicio={agregarServicioAlCarrito}
+              lineKey={lineKey}
+              onDec={(key) => actualizarCantidad(key, -1)}
+              onInc={(key) => actualizarCantidad(key, 1)}
               onSet={setCantidadDirecta}
+              onSetPrecio={setPrecioDirecto}
               onEliminar={eliminarItem}
             />
           )}
 
           {paso === 3 && (
             <PasoAjustes
-              descuentoPct={descuentoPct}
-              setDescuentoPct={setDescuentoPct}
+              descuentoValor={descuentoValor}
+              setDescuentoValor={setDescuentoValor}
+              domicilio={domicilio}
+              setDomicilio={setDomicilio}
               vigenciaDias={vigenciaDias}
               setVigenciaDias={setVigenciaDias}
               ivaPct={ivaPct}
@@ -541,12 +610,15 @@ export default function CotizacionNueva() {
               }}
               carrito={carrito}
               subtotal={subtotal}
+              descuento={descuento}
+              domicilio={Math.max(0, domicilio)}
               iva={iva}
               ivaPct={ivaPct}
               total={total}
               ajustes={{
                 vigenciaDias,
-                descuentoPct,
+                descuento,
+                domicilio: Math.max(0, domicilio),
                 condicionesPago,
                 tiempoEntregaNota,
                 cuentasCount: cuentasIds.length,
@@ -613,9 +685,9 @@ export default function CotizacionNueva() {
             <span>Subtotal</span>
             <span className="v">{formatCOP(subtotal)}</span>
           </div>
-          {descuentoPct > 0 && (
+          {descuento > 0 && (
             <div className="cart-line" style={{ color: "var(--warn-700)" }}>
-              <span>Descuento ({descuentoPct}%)</span>
+              <span>Descuento</span>
               <span className="v" style={{ color: "var(--warn-700)" }}>
                 −{formatCOP(descuento)}
               </span>
@@ -625,6 +697,12 @@ export default function CotizacionNueva() {
             <span>IVA {ivaPct}%</span>
             <span className="v">{formatCOP(iva)}</span>
           </div>
+          {domicilio > 0 && (
+            <div className="cart-line">
+              <span>Domicilio</span>
+              <span className="v">{formatCOP(Math.max(0, domicilio))}</span>
+            </div>
+          )}
           <div className="cart-line tot">
             <span>Total</span>
             <span className="v">{formatCOP(total)}</span>
@@ -840,13 +918,17 @@ function PasoProductos({
   onAgregar,
   onScan,
   carrito,
+  servicios,
+  onAgregarServicio,
+  lineKey,
   onDec,
   onInc,
   onSet,
+  onSetPrecio,
   onEliminar,
 }) {
   return (
-    <WizCard paso={2} title="Productos a cotizar">
+    <WizCard paso={2} title="Productos y servicios a cotizar">
       {/* Buscador + QR */}
       <div className="flex items-stretch">
         <div
@@ -883,6 +965,37 @@ function PasoProductos({
           <span className="hidden sm:inline">Escanear QR</span>
         </button>
       </div>
+
+      {/* B4 — Agregar un servicio (catálogo que solo crea el Admin). */}
+      {servicios.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2.5">
+          <label
+            htmlFor="cot-serv-add"
+            className="inline-flex items-center gap-1.5 text-[12px]"
+            style={{ color: "var(--n-500)" }}
+          >
+            <Wrench className="h-3.5 w-3.5" strokeWidth={1.7} />
+            Servicio
+          </label>
+          <select
+            id="cot-serv-add"
+            value=""
+            onChange={(e) => {
+              const s = servicios.find((x) => String(x.id) === e.target.value);
+              if (s) onAgregarServicio(s);
+            }}
+            className="h-10 min-w-[220px] cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+            style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
+          >
+            <option value="">Agregar un servicio…</option>
+            {servicios.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nombre} · {formatCOP(s.precio)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {buscando && (
         <p className="mt-2 text-xs" style={{ color: "var(--n-500)" }}>
@@ -980,20 +1093,39 @@ function PasoProductos({
             </thead>
             <tbody>
               {carrito.map((item) => {
-                const badge = categoriaBadge(item.categoria);
+                const key = lineKey(item);
+                const esServicio = item.tipo === "servicio";
+                const badge = esServicio
+                  ? null
+                  : categoriaBadge(item.categoria);
                 return (
-                  <tr key={item.producto_id}>
+                  <tr key={key}>
                     <td>
-                      <span className="p-sku">{item.referencia ?? "—"}</span>
-                      <div className="p-meta">
-                        {item.marca ?? item.unidad ?? ""}
-                      </div>
+                      {esServicio ? (
+                        <span
+                          className="p-sku"
+                          style={{ color: "var(--p-600)" }}
+                        >
+                          Servicio
+                        </span>
+                      ) : (
+                        <>
+                          <span className="p-sku">
+                            {item.referencia ?? "—"}
+                          </span>
+                          <div className="p-meta">
+                            {item.marca ?? item.unidad ?? ""}
+                          </div>
+                        </>
+                      )}
                     </td>
                     <td>
                       <div className="p-nm">{item.nombre}</div>
                     </td>
                     <td>
-                      {badge ? (
+                      {esServicio ? (
+                        <CatBadge cls="cat-srv" label="Servicio" />
+                      ) : badge ? (
                         <CatBadge cls={badge.cls} label={badge.label} />
                       ) : (
                         <span style={{ color: "var(--n-300)" }}>—</span>
@@ -1002,23 +1134,23 @@ function PasoProductos({
                     <td style={{ textAlign: "right" }}>
                       <QtyControl
                         value={item.cantidad}
-                        onDec={() => onDec(item.producto_id)}
-                        onInc={() => onInc(item.producto_id)}
-                        onSet={(v) => onSet(item.producto_id, v)}
+                        onDec={() => onDec(key)}
+                        onInc={() => onInc(key)}
+                        onSet={(v) => onSet(key, v)}
                       />
                     </td>
-                    <td
-                      className="p-pr"
-                      title="Precio del catálogo (no editable)"
-                    >
-                      {formatCOP(item.precio_unitario)}
+                    <td className="p-pr">
+                      <PriceInput
+                        value={item.precio_unitario}
+                        onSet={(v) => onSetPrecio(key, v)}
+                      />
                     </td>
                     <td className="p-sub">
                       {formatCOP(item.cantidad * item.precio_unitario)}
                     </td>
                     <td>
                       <button
-                        onClick={() => onEliminar(item.producto_id)}
+                        onClick={() => onEliminar(key)}
                         className="flex size-7 items-center justify-center rounded-md transition-colors"
                         style={{ color: "var(--n-500)" }}
                         onMouseEnter={(e) =>
@@ -1027,7 +1159,7 @@ function PasoProductos({
                         onMouseLeave={(e) =>
                           (e.currentTarget.style.color = "var(--n-500)")
                         }
-                        aria-label="Eliminar producto"
+                        aria-label="Eliminar línea"
                       >
                         <Trash2 className="size-3.5" />
                       </button>
@@ -1040,8 +1172,8 @@ function PasoProductos({
         </div>
       )}
       <p className="mt-2 text-[11.5px]" style={{ color: "var(--n-500)" }}>
-        El precio es el del catálogo (no editable). La negociación se hace con
-        el descuento % en el paso de ajustes.
+        El precio inicia con el del catálogo y es editable por línea. También
+        puedes aplicar un descuento en $ y domicilio en el paso de ajustes.
       </p>
     </WizCard>
   );
@@ -1110,11 +1242,39 @@ function QtyControl({ value, onDec, onInc, onSet }) {
   );
 }
 
+// B4 — precio de venta editable por línea (entero COP, sin decimales).
+function PriceInput({ value, onSet }) {
+  return (
+    <div
+      className="inline-flex h-9 items-center overflow-hidden rounded-md border"
+      style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+    >
+      <span
+        className="pl-2 font-mono text-[12px]"
+        style={{ color: "var(--n-500)" }}
+      >
+        $
+      </span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => onSet(e.target.value)}
+        className="w-[92px] border-0 bg-transparent px-1.5 text-right font-mono text-[13px] font-medium outline-none"
+        style={{ color: "var(--n-950)" }}
+        aria-label="Precio unitario"
+      />
+    </div>
+  );
+}
+
 /* ─────────────────────────── Paso 3 · Ajustes ─────────────────────────── */
 
 function PasoAjustes({
-  descuentoPct,
-  setDescuentoPct,
+  descuentoValor,
+  setDescuentoValor,
+  domicilio,
+  setDomicilio,
   vigenciaDias,
   setVigenciaDias,
   ivaPct,
@@ -1137,7 +1297,7 @@ function PasoAjustes({
     >
       {/* Términos comerciales */}
       <SubHead>Términos comerciales</SubHead>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <NumField
           label="IVA %"
           value={ivaPct}
@@ -1153,15 +1313,23 @@ function PasoAjustes({
           onChange={(v) => setVigenciaDias(Math.max(1, v))}
         />
         <NumField
-          label="Descuento %"
-          value={descuentoPct}
+          label="Descuento $"
+          value={descuentoValor}
           min={0}
-          max={100}
-          onChange={(v) => setDescuentoPct(Math.min(100, Math.max(0, v)))}
+          step={1000}
+          onChange={(v) => setDescuentoValor(Math.max(0, v))}
+        />
+        <NumField
+          label="Domicilio $"
+          value={domicilio}
+          min={0}
+          step={1000}
+          onChange={(v) => setDomicilio(Math.max(0, v))}
         />
       </div>
       <p className="mt-2 text-xs" style={{ color: "var(--n-500)" }}>
-        IVA 0% si la venta no lleva IVA.
+        IVA 0% si la venta no lleva IVA. El descuento se resta antes del IVA; el
+        domicilio se suma después (no se grava).
       </p>
       <div className="mt-3 space-y-3">
         <FieldArea
@@ -1287,6 +1455,8 @@ function PasoRevision({
   cliente,
   carrito,
   subtotal,
+  descuento,
+  domicilio,
   iva,
   ivaPct,
   total,
@@ -1348,21 +1518,28 @@ function PasoRevision({
               </tr>
             </thead>
             <tbody>
-              {carrito.map((i) => (
-                <tr key={i.producto_id}>
-                  <ReviewTd mono muted>
-                    {i.referencia ?? "—"}
-                  </ReviewTd>
-                  <ReviewTd>{i.nombre}</ReviewTd>
-                  <ReviewTd right>×{i.cantidad}</ReviewTd>
-                  <ReviewTd right mono>
-                    {formatCOP(i.precio_unitario)}
-                  </ReviewTd>
-                  <ReviewTd right mono>
-                    {formatCOP(i.cantidad * i.precio_unitario)}
-                  </ReviewTd>
-                </tr>
-              ))}
+              {carrito.map((i) => {
+                const esServicio = i.tipo === "servicio";
+                return (
+                  <tr
+                    key={
+                      esServicio ? `s:${i.servicio_id}` : `p:${i.producto_id}`
+                    }
+                  >
+                    <ReviewTd mono muted>
+                      {esServicio ? "Servicio" : (i.referencia ?? "—")}
+                    </ReviewTd>
+                    <ReviewTd>{i.nombre}</ReviewTd>
+                    <ReviewTd right>×{i.cantidad}</ReviewTd>
+                    <ReviewTd right mono>
+                      {formatCOP(i.precio_unitario)}
+                    </ReviewTd>
+                    <ReviewTd right mono>
+                      {formatCOP(i.cantidad * i.precio_unitario)}
+                    </ReviewTd>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1371,7 +1548,16 @@ function PasoRevision({
           style={{ borderColor: "var(--n-150)" }}
         >
           <ReviewFootLine label="Subtotal" value={formatCOP(subtotal)} />
+          {descuento > 0 && (
+            <ReviewFootLine
+              label="Descuento"
+              value={`−${formatCOP(descuento)}`}
+            />
+          )}
           <ReviewFootLine label={`IVA (${ivaPct}%)`} value={formatCOP(iva)} />
+          {domicilio > 0 && (
+            <ReviewFootLine label="Domicilio" value={formatCOP(domicilio)} />
+          )}
           <ReviewFootLine label="Total" value={formatCOP(total)} tot />
         </div>
       </ReviewBlock>
@@ -1384,10 +1570,14 @@ function PasoRevision({
           <ReviewItem
             label="Descuento"
             value={
-              ajustes.descuentoPct > 0
-                ? `${ajustes.descuentoPct}%`
+              ajustes.descuento > 0
+                ? formatCOP(ajustes.descuento)
                 : "Sin descuento"
             }
+          />
+          <ReviewItem
+            label="Domicilio"
+            value={ajustes.domicilio > 0 ? formatCOP(ajustes.domicilio) : "—"}
           />
           <ReviewItem
             label="Condiciones de pago"
@@ -1638,7 +1828,7 @@ function FieldArea({ label, value, onChange, placeholder, full }) {
   );
 }
 
-function NumField({ label, value, min, max, onChange }) {
+function NumField({ label, value, min, max, step, onChange }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="flbl">{label}</span>
@@ -1646,6 +1836,7 @@ function NumField({ label, value, min, max, onChange }) {
         type="number"
         min={min}
         max={max}
+        step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         className="finput"

@@ -272,10 +272,17 @@ function DetalleContenido({
   onVolver,
   onRefrescar,
 }) {
+  // B4: descuento en $ (cae al % legado si no hay valor); domicilio tras el IVA.
   const descuento =
-    cotizacion.subtotal * ((cotizacion.descuento_pct ?? 0) / 100);
+    cotizacion.descuento_valor != null
+      ? Math.min(
+          Math.max(0, Number(cotizacion.descuento_valor)),
+          cotizacion.subtotal,
+        )
+      : cotizacion.subtotal * ((cotizacion.descuento_pct ?? 0) / 100);
   const baseIva = cotizacion.subtotal - descuento;
   const iva = baseIva * ((cotizacion.iva_pct ?? 19) / 100);
+  const domicilio = Math.max(0, Number(cotizacion.domicilio ?? 0));
 
   const convertida = Boolean(cotizacion.venta_id);
   // F11.5: solo se puede convertir a venta desde estado APROBADA.
@@ -606,26 +613,40 @@ function DetalleContenido({
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <span className="p-sku">
-                          {item.producto?.referencia ?? "—"}
-                        </span>
-                        <div className="p-meta">
-                          {item.producto?.unidad_medida ?? ""}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="p-nm">{item.producto?.nombre}</div>
-                      </td>
-                      <td className="p-qty">×{item.cantidad}</td>
-                      <td className="p-pr">
-                        {formatCOP(item.precio_unitario)}
-                      </td>
-                      <td className="p-sub">{formatCOP(item.subtotal)}</td>
-                    </tr>
-                  ))}
+                  {items.map((item) => {
+                    const esServicio = item.servicio_id != null;
+                    return (
+                      <tr key={item.id}>
+                        <td>
+                          <span
+                            className="p-sku"
+                            style={
+                              esServicio ? { color: "var(--p-600)" } : undefined
+                            }
+                          >
+                            {esServicio
+                              ? "Servicio"
+                              : (item.producto?.referencia ?? "—")}
+                          </span>
+                          <div className="p-meta">
+                            {esServicio
+                              ? "—"
+                              : (item.producto?.unidad_medida ?? "")}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="p-nm">
+                            {item.descripcion ?? item.producto?.nombre ?? "—"}
+                          </div>
+                        </td>
+                        <td className="p-qty">×{item.cantidad}</td>
+                        <td className="p-pr">
+                          {formatCOP(item.precio_unitario)}
+                        </td>
+                        <td className="p-sub">{formatCOP(item.subtotal)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -634,9 +655,9 @@ function DetalleContenido({
                 <span>Subtotal</span>
                 <span className="v">{formatCOP(cotizacion.subtotal)}</span>
               </div>
-              {cotizacion.descuento_pct > 0 && (
+              {descuento > 0 && (
                 <div className="ln">
-                  <span>Descuento ({cotizacion.descuento_pct}%)</span>
+                  <span>Descuento</span>
                   <span className="v">−{formatCOP(descuento)}</span>
                 </div>
               )}
@@ -644,6 +665,12 @@ function DetalleContenido({
                 <span>IVA {cotizacion.iva_pct ?? 19}%</span>
                 <span className="v">{formatCOP(iva)}</span>
               </div>
+              {domicilio > 0 && (
+                <div className="ln">
+                  <span>Domicilio</span>
+                  <span className="v">{formatCOP(domicilio)}</span>
+                </div>
+              )}
               <div className="ln tot">
                 <span>Total</span>
                 <span className="v">{formatCOP(cotizacion.total)}</span>
@@ -820,6 +847,12 @@ function DetalleContenido({
             </section>
           )}
 
+          {/* B4 — Abonos de la cotización (ligados a la futura venta) */}
+          <AbonosCotizacionSection
+            cotizacion={cotizacion}
+            rolUsuario={rolUsuario}
+          />
+
           {/* Historial */}
           {historial.length > 0 && (
             <section className="iblock">
@@ -868,6 +901,7 @@ function DetalleContenido({
             extra={extra}
             descuento={descuento}
             iva={iva}
+            domicilio={domicilio}
             onPDF={onPDF}
           />
         </div>
@@ -928,6 +962,7 @@ function PdfPreview({
   extra,
   descuento,
   iva,
+  domicilio,
   onPDF,
 }) {
   const fechaEmision = cotizacion.fecha ? formatDate(cotizacion.fecha) : "—";
@@ -1040,15 +1075,22 @@ function PdfPreview({
               </tr>
             </thead>
             <tbody>
-              {items.map((p) => (
-                <tr key={p.id}>
-                  <td className="mono">{p.producto?.referencia ?? "—"}</td>
-                  <td>{p.producto?.nombre}</td>
-                  <td className="c">{p.cantidad}</td>
-                  <td className="r">{formatCOP(p.precio_unitario)}</td>
-                  <td className="r sub">{formatCOP(p.subtotal)}</td>
-                </tr>
-              ))}
+              {items.map((p) => {
+                const esServicio = p.servicio_id != null;
+                return (
+                  <tr key={p.id}>
+                    <td className="mono">
+                      {esServicio
+                        ? "Servicio"
+                        : (p.producto?.referencia ?? "—")}
+                    </td>
+                    <td>{p.descripcion ?? p.producto?.nombre ?? "—"}</td>
+                    <td className="c">{p.cantidad}</td>
+                    <td className="r">{formatCOP(p.precio_unitario)}</td>
+                    <td className="r sub">{formatCOP(p.subtotal)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
@@ -1060,9 +1102,9 @@ function PdfPreview({
                   <td>Subtotal</td>
                   <td>{formatCOP(cotizacion.subtotal)}</td>
                 </tr>
-                {cotizacion.descuento_pct > 0 && (
+                {descuento > 0 && (
                   <tr>
-                    <td>Descuento ({cotizacion.descuento_pct}%)</td>
+                    <td>Descuento</td>
                     <td>−{formatCOP(descuento)}</td>
                   </tr>
                 )}
@@ -1070,6 +1112,12 @@ function PdfPreview({
                   <td>IVA {cotizacion.iva_pct ?? 19}%</td>
                   <td>{formatCOP(iva)}</td>
                 </tr>
+                {domicilio > 0 && (
+                  <tr>
+                    <td>Domicilio</td>
+                    <td>{formatCOP(domicilio)}</td>
+                  </tr>
+                )}
                 <tr className="tot">
                   <td>TOTAL</td>
                   <td>{formatCOP(cotizacion.total)}</td>
@@ -1145,5 +1193,220 @@ function PdfPreview({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─────────────────────── B4 · Abonos de la cotización ─────────────────── */
+
+const ABONO_METODOS = [
+  { v: "efectivo", l: "Efectivo" },
+  { v: "transferencia", l: "Transferencia" },
+  { v: "tarjeta", l: "Tarjeta" },
+  { v: "otro", l: "Otro" },
+];
+
+function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
+  const [abonos, setAbonos] = useState([]);
+  const [monto, setMonto] = useState("");
+  const [metodo, setMetodo] = useState("efectivo");
+  const [obs, setObs] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const convertida = Boolean(cotizacion.venta_id);
+  const puedeRegistrar =
+    !convertida && ["Admin", "Vendedor"].includes(rolUsuario);
+  const esAdmin = rolUsuario === "Admin";
+
+  const cargar = useCallback(async () => {
+    const { data } = await supabase
+      .from("abonos_cotizacion")
+      .select("id, fecha, monto, metodo_pago, observaciones")
+      .eq("cotizacion_id", cotizacion.id)
+      .order("fecha", { ascending: true });
+    setAbonos(data ?? []);
+  }, [cotizacion.id]);
+
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
+
+  const abonado = abonos.reduce((s, a) => s + Number(a.monto ?? 0), 0);
+  const total = Number(cotizacion.total ?? 0);
+  const saldo = Math.max(0, total - abonado);
+
+  const registrar = async () => {
+    const n = Number(String(monto).replace(/[^\d]/g, ""));
+    if (!n || n <= 0) {
+      setErr("Ingresa un monto válido mayor a 0.");
+      return;
+    }
+    setErr(null);
+    setGuardando(true);
+    try {
+      const { error: e } = await supabase.rpc("fn_registrar_abono_cotizacion", {
+        p_cotizacion_id: cotizacion.id,
+        p_monto: n,
+        p_metodo_pago: metodo,
+        p_observaciones: obs || null,
+      });
+      if (e) throw new Error(e.message);
+      setMonto("");
+      setObs("");
+      await cargar();
+    } catch (e2) {
+      setErr(safeError(e2, "No se pudo registrar el abono"));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const eliminar = async (abonoId) => {
+    setErr(null);
+    try {
+      const { error: e } = await supabase.rpc("fn_eliminar_abono_cotizacion", {
+        p_abono_id: abonoId,
+      });
+      if (e) throw new Error(e.message);
+      await cargar();
+    } catch (e2) {
+      setErr(safeError(e2, "No se pudo eliminar el abono"));
+    }
+  };
+
+  // Si no hay abonos y no se puede registrar (p.ej. ya convertida), no mostrar.
+  if (abonos.length === 0 && !puedeRegistrar) return null;
+
+  return (
+    <section className="iblock">
+      <div className="ib-head">
+        <div className="ib-ico succ">
+          <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
+        </div>
+        <div className="ib-title">Abonos de la cotización</div>
+      </div>
+
+      {total > 0 && <AbonoBar abonado={abonado} total={total} />}
+
+      <div
+        className="mb-3 flex items-center justify-between text-[12.5px]"
+        style={{ color: "var(--n-700)" }}
+      >
+        <span>
+          Abonado{" "}
+          <b
+            className="font-mono"
+            style={{ color: "var(--success-700, var(--n-900))" }}
+          >
+            {formatCOP(abonado)}
+          </b>
+        </span>
+        <span>
+          Saldo{" "}
+          <b className="font-mono" style={{ color: "var(--n-900)" }}>
+            {formatCOP(saldo)}
+          </b>
+        </span>
+      </div>
+
+      {abonos.map((a) => (
+        <div key={a.id} className="abono-row">
+          <span className="abono-date">{formatDate(a.fecha)}</span>
+          <span className="abono-amt">{formatCOP(a.monto)}</span>
+          <span className="abono-method">{a.metodo_pago}</span>
+          <span className="abono-ref">{a.observaciones ?? "—"}</span>
+          {esAdmin && (
+            <button
+              onClick={() => eliminar(a.id)}
+              className="text-[11px] font-medium"
+              style={{ color: "var(--dang-600)" }}
+              aria-label="Eliminar abono"
+            >
+              Eliminar
+            </button>
+          )}
+        </div>
+      ))}
+
+      {convertida && (
+        <p className="mt-2 text-[12px]" style={{ color: "var(--n-500)" }}>
+          Cotización convertida en venta — los abonos quedaron ligados a la
+          venta y su saldo se gestiona allí.
+        </p>
+      )}
+
+      {puedeRegistrar && (
+        <div
+          className="mt-3 border-t border-dashed pt-3"
+          style={{ borderColor: "var(--n-150)" }}
+        >
+          <div
+            className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.08em]"
+            style={{ color: "var(--n-300)" }}
+          >
+            Registrar abono
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px]" style={{ color: "var(--n-500)" }}>
+                Monto $
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={monto}
+                onChange={(e) => setMonto(e.target.value)}
+                placeholder="0"
+                className="finput"
+                style={{ width: 120, textAlign: "right" }}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px]" style={{ color: "var(--n-500)" }}>
+                Método
+              </span>
+              <select
+                value={metodo}
+                onChange={(e) => setMetodo(e.target.value)}
+                className="h-10 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] outline-none"
+                style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
+              >
+                {ABONO_METODOS.map((m) => (
+                  <option key={m.v} value={m.v}>
+                    {m.l}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[160px] flex-1 flex-col gap-1">
+              <span className="text-[11px]" style={{ color: "var(--n-500)" }}>
+                Nota (opcional)
+              </span>
+              <input
+                type="text"
+                value={obs}
+                onChange={(e) => setObs(e.target.value)}
+                placeholder="Referencia / observación"
+                className="finput sans"
+              />
+            </label>
+            <button
+              onClick={registrar}
+              disabled={guardando}
+              className="btn btn-pri disabled:opacity-40"
+              style={{ height: 40 }}
+            >
+              {guardando ? "Guardando…" : "Agregar abono"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {err && (
+        <p className="mt-2 text-[12px]" style={{ color: "var(--dang-700)" }}>
+          {err}
+        </p>
+      )}
+    </section>
   );
 }

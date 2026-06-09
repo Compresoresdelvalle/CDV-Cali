@@ -11,6 +11,7 @@ import {
   Save,
   AlertCircle,
   Info,
+  Wrench,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
@@ -54,13 +55,26 @@ export default function CotizacionEditar() {
   const [clienteCargo, setClienteCargo] = useState("");
   const [clienteDireccion, setClienteDireccion] = useState("");
 
-  const [descuentoPct, setDescuentoPct] = useState(0);
+  // B4: descuento en $ + domicilio (reemplazan al % legado).
+  const [descuentoValor, setDescuentoValor] = useState(0);
+  const [domicilio, setDomicilio] = useState(0);
   const [vigenciaDias, setVigenciaDias] = useState(15);
   const [ivaPct, setIvaPct] = useState(19);
   const [observaciones, setObservaciones] = useState("");
   const [condicionesPago, setCondicionesPago] = useState("");
   const [tiempoEntregaNota, setTiempoEntregaNota] = useState("");
   const [cuentasIds, setCuentasIds] = useState([]);
+
+  // B4: catálogo de servicios activos para agregar a la cotización.
+  const [servicios, setServicios] = useState([]);
+  useEffect(() => {
+    supabase
+      .from("servicios")
+      .select("id, nombre, precio, iva_pct")
+      .eq("activo", true)
+      .order("nombre")
+      .then(({ data }) => setServicios(data ?? []));
+  }, []);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
@@ -105,7 +119,15 @@ export default function CotizacionEditar() {
         setClienteContacto(extra.contacto ?? "");
         setClienteCargo(extra.cargo ?? "");
         setClienteDireccion(extra.direccion ?? "");
-        setDescuentoPct(cot.descuento_pct ?? 0);
+        // B4: descuento en $ (si la cotización es legada en %, se convierte a $
+        // usando su subtotal guardado para no perder el descuento al editar).
+        setDescuentoValor(
+          cot.descuento_valor ??
+            (cot.descuento_pct
+              ? Math.round((cot.subtotal ?? 0) * (cot.descuento_pct / 100))
+              : 0),
+        );
+        setDomicilio(cot.domicilio ?? 0);
         setVigenciaDias(cot.vigencia_dias ?? 15);
         setIvaPct(cot.iva_pct ?? 19);
         setObservaciones(extra.notas ?? "");
@@ -119,18 +141,28 @@ export default function CotizacionEditar() {
         setCuentasIds((cuentas ?? []).map((r) => r.cuenta_id));
 
         setCarrito(
-          (filas ?? []).map((i) => ({
-            producto_id: i.producto_id,
-            nombre: i.producto?.nombre ?? "—",
-            referencia: i.producto?.referencia ?? "",
-            unidad: i.producto?.unidad_medida ?? "",
-            categoria: i.producto?.categoria ?? null,
-            marca: i.producto?.marca ?? null,
-            // Precio SIEMPRE del catálogo (server-authoritative): el RPC lo
-            // recalcula así; mostrar el del catálogo evita desincronía.
-            precio_unitario: i.producto?.precio_venta ?? i.precio_unitario,
-            cantidad: i.cantidad,
-          })),
+          (filas ?? []).map((i) =>
+            i.servicio_id != null
+              ? {
+                  tipo: "servicio",
+                  servicio_id: i.servicio_id,
+                  nombre: i.descripcion ?? "Servicio",
+                  precio_unitario: i.precio_unitario,
+                  cantidad: i.cantidad,
+                }
+              : {
+                  tipo: "producto",
+                  producto_id: i.producto_id,
+                  nombre: i.producto?.nombre ?? "—",
+                  referencia: i.producto?.referencia ?? "",
+                  unidad: i.producto?.unidad_medida ?? "",
+                  categoria: i.producto?.categoria ?? null,
+                  marca: i.producto?.marca ?? null,
+                  // B4: el precio es editable; conservar el guardado en la línea.
+                  precio_unitario: i.precio_unitario,
+                  cantidad: i.cantidad,
+                },
+          ),
         );
       } catch (e) {
         setError(safeError(e, "No se pudo cargar la cotización"));
@@ -193,11 +225,17 @@ export default function CotizacionEditar() {
     }
   }, []);
 
+  // Identidad de línea (producto o servicio).
+  const lineKey = (i) =>
+    i.tipo === "servicio" ? `s:${i.servicio_id}` : `p:${i.producto_id}`;
+
   const agregarAlCarrito = (prod) => {
     setBusqueda("");
     setResultados([]);
     setCarrito((prev) => {
-      const idx = prev.findIndex((i) => i.producto_id === prod.id);
+      const idx = prev.findIndex(
+        (i) => i.tipo !== "servicio" && i.producto_id === prod.id,
+      );
       if (idx >= 0) {
         const updated = [...prev];
         updated[idx] = { ...updated[idx], cantidad: updated[idx].cantidad + 1 };
@@ -206,6 +244,7 @@ export default function CotizacionEditar() {
       return [
         ...prev,
         {
+          tipo: "producto",
           producto_id: prod.id,
           nombre: prod.nombre,
           referencia: prod.referencia,
@@ -219,11 +258,34 @@ export default function CotizacionEditar() {
     });
   };
 
-  const actualizarCantidad = (productoId, delta) => {
+  const agregarServicioAlCarrito = (serv) => {
+    setCarrito((prev) => {
+      const idx = prev.findIndex(
+        (i) => i.tipo === "servicio" && i.servicio_id === serv.id,
+      );
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], cantidad: updated[idx].cantidad + 1 };
+        return updated;
+      }
+      return [
+        ...prev,
+        {
+          tipo: "servicio",
+          servicio_id: serv.id,
+          nombre: serv.nombre,
+          precio_unitario: Number(serv.precio) || 0,
+          cantidad: 1,
+        },
+      ];
+    });
+  };
+
+  const actualizarCantidad = (key, delta) => {
     setCarrito((prev) =>
       prev
         .map((i) =>
-          i.producto_id !== productoId
+          lineKey(i) !== key
             ? i
             : { ...i, cantidad: Math.max(0, i.cantidad + delta) },
         )
@@ -231,20 +293,28 @@ export default function CotizacionEditar() {
     );
   };
 
-  const setCantidadDirecta = (productoId, valor) => {
+  const setCantidadDirecta = (key, valor) => {
     const n = parseInt(valor, 10);
     if (isNaN(n)) return;
     // Clamp [1, 100000]; teclear 0 NO elimina la fila (eso es la X).
     const clamped = Math.min(100000, Math.max(1, n));
     setCarrito((prev) =>
-      prev.map((i) =>
-        i.producto_id !== productoId ? i : { ...i, cantidad: clamped },
-      ),
+      prev.map((i) => (lineKey(i) !== key ? i : { ...i, cantidad: clamped })),
     );
   };
 
-  const eliminarItem = (productoId) => {
-    setCarrito((prev) => prev.filter((i) => i.producto_id !== productoId));
+  // B4: precio editable por línea. Solo dígitos; vacío = 0.
+  const setPrecioDirecto = (key, valor) => {
+    const limpio = String(valor).replace(/[^\d]/g, "");
+    const n = limpio === "" ? 0 : Number(limpio);
+    if (isNaN(n) || n < 0) return;
+    setCarrito((prev) =>
+      prev.map((i) => (lineKey(i) === key ? { ...i, precio_unitario: n } : i)),
+    );
+  };
+
+  const eliminarItem = (key) => {
+    setCarrito((prev) => prev.filter((i) => lineKey(i) !== key));
   };
 
   /* ── Totales (fórmula consistente con el servidor · IVA dinámico) ──── */
@@ -252,10 +322,10 @@ export default function CotizacionEditar() {
     (s, i) => s + i.cantidad * i.precio_unitario,
     0,
   );
-  const descuento = subtotal * (descuentoPct / 100);
+  const descuento = Math.min(Math.max(0, descuentoValor), subtotal);
   const baseIva = subtotal - descuento;
   const iva = baseIva * (ivaPct / 100);
-  const total = baseIva + iva;
+  const total = baseIva * (1 + ivaPct / 100) + Math.max(0, domicilio);
 
   /* ── Guardar cambios ───────────────────────────────────────────────── */
   const validar = () => {
@@ -304,16 +374,28 @@ export default function CotizacionEditar() {
         p_cliente_nit: clienteNit || null,
         p_cliente_email: clienteEmail || null,
         p_cliente_telefono: clienteTelefono || null,
-        p_descuento_pct: descuentoPct,
+        // B4: descuento ahora en $ (el % legado se manda en 0).
+        p_descuento_pct: 0,
+        p_descuento_valor: descuento,
+        p_domicilio: Math.max(0, domicilio),
         p_vigencia_dias: vigenciaDias,
         p_iva_pct: ivaPct,
         p_observaciones: observacionesFinal,
         p_condiciones_pago: condicionesPago || null,
         p_tiempo_entrega_nota: tiempoEntregaNota || null,
-        p_items: carrito.map((i) => ({
-          producto_id: i.producto_id,
-          cantidad: i.cantidad,
-        })),
+        p_items: carrito.map((i) =>
+          i.tipo === "servicio"
+            ? {
+                servicio_id: i.servicio_id,
+                cantidad: i.cantidad,
+                precio_unitario: i.precio_unitario,
+              }
+            : {
+                producto_id: i.producto_id,
+                cantidad: i.cantidad,
+                precio_unitario: i.precio_unitario,
+              },
+        ),
         p_cuentas_ids: cuentasLimpias,
       });
       if (rpcErr) throw new Error(rpcErr.message);
@@ -477,6 +559,39 @@ export default function CotizacionEditar() {
               </button>
             </div>
 
+            {/* B4 — Agregar un servicio (catálogo que solo crea el Admin). */}
+            {servicios.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-2.5">
+                <label
+                  htmlFor="cot-edit-serv-add"
+                  className="inline-flex items-center gap-1.5 text-[12px]"
+                  style={{ color: "var(--n-500)" }}
+                >
+                  <Wrench className="h-3.5 w-3.5" strokeWidth={1.7} />
+                  Servicio
+                </label>
+                <select
+                  id="cot-edit-serv-add"
+                  value=""
+                  onChange={(e) => {
+                    const s = servicios.find(
+                      (x) => String(x.id) === e.target.value,
+                    );
+                    if (s) agregarServicioAlCarrito(s);
+                  }}
+                  className="h-10 min-w-[220px] cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+                  style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
+                >
+                  <option value="">Agregar un servicio…</option>
+                  {servicios.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nombre} · {formatCOP(s.precio)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {buscando && (
               <p className="mt-2 text-xs" style={{ color: "var(--n-500)" }}>
                 Buscando…
@@ -579,22 +694,39 @@ export default function CotizacionEditar() {
                   </thead>
                   <tbody>
                     {carrito.map((item) => {
-                      const badge = categoriaBadge(item.categoria);
+                      const key = lineKey(item);
+                      const esServicio = item.tipo === "servicio";
+                      const badge = esServicio
+                        ? null
+                        : categoriaBadge(item.categoria);
                       return (
-                        <tr key={item.producto_id}>
+                        <tr key={key}>
                           <td>
-                            <span className="p-sku">
-                              {item.referencia ?? "—"}
-                            </span>
-                            <div className="p-meta">
-                              {item.marca ?? item.unidad ?? ""}
-                            </div>
+                            {esServicio ? (
+                              <span
+                                className="p-sku"
+                                style={{ color: "var(--p-600)" }}
+                              >
+                                Servicio
+                              </span>
+                            ) : (
+                              <>
+                                <span className="p-sku">
+                                  {item.referencia ?? "—"}
+                                </span>
+                                <div className="p-meta">
+                                  {item.marca ?? item.unidad ?? ""}
+                                </div>
+                              </>
+                            )}
                           </td>
                           <td>
                             <div className="p-nm">{item.nombre}</div>
                           </td>
                           <td>
-                            {badge ? (
+                            {esServicio ? (
+                              <CatBadge cls="cat-srv" label="Servicio" />
+                            ) : badge ? (
                               <CatBadge cls={badge.cls} label={badge.label} />
                             ) : (
                               <span style={{ color: "var(--n-300)" }}>—</span>
@@ -603,29 +735,23 @@ export default function CotizacionEditar() {
                           <td style={{ textAlign: "right" }}>
                             <QtyControl
                               value={item.cantidad}
-                              onDec={() =>
-                                actualizarCantidad(item.producto_id, -1)
-                              }
-                              onInc={() =>
-                                actualizarCantidad(item.producto_id, 1)
-                              }
-                              onSet={(v) =>
-                                setCantidadDirecta(item.producto_id, v)
-                              }
+                              onDec={() => actualizarCantidad(key, -1)}
+                              onInc={() => actualizarCantidad(key, 1)}
+                              onSet={(v) => setCantidadDirecta(key, v)}
                             />
                           </td>
-                          <td
-                            className="p-pr"
-                            title="Precio del catálogo (no editable)"
-                          >
-                            {formatCOP(item.precio_unitario)}
+                          <td className="p-pr">
+                            <PriceInput
+                              value={item.precio_unitario}
+                              onSet={(v) => setPrecioDirecto(key, v)}
+                            />
                           </td>
                           <td className="p-sub">
                             {formatCOP(item.cantidad * item.precio_unitario)}
                           </td>
                           <td>
                             <button
-                              onClick={() => eliminarItem(item.producto_id)}
+                              onClick={() => eliminarItem(key)}
                               className="flex size-7 items-center justify-center rounded-md transition-colors"
                               style={{ color: "var(--n-500)" }}
                               onMouseEnter={(e) =>
@@ -635,7 +761,7 @@ export default function CotizacionEditar() {
                               onMouseLeave={(e) =>
                                 (e.currentTarget.style.color = "var(--n-500)")
                               }
-                              aria-label="Eliminar producto"
+                              aria-label="Eliminar línea"
                             >
                               <Trash2 className="size-3.5" />
                             </button>
@@ -648,8 +774,8 @@ export default function CotizacionEditar() {
               </div>
             )}
             <p className="mt-2 text-[11.5px]" style={{ color: "var(--n-500)" }}>
-              El precio es el del catálogo (no editable). La negociación se hace
-              con el descuento % en los ajustes.
+              El precio es editable por línea. También puedes aplicar descuento
+              en $ y domicilio en los ajustes.
             </p>
           </EditCard>
 
@@ -729,7 +855,7 @@ export default function CotizacionEditar() {
             sub="Configura los términos comerciales según el caso."
           >
             <SubHead>Términos comerciales</SubHead>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <NumField
                 label="IVA %"
                 value={ivaPct}
@@ -745,15 +871,23 @@ export default function CotizacionEditar() {
                 onChange={(v) => setVigenciaDias(Math.max(1, v))}
               />
               <NumField
-                label="Descuento %"
-                value={descuentoPct}
+                label="Descuento $"
+                value={descuentoValor}
                 min={0}
-                max={100}
-                onChange={(v) => setDescuentoPct(Math.min(100, Math.max(0, v)))}
+                step={1000}
+                onChange={(v) => setDescuentoValor(Math.max(0, v))}
+              />
+              <NumField
+                label="Domicilio $"
+                value={domicilio}
+                min={0}
+                step={1000}
+                onChange={(v) => setDomicilio(Math.max(0, v))}
               />
             </div>
             <p className="mt-2 text-xs" style={{ color: "var(--n-500)" }}>
-              IVA 0% si la venta no lleva IVA.
+              IVA 0% si la venta no lleva IVA. El descuento se resta antes del
+              IVA; el domicilio se suma después (no se grava).
             </p>
             <div className="mt-3 space-y-3">
               <FieldArea
@@ -843,9 +977,9 @@ export default function CotizacionEditar() {
             <span>Subtotal</span>
             <span className="v">{formatCOP(subtotal)}</span>
           </div>
-          {descuentoPct > 0 && (
+          {descuento > 0 && (
             <div className="cart-line" style={{ color: "var(--warn-700)" }}>
-              <span>Descuento ({descuentoPct}%)</span>
+              <span>Descuento</span>
               <span className="v" style={{ color: "var(--warn-700)" }}>
                 −{formatCOP(descuento)}
               </span>
@@ -855,6 +989,12 @@ export default function CotizacionEditar() {
             <span>IVA {ivaPct}%</span>
             <span className="v">{formatCOP(iva)}</span>
           </div>
+          {domicilio > 0 && (
+            <div className="cart-line">
+              <span>Domicilio</span>
+              <span className="v">{formatCOP(Math.max(0, domicilio))}</span>
+            </div>
+          )}
           <div className="cart-line tot">
             <span>Total</span>
             <span className="v">{formatCOP(total)}</span>
@@ -993,6 +1133,32 @@ function QtyControl({ value, onDec, onInc, onSet }) {
   );
 }
 
+// B4 — precio de venta editable por línea (entero COP, sin decimales).
+function PriceInput({ value, onSet }) {
+  return (
+    <div
+      className="inline-flex h-9 items-center overflow-hidden rounded-md border"
+      style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+    >
+      <span
+        className="pl-2 font-mono text-[12px]"
+        style={{ color: "var(--n-500)" }}
+      >
+        $
+      </span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => onSet(e.target.value)}
+        className="w-[92px] border-0 bg-transparent px-1.5 text-right font-mono text-[13px] font-medium outline-none"
+        style={{ color: "var(--n-950)" }}
+        aria-label="Precio unitario"
+      />
+    </div>
+  );
+}
+
 function FieldText({
   label,
   value,
@@ -1053,7 +1219,7 @@ function FieldArea({ label, value, onChange, placeholder, full }) {
   );
 }
 
-function NumField({ label, value, min, max, onChange }) {
+function NumField({ label, value, min, max, step, onChange }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="flbl">{label}</span>
@@ -1061,6 +1227,7 @@ function NumField({ label, value, min, max, onChange }) {
         type="number"
         min={min}
         max={max}
+        step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         className="finput"
