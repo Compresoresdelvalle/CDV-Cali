@@ -588,6 +588,7 @@ function EnsambleCard({ ensamble: e, esAdmin, onEliminar }) {
 /* ─────────────────────────── Vista tablero (kanban) ────────────────────── */
 
 function KanbanView({ rows }) {
+  const navigate = useNavigate();
   return (
     <div className="kanban" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
       {ENSAMBLE_KANBAN_COLS.map((col) => {
@@ -609,7 +610,17 @@ function KanbanView({ rows }) {
               return (
                 <div
                   key={e.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/ops/ensambles/${e.id}`)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter" || ev.key === " ") {
+                      ev.preventDefault();
+                      navigate(`/ops/ensambles/${e.id}`);
+                    }
+                  }}
                   className={"kcard" + (e.completado ? " done" : "")}
+                  style={{ cursor: "pointer" }}
                 >
                   <div className="ktop">
                     <span className="knum">#{e.numero}</span>
