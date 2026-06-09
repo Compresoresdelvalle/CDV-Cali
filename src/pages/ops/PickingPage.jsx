@@ -83,8 +83,13 @@ export default function PickingPage() {
         for (const item of sorted) {
           init[item.id] = {
             picking_completado: item.picking_completado ?? false,
+            // La columna cantidad_enviada tiene DEFAULT 0; `0 ?? x` deja 0
+            // (?? solo cae en null/undefined). Tratamos 0 como "aún sin
+            // pickear" y arrancamos en lo solicitado.
             cantidad_enviada:
-              item.cantidad_enviada ?? item.cantidad_solicitada ?? 1,
+              item.cantidad_enviada > 0
+                ? item.cantidad_enviada
+                : (item.cantidad_solicitada ?? 1),
           };
         }
         setLocal(init);
@@ -114,9 +119,11 @@ export default function PickingPage() {
       try {
         const p_items = items.map((item) => ({
           detalle_id: item.id,
+          // `||` (no `??`) para que un 0 heredado caiga a lo solicitado.
           cantidad_enviada:
-            localSnapshot[item.id]?.cantidad_enviada ??
-            item.cantidad_solicitada,
+            localSnapshot[item.id]?.cantidad_enviada ||
+            item.cantidad_solicitada ||
+            1,
           picking_completado:
             localSnapshot[item.id]?.picking_completado ?? false,
         }));
