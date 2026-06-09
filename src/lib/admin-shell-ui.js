@@ -17,6 +17,7 @@ import {
   Settings,
   Users,
   CreditCard,
+  HandCoins,
 } from "lucide-react";
 
 /**
@@ -83,6 +84,12 @@ export const SECCIONES_ADMIN = [
         label: "Notas crédito",
         href: "/admin/notas-credito",
         icon: CreditCard,
+      },
+      {
+        id: "cuentas",
+        label: "Cuentas cobrar/pagar",
+        href: "/admin/cuentas",
+        icon: HandCoins,
       },
       {
         id: "configuracion",
