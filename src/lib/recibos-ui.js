@@ -13,12 +13,6 @@ export const RECIBOS_TABS = [
   { v: "Anulados", anulado: true },
 ];
 
-/** Modos reales del formulario de creación (estado local `modo`). */
-export const RECIBO_MODOS = [
-  { v: "cero", label: "Manual" },
-  { v: "cotizacion", label: "Desde cotización" },
-];
-
 /**
  * Métodos de pago reales del recibo (columna recibos.metodo_pago) para el
  * <select> del formulario. Reales: 'efectivo' | 'transferencia' | 'tarjeta' |
