@@ -392,7 +392,7 @@ function DetalleContenido({
             to={`/ops/ordenes/${cotizacion.ot.id}`}
             className="vinc-pill"
             title="Ver OT vinculada"
-            style={{ minHeight: 32 }}
+            style={{ minHeight: 48 }}
           >
             <Link2 className="mr-1.5 h-3 w-3" strokeWidth={2} />
             OT #{cotizacion.ot.numero}
@@ -403,7 +403,7 @@ function DetalleContenido({
             to={`/ops/ventas/${cotizacion.venta.id}`}
             className="vinc-pill"
             title="Ver venta convertida"
-            style={{ minHeight: 32 }}
+            style={{ minHeight: 48 }}
           >
             <ShoppingCart className="mr-1.5 h-3 w-3" strokeWidth={2} />
             Venta #{cotizacion.venta.numero}

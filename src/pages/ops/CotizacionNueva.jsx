@@ -12,8 +12,6 @@ import {
   Check,
   Info,
   Lock,
-  FileText,
-  Save,
   Pencil,
   AlertCircle,
   Wrench,
@@ -1591,55 +1589,27 @@ function PasoRevision({
         </div>
       </ReviewBlock>
 
-      {/* Acciones de generación */}
-      <div className="mt-1 grid grid-cols-1 gap-3 sm:grid-cols-[1.4fr_1fr]">
-        <div
-          className="flex flex-col gap-1.5 rounded-[10px] border-2 p-4"
-          style={{
-            borderColor: "var(--p-600)",
-            backgroundColor: "var(--p-50)",
-          }}
+      {/* Nota informativa (NO son botones — el CTA real es "Generar
+          cotización" del resumen). Antes eran dos cuadros con pinta de CTA. */}
+      <div
+        className="mt-1 flex items-start gap-2.5 rounded-[10px] border p-3.5"
+        style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-50)" }}
+      >
+        <Info
+          className="mt-0.5 h-4 w-4 shrink-0"
+          style={{ color: "var(--n-500)" }}
+          strokeWidth={2}
+        />
+        <p
+          className="text-[12.5px] leading-relaxed"
+          style={{ color: "var(--n-600)" }}
         >
-          <div className="flex items-center gap-2.5">
-            <FileText
-              className="h-4 w-4"
-              style={{ color: "var(--p-700)" }}
-              strokeWidth={2}
-            />
-            <span
-              className="text-sm font-medium"
-              style={{ color: "var(--p-700)" }}
-            >
-              Generar PDF y guardar
-            </span>
-          </div>
-          <p className="text-[12px]" style={{ color: "var(--n-500)" }}>
-            Usa el botón <b>Generar cotización</b> del resumen. Se guarda la
-            cotización y podrás descargar el PDF desde el listado.
-          </p>
-        </div>
-        <div
-          className="flex flex-col gap-1.5 rounded-[10px] border p-4"
-          style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
-        >
-          <div className="flex items-center gap-2.5">
-            <Save
-              className="h-4 w-4"
-              style={{ color: "var(--n-500)" }}
-              strokeWidth={2}
-            />
-            <span
-              className="text-sm font-medium"
-              style={{ color: "var(--n-950)" }}
-            >
-              Queda como borrador
-            </span>
-          </div>
-          <p className="text-[12px]" style={{ color: "var(--n-500)" }}>
-            La cotización se crea en estado borrador. Podrás enviarla o
-            convertirla más tarde.
-          </p>
-        </div>
+          Para crear la cotización usa el botón{" "}
+          <b style={{ color: "var(--n-900)" }}>Generar cotización</b> del
+          resumen. Se guarda en estado{" "}
+          <b style={{ color: "var(--n-900)" }}>borrador</b>; después podrás
+          descargar el PDF, enviarla o convertirla en venta desde el listado.
+        </p>
       </div>
     </WizCard>
   );
