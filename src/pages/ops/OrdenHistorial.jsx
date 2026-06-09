@@ -144,7 +144,7 @@ export default function OrdenHistorial() {
             className="text-[22px] sm:text-[24px] font-semibold tracking-[-0.018em]"
             style={{ color: "var(--n-950)" }}
           >
-            Órdenes de Servicio
+            Órdenes de Trabajo
           </h1>
           <p
             className="mt-1.5 text-[13px] leading-[1.5]"

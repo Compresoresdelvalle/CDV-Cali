@@ -226,7 +226,7 @@ export default function Dashboard() {
       roles: ["Admin", "Bodeguero", "Vendedor"],
     },
     {
-      label: "Orden de Servicio",
+      label: "Orden de Trabajo",
       icon: <Icon d={ICONS.wrench} />,
       url: "/ops/ordenes",
       roles: ["Admin", "Tecnico", "Vendedor"],

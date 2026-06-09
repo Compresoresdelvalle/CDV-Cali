@@ -107,7 +107,7 @@ export function movimientoModulo(tipo) {
     ensamble_consumo: "Ensambles",
     ensamble_produccion: "Ensambles",
     devolucion: "Devoluciones",
-    orden_consumo: "Órdenes de servicio",
+    orden_consumo: "Órdenes de trabajo",
   };
   return map[tipo] ?? "Sistema";
 }

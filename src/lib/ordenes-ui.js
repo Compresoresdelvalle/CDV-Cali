@@ -1,5 +1,5 @@
 /**
- * Helpers de presentación de Órdenes de Servicio (diseño Lovable).
+ * Helpers de presentación de Órdenes de Trabajo (diseño Lovable).
  *
  * Convierte valores REALES de la base de datos a las clases del sistema de
  * diseño portado (`.s-pill`, `.auth-pill`, `.av-tec`). NO contiene lógica de
