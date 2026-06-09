@@ -32,6 +32,10 @@ export default function ModalAbrirGarantiaVenta({
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState([]);
   const [items, setItems] = useState([]); // [{ producto_id, nombre, cantidad }]
+  // B11: producto(s) defectuoso(s) que devuelve el cliente → reingresan como 2da.
+  const [busquedaDev, setBusquedaDev] = useState("");
+  const [resultadosDev, setResultadosDev] = useState([]);
+  const [itemsDevueltos, setItemsDevueltos] = useState([]);
   const mountedRef = useRef(true);
   const guardandoRef = useRef(false);
   useEffect(() => {
@@ -83,6 +87,42 @@ export default function ModalAbrirGarantiaVenta({
   const removeItem = (id) =>
     setItems((prev) => prev.filter((i) => i.producto_id !== id));
 
+  // B11: buscador + lista de defectuosos devueltos (reingresan como segunda).
+  const buscarDev = async (q) => {
+    const term = sanitizeSearch(q ?? "");
+    if (term.length < 2) {
+      setResultadosDev([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("productos")
+      .select("id, nombre, referencia, codigo_interno")
+      .eq("activo", true)
+      .or(
+        `nombre.ilike.%${term}%,referencia.ilike.%${term}%,codigo_interno.ilike.%${term}%`,
+      )
+      .limit(1000);
+    if (mountedRef.current) setResultadosDev(error ? [] : (data ?? []));
+  };
+  const buscarDevDebounced = useDebouncedCallback(buscarDev, 400);
+  const addItemDev = (p) => {
+    setItemsDevueltos((prev) =>
+      prev.some((i) => i.producto_id === p.id)
+        ? prev
+        : [...prev, { producto_id: p.id, nombre: p.nombre, cantidad: 1 }],
+    );
+    setBusquedaDev("");
+    setResultadosDev([]);
+  };
+  const setQtyDev = (id, v) => {
+    const n = Math.max(1, Number(v) || 1);
+    setItemsDevueltos((prev) =>
+      prev.map((i) => (i.producto_id === id ? { ...i, cantidad: n } : i)),
+    );
+  };
+  const removeItemDev = (id) =>
+    setItemsDevueltos((prev) => prev.filter((i) => i.producto_id !== id));
+
   const submit = async () => {
     setErrorMsg("");
     if (resolucion === "cambiar_pieza" && items.length === 0) {
@@ -115,6 +155,9 @@ export default function ModalAbrirGarantiaVenta({
             ? equipoDescripcion.trim() || null
             : null,
         items: resolucion === "cambiar_pieza" ? items : [],
+        // B11: defectuosos que devuelve el cliente → reingresan como segunda.
+        items_devueltos:
+          resolucion === "arreglar_producto" ? [] : itemsDevueltos,
       };
       const { data, error } = await supabase.rpc("fn_abrir_garantia_venta", {
         p_payload: payload,
@@ -386,6 +429,101 @@ export default function ModalAbrirGarantiaVenta({
                 placeholder="Si está vacío se usará referencia automática"
                 maxLength={200}
               />
+            </div>
+          )}
+
+          {/* B11: producto(s) defectuoso(s) que devuelve el cliente → segunda */}
+          {resolucion !== "arreglar_producto" && (
+            <div>
+              <p
+                className="text-xs uppercase tracking-wide font-semibold mb-1"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                Producto defectuoso que devuelve el cliente (opcional)
+              </p>
+              <p
+                className="text-[11px] mb-1"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                Lo que entregue el cliente reingresa al inventario como{" "}
+                <strong>segunda mano</strong> (precio/costo en 0, ajústalos
+                luego).
+              </p>
+              <input
+                type="text"
+                value={busquedaDev}
+                onChange={(e) => {
+                  setBusquedaDev(e.target.value);
+                  buscarDevDebounced(e.target.value);
+                }}
+                placeholder="Buscar producto devuelto (mín. 2 letras)..."
+                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[44px]"
+                style={{
+                  backgroundColor: "hsl(var(--background))",
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--foreground))",
+                }}
+              />
+              {resultadosDev.length > 0 && (
+                <ul
+                  className="mt-1 max-h-60 overflow-y-auto rounded-lg border"
+                  style={{ borderColor: "hsl(var(--border))" }}
+                >
+                  {resultadosDev.map((p) => (
+                    <li key={p.id}>
+                      <button
+                        onClick={() => addItemDev(p)}
+                        className="w-full text-left px-3 py-2 text-sm cursor-pointer"
+                        style={{
+                          borderBottom: "1px solid hsl(var(--border) / 0.5)",
+                          color: "hsl(var(--foreground))",
+                        }}
+                      >
+                        {p.nombre}{" "}
+                        <span style={{ opacity: 0.6 }}>
+                          ({p.codigo_interno ?? p.referencia})
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {itemsDevueltos.length > 0 && (
+                <ul className="mt-2 space-y-1.5">
+                  {itemsDevueltos.map((i) => (
+                    <li
+                      key={i.producto_id}
+                      className="flex items-center gap-2 rounded-lg border px-2 py-1.5"
+                      style={{ borderColor: "hsl(var(--border))" }}
+                    >
+                      <span className="flex-1 text-sm">{i.nombre}</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={i.cantidad}
+                        onChange={(e) =>
+                          setQtyDev(i.producto_id, e.target.value)
+                        }
+                        className="w-20 px-2 py-1 rounded border text-sm text-right"
+                        style={{
+                          backgroundColor: "hsl(var(--background))",
+                          borderColor: "hsl(var(--border))",
+                        }}
+                      />
+                      <button
+                        onClick={() => removeItemDev(i.producto_id)}
+                        className="text-xs px-2 py-1 rounded border cursor-pointer"
+                        style={{
+                          borderColor: "hsl(var(--destructive))",
+                          color: "hsl(var(--destructive))",
+                        }}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
