@@ -64,6 +64,7 @@ export default function CompraDetalle() {
           .select(
             `id, numero, fecha, fecha_recepcion, proveedor, factura_proveedor,
              observaciones, subtotal, iva, total, recibida, estado, sede_destino_id,
+             metodo_pago, cuenta_bancaria, descuento_valor,
              registrador:registrado_por(nombre)`,
           )
           .eq("id", id)
@@ -355,6 +356,14 @@ export default function CompraDetalle() {
                 <span>Subtotal</span>
                 <span className="v">{formatCOP(compra.subtotal)}</span>
               </div>
+              {Number(compra.descuento_valor ?? 0) > 0 && (
+                <div className="ln">
+                  <span>Descuento</span>
+                  <span className="v">
+                    −{formatCOP(Number(compra.descuento_valor))}
+                  </span>
+                </div>
+              )}
               <div className="ln">
                 <span>IVA</span>
                 <span className="v">{formatCOP(compra.iva)}</span>
@@ -363,6 +372,27 @@ export default function CompraDetalle() {
                 <span>Total</span>
                 <span className="v">{formatCOP(compra.total)}</span>
               </div>
+              {/* B9: forma de pago + cuenta destino / crédito */}
+              <div
+                className="ln"
+                style={{
+                  marginTop: 6,
+                  paddingTop: 6,
+                  borderTop: "1px solid var(--n-100)",
+                }}
+              >
+                <span>Pago</span>
+                <span className="v">
+                  {compra.metodo_pago ?? "Efectivo"}
+                  {compra.metodo_pago === "Crédito" ? " · pendiente" : ""}
+                </span>
+              </div>
+              {compra.cuenta_bancaria && (
+                <div className="ln">
+                  <span>Cuenta</span>
+                  <span className="v">{compra.cuenta_bancaria}</span>
+                </div>
+              )}
             </div>
           </div>
 

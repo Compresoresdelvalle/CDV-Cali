@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeftCircle,
@@ -29,6 +29,19 @@ export default function CompraNueva() {
   const [observaciones, setObservaciones] = useState("");
   const [recibirAhora, setRecibirAhora] = useState(false);
   const [ivaPct, setIvaPct] = useState(IVA_DEFAULT);
+  // B9 — forma de pago (incl. CRÉDITO), cuenta destino real y descuento $.
+  const [metodoPago, setMetodoPago] = useState("Efectivo");
+  const [cuentaBancaria, setCuentaBancaria] = useState("");
+  const [descuentoValor, setDescuentoValor] = useState(0);
+  const [cuentasBanco, setCuentasBanco] = useState([]);
+  useEffect(() => {
+    supabase
+      .from("cuentas_bancarias")
+      .select("id, banco, tipo, numero, titular")
+      .eq("activo", true)
+      .order("banco")
+      .then(({ data }) => setCuentasBanco(data ?? []));
+  }, []);
   const [concepto, setConcepto] = useState(""); // #31 caja menor
   const [monto, setMonto] = useState(""); // #31 caja menor (total manual)
   // estado_compra removido del form: se asigna 'completada' en BD por default.
@@ -152,8 +165,10 @@ export default function CompraNueva() {
     (s, i) => s + i.cantidad * i.costo_unitario,
     0,
   );
-  const iva = subtotal * (ivaPct / 100);
-  const total = subtotal + iva;
+  // B9: descuento en $ (clamp a [0, subtotal]); reduce la base gravable.
+  const descuento = Math.min(Math.max(0, descuentoValor), subtotal);
+  const iva = (subtotal - descuento) * (ivaPct / 100);
+  const total = subtotal - descuento + iva;
   const totalItems = carrito.reduce((s, i) => s + i.cantidad, 0);
 
   // Pasos del wizard: el paso "Proveedor" se considera completo cuando hay
@@ -169,6 +184,14 @@ export default function CompraNueva() {
     }
     if (carrito.length === 0) {
       setError("Agrega al menos un producto.");
+      return;
+    }
+    // B9: en pagos electrónicos la cuenta destino es obligatoria.
+    if (
+      (metodoPago === "Transferencia" || metodoPago === "Tarjeta") &&
+      !cuentaBancaria
+    ) {
+      setError("Selecciona la cuenta bancaria desde donde se pagó.");
       return;
     }
     // Guard síncrono: el `disabled` de React no evita el doble-clic veloz.
@@ -192,6 +215,9 @@ export default function CompraNueva() {
           destino: i.destino ?? "venta",
         })),
         p_iva_pct: ivaPct,
+        p_metodo_pago: metodoPago,
+        p_cuenta_bancaria: cuentaBancaria || null,
+        p_descuento_valor: descuento,
       });
       if (rpcErr) throw new Error(rpcErr.message);
 
@@ -755,6 +781,114 @@ export default function CompraNueva() {
             </div>
           )}
 
+          {/* B9 — Forma de pago + cuenta + descuento (solo compra normal) */}
+          {modo === "normal" && (
+            <div className="iblock flex flex-col gap-3.5">
+              <div className="ib-head">
+                <div className="ib-title">Pago de la compra</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {["Efectivo", "Transferencia", "Tarjeta", "Crédito"].map(
+                  (m) => {
+                    const on = metodoPago === m;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          setMetodoPago(m);
+                          if (m === "Efectivo" || m === "Crédito")
+                            setCuentaBancaria("");
+                        }}
+                        className="rounded-md border px-3 text-[13px] font-medium transition-colors"
+                        style={{
+                          minHeight: 40,
+                          borderColor: on ? "var(--p-400)" : "var(--n-200)",
+                          backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
+                          color: on ? "#fff" : "var(--n-700)",
+                        }}
+                      >
+                        {m}
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+              {metodoPago === "Crédito" && (
+                <p className="text-xs" style={{ color: "var(--warn-700)" }}>
+                  Compra a crédito: queda como pendiente de pago al proveedor.
+                </p>
+              )}
+
+              {(metodoPago === "Transferencia" || metodoPago === "Tarjeta") && (
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <label
+                    htmlFor="compra-cuenta"
+                    className="text-sm"
+                    style={{ color: "var(--n-500)" }}
+                  >
+                    Cuenta bancaria
+                    <span style={{ color: "var(--dang-700)" }}> *</span>
+                  </label>
+                  <select
+                    id="compra-cuenta"
+                    value={cuentaBancaria}
+                    onChange={(e) => setCuentaBancaria(e.target.value)}
+                    className="h-10 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+                    style={{
+                      borderColor: "var(--n-200)",
+                      color: "var(--n-950)",
+                    }}
+                  >
+                    <option value="">Sin especificar</option>
+                    {cuentasBanco.map((c) => {
+                      const ref = `${c.banco} ${c.tipo} ${c.numero}${c.titular ? " · " + c.titular : ""}`;
+                      return (
+                        <option key={c.id} value={ref}>
+                          {ref}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {!cuentaBancaria && (
+                    <span
+                      className="text-[11.5px]"
+                      style={{ color: "var(--dang-700)" }}
+                    >
+                      {cuentasBanco.length === 0
+                        ? "No hay cuentas activas. El Admin debe crearlas en Configuración."
+                        : "Obligatorio: indica desde qué cuenta se pagó"}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="text-sm" style={{ color: "var(--n-500)" }}>
+                  Descuento $
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={descuentoValor}
+                  onChange={(e) =>
+                    setDescuentoValor(Math.max(0, Number(e.target.value) || 0))
+                  }
+                  className="finput"
+                  style={{ width: 140, textAlign: "center" }}
+                  aria-label="Descuento en pesos"
+                />
+                <span
+                  className="text-[11.5px]"
+                  style={{ color: "var(--n-500)" }}
+                >
+                  Se resta del subtotal antes del IVA.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* #31 — Caja menor: concepto + monto (no inventariable) */}
           {modo === "caja_menor" && (
             <div className="iblock flex flex-col gap-3.5">
@@ -868,6 +1002,14 @@ export default function CompraNueva() {
                 <span>Subtotal</span>
                 <span className="v">{formatCOP(subtotal)}</span>
               </div>
+              {descuento > 0 && (
+                <div className="cart-line" style={{ color: "var(--warn-700)" }}>
+                  <span>Descuento</span>
+                  <span className="v" style={{ color: "var(--warn-700)" }}>
+                    −{formatCOP(descuento)}
+                  </span>
+                </div>
+              )}
               <div className="cart-line">
                 <span>
                   IVA {ivaPct}%{ivaPct === 0 ? " (exento)" : ""}
@@ -877,6 +1019,10 @@ export default function CompraNueva() {
               <div className="cart-line tot">
                 <span>Total estimado</span>
                 <span className="v">{formatCOP(total)}</span>
+              </div>
+              <div className="text-[11.5px]" style={{ color: "var(--n-500)" }}>
+                Pago: {metodoPago}
+                {metodoPago === "Crédito" ? " (pendiente)" : ""}
               </div>
             </>
           ) : (
