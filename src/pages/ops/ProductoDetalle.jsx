@@ -7,6 +7,7 @@ import {
   QrCode,
   Tag,
   ClipboardList,
+  History,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../stores/authStore";
@@ -17,6 +18,7 @@ import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { ubicacionLabel } from "../../lib/inventario-ui";
+import { usuarioDisplayName } from "../../lib/user-display";
 
 export default function ProductoDetalle() {
   const { productoId } = useParams();
@@ -29,6 +31,7 @@ export default function ProductoDetalle() {
   const [inventario, setInventario] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
   const [proveedores, setProveedores] = useState([]); // F12: historial proveedores
+  const [historialPrecios, setHistorialPrecios] = useState([]); // auditoría costo/precio
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -98,11 +101,45 @@ export default function ProductoDetalle() {
           .eq("producto_id", productoId)
           .order("ultima_compra_at", { ascending: false, nullsFirst: false });
 
+        // Auditoría de cambios de costo/precio (solo Admin; la RLS lo restringe).
+        // usuario_id no tiene FK a usuarios, así que se resuelve el nombre aparte.
+        let histRows = [];
+        if (esAdmin) {
+          const { data: hist } = await supabase
+            .from("productos_precio_costo_log")
+            .select(
+              "id, campo, valor_anterior, valor_nuevo, usuario_id, created_at",
+            )
+            .eq("producto_id", productoId)
+            .order("created_at", { ascending: false })
+            .limit(30);
+          histRows = hist ?? [];
+          const uids = [
+            ...new Set(histRows.map((h) => h.usuario_id).filter(Boolean)),
+          ];
+          if (uids.length) {
+            const { data: us } = await supabase
+              .from("usuarios")
+              .select("id, nombre")
+              .in("id", uids);
+            const nameById = Object.fromEntries(
+              (us ?? []).map((u) => [u.id, usuarioDisplayName(u)]),
+            );
+            histRows = histRows.map((h) => ({
+              ...h,
+              usuario_nombre: h.usuario_id
+                ? (nameById[h.usuario_id] ?? null)
+                : null,
+            }));
+          }
+        }
+
         if (!cancelled) {
           setProducto(prod);
           setInventario(inv ?? []);
           setMovimientos(movs ?? []);
           setProveedores(provs ?? []);
+          setHistorialPrecios(histRows);
           setLoading(false);
         }
       } catch (e) {
@@ -117,7 +154,7 @@ export default function ProductoDetalle() {
     return () => {
       cancelled = true;
     };
-  }, [productoId, authLoading]);
+  }, [productoId, authLoading, esAdmin]);
 
   const abrirEditarPrecio = () => {
     if (!producto) return;
@@ -649,6 +686,81 @@ export default function ProductoDetalle() {
             </ul>
           )}
         </div>
+
+        {/* Historial de costo y precio (solo Admin) */}
+        {esAdmin && (
+          <div className="iblock">
+            <div className="ib-head">
+              <div className="ib-ico">
+                <History className="h-3.5 w-3.5" strokeWidth={2} />
+              </div>
+              <div className="ib-title">Historial de costo y precio</div>
+              {historialPrecios.length > 0 && (
+                <div className="ib-aux">{historialPrecios.length}</div>
+              )}
+            </div>
+            {historialPrecios.length === 0 ? (
+              <p
+                className="px-4 py-3 text-sm"
+                style={{ color: "var(--n-500)" }}
+              >
+                Sin cambios de costo o precio registrados.
+              </p>
+            ) : (
+              <ul>
+                {historialPrecios.map((h, idx) => (
+                  <li
+                    key={h.id}
+                    className="flex items-start justify-between gap-3 px-4 py-3"
+                    style={{
+                      borderTop: idx === 0 ? "none" : "1px solid var(--n-100)",
+                    }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                          style={
+                            h.campo === "precio_venta"
+                              ? {
+                                  backgroundColor: "var(--p-50)",
+                                  color: "var(--p-700)",
+                                }
+                              : {
+                                  backgroundColor: "var(--warn-50)",
+                                  color: "var(--warn-700)",
+                                }
+                          }
+                        >
+                          {h.campo === "precio_venta" ? "Precio" : "Costo"}
+                        </span>
+                        <span
+                          className="font-mono text-sm tabular-nums"
+                          style={{ color: "var(--n-900)" }}
+                        >
+                          {formatCOP(h.valor_anterior ?? 0)} →{" "}
+                          {formatCOP(h.valor_nuevo ?? 0)}
+                        </span>
+                      </div>
+                      <p
+                        className="mt-0.5 text-[11px]"
+                        style={{ color: "var(--n-500)" }}
+                      >
+                        {h.usuario_nombre ?? "—"}
+                      </p>
+                    </div>
+                    <span
+                      className="shrink-0 font-mono text-[10px]"
+                      style={{ color: "var(--n-300)" }}
+                    >
+                      {formatDate(h.created_at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Modal: editar precio (solo Admin) ── */}
