@@ -146,6 +146,7 @@ export default function VentaDetalle() {
           .select("id, fecha, monto, metodo_pago, observaciones")
           .eq("venta_id", id)
           .eq("tipo", "cobro")
+          .eq("anulado", false)
           .order("fecha", { ascending: true }),
       ]);
       const abonosCotiz = (cots ?? [])
