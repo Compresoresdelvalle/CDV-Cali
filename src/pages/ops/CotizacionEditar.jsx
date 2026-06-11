@@ -37,7 +37,6 @@ export default function CotizacionEditar() {
 
   const [loading, setLoading] = useState(true);
   const [numero, setNumero] = useState(null);
-  const [estadoOriginal, setEstadoOriginal] = useState(null);
   const [noEditable, setNoEditable] = useState(null);
   const guardandoRef = useRef(false);
 
@@ -100,13 +99,13 @@ export default function CotizacionEditar() {
         if (itemsErr) throw itemsErr;
 
         setNumero(cot.numero);
-        setEstadoOriginal(cot.estado);
-        // Solo editable en borrador/enviada/rechazada y si no fue convertida.
+        // Solo editable en borrador y si no fue convertida (B9-6: editar una
+        // enviada/rechazada fallaba luego con "Transición ilegal a borrador").
         if (cot.venta_id) {
           setNoEditable("Esta cotización ya fue convertida en venta.");
-        } else if (!["borrador", "enviada", "rechazada"].includes(cot.estado)) {
+        } else if (cot.estado !== "borrador") {
           setNoEditable(
-            `No se puede editar una cotización en estado "${cot.estado}".`,
+            `Solo se puede editar una cotización en estado Borrador (estado actual: "${cot.estado}").`,
           );
         }
 
@@ -459,11 +458,6 @@ export default function CotizacionEditar() {
     );
   }
 
-  const volveraBorrador =
-    estadoOriginal &&
-    estadoOriginal !== "borrador" &&
-    estadoOriginal !== "aprobada";
-
   return (
     <div className="px-4 pb-16 pt-5 sm:px-7 animate-fade-in">
       <button
@@ -495,15 +489,6 @@ export default function CotizacionEditar() {
           >
             Editar cotización #{numero}
           </h1>
-          {volveraBorrador && (
-            <p
-              className="mt-1.5 text-[13px]"
-              style={{ color: "var(--warn-700)" }}
-            >
-              Al guardar, esta cotización volverá a estado{" "}
-              <b className="font-medium">Borrador</b>.
-            </p>
-          )}
         </div>
         <button
           onClick={() => navigate(`/ops/cotizaciones/${id}`)}
