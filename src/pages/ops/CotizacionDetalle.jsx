@@ -1062,6 +1062,10 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
       setErr("Ingresa un monto válido mayor a 0.");
       return;
     }
+    if (n > saldo) {
+      setErr(`El abono supera el saldo pendiente (${formatCOP(saldo)}).`);
+      return;
+    }
     setErr(null);
     setGuardando(true);
     try {
