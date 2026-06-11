@@ -10,8 +10,11 @@ import {
   Activity,
   Printer,
   Truck,
+  Ban,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
+import { useAuthStore } from "../../../stores/authStore";
+import AnularGarantiaModal from "../../../components/garantias/AnularGarantiaModal";
 import { formatCOP, formatDate, safeError } from "../../../lib/utils";
 import {
   garantiaEstadoLabel,
@@ -59,6 +62,10 @@ export default function GarantiaCompraDetalle() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const perfil = useAuthStore((s) => s.perfil);
+  const esAdmin = perfil?.rol === "Admin";
+  const [anulOpen, setAnulOpen] = useState(false);
+  const [anulBusy, setAnulBusy] = useState(false);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -129,6 +136,25 @@ export default function GarantiaCompraDetalle() {
       setErrorMsg(safeError(err, "Error al marcar reposición"));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const anularGarantia = async (motivo) => {
+    setAnulBusy(true);
+    setErrorMsg("");
+    try {
+      const { error } = await supabase.rpc("fn_anular_garantia_compra", {
+        p_garantia_id: id,
+        p_motivo: motivo,
+      });
+      if (error) throw error;
+      setAnulOpen(false);
+      await cargar();
+    } catch (err) {
+      setAnulOpen(false);
+      setErrorMsg(safeError(err, "No se pudo anular la garantía"));
+    } finally {
+      setAnulBusy(false);
     }
   };
 
@@ -246,6 +272,20 @@ export default function GarantiaCompraDetalle() {
             Ver compra origen
           </button>
         )}
+        {esAdmin && garantia.estado !== "anulada" && (
+          <button
+            onClick={() => setAnulOpen(true)}
+            className="btn btn-out"
+            style={{
+              height: 48,
+              color: "hsl(var(--destructive))",
+              borderColor: "hsl(var(--destructive) / 0.4)",
+            }}
+          >
+            <Ban className="h-3.5 w-3.5" strokeWidth={2} />
+            Anular garantía
+          </button>
+        )}
       </div>
 
       {errorMsg && (
@@ -261,6 +301,14 @@ export default function GarantiaCompraDetalle() {
           {errorMsg}
         </div>
       )}
+
+      <AnularGarantiaModal
+        open={anulOpen}
+        tipo="compra"
+        busy={anulBusy}
+        onClose={() => setAnulOpen(false)}
+        onConfirm={anularGarantia}
+      />
 
       {/* ── State machine ───────────────────────────────────────────── */}
       <ProcesoStepper pasos={pasos} />
