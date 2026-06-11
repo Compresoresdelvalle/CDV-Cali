@@ -38,6 +38,7 @@ import { ToolIcon, UserAvatar, Pill } from "./HerramientasBits";
 export default function HerramientaDetalle({
   herramienta,
   accionando,
+  esAdmin,
   onClose,
   onDevolver,
   onConsumir,
@@ -133,7 +134,9 @@ export default function HerramientaDetalle({
 
         {/* ── Fila de acciones ─────────────────────────────────────── */}
         <div className="mb-5 flex flex-wrap gap-2">
-          {esPrestada && (
+          {/* Devolver una inventariable la regresa al insumo (retiro) → solo Admin.
+              Una manual vuelve a 'disponible' y puede hacerlo Bodeguero/misma sede. */}
+          {esPrestada && (!esInventariable || esAdmin) && (
             <button
               onClick={onDevolver}
               disabled={accionando}
@@ -149,8 +152,8 @@ export default function HerramientaDetalle({
               {accionando ? "Procesando…" : "Marcar devuelta"}
             </button>
           )}
-          {/* B11: consumido — no regresa al inventario; la herramienta desaparece. */}
-          {esPrestada && onConsumir && (
+          {/* B11: consumido — no regresa al inventario; la herramienta desaparece. Solo Admin. */}
+          {esPrestada && onConsumir && esAdmin && (
             <button
               onClick={() => {
                 if (
@@ -182,7 +185,7 @@ export default function HerramientaDetalle({
               <UserCheck className="h-3.5 w-3.5" strokeWidth={2} /> Prestar
             </button>
           )}
-          {esDisponible && esInventariable && (
+          {esDisponible && esInventariable && esAdmin && (
             <button
               onClick={onDevolver}
               disabled={accionando}

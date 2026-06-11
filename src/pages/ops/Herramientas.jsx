@@ -56,6 +56,8 @@ const TABS = [
 export default function Herramientas() {
   const perfil = useAuthStore((s) => s.perfil);
   const isAdmin = perfil?.rol === "Admin";
+  // Bodeguero puede crear/prestar/devolver; solo Admin consume y regresa a insumo.
+  const puedeCrear = isAdmin || perfil?.rol === "Bodeguero";
 
   const [herramientas, setHerramientas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -292,7 +294,7 @@ export default function Herramientas() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {isAdmin && (
+          {puedeCrear && (
             <button
               onClick={() => setModalNueva(true)}
               className="btn btn-pri inline-flex items-center gap-1.5"
@@ -401,6 +403,7 @@ export default function Herramientas() {
             atrasadas={atrasadas}
             disponiblesCount={disponibles.length}
             accionando={accionando}
+            esAdmin={isAdmin}
             onOpen={setDetalleId}
             onDevolver={devolver}
           />
@@ -424,6 +427,7 @@ export default function Herramientas() {
         <HerramientaDetalle
           herramienta={detalle}
           accionando={accionando === detalle.id}
+          esAdmin={isAdmin}
           onClose={() => setDetalleId(null)}
           onDevolver={() => devolver(detalle)}
           onConsumir={() => consumir(detalle)}
@@ -467,6 +471,7 @@ function TabActivos({
   atrasadas,
   disponiblesCount,
   accionando,
+  esAdmin,
   onOpen,
   onDevolver,
 }) {
@@ -581,6 +586,7 @@ function TabActivos({
                 key={h.id}
                 h={h}
                 accionando={accionando === h.id}
+                esAdmin={esAdmin}
                 onOpen={() => onOpen(h.id)}
                 onDevolver={() => onDevolver(h)}
               />
@@ -614,6 +620,7 @@ function TabActivos({
             <LoanCard
               h={h}
               accionando={accionando === h.id}
+              esAdmin={esAdmin}
               onOpen={() => onOpen(h.id)}
               onDevolver={() => onDevolver(h)}
             />
@@ -624,9 +631,11 @@ function TabActivos({
   );
 }
 
-function LoanRow({ h, accionando, onOpen, onDevolver }) {
+function LoanRow({ h, accionando, esAdmin, onOpen, onDevolver }) {
   const tono = prestamoTono(h);
   const dang = tono === "danger";
+  // Devolver una inventariable la regresa al insumo (retiro) → solo Admin.
+  const puedeDevolver = !h.producto_id || esAdmin;
   return (
     <tr
       className={dang ? "hrm-row-dang" : undefined}
@@ -710,19 +719,29 @@ function LoanRow({ h, accionando, onOpen, onDevolver }) {
       </td>
       <td className="px-3.5">
         <div className="flex items-center justify-end gap-1.5">
-          <button
-            onClick={onDevolver}
-            disabled={accionando}
-            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[12px] font-medium disabled:opacity-50"
-            style={{
-              borderColor: "var(--succ-border)",
-              color: "var(--succ-700)",
-              backgroundColor: "var(--n-0)",
-            }}
-          >
-            <Check className="h-3 w-3" strokeWidth={2} />
-            {accionando ? "…" : "Marcar devuelta"}
-          </button>
+          {puedeDevolver ? (
+            <button
+              onClick={onDevolver}
+              disabled={accionando}
+              className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[12px] font-medium disabled:opacity-50"
+              style={{
+                borderColor: "var(--succ-border)",
+                color: "var(--succ-700)",
+                backgroundColor: "var(--n-0)",
+              }}
+            >
+              <Check className="h-3 w-3" strokeWidth={2} />
+              {accionando ? "…" : "Marcar devuelta"}
+            </button>
+          ) : (
+            <span
+              className="text-[11px] italic"
+              style={{ color: "var(--n-400)" }}
+              title="Regresar una herramienta inventariable al insumo solo lo hace el Admin"
+            >
+              Devuelve Admin
+            </span>
+          )}
           <button
             onClick={onOpen}
             className="flex h-7 w-7 items-center justify-center rounded-md"
@@ -737,9 +756,10 @@ function LoanRow({ h, accionando, onOpen, onDevolver }) {
   );
 }
 
-function LoanCard({ h, accionando, onOpen, onDevolver }) {
+function LoanCard({ h, accionando, esAdmin, onOpen, onDevolver }) {
   const tono = prestamoTono(h);
   const dang = tono === "danger";
+  const puedeDevolver = !h.producto_id || esAdmin;
   return (
     <div
       className="rounded-xl border px-4 py-4"
@@ -802,20 +822,30 @@ function LoanCard({ h, accionando, onOpen, onDevolver }) {
         )}
       </div>
 
-      <button
-        onClick={onDevolver}
-        disabled={accionando}
-        className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border text-sm font-medium disabled:opacity-50"
-        style={{
-          height: 48,
-          borderColor: "var(--succ-border)",
-          color: "var(--succ-700)",
-          backgroundColor: "var(--succ-50)",
-        }}
-      >
-        <Check className="h-4 w-4" strokeWidth={2} />
-        {accionando ? "Procesando…" : "Marcar devuelta"}
-      </button>
+      {puedeDevolver ? (
+        <button
+          onClick={onDevolver}
+          disabled={accionando}
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border text-sm font-medium disabled:opacity-50"
+          style={{
+            height: 48,
+            borderColor: "var(--succ-border)",
+            color: "var(--succ-700)",
+            backgroundColor: "var(--succ-50)",
+          }}
+        >
+          <Check className="h-4 w-4" strokeWidth={2} />
+          {accionando ? "Procesando…" : "Marcar devuelta"}
+        </button>
+      ) : (
+        <p
+          className="text-center text-[11.5px] italic"
+          style={{ color: "var(--n-400)" }}
+        >
+          La devolución de esta herramienta (regresa al insumo) la registra el
+          Admin.
+        </p>
+      )}
     </div>
   );
 }

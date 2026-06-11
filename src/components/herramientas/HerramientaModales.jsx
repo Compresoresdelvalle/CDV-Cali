@@ -270,11 +270,12 @@ export function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
 /* ───────────────────────── Modal: Nueva herramienta ───────────────────── */
 
 /**
- * Alta de una herramienta del catálogo (solo Admin). Reusa la estética del
- * formulario por pasos de Lovable. Lógica de inserción REAL sin cambios.
+ * Alta de una herramienta del catálogo (Admin o Bodeguero; el Bodeguero solo en
+ * su propia sede). Reusa la estética del formulario por pasos de Lovable.
  */
 export function ModalNueva({ sedeDefault, onClose, onSaved }) {
   const perfil = useAuthStore((s) => s.perfil);
+  const esAdmin = perfil?.rol === "Admin";
   const savingRef = useRef(false);
   // 'insumo' = inventariable (sale del stock de insumo) · 'manual' = no inventariable
   const [modo, setModo] = useState("insumo");
@@ -358,8 +359,8 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
 
   const guardar = async (e) => {
     e.preventDefault();
-    if (perfil?.rol !== "Admin") {
-      setError("Solo el Admin puede crear herramientas");
+    if (!["Admin", "Bodeguero"].includes(perfil?.rol)) {
+      setError("Solo Admin o Bodeguero pueden crear herramientas");
       return;
     }
     if (modo === "manual" && !nombre.trim()) {
@@ -470,7 +471,9 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
             value={sedeId}
             onChange={(e) => setSedeId(e.target.value)}
             required
+            disabled={!esAdmin}
             className="finput sans"
+            style={!esAdmin ? { opacity: 0.7 } : undefined}
           >
             {sedes.map((s) => (
               <option key={s.id} value={s.id}>
@@ -478,6 +481,11 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
               </option>
             ))}
           </select>
+          {!esAdmin && (
+            <p className="mt-1 text-[11px]" style={{ color: "var(--n-500)" }}>
+              Solo puedes crear herramientas en tu sede.
+            </p>
+          )}
         </Field>
 
         {modo === "insumo" ? (
