@@ -41,6 +41,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
       .select("id, fecha, monto, metodo_pago, cuenta_bancaria, observaciones")
       .eq(refKey, cuenta.refId)
       .eq("tipo", cuenta.tipo)
+      .eq("anulado", false)
       .order("fecha", { ascending: true });
     setPagos(data ?? []);
     setLoading(false);
