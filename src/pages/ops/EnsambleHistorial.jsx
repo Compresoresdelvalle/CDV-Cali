@@ -35,7 +35,7 @@ export default function EnsambleHistorial() {
       titulo: "Eliminar ensamble",
       mensaje: `Se eliminará el ensamble #${e.numero} de "${
         e.producto?.nombre ?? ""
-      }". Si está completado, se devolverán los insumos al pool y se quitará el producto ensamblado del stock. ¿Confirmar?`,
+      }". Si está completado, se intentará devolver los insumos al pool y quitar el producto del stock; solo es posible si el producido sigue completo (si ya se vendió o trasladó parte, se rechazará). ¿Confirmar?`,
       confirmLabel: "Sí, eliminar",
     });
     if (!ok) return;

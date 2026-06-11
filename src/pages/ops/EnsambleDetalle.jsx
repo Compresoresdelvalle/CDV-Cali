@@ -291,7 +291,7 @@ export default function EnsambleDetalle() {
     const ok = await confirm({
       titulo: "Eliminar ensamble",
       mensaje:
-        "Se devolverán los insumos al pool y (si estaba completado) se quitará el producto del stock. ¿Confirmar?",
+        "Se intentará devolver los insumos al pool y, si estaba completado, quitar el producto del stock. Solo es posible si el producido sigue completo en stock: si ya se vendió o trasladó parte, la eliminación se rechazará. ¿Confirmar?",
       confirmLabel: "Sí, eliminar",
     });
     if (!ok) return;
