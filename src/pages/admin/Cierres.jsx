@@ -20,6 +20,7 @@ const METODO_LABELS = {
   efectivo: "Efectivo",
   transferencia: "Transferencia",
   tarjeta: "Tarjeta",
+  crédito: "Crédito",
   otro: "Otro",
 };
 
