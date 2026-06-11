@@ -561,7 +561,9 @@ export default function OrdenDetalle() {
   const pill = ordenEstadoPill(orden.estado);
   const aPill = autorizacionPill(orden.estado_autorizacion);
   const tec = tecnicoAvatar(orden.tecnico?.nombre);
-  const totalOT = Number(orden.total ?? 0) + Number(orden.valor_revision ?? 0);
+  // `total` ya incluye mano de obra + repuestos + valor_revision (canónico en BD,
+  // migración 20260610000033). No re-sumar valor_revision aquí o se duplicaría.
+  const totalOT = Number(orden.total ?? 0);
   const saldo = Math.max(0, totalOT - abonado);
   // Días en taller (derivado de la recepción real) y línea de tiempo de eventos.
   const diasTaller = diasEnEstado(orden);
