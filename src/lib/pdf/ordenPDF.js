@@ -219,7 +219,11 @@ export function generarOrdenPDF({
   const manoObra = Number(orden.costo_mano_obra ?? 0);
   const costoRep = Number(orden.costo_repuestos ?? 0);
   const valorRev = Number(orden.valor_revision ?? 0);
-  const total = Number(orden.total ?? manoObra + costoRep + valorRev);
+  // TOTAL autoconsistente con las líneas mostradas (mano obra + repuestos +
+  // valor de revisión). Equivale a orden.total (canónico en BD), pero se computa
+  // de los componentes para no caer en el bug de `orden.total ?? ...` cuando
+  // orden.total = 0 (?? no cae en 0) en OTs no_autorizado.
+  const total = manoObra + costoRep + valorRev;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
