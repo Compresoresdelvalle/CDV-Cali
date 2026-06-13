@@ -97,7 +97,12 @@ export default function ProductoDetalle() {
         // F12: historial de proveedores (último primero)
         const { data: provs } = await supabase
           .from("productos_proveedores")
-          .select("proveedor, ultima_compra_at, ultimo_costo")
+          // FRONTEND-01: el último costo es información de costo → solo Admin lo recibe.
+          .select(
+            esAdmin
+              ? "proveedor, ultima_compra_at, ultimo_costo"
+              : "proveedor, ultima_compra_at",
+          )
           .eq("producto_id", productoId)
           .order("ultima_compra_at", { ascending: false, nullsFirst: false });
 
@@ -592,7 +597,7 @@ export default function ProductoDetalle() {
                       </p>
                     )}
                   </div>
-                  {p.ultimo_costo != null && (
+                  {esAdmin && p.ultimo_costo != null && (
                     <span
                       className="font-mono text-sm tabular-nums"
                       style={{ color: "var(--n-500)" }}
