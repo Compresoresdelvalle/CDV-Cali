@@ -18,6 +18,7 @@ import {
   RECIBO_DIRECCION,
   SEDE_TELEFONO,
 } from "./pdfStyles";
+import { METODO_PAGO_LABELS } from "../ordenes-ui";
 
 const ESTADO_LABEL = {
   abierta: "Abierta",
@@ -44,6 +45,12 @@ export function generarOrdenPDF({
   repuestos = [],
   tecnico = "—",
   checklist = [],
+  abonos = [],
+  // Solo el DESGLOSE de costos (costo unitario de repuestos y el desglose de
+  // mano de obra/repuestos) es información sensible y se imprime únicamente para
+  // Admin. El total a pagar, los abonos y el saldo son del cliente y se imprimen
+  // para todos los roles. Default true por compatibilidad.
+  incluirCostos = true,
 }) {
   const doc = new jsPDF({ unit: "mm", format: "letter", compress: true });
   let y = LAYOUT.margenSup;
@@ -175,17 +182,25 @@ export function generarOrdenPDF({
 
   // ── Tabla de repuestos ───────────────────────────────────────────────
   if (repuestos.length > 0) {
-    autoTable(doc, {
-      startY: y,
-      head: [["#", "Referencia", "Repuesto", "Cant.", "Costo unit.", "Total"]],
-      body: repuestos.map((it, i) => [
+    const cabecera = incluirCostos
+      ? ["#", "Referencia", "Repuesto", "Cant.", "Costo unit.", "Total"]
+      : ["#", "Referencia", "Repuesto", "Cant."];
+    const cuerpo = repuestos.map((it, i) => {
+      const fila = [
         String(i + 1),
         it.producto?.referencia ?? "—",
         it.producto?.nombre ?? "—",
         String(it.cantidad ?? 0),
-        formatCOP(it.costo_unitario),
-        formatCOP(it.subtotal),
-      ]),
+      ];
+      if (incluirCostos) {
+        fila.push(formatCOP(it.costo_unitario), formatCOP(it.subtotal));
+      }
+      return fila;
+    });
+    autoTable(doc, {
+      startY: y,
+      head: [cabecera],
+      body: cuerpo,
       theme: "grid",
       headStyles: {
         fillColor: COLORES.primario,
@@ -194,14 +209,21 @@ export function generarOrdenPDF({
         fontSize: 9,
       },
       bodyStyles: { fontSize: 9, textColor: COLORES.textoOscuro },
-      columnStyles: {
-        0: { cellWidth: 10, halign: "center" },
-        1: { cellWidth: 30 },
-        2: { cellWidth: 70 },
-        3: { cellWidth: 18, halign: "right" },
-        4: { cellWidth: 29, halign: "right" },
-        5: { cellWidth: 29, halign: "right" },
-      },
+      columnStyles: incluirCostos
+        ? {
+            0: { cellWidth: 10, halign: "center" },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 70 },
+            3: { cellWidth: 18, halign: "right" },
+            4: { cellWidth: 29, halign: "right" },
+            5: { cellWidth: 29, halign: "right" },
+          }
+        : {
+            0: { cellWidth: 10, halign: "center" },
+            1: { cellWidth: 38 },
+            2: { cellWidth: 108 },
+            3: { cellWidth: 20, halign: "right" },
+          },
       margin: { left: LAYOUT.margenIzq, right: LAYOUT.margenDer },
     });
     y = doc.lastAutoTable.finalY + 5;
@@ -213,37 +235,91 @@ export function generarOrdenPDF({
     y += 7;
   }
 
-  // ── Totales ──────────────────────────────────────────────────────────
-  const totalsX = LAYOUT.pageWidth - LAYOUT.margenDer - 60;
-  const valuesX = LAYOUT.pageWidth - LAYOUT.margenDer;
-  const manoObra = Number(orden.costo_mano_obra ?? 0);
-  const costoRep = Number(orden.costo_repuestos ?? 0);
-  const valorRev = Number(orden.valor_revision ?? 0);
-  // TOTAL autoconsistente con las líneas mostradas (mano obra + repuestos +
-  // valor de revisión). Equivale a orden.total (canónico en BD), pero se computa
-  // de los componentes para no caer en el bug de `orden.total ?? ...` cuando
-  // orden.total = 0 (?? no cae en 0) en OTs no_autorizado.
-  const total = manoObra + costoRep + valorRev;
+  // ── Resumen económico ────────────────────────────────────────────────
+  // El DESGLOSE de costos (mano de obra / repuestos / valor de revisión) solo
+  // se imprime para Admin porque revela el costo de los repuestos. El TOTAL a
+  // pagar, los ABONOS del cliente y el SALDO se imprimen para todos los roles.
+  {
+    const totalsX = LAYOUT.pageWidth - LAYOUT.margenDer - 60;
+    const valuesX = LAYOUT.pageWidth - LAYOUT.margenDer;
+    const manoObra = Number(orden.costo_mano_obra ?? 0);
+    const costoRep = Number(orden.costo_repuestos ?? 0);
+    const valorRev = Number(orden.valor_revision ?? 0);
+    // TOTAL autoconsistente con las líneas (mano obra + repuestos + valor de
+    // revisión). Equivale a orden.total (canónico en BD), pero se computa de los
+    // componentes para no caer en `orden.total ?? ...` cuando total = 0.
+    const total = manoObra + costoRep + valorRev;
+    const abonado = abonos.reduce((s, a) => s + (Number(a.monto) || 0), 0);
+    const saldo = total - abonado;
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  const filaT = (label, valor) => {
-    doc.setTextColor(...COLORES.textoMedio);
-    doc.text(label, totalsX, y);
-    doc.setTextColor(...COLORES.textoOscuro);
-    doc.text(valor, valuesX, y, { align: "right" });
-    y += 4.5;
-  };
-  filaT("Revisión de servicio:", formatCOP(manoObra));
-  filaT("Repuestos:", formatCOP(costoRep));
-  if (valorRev > 0) filaT("Valor de revisión:", formatCOP(valorRev));
-  y += 1.5;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...COLORES.primario);
-  doc.text("TOTAL:", totalsX, y);
-  doc.text(formatCOP(total), valuesX, y, { align: "right" });
-  y += 10;
+    const filaT = (label, valor) => {
+      doc.setTextColor(...COLORES.textoMedio);
+      doc.text(label, totalsX, y);
+      doc.setTextColor(...COLORES.textoOscuro);
+      doc.text(valor, valuesX, y, { align: "right" });
+      y += 4.5;
+    };
+
+    // Desglose de costos: SOLO Admin.
+    if (incluirCostos) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      filaT("Revisión de servicio:", formatCOP(manoObra));
+      filaT("Repuestos:", formatCOP(costoRep));
+      if (valorRev > 0) filaT("Valor de revisión:", formatCOP(valorRev));
+      y += 1.5;
+    }
+
+    // Total a pagar: TODOS los roles (es lo que paga el cliente).
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...COLORES.primario);
+    doc.text("TOTAL:", totalsX, y);
+    doc.text(formatCOP(total), valuesX, y, { align: "right" });
+    y += 7;
+
+    // Abonos del cliente: TODOS los roles, si hay alguno registrado.
+    if (abonos.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...COLORES.textoOscuro);
+      doc.text(`Abonos (${abonos.length})`, LAYOUT.margenIzq, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      abonos.forEach((a) => {
+        const f = a.fecha
+          ? new Date(a.fecha).toLocaleDateString("es-CO", {
+              timeZone: "America/Bogota",
+            })
+          : "—";
+        const metodo = METODO_PAGO_LABELS[a.metodo_pago] ?? a.metodo_pago ?? "";
+        const nota = a.observaciones ? ` · ${a.observaciones}` : "";
+        let izq = `${f} · ${metodo}${nota}`;
+        if (izq.length > 62) izq = izq.slice(0, 60) + "…";
+        doc.setTextColor(...COLORES.textoMedio);
+        doc.text(izq, LAYOUT.margenIzq, y);
+        doc.setTextColor(...COLORES.textoOscuro);
+        doc.text(formatCOP(a.monto), valuesX, y, { align: "right" });
+        y += 4.2;
+      });
+      y += 1.5;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      filaT("Abonado:", formatCOP(abonado));
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(...COLORES.primario);
+      // El documento del cliente nunca muestra saldo negativo: un sobre-abono se
+      // presenta como "Saldo a favor" (crédito del cliente), no como saldo < 0 (ORDENES-02).
+      const saldoAFavor = saldo < 0;
+      doc.text(saldoAFavor ? "Saldo a favor:" : "Saldo:", totalsX, y);
+      doc.text(formatCOP(Math.abs(saldo)), valuesX, y, { align: "right" });
+      y += 6;
+    }
+    y += 4;
+  }
 
   // ── Firmas ───────────────────────────────────────────────────────────
   if (y > LAYOUT.pageHeight - 40) {
