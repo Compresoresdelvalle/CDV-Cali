@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 import { EMAIL_BY_UID, EMAIL_MAP } from "../lib/constants";
 import { usuarioDisplayName } from "../lib/user-display";
+import { useInventarioStore } from "./inventarioStore";
 
 export const useAuthStore = create((set, get) => ({
   // Estado
@@ -95,6 +96,9 @@ export const useAuthStore = create((set, get) => ({
       // signOut falló (red, token expirado, etc.) — limpiamos igual
     } finally {
       set({ session: null, user: null, perfil: null, error: null });
+      // FRONTEND-03: limpiar el inventario cacheado para que el siguiente usuario
+      // en un dispositivo compartido no vea el estado del anterior.
+      useInventarioStore.getState().reset();
     }
   },
 
