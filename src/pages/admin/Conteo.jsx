@@ -849,7 +849,7 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
         let pq = supabase
           .from("productos")
           .select(
-            `id, referencia, nombre, inventario:inventario(id, cantidad, sede_id)`,
+            `id, referencia, nombre, vendible, inventario:inventario(id, cantidad, cantidad_insumo, sede_id)`,
           )
           .eq("activo", true);
         pq = applyKeywordSearch(pq, search, ["referencia", "nombre"]);
@@ -881,7 +881,11 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
     }
     setError("");
     setProductoSel({ ...p, inventario_id: inv.id });
-    setStockSistema(inv.cantidad ?? 0);
+    // Conteo consciente del pool: los productos insumo (vendible=false) cuentan
+    // contra cantidad_insumo, no contra el stock vendible (LEDGER-01).
+    setStockSistema(
+      (p.vendible === false ? inv.cantidad_insumo : inv.cantidad) ?? 0,
+    );
     setSearch("");
     setResultados([]);
   };
