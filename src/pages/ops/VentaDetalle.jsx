@@ -37,6 +37,7 @@ export default function VentaDetalle() {
   const [loading, setLoading] = useState(true);
   const [anulando, setAnulando] = useState(false);
   const [confirmAnular, setConfirmAnular] = useState(false);
+  const [motivoAnular, setMotivoAnular] = useState("");
   const [error, setError] = useState(null);
   const [modalGarantia, setModalGarantia] = useState(false);
   const [imprimiendo, setImprimiendo] = useState(false);
@@ -163,6 +164,7 @@ export default function VentaDetalle() {
     try {
       const { error: fnErr } = await supabase.rpc("fn_anular_venta", {
         p_venta_id: id,
+        p_motivo: motivoAnular.trim() || null,
       });
       if (fnErr) throw new Error(fnErr.message);
       setVenta((prev) => ({ ...prev, anulada: true }));
@@ -354,6 +356,18 @@ export default function VentaDetalle() {
           >
             ¿Confirmar anulación? El stock será devuelto automáticamente.
           </p>
+          <textarea
+            value={motivoAnular}
+            onChange={(e) => setMotivoAnular(e.target.value)}
+            placeholder="Motivo de la anulación (opcional, queda en la auditoría)"
+            rows={2}
+            className="w-full rounded-[8px] border px-3 py-2 text-sm"
+            style={{
+              backgroundColor: "hsl(var(--card))",
+              borderColor: "hsl(var(--border))",
+              color: "hsl(var(--foreground))",
+            }}
+          />
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setConfirmAnular(false)}
