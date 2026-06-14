@@ -418,8 +418,9 @@ export default function EnsambleDetalle() {
                     className="font-mono text-xs"
                     style={{ color: "var(--n-500)" }}
                   >
-                    {it.producto?.referencia} · {formatCOP(it.costo_unitario)}{" "}
-                    c/u
+                    {it.producto?.referencia}
+                    {/* Costo: solo Admin */}
+                    {esAdmin && <> · {formatCOP(it.costo_unitario)} c/u</>}
                   </p>
                 </div>
                 {puedeEditarReceta ? (
