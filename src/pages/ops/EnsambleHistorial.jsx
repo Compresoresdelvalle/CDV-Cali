@@ -297,7 +297,7 @@ export default function EnsambleHistorial() {
       ) : view === "lista" ? (
         <ListView rows={filtrados} esAdmin={esAdmin} onEliminar={eliminar} />
       ) : (
-        <KanbanView rows={filtrados} />
+        <KanbanView rows={filtrados} esAdmin={esAdmin} />
       )}
 
       {hasMore && !loading && (
@@ -357,9 +357,12 @@ function ListView({ rows, esAdmin, onEliminar }) {
                   Cant.
                 </Th>
                 <Th width={150}>Estado</Th>
-                <Th width={140} right>
-                  Costo
-                </Th>
+                {/* Columna Costo: solo Admin */}
+                {esAdmin && (
+                  <Th width={140} right>
+                    Costo
+                  </Th>
+                )}
                 {esAdmin && <Th width={70} />}
               </tr>
             </thead>
@@ -483,14 +486,16 @@ function EnsambleFila({ ensamble: e, esAdmin, onEliminar }) {
           {pill.label}
         </span>
       </Td>
-      <Td right>
-        <span
-          className="font-mono text-[13.5px] font-medium tabular-nums"
-          style={{ color: "var(--n-950)" }}
-        >
-          {formatCOP(e.costo_total ?? 0)}
-        </span>
-      </Td>
+      {esAdmin && (
+        <Td right>
+          <span
+            className="font-mono text-[13.5px] font-medium tabular-nums"
+            style={{ color: "var(--n-950)" }}
+          >
+            {formatCOP(e.costo_total ?? 0)}
+          </span>
+        </Td>
+      )}
       {esAdmin && (
         <Td right>
           <button
@@ -559,12 +564,14 @@ function EnsambleCard({ ensamble: e, esAdmin, onEliminar }) {
             {formatDate(e.fecha)} · ×{e.cantidad_producida}
           </p>
         </div>
-        <p
-          className="shrink-0 font-mono text-[15px] font-semibold tabular-nums"
-          style={{ color: "var(--n-950)" }}
-        >
-          {formatCOP(e.costo_total ?? 0)}
-        </p>
+        {esAdmin && (
+          <p
+            className="shrink-0 font-mono text-[15px] font-semibold tabular-nums"
+            style={{ color: "var(--n-950)" }}
+          >
+            {formatCOP(e.costo_total ?? 0)}
+          </p>
+        )}
       </div>
       {esAdmin && (
         <div className="mt-2 flex justify-end">
@@ -587,7 +594,7 @@ function EnsambleCard({ ensamble: e, esAdmin, onEliminar }) {
 
 /* ─────────────────────────── Vista tablero (kanban) ────────────────────── */
 
-function KanbanView({ rows }) {
+function KanbanView({ rows, esAdmin }) {
   const navigate = useNavigate();
   return (
     <div className="kanban" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
@@ -624,12 +631,14 @@ function KanbanView({ rows }) {
                 >
                   <div className="ktop">
                     <span className="knum">#{e.numero}</span>
-                    <span
-                      className="font-mono text-[10.5px] tabular-nums"
-                      style={{ color: "var(--n-500)" }}
-                    >
-                      {formatCOP(e.costo_total ?? 0)}
-                    </span>
+                    {esAdmin && (
+                      <span
+                        className="font-mono text-[10.5px] tabular-nums"
+                        style={{ color: "var(--n-500)" }}
+                      >
+                        {formatCOP(e.costo_total ?? 0)}
+                      </span>
+                    )}
                   </div>
                   <div className="kcli">{e.producto?.nombre ?? "—"}</div>
                   <div className="keqp">

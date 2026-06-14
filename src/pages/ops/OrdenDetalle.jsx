@@ -119,11 +119,21 @@ export default function OrdenDetalle() {
           orden: r.componente?.orden ?? 0,
         }))
         .sort((a, b) => a.orden - b.orden);
+      // Abonos del cliente: se imprimen en el PDF para todos los roles.
+      const { data: ab } = await supabase
+        .from("abonos")
+        .select("fecha, monto, metodo_pago, observaciones")
+        .eq("orden_id", id)
+        .order("fecha", { ascending: true });
       generarOrdenPDF({
         orden,
         repuestos: detalles,
         tecnico: orden.tecnico?.nombre ?? "—",
         checklist,
+        abonos: ab ?? [],
+        // Solo el Admin ve el desglose de COSTOS; el total a pagar, los abonos
+        // y el saldo se imprimen para todos los roles.
+        incluirCostos: isAdmin,
       }).print();
     } catch (err) {
       console.error("[OrdenDetalle] imprimir:", err);
@@ -880,9 +890,12 @@ export default function OrdenDetalle() {
                 <Package className="h-3.5 w-3.5" strokeWidth={1.7} />
               </div>
               <div className="ib-title">Repuestos consumidos</div>
-              <div className="ib-aux">
-                {formatCOP(orden.costo_repuestos ?? 0)}
-              </div>
+              {/* El costo de los repuestos es información sensible: solo Admin. */}
+              {isAdmin && (
+                <div className="ib-aux">
+                  {formatCOP(orden.costo_repuestos ?? 0)}
+                </div>
+              )}
             </div>
 
             {detalles.length === 0 ? (
@@ -906,11 +919,14 @@ export default function OrdenDetalle() {
                           </div>
                         </td>
                         <td className="p-pr" style={{ width: 160 }}>
-                          ×{d.cantidad} · {formatCOP(d.costo_unitario)}
+                          ×{d.cantidad}
+                          {isAdmin && <> · {formatCOP(d.costo_unitario)}</>}
                         </td>
-                        <td className="p-sub" style={{ width: 120 }}>
-                          {formatCOP(d.subtotal)}
-                        </td>
+                        {isAdmin && (
+                          <td className="p-sub" style={{ width: 120 }}>
+                            {formatCOP(d.subtotal)}
+                          </td>
+                        )}
                         {puedeEditar && editable && (
                           <td style={{ width: 48 }}>
                             <button

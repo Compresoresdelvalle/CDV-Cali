@@ -29,6 +29,7 @@ import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 export default function EnsambleNuevo() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
+  const esAdmin = perfil?.rol === "Admin"; // costos visibles solo para Admin
   const sede = perfil?.sede_id;
 
   // Producto resultado
@@ -722,8 +723,11 @@ export default function EnsambleNuevo() {
                           className="font-mono text-xs"
                           style={{ color: "var(--n-500)" }}
                         >
-                          {c.referencia} · {formatCOP(c.costo_unitario)} c/u ·
-                          insumo disp.: {c.insumo ?? 0}
+                          {c.referencia}
+                          {esAdmin && (
+                            <> · {formatCOP(c.costo_unitario)} c/u</>
+                          )}{" "}
+                          · insumo disp.: {c.insumo ?? 0}
                         </p>
                       </div>
                       <input
@@ -810,20 +814,23 @@ export default function EnsambleNuevo() {
           className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border p-4"
           style={{ backgroundColor: "var(--n-0)", borderColor: "var(--p-200)" }}
         >
-          <div>
-            <p
-              className="font-mono text-[10px] uppercase tracking-[0.08em]"
-              style={{ color: "var(--n-300)" }}
-            >
-              Costo de materiales
-            </p>
-            <p
-              className="font-mono text-[22px] font-medium tabular-nums"
-              style={{ color: "var(--p-700)" }}
-            >
-              {formatCOP(costoEstimado)}
-            </p>
-          </div>
+          {/* Costo de materiales: solo Admin */}
+          {esAdmin && (
+            <div>
+              <p
+                className="font-mono text-[10px] uppercase tracking-[0.08em]"
+                style={{ color: "var(--n-300)" }}
+              >
+                Costo de materiales
+              </p>
+              <p
+                className="font-mono text-[22px] font-medium tabular-nums"
+                style={{ color: "var(--p-700)" }}
+              >
+                {formatCOP(costoEstimado)}
+              </p>
+            </div>
+          )}
           <p
             className="text-[12.5px] font-medium"
             style={{
