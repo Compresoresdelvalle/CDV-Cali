@@ -30,7 +30,7 @@
 
 4. **Anticipos:** se mantiene la tabla `abonos` (ligada a `orden_id`). Gana `venta_id` (nullable) que se llena al conciliar en la recogida. En el cierre, los abonos se muestran como **anticipos recibidos** (efectivo), no como ingreso.
 
-5. **Permisos (toderos):** Admin, **Vendedor** y Tecnico (misma sede) pueden ejecutar **todos** los pasos operativos (recepción, diagnóstico, cotización, descarga, terminar, generar venta). Bodeguero apoya la descarga. Solo Admin cancela. Se corrige la RLS de `detalle_orden` (hoy excluye al Vendedor → FALLA 2).
+5. **Permisos (toderos) + visibilidad global:** **TODOS los roles VEN las OT de todas las sedes** (lectura global), pero **solo pueden MANIPULAR (crear/editar/descargar/terminar/generar venta) las de su PROPIA sede**. Admin manipula cualquier sede. Bodeguero apoya la descarga. Solo Admin cancela/anula. Se corrige la RLS de `detalle_orden` (hoy excluye al Vendedor → FALLA 2). Aplicado en Fase 1 (escritura por sede) + Fase 1b (lectura global). En la UI: las OT de otras sedes se muestran en **modo solo lectura** (los controles de acción se deshabilitan).
 
 6. **Anti-doble-conteo:** el ingreso se reconoce **solo** en la venta-OT (recogida). Los abonos nunca cuentan como ingreso. Se elimina del cierre el conteo de `abonos` como `ingresos_servicios`.
 
