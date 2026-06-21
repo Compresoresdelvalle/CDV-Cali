@@ -322,6 +322,115 @@
   --ring: 234 100% 88%;
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+ * CORRECCIÓN DE MODO OSCURO v1.1
+ * El bloque .dark de arriba solo redefine neutros + alias shadcn, nunca las
+ * escalas de tinte (--*-50/100/200, --*-border, --*-700). Las páginas las usan
+ * vía utilidades Tailwind (bg-succ-50, text-succ-700, bg-p-50…) y varios
+ * componentes las usan crudas → en oscuro quedan con fondo claro saturado y
+ * texto oscuro ilegible. Aquí se redefinen (misma especificidad, gana el
+ * último). Los acentos -500/-600 se mantienen: leen bien sobre oscuro.
+ * ════════════════════════════════════════════════════════════════════════ */
+.dark {
+  /* PRIMARY royal — -700 pasa a ser texto claro */
+  --p-50: #141e46;
+  --p-100: #1a2560;
+  --p-200: #2a3580;
+  --p-700: #c2ccff;
+
+  /* SUCCESS */
+  --succ-50: #102a1f;
+  --succ-100: #143a2a;
+  --succ-700: #6ce9a6;
+  --succ-border: #1f5740;
+
+  /* WARNING */
+  --warn-50: #2c2417;
+  --warn-100: #3a2f1d;
+  --warn-700: #fdb022;
+  --warn-border: #5c4020;
+
+  /* DANGER */
+  --dang-50: #2e1b1b;
+  --dang-100: #3d2222;
+  --dang-700: #fda29b;
+  --dang-border: #5c2b29;
+
+  /* INFO */
+  --info-50: #122740;
+  --info-100: #173053;
+  --info-700: #84caff;
+  --info-border: #1e4870;
+
+  /* PROGRESS */
+  --prog-50: #221f3a;
+  --prog-100: #2c294d;
+  --prog-700: #d6bbfb;
+  --prog-border: #3d3566;
+
+  /* CATEGORÍAS (badges de inventario) */
+  --cat-cmp-bg: #181f3a;
+  --cat-cmp-text: #c7d0f2;
+  --cat-cmp-border: #2a3568;
+  --cat-rpt-bg: #0f2e2a;
+  --cat-rpt-text: #99e8dd;
+  --cat-rpt-border: #1c5650;
+  --cat-hrm-bg: #221a3c;
+  --cat-hrm-text: #d9c2ff;
+  --cat-hrm-border: #3a2a66;
+  --cat-lbr-bg: #2e2516;
+  --cat-lbr-text: #fcd888;
+  --cat-lbr-border: #57401f;
+  --cat-acc-bg: #321a2a;
+  --cat-acc-text: #fbc8dd;
+  --cat-acc-border: #5c2748;
+
+  /* HSL legacy (status badges en legacy-utilities.css) */
+  --success: 142 60% 62%;
+  --warning: 38 92% 60%;
+  --info: 200 85% 66%;
+}
+
+/* Únicos sitios donde un -700 se usaba como FONDO/borde */
+.dark .btn-pri:hover {
+  background: var(--p-500);
+  border-color: var(--p-500);
+}
+
+/* Cierre de huecos: bordes con hex claro hardcodeado sin regla dark previa */
+.dark .s-pill.s-apr,
+.dark .s-pill.s-comp,
+.dark .s-pill.s-completada,
+.dark .auth-pill.aut-ok,
+.dark .ck-item.on {
+  border-color: var(--succ-border);
+}
+.dark .s-pill.s-env,
+.dark .s-pill.s-proceso,
+.dark .pay-pill.transferencia,
+.dark .banner-info,
+.dark .flbl .auto {
+  border-color: var(--info-border);
+}
+.dark .s-pill.s-rec,
+.dark .s-pill.s-anul,
+.dark .kcard.dang {
+  border-color: var(--dang-border);
+}
+.dark .s-pill.s-ven,
+.dark .s-pill.s-devp,
+.dark .s-pill.s-esperando,
+.dark .s-pill.s-recogida,
+.dark .auth-pill.aut-pen,
+.dark .pay-pill.mixto,
+.dark .flbl .sugg,
+.dark .kcard.warn {
+  border-color: var(--warn-border);
+}
+.dark .auth-pill.aut-no {
+  border-color: var(--dang-border);
+}
+
 /* ─── BASE ─── */
 * {
   box-sizing: border-box;
