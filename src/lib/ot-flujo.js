@@ -211,13 +211,7 @@ export function calcularMontos(orden = {}, detalles = null, abonos = []) {
  * @param {object} ctx { orden, detalles, montos, checklistTocado, descargado }
  */
 export function gateCumplido(i, ctx) {
-  const {
-    orden = {},
-    detalles = [],
-    montos = {},
-    checklistTocado,
-    descargado,
-  } = ctx;
+  const { orden = {}, detalles = [], montos = {}, checklistTocado } = ctx;
   const noAutoriza = orden.estado_autorizacion === "no_autorizado";
   switch (i) {
     case 0:
@@ -227,10 +221,13 @@ export function gateCumplido(i, ctx) {
     case 1:
       return Boolean((orden.diagnostico || "").trim());
     case 2:
-      // Si no autoriza, basta el valor de revisión; si autoriza, repuesto o mano de obra.
+      // Si no autoriza, basta el valor de revisión; si autoriza, repuesto
+      // (en borrador o ya descargado) o mano de obra.
       return noAutoriza
         ? (Number(orden.valor_revision) || 0) > 0
-        : detalles.length > 0 || (Number(orden.costo_mano_obra) || 0) > 0;
+        : (ctx.draft?.length ?? 0) > 0 ||
+            detalles.length > 0 ||
+            (Number(orden.costo_mano_obra) || 0) > 0;
     case 3:
       if (noAutoriza) return true; // no autoriza: no requiere anticipo
       return Boolean(
@@ -238,7 +235,8 @@ export function gateCumplido(i, ctx) {
       );
     case 4:
       // Si no autoriza, no hay descarga; basta marcar terminado luego.
-      return noAutoriza ? true : Boolean(descargado || detalles.length === 0);
+      // Si autoriza, no debe quedar ningún repuesto pendiente en el borrador.
+      return noAutoriza ? true : (ctx.draft?.length ?? 0) === 0;
     case 5:
       return Boolean((orden.trabajo_realizado || "").trim());
     case 6:

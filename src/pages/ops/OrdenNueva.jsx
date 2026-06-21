@@ -172,7 +172,7 @@ export default function OrdenNueva() {
           // B7: registrar quién creó la OT (independiente del técnico asignado).
           creado_por: perfil?.id || null,
           sede_id: sedeOrden,
-          estado: "abierta",
+          estado: "recepcion",
           costo_mano_obra: costo,
           costo_repuestos: 0,
           total: costo,

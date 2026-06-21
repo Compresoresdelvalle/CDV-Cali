@@ -233,7 +233,7 @@ export default function OrdenDetalle() {
   // descargado: hay líneas reales y el draft quedó vacío.
   const descargado = detalles.length > 0 && draft.length === 0;
 
-  const ctx = { orden, detalles, montos, checklistTocado, descargado };
+  const ctx = { orden, detalles, montos, checklistTocado, descargado, draft };
 
   const historial = useMemo(
     () => (orden ? construirHistorialOT(orden, formatDate) : []),
@@ -404,7 +404,7 @@ export default function OrdenDetalle() {
         <OrdenStepper
           pasos={PASOS}
           actual={activo}
-          reachableUntil={activo}
+          reachableUntil={orden.estado === "terminada" ? 6 : activo}
           onGo={(i) => setPasoAbierto(i)}
         />
       </div>
@@ -439,6 +439,7 @@ export default function OrdenDetalle() {
                 cargar={cargar}
                 updateOrden={updateOrden}
                 continuar={continuar}
+                setPasoAbierto={setPasoAbierto}
                 setErrorMsg={setErrorMsg}
                 setAviso={setAviso}
                 setChecklistTocado={setChecklistTocado}
@@ -1007,7 +1008,17 @@ function PasoCotizacion({
   const persistirDraft = async (nuevo) => {
     if (ro) return;
     try {
-      await updateOrden({ cotizacion_draft: nuevo });
+      // Además del borrador, refleja el total de repuestos cotizados en
+      // valor_repuestos para que el backend recalcule el total (y "Sugerir 50%"
+      // del paso 4 no sea rechazado por el tope de abonos).
+      const totalRepuestos = nuevo.reduce(
+        (s, l) => s + (Number(l.precio) || 0) * (Number(l.cantidad) || 0),
+        0,
+      );
+      await updateOrden({
+        cotizacion_draft: nuevo,
+        valor_repuestos: totalRepuestos,
+      });
     } catch (err) {
       setErrorMsg(safeError(err, "No se pudo guardar la cotización"));
     }
@@ -1583,23 +1594,64 @@ function PasoTrabajo({
   ro,
   ctx,
   draft,
-  continuar,
   updateOrden,
+  setPasoAbierto,
   setErrorMsg,
   setAviso,
 }) {
   const [descargando, setDescargando] = useState(false);
   const [conv, setConv] = useState(null); // { producto_id, faltante }
+  const [trabajo, setTrabajo] = useState(orden.trabajo_realizado ?? "");
+  const [terminando, setTerminando] = useState(false);
   const esperando = orden.estado === "esperando_repuesto";
+
+  // Habilitar "Marcar como terminado" solo si: editable, no quedan repuestos
+  // pendientes en el borrador y hay descripción del trabajo realizado.
+  const puedeTerminar =
+    !ro && (draft?.length ?? 0) === 0 && Boolean((trabajo || "").trim());
+
+  const guardarTrabajo = async () => {
+    if (ro) return;
+    try {
+      await updateOrden({ trabajo_realizado: trabajo || null });
+    } catch (err) {
+      setErrorMsg(safeError(err, "No se pudo guardar"));
+    }
+  };
+
+  // Marca terminado escribiendo el trabajo en el MISMO update (el backend exige
+  // trabajo_realizado no vacío para la transición a 'terminada').
+  const marcarTerminado = async () => {
+    if (!puedeTerminar || terminando) return;
+    setTerminando(true);
+    setErrorMsg("");
+    try {
+      await updateOrden({
+        estado: "terminada",
+        trabajo_realizado: trabajo || null,
+      });
+      setAviso("OT marcada como terminada.");
+      setPasoAbierto?.(5);
+    } catch (err) {
+      setErrorMsg(safeError(err, "No se pudo marcar como terminada"));
+    } finally {
+      setTerminando(false);
+    }
+  };
 
   const descargar = async () => {
     if (ro || descargando) return;
     setDescargando(true);
     setErrorMsg("");
     try {
-      // Inserta cada línea pendiente del draft en detalle_orden.
-      const pendientes = [...draft];
-      for (const l of pendientes) {
+      // Procesa el draft como cola de PENDIENTES: por cada línea insertada con
+      // éxito se elimina del draft y se persiste el resto. Así, si una línea
+      // falla por insumo y luego se reintenta tras convertir, no se reinserta lo
+      // ya descargado (evita duplicados). No se toca valor_repuestos aquí: el
+      // trigger de detalle_orden lo mantiene.
+      let pendientes = [...draft];
+      while (pendientes.length > 0) {
+        const l = pendientes[0];
         const { error } = await supabase.from("detalle_orden").insert({
           orden_id: id,
           producto_id: l.producto_id,
@@ -1608,7 +1660,8 @@ function PasoTrabajo({
           costo_unitario: l.costo,
         });
         if (error) {
-          // Insumo insuficiente → ofrecer conversión y abortar el lote.
+          // Insumo insuficiente → ofrecer conversión y abortar, dejando esta
+          // línea (y las siguientes) pendientes en el draft.
           if ((error.message ?? "").toLowerCase().includes("insumo")) {
             setConv({
               producto_id: l.producto_id,
@@ -1621,9 +1674,10 @@ function PasoTrabajo({
           }
           throw error;
         }
+        // Línea insertada → quitarla de la cola y persistir el draft restante.
+        pendientes = pendientes.slice(1);
+        await updateOrden({ cotizacion_draft: pendientes });
       }
-      // Todas insertadas → limpiar el draft.
-      await updateOrden({ cotizacion_draft: [] });
       setAviso("Repuestos descargados del inventario.");
     } catch (err) {
       setErrorMsg(safeError(err, "No se pudo descargar el inventario"));
@@ -1758,51 +1812,6 @@ function PasoTrabajo({
         </OutlineButton>
       </div>
 
-      <ContinuarBtn paso={PASOS[4]} ctx={ctx} ro={ro} continuar={continuar} />
-    </div>
-  );
-}
-
-/* ── PASO 6 · Terminado ─────────────────────────────────────────────────── */
-function PasoTerminado({
-  orden,
-  ro,
-  ctx,
-  continuar,
-  updateOrden,
-  setErrorMsg,
-  setAviso,
-}) {
-  const [trabajo, setTrabajo] = useState(orden.trabajo_realizado ?? "");
-  const enProceso =
-    orden.estado === "en_proceso" || orden.estado === "esperando_repuesto";
-
-  const guardar = async () => {
-    if (ro) return;
-    try {
-      await updateOrden({ trabajo_realizado: trabajo || null });
-    } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo guardar"));
-    }
-  };
-
-  const marcarTerminado = async () => {
-    if (ro) return;
-    try {
-      await updateOrden({
-        estado: "terminada",
-        trabajo_realizado: trabajo || null,
-      });
-      setAviso("OT marcada como terminada.");
-    } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo marcar como terminada"));
-    }
-  };
-
-  const cumplido = gateCumplido(PASOS[5].i, ctx) && !ro;
-
-  return (
-    <div className="space-y-4">
       <Field label="Trabajo realizado" htmlFor="ot-trab">
         <textarea
           id="ot-trab"
@@ -1810,31 +1819,65 @@ function PasoTerminado({
           disabled={ro}
           value={trabajo}
           onChange={(e) => setTrabajo(e.target.value)}
-          onBlur={guardar}
+          onBlur={guardarTrabajo}
           placeholder="Describe lo que se hizo en el equipo"
           className="rounded-lg border px-3 py-2 text-sm outline-none disabled:opacity-60"
           style={inputStyle}
         />
       </Field>
 
-      {enProceso ? (
-        <PrimaryButton
-          disabled={!cumplido}
-          onClick={marcarTerminado}
-          style={{ width: "100%" }}
+      <PrimaryButton
+        disabled={!puedeTerminar || terminando}
+        onClick={marcarTerminado}
+        style={{ width: "100%" }}
+      >
+        {terminando ? "Guardando…" : TX.marcarTerminado}
+      </PrimaryButton>
+    </div>
+  );
+}
+
+/* ── PASO 6 · Terminado ─────────────────────────────────────────────────── */
+function PasoTerminado({ orden, setPasoAbierto }) {
+  // Confirmación breve: el trabajo ya se registró en el paso anterior. Este
+  // botón SOLO navega a la entrega (no cambia estado: la entrega real ocurre
+  // en el paso 7 vía fn_generar_venta_ot).
+  return (
+    <div className="space-y-4">
+      <div
+        className="rounded-lg border px-4 py-3"
+        style={{
+          backgroundColor: "hsl(var(--success) / 0.1)",
+          borderColor: "hsl(var(--success) / 0.3)",
+        }}
+      >
+        <p
+          className="text-sm font-medium"
+          style={{ color: "hsl(var(--foreground))" }}
         >
-          {TX.marcarTerminado}
-        </PrimaryButton>
-      ) : (
-        // Ya está 'terminada': el continuar solo navega al paso 7.
-        <PrimaryButton
-          disabled={!cumplido}
-          onClick={() => continuar(PASOS[5].i)}
-          style={{ width: "100%" }}
+          Equipo terminado, listo para la entrega.
+        </p>
+      </div>
+
+      <Field label="Trabajo realizado">
+        <p
+          className="whitespace-pre-wrap rounded-lg border px-3 py-2 text-sm"
+          style={{
+            color: "hsl(var(--foreground))",
+            borderColor: "hsl(var(--border))",
+            backgroundColor: "hsl(var(--muted) / 0.3)",
+          }}
         >
-          {TX.continuar}
-        </PrimaryButton>
-      )}
+          {(orden.trabajo_realizado || "").trim() || "—"}
+        </p>
+      </Field>
+
+      <PrimaryButton
+        onClick={() => setPasoAbierto?.(6)}
+        style={{ width: "100%" }}
+      >
+        Ir a la entrega
+      </PrimaryButton>
     </div>
   );
 }
