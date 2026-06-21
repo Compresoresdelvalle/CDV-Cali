@@ -1661,11 +1661,20 @@ function PasoTrabajo({
         });
         if (error) {
           // Insumo insuficiente → ofrecer conversión y abortar, dejando esta
-          // línea (y las siguientes) pendientes en el draft.
+          // línea (y las siguientes) pendientes en el draft. Se convierte solo
+          // el DÉFICIT (cantidad − insumo disponible), no la cantidad completa,
+          // para no exigir más stock de venta del necesario.
           if ((error.message ?? "").toLowerCase().includes("insumo")) {
+            const { data: invRow } = await supabase
+              .from("inventario")
+              .select("cantidad_insumo")
+              .eq("producto_id", l.producto_id)
+              .eq("sede_id", orden.sede_id)
+              .maybeSingle();
+            const insumoDisp = Number(invRow?.cantidad_insumo) || 0;
             setConv({
               producto_id: l.producto_id,
-              faltante: l.cantidad,
+              faltante: Math.max(Number(l.cantidad) - insumoDisp, 1),
               nombre: l.nombre,
             });
             setErrorMsg(safeError(error, "Stock de insumo insuficiente"));
