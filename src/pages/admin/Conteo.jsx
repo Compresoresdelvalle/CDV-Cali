@@ -1141,15 +1141,22 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
 
             {productoSel.sinInventario && (
               <div
-                className="rounded-lg border px-3 py-2 text-xs"
+                className="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
                 style={{
                   backgroundColor: "hsl(var(--warning) / 0.1)",
                   borderColor: "hsl(var(--warning) / 0.4)",
-                  color: "hsl(var(--warning))",
+                  color: "hsl(var(--foreground))",
                 }}
               >
-                Esta sede aún no tenía este producto. Se inicializará en{" "}
-                <strong>0</strong> y se contará con el físico que registres.
+                <AlertTriangle
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  strokeWidth={2}
+                  style={{ color: "hsl(var(--warning))" }}
+                />
+                <span>
+                  Esta sede aún no tenía este producto. Se inicializará en{" "}
+                  <strong>0</strong> y se contará con el físico que registres.
+                </span>
               </div>
             )}
 
