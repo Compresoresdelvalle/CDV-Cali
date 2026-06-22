@@ -51,7 +51,14 @@ export function generarOrdenPDF({
   // Admin. El total a pagar, los abonos y el saldo son del cliente y se imprimen
   // para todos los roles. Default true por compatibilidad.
   incluirCostos = true,
+  // modo:
+  //   'final'     (default) — documento completo: repuestos + totales + abonos + saldo.
+  //   'recepcion'           — constancia de recepción: encabezado + cliente + equipo
+  //                           + checklist + nota "sin valor comercial". OCULTA
+  //                           repuestos, totales, abonos y saldo.
+  modo = "final",
 }) {
+  const esRecepcion = modo === "recepcion";
   const doc = new jsPDF({ unit: "mm", format: "letter", compress: true });
   let y = LAYOUT.margenSup;
 
@@ -132,9 +139,12 @@ export function generarOrdenPDF({
   y += 3;
 
   // ── Diagnóstico / trabajo ────────────────────────────────────────────
+  // En la constancia de recepción no se imprime diagnóstico ni trabajo (aún no
+  // existen al recibir el equipo).
   const bloques = [];
-  if (orden.diagnostico) bloques.push(["Diagnóstico", orden.diagnostico]);
-  if (orden.trabajo_realizado)
+  if (!esRecepcion && orden.diagnostico)
+    bloques.push(["Diagnóstico", orden.diagnostico]);
+  if (!esRecepcion && orden.trabajo_realizado)
     bloques.push(["Trabajo realizado", orden.trabajo_realizado]);
   for (const [tit, txt] of bloques) {
     doc.setFont("helvetica", "bold");
@@ -180,8 +190,27 @@ export function generarOrdenPDF({
     doc.setTextColor(...COLORES.textoOscuro);
   }
 
+  // ── Constancia de recepción: nota + fin ──────────────────────────────
+  // En modo recepción no se imprimen repuestos, totales, abonos ni saldo:
+  // es solo la prueba de qué equipo y en qué estado ingresó.
+  if (esRecepcion) {
+    if (y > LAYOUT.pageHeight - 50) {
+      doc.addPage();
+      y = LAYOUT.margenSup;
+    }
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9);
+    doc.setTextColor(...COLORES.textoMedio);
+    const nota = doc.splitTextToSize(
+      "Constancia de recepción, sin valor comercial. Documento que acredita el ingreso del equipo y su estado al momento de la recepción.",
+      LAYOUT.contentWidth,
+    );
+    doc.text(nota, LAYOUT.margenIzq, y);
+    y += nota.length * 4.5 + 4;
+  }
+
   // ── Tabla de repuestos ───────────────────────────────────────────────
-  if (repuestos.length > 0) {
+  if (!esRecepcion && repuestos.length > 0) {
     const cabecera = incluirCostos
       ? ["#", "Referencia", "Repuesto", "Cant.", "Costo unit.", "Total"]
       : ["#", "Referencia", "Repuesto", "Cant."];
@@ -227,7 +256,7 @@ export function generarOrdenPDF({
       margin: { left: LAYOUT.margenIzq, right: LAYOUT.margenDer },
     });
     y = doc.lastAutoTable.finalY + 5;
-  } else {
+  } else if (!esRecepcion) {
     doc.setFont("helvetica", "italic");
     doc.setFontSize(9);
     doc.setTextColor(...COLORES.textoMedio);
@@ -239,7 +268,8 @@ export function generarOrdenPDF({
   // El DESGLOSE de costos (mano de obra / repuestos / valor de revisión) solo
   // se imprime para Admin porque revela el costo de los repuestos. El TOTAL a
   // pagar, los ABONOS del cliente y el SALDO se imprimen para todos los roles.
-  {
+  // En la constancia de recepción NO se imprime nada económico.
+  if (!esRecepcion) {
     const totalsX = LAYOUT.pageWidth - LAYOUT.margenDer - 60;
     const valuesX = LAYOUT.pageWidth - LAYOUT.margenDer;
     const manoObra = Number(orden.costo_mano_obra ?? 0);

@@ -22,6 +22,8 @@ import {
   sedeLabel,
   traspasoEstadoPill,
   traspasoBadge,
+  TRASPASO_FLUJO,
+  flujoIndex,
 } from "../../lib/traspasos-ui";
 import {
   Avatar,
@@ -224,6 +226,15 @@ export default function TraspasoDetalle() {
   const pill = traspasoEstadoPill(estado);
   const pillKind = PILL_KIND[estado] ?? "neut";
   const badge = traspasoBadge(traspaso.tipo);
+  // Valor de la mercancía que se mueve (idea robada del prototipo): a precio de
+  // venta × cantidad (enviada si ya salió, si no la solicitada).
+  const valorMercancia = items.reduce(
+    (s, it) =>
+      s +
+      (it.producto?.precio_venta ?? 0) *
+        (it.cantidad_enviada ?? it.cantidad_solicitada ?? 0),
+    0,
+  );
 
   return (
     <div className="flex h-full flex-col gap-4 px-4 pb-14 pt-5 sm:px-7 sm:pt-6 animate-fade-in">
@@ -288,6 +299,22 @@ export default function TraspasoDetalle() {
         </div>
         <div className="flex flex-col items-end gap-2.5">
           <Pill kind={pillKind} label={pill.label} />
+          {valorMercancia > 0 && (
+            <div className="text-right">
+              <div
+                className="font-mono text-[10px] uppercase tracking-[0.1em]"
+                style={{ color: "var(--n-400)" }}
+              >
+                Valor mercancía
+              </div>
+              <div
+                className="font-mono text-[15px] font-semibold leading-tight"
+                style={{ color: "var(--n-900)" }}
+              >
+                {formatCOP(valorMercancia)}
+              </div>
+            </div>
+          )}
           <button
             onClick={() => window.print()}
             className="btn btn-out"
@@ -297,6 +324,8 @@ export default function TraspasoDetalle() {
           </button>
         </div>
       </div>
+
+      {estado !== "cancelado" && <TraspasoStepper estado={estado} />}
 
       {error && (
         <div
@@ -439,6 +468,80 @@ export default function TraspasoDetalle() {
 }
 
 /* ─────────────────────────── Subcomponentes ─────────────────────────── */
+
+/**
+ * Stepper horizontal del flujo (idea robada del prototipo): da sensación de
+ * progreso "voy en el paso 2 de 4". Puramente visual, no cambia ninguna acción.
+ */
+function TraspasoStepper({ estado }) {
+  const cur = flujoIndex(estado);
+  return (
+    <div
+      className="overflow-x-auto rounded-[10px] border p-3.5"
+      style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+    >
+      <div className="flex items-start" style={{ minWidth: 460 }}>
+        {TRASPASO_FLUJO.map((paso, i) => {
+          const done = cur > i;
+          const active = cur === i;
+          const dotBg = done
+            ? "var(--succ-600)"
+            : active
+              ? "var(--p-600)"
+              : "var(--n-0)";
+          const dotBd = done
+            ? "var(--succ-600)"
+            : active
+              ? "var(--p-600)"
+              : "var(--n-200)";
+          const dotFg = done || active ? "#fff" : "var(--n-400)";
+          return (
+            <div
+              key={paso.key}
+              className="flex flex-1 items-start"
+              style={{ minWidth: 0 }}
+            >
+              <div
+                className="flex flex-col items-center gap-1.5"
+                style={{ width: 92, flexShrink: 0 }}
+              >
+                <span
+                  className="flex items-center justify-center rounded-full font-mono text-[13px] font-semibold"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    background: dotBg,
+                    border: `2px solid ${dotBd}`,
+                    color: dotFg,
+                  }}
+                >
+                  {done ? "✓" : i + 1}
+                </span>
+                <span
+                  className="text-center text-[11.5px] leading-tight"
+                  style={{
+                    color: active ? "var(--n-900)" : "var(--n-500)",
+                    fontWeight: active ? 600 : 500,
+                  }}
+                >
+                  {paso.label}
+                </span>
+              </div>
+              {i < TRASPASO_FLUJO.length - 1 && (
+                <div
+                  className="mt-4 h-[2px] flex-1 rounded"
+                  style={{
+                    background: cur > i ? "var(--succ-500)" : "var(--n-150)",
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function Block({ icon, title, children }) {
   return (
@@ -702,7 +805,6 @@ function AccionPanel(props) {
     onIniciarPicking,
     onEnviar,
     onIrPicking,
-    onVerificar,
     onRecibir,
     onCancelar,
   } = props;
@@ -721,7 +823,6 @@ function AccionPanel(props) {
     onIniciarPicking,
     onEnviar,
     onIrPicking,
-    onVerificar,
     onRecibir,
   });
 
@@ -1019,6 +1120,29 @@ function construirConfig(p) {
       desc: "Un Admin canceló este traspaso. Si ya estaba en tránsito, el stock se devolvió a la sede origen.",
       progreso: null,
       tone: "danger",
+      actions: [],
+    };
+  }
+  // Guía pasiva — sede DESTINO: aún se prepara en origen, solo hay que esperar.
+  if (
+    ["borrador", "picking", "verificado"].includes(estado) &&
+    yoSoyDeSedeDestino
+  ) {
+    return {
+      icon: <Clock className="h-4 w-4" strokeWidth={2} />,
+      title: "En preparación en origen",
+      desc: `${sedeLabel(traspaso.sede_origen_id)} está preparando este traspaso. Podrás confirmar la recepción cuando llegue a tu sede.`,
+      progreso: null,
+      actions: [],
+    };
+  }
+  // Guía pasiva — sede ORIGEN: ya se envió, espera la confirmación de recepción.
+  if (estado === "en_transito" && yoSoyDeSedeOrigen) {
+    return {
+      icon: <Truck className="h-4 w-4" strokeWidth={2} />,
+      title: "En camino a destino",
+      desc: `Enviado. Esperando que ${sedeLabel(traspaso.sede_destino_id)} confirme la recepción.`,
+      progreso: null,
       actions: [],
     };
   }

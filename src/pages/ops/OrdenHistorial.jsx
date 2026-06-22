@@ -1,346 +1,352 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+/**
+ * OrdenHistorial — Listado / Tablero de Órdenes de Trabajo (OT), nuevo flujo.
+ *
+ * Dos vistas: Lista (tabla desktop / cards móvil) y Kanban por estado.
+ * Carga TODAS las OT (todas las sedes; la RLS permite verlas). Las OT de otra
+ * sede salen atenuadas con candado 🔒 pero siguen siendo clickeables (lectura).
+ *
+ * Sistema de diseño: SOLO tokens `hsl(var(--token))`, nunca hex. Móvil = cards,
+ * desktop = tabla. Botones de 48px.
+ */
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, List, LayoutGrid, X, Wrench } from "lucide-react";
+import { Search, Plus, List, LayoutGrid, X, Wrench, Lock } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { formatCOP, safeError } from "../../lib/utils";
+import PageHeader from "../../components/layout/PageHeader";
 import {
-  OT_TABS,
-  OT_KANBAN_COLS,
-  ordenEstadoPill,
-  autorizacionPill,
-  tecnicoAvatar,
-  diasEnEstado,
-} from "../../lib/ordenes-ui";
+  estadoEstilo,
+  ESTADO_LABEL,
+  pasoActual,
+  calcularMontos,
+  OT_DIAS_VENCIDA,
+  SEDE_LABEL,
+  puedeManipular,
+} from "../../lib/ot-flujo";
 
-const PAGE_SIZE = 20;
+// Columnas del tablero / opciones del filtro — estados del nuevo flujo.
+// El valor coincide con el `key`/estado real al que mapean (vía pasoActual).
+const ESTADOS_FLUJO = [
+  "recepcion",
+  "diagnostico",
+  "cotizada",
+  "autorizada",
+  "en_proceso",
+  "terminada",
+  "entregada",
+];
+
+// Estado real (incl. legacy) → grupo del flujo, usando el índice de paso.
+const PASO_A_GRUPO = [
+  "recepcion", // 0
+  "diagnostico", // 1
+  "cotizada", // 2
+  "autorizada", // 3
+  "en_proceso", // 4
+  "terminada", // 5
+  "entregada", // 6
+];
+
+function grupoDeEstado(estado) {
+  // cancelada → paso 6 pero la tratamos como "entregada"/cerrada en el filtro.
+  return PASO_A_GRUPO[pasoActual({ estado })] ?? "recepcion";
+}
+
+// Días en taller: entero desde `fecha` hasta hoy.
+function diasEnTaller(fecha) {
+  if (!fecha) return 0;
+  const inicio = new Date(fecha);
+  if (Number.isNaN(inicio.getTime())) return 0;
+  const ms = Date.now() - inicio.getTime();
+  return Math.max(0, Math.floor(ms / 86_400_000));
+}
 
 export default function OrdenHistorial() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
 
   const [ordenes, setOrdenes] = useState([]);
+  const [abonosPorOt, setAbonosPorOt] = useState({});
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState(null); // estado real o null = todas
-  const [view, setView] = useState("lista"); // 'lista' | 'tablero'
-  const [q, setQ] = useState("");
-  const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const abortRef = useRef(null);
-  const mountedRef = useRef(true);
+  const [view, setView] = useState("lista"); // 'lista' | 'kanban'
+  const [q, setQ] = useState("");
+  const [estado, setEstado] = useState("todos");
 
   useEffect(() => {
-    mountedRef.current = true;
+    let activo = true;
+    (async () => {
+      setLoading(true);
+      setErrorMsg("");
+      try {
+        const [ordRes, aboRes] = await Promise.all([
+          supabase
+            .from("ordenes_servicio")
+            .select(
+              "id,numero,cliente_nombre,equipo_descripcion,equipo_serie,estado,sede_id,fecha,pendiente_recogida_at,total,costo_mano_obra,valor_repuestos,valor_revision,descuento_valor,iva_pct",
+            )
+            .order("fecha", { ascending: false }),
+          supabase.from("abonos").select("orden_id,monto"),
+        ]);
+        if (!activo) return;
+        if (ordRes.error) throw ordRes.error;
+        if (aboRes.error) throw aboRes.error;
+
+        const mapa = {};
+        for (const a of aboRes.data ?? []) {
+          (mapa[a.orden_id] ??= []).push(a);
+        }
+        setAbonosPorOt(mapa);
+        setOrdenes(ordRes.data ?? []);
+      } catch (err) {
+        if (!activo) return;
+        console.error("[OrdenHistorial]", err);
+        setErrorMsg(safeError(err, "Error al cargar órdenes"));
+      } finally {
+        if (activo) setLoading(false);
+      }
+    })();
     return () => {
-      mountedRef.current = false;
-      abortRef.current?.abort();
+      activo = false;
     };
   }, []);
 
-  const cargar = async (reset = false) => {
-    // Abortar cualquier carga previa en vuelo (evita race en clicks rápidos)
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    if (!mountedRef.current) return;
-    setLoading(true);
-    setErrorMsg("");
-    const currentPage = reset ? 0 : page;
-    try {
-      let query = supabase
-        .from("ordenes_servicio")
-        .select(
-          `id, numero, fecha, cliente_nombre, cliente_telefono, equipo_descripcion,
-           equipo_serie, estado, estado_autorizacion, total, tipo,
-           pendiente_recogida_at, fecha_entrega,
-           tecnico:tecnico_id(nombre)`,
-        )
-        .order("fecha", { ascending: false })
-        .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
+  // Enriquecer cada OT con campos derivados (saldo, días, vencida, sede propia).
+  const enriquecidas = useMemo(() => {
+    return ordenes.map((o) => {
+      const { total, saldo } = calcularMontos(o, null, abonosPorOt[o.id] ?? []);
+      const dias = diasEnTaller(o.fecha);
+      const grupo = grupoDeEstado(o.estado);
+      const entregada = grupo === "entregada";
+      const propia = puedeManipular(perfil, o);
+      return {
+        ...o,
+        _total: total,
+        _saldo: saldo,
+        _dias: dias,
+        _grupo: grupo,
+        _vencida: !entregada && dias > OT_DIAS_VENCIDA,
+        _propia: propia,
+      };
+    });
+  }, [ordenes, abonosPorOt, perfil]);
 
-      // B1: Admin y Vendedor ven las OT de todas las sedes; Técnico y Bodeguero
-      // siguen viendo solo su sede. (La edición sigue restringida por sede.)
-      const veTodas = perfil?.rol === "Admin" || perfil?.rol === "Vendedor";
-      if (!veTodas && perfil?.sede_id)
-        query = query.eq("sede_id", perfil.sede_id);
-
-      if (tab) query = query.eq("estado", tab);
-
-      const { data, error } = await query;
-      if (ac.signal.aborted || !mountedRef.current) return;
-      if (error) throw error;
-
-      if (reset) {
-        setOrdenes(data ?? []);
-        setPage(1);
-      } else {
-        setOrdenes((p) => [...p, ...(data ?? [])]);
-        setPage((p) => p + 1);
-      }
-      setHasMore((data ?? []).length === PAGE_SIZE);
-    } catch (err) {
-      if (ac.signal.aborted || !mountedRef.current) return;
-      console.error("[OrdenHistorial]", err);
-      setErrorMsg(safeError(err, "Error al cargar órdenes"));
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    setPage(0);
-    setHasMore(true);
-    cargar(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, perfil?.sede_id]);
-
-  // Filtro de búsqueda en cliente, sobre lo cargado (la búsqueda server-side
-  // requeriría debounce + endpoint; aquí se filtra el set paginado).
   const filtradas = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return ordenes;
-    return ordenes.filter(
-      (o) =>
-        String(o.numero).toLowerCase().includes(needle) ||
-        (o.cliente_nombre ?? "").toLowerCase().includes(needle) ||
-        (o.equipo_descripcion ?? "").toLowerCase().includes(needle) ||
-        (o.equipo_serie ?? "").toLowerCase().includes(needle),
-    );
-  }, [ordenes, q]);
+    return enriquecidas.filter((o) => {
+      if (estado !== "todos" && o._grupo !== estado) return false;
+      if (!needle) return true;
+      const hay = `${o.cliente_nombre ?? ""} ${o.equipo_descripcion ?? ""} ${
+        o.equipo_serie ?? ""
+      }`.toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [enriquecidas, q, estado]);
 
-  // KPIs del encabezado — derivados de datos reales (sin números inventados).
-  const kpis = useMemo(() => {
-    const abiertas = ordenes.filter((o) => o.estado === "abierta").length;
-    const vencidas = ordenes.filter((o) => diasEnEstado(o).vencida).length;
-    const tecnicos = new Set(
-      ordenes.map((o) => o.tecnico?.nombre).filter(Boolean),
-    ).size;
-    return { abiertas, vencidas, tecnicos };
-  }, [ordenes]);
-
-  // Conteo por estado para las pestañas (sobre lo cargado en vista).
-  const counts = useMemo(() => {
-    const map = { all: ordenes.length };
-    for (const o of ordenes) map[o.estado] = (map[o.estado] ?? 0) + 1;
-    return map;
-  }, [ordenes]);
+  const open = (id) => navigate(`/ops/ordenes/${id}`);
+  const sedeLabel = SEDE_LABEL[perfil?.sede_id] ?? perfil?.sede_id ?? "tu sede";
 
   return (
-    <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-[18px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
-      {/* ── Encabezado ──────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p
-            className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.08em]"
-            style={{ color: "var(--n-300)" }}
-          >
-            Operaciones · Taller ·{" "}
-            {loading
-              ? "cargando…"
-              : `${ordenes.length}${hasMore ? "+" : ""} registros`}
-          </p>
-          <h1
-            className="text-[22px] sm:text-[24px] font-semibold tracking-[-0.018em]"
-            style={{ color: "var(--n-950)" }}
-          >
-            Órdenes de Trabajo
-          </h1>
-          <p
-            className="mt-1.5 text-[13px] leading-[1.5]"
-            style={{ color: "var(--n-500)" }}
-          >
-            <b className="font-medium" style={{ color: "var(--n-950)" }}>
-              {kpis.abiertas} abiertas
-            </b>{" "}
-            · {kpis.tecnicos} técnico{kpis.tecnicos === 1 ? "" : "s"} en vista
-            {kpis.vencidas > 0 && (
-              <>
-                {" · "}
-                <span
-                  className="font-medium"
-                  style={{ color: "var(--dang-700)" }}
-                >
-                  {kpis.vencidas} vencida{kpis.vencidas === 1 ? "" : "s"}
-                </span>
-              </>
-            )}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2.5">
-          <div className="viewtog">
+    <div
+      className="p-4 sm:p-6 space-y-4 animate-fade-in"
+      style={{ backgroundColor: "hsl(var(--background))" }}
+    >
+      <PageHeader
+        title="Órdenes de Trabajo"
+        description={`Todas las sedes · gestionas las de ${sedeLabel}`}
+        actions={
+          <>
+            <ViewToggle view={view} setView={setView} />
             <button
-              className={view === "lista" ? "on" : ""}
-              onClick={() => setView("lista")}
+              onClick={() => navigate("/ops/ordenes/nueva")}
+              className="inline-flex items-center gap-2 rounded-lg px-4 text-sm font-semibold"
+              style={{
+                height: 48,
+                backgroundColor: "hsl(var(--primary))",
+                color: "hsl(var(--primary-foreground))",
+              }}
             >
-              <List className="h-3 w-3" /> Lista
+              <Plus className="h-4 w-4" strokeWidth={2.2} />
+              <span className="hidden sm:inline">Nueva OT</span>
             </button>
-            <button
-              className={view === "tablero" ? "on" : ""}
-              onClick={() => setView("tablero")}
-            >
-              <LayoutGrid className="h-3 w-3" /> Tablero
-            </button>
-          </div>
-          <button
-            onClick={() => navigate("/ops/ordenes/nueva")}
-            className="btn btn-pri"
-            style={{ height: 48 }}
-          >
-            <Plus className="h-4 w-4" strokeWidth={2} />
-            Nueva orden
-          </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {errorMsg && (
         <div
           role="alert"
-          className="rounded-[10px] border px-4 py-3 text-sm"
+          className="rounded-xl border px-4 py-3 text-sm"
           style={{
-            backgroundColor: "var(--dang-50)",
-            borderColor: "var(--dang-border)",
-            color: "var(--dang-700)",
+            backgroundColor: "hsl(var(--destructive) / 0.08)",
+            borderColor: "hsl(var(--destructive) / 0.3)",
+            color: "hsl(var(--destructive))",
           }}
         >
           {errorMsg}
         </div>
       )}
 
-      {/* ── Tabs de estado (con conteo) ─────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {OT_TABS.map((t) => {
-          const on = (tab ?? null) === t.estado;
-          const ct = t.estado == null ? counts.all : (counts[t.estado] ?? 0);
-          return (
-            <button
-              key={t.v}
-              onClick={() => setTab(t.estado)}
-              className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors"
-              style={
-                on
-                  ? { backgroundColor: "var(--n-100)", color: "var(--n-950)" }
-                  : { backgroundColor: "transparent", color: "var(--n-500)" }
-              }
-              onMouseEnter={(e) => {
-                if (!on) e.currentTarget.style.backgroundColor = "var(--n-50)";
-              }}
-              onMouseLeave={(e) => {
-                if (!on) e.currentTarget.style.backgroundColor = "transparent";
-              }}
-            >
-              {t.v}
-              <span
-                className="font-mono text-[10.5px]"
-                style={{ color: "var(--n-400)" }}
-              >
-                {ct}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── Búsqueda (solo vista lista) ─────────────────────────────── */}
-      {view === "lista" && (
-        <div className="flex flex-wrap items-center gap-3">
-          <div
-            className="flex h-12 max-w-[560px] flex-1 items-center gap-2.5 rounded-lg border px-3.5"
-            style={{
-              borderColor: "var(--n-200)",
-              backgroundColor: "var(--n-0)",
-            }}
-          >
-            <Search
-              className="h-4 w-4 shrink-0"
-              strokeWidth={1.5}
-              style={{ color: "var(--n-500)" }}
-            />
-            <input
-              type="search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar OT, cliente, equipo o serie…"
-              className="min-w-0 flex-1 border-none bg-transparent text-[14px] outline-none"
-              style={{ color: "var(--n-950)" }}
-            />
-            {q ? (
-              <button
-                onClick={() => setQ("")}
-                aria-label="Limpiar búsqueda"
-                className="grid h-6 w-6 place-items-center rounded"
-                style={{ color: "var(--n-500)" }}
-              >
-                <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-              </button>
-            ) : (
-              <span
-                className="hidden shrink-0 rounded border px-1.5 py-0.5 font-mono text-[11px] sm:inline"
-                style={{
-                  borderColor: "var(--n-200)",
-                  backgroundColor: "var(--n-50)",
-                  color: "var(--n-500)",
-                }}
-              >
-                ⌘K
-              </span>
-            )}
-          </div>
-          <span
-            className="ml-auto hidden font-mono text-[11px] uppercase tracking-wider sm:inline"
-            style={{ color: "var(--n-500)" }}
-          >
-            Ordenado por ·{" "}
-            <b className="font-medium" style={{ color: "var(--n-950)" }}>
-              Recepción ↓
-            </b>
-          </span>
-        </div>
-      )}
-
-      {/* ── Contenido ───────────────────────────────────────────────── */}
-      {loading && ordenes.length === 0 ? (
-        <Skeleton />
-      ) : filtradas.length === 0 ? (
-        <Empty q={q} />
-      ) : view === "lista" ? (
-        <ListView
-          rows={filtradas}
-          total={ordenes.length}
-          abiertas={kpis.abiertas}
-          hasMore={hasMore}
-          onOpen={(id) => navigate(`/ops/ordenes/${id}`)}
-        />
-      ) : (
-        <KanbanView
-          rows={filtradas}
-          onOpen={(id) => navigate(`/ops/ordenes/${id}`)}
-        />
-      )}
-
-      {hasMore && !loading && (
-        <button
-          onClick={() => cargar(false)}
-          className="w-full rounded-[10px] border py-3 text-sm font-medium"
+      {/* Filtros: búsqueda + estado */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div
+          className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-xl border px-3.5"
           style={{
-            borderColor: "var(--n-200)",
-            color: "var(--n-500)",
-            backgroundColor: "var(--n-0)",
+            borderColor: "hsl(var(--border))",
+            backgroundColor: "hsl(var(--card))",
           }}
         >
-          Cargar más
-        </button>
+          <Search
+            className="h-4 w-4 shrink-0"
+            strokeWidth={1.6}
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          />
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar por cliente, equipo o serie…"
+            className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
+            style={{ color: "hsl(var(--foreground))" }}
+          />
+          {q && (
+            <button
+              onClick={() => setQ("")}
+              aria-label="Limpiar búsqueda"
+              className="grid h-6 w-6 place-items-center rounded"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              <X className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+          )}
+        </div>
+        <select
+          value={estado}
+          onChange={(e) => setEstado(e.target.value)}
+          className="h-12 rounded-xl border px-3 text-sm font-medium outline-none"
+          style={{
+            borderColor: "hsl(var(--border))",
+            backgroundColor: "hsl(var(--card))",
+            color: "hsl(var(--foreground))",
+          }}
+        >
+          <option value="todos">Todos los estados</option>
+          {ESTADOS_FLUJO.map((e) => (
+            <option key={e} value={e}>
+              {ESTADO_LABEL[e] ?? e}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Contenido */}
+      {loading ? (
+        <Skeleton view={view} />
+      ) : filtradas.length === 0 ? (
+        <Empty filtro={q || estado !== "todos"} />
+      ) : view === "lista" ? (
+        <ListView rows={filtradas} onOpen={open} />
+      ) : (
+        <KanbanView rows={filtradas} onOpen={open} />
       )}
     </div>
   );
 }
 
-/* ─────────────────────────── Vista lista (desktop tabla / mobile cards) ── */
+/* ─────────────────────────── Toggle de vista ──────────────────────────── */
 
-function ListView({ rows, total, abiertas, hasMore, onOpen }) {
+function ViewToggle({ view, setView }) {
+  const opciones = [
+    { v: "lista", label: "Lista", Icon: List },
+    { v: "kanban", label: "Kanban", Icon: LayoutGrid },
+  ];
+  return (
+    <div
+      className="flex items-center gap-0.5 rounded-xl p-1"
+      style={{ backgroundColor: "hsl(var(--muted) / 0.5)" }}
+    >
+      {opciones.map(({ v, label, Icon }) => {
+        const on = view === v;
+        return (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors"
+            style={{
+              height: 40,
+              backgroundColor: on ? "hsl(var(--card))" : "transparent",
+              color: on
+                ? "hsl(var(--foreground))"
+                : "hsl(var(--muted-foreground))",
+              boxShadow: on
+                ? "0 1px 2px hsl(var(--foreground) / 0.08)"
+                : "none",
+            }}
+          >
+            <Icon className="h-4 w-4" />
+            <span className="hidden sm:inline">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─────────────────────────── Píldora de estado ────────────────────────── */
+
+function EstadoPill({ estado }) {
+  const s = estadoEstilo(estado);
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold"
+      style={{
+        backgroundColor: s.bg,
+        color: s.fg,
+        border: `1px solid ${s.border}`,
+      }}
+    >
+      <span
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ backgroundColor: s.dot }}
+      />
+      {s.label}
+    </span>
+  );
+}
+
+function VencidaBadge() {
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+      style={{
+        backgroundColor: "hsl(var(--destructive) / 0.12)",
+        color: "hsl(var(--destructive))",
+      }}
+    >
+      Vencida
+    </span>
+  );
+}
+
+function CandadoSede({ sedeId }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[11px] font-medium"
+      style={{ color: "hsl(var(--muted-foreground))" }}
+    >
+      <Lock className="h-3 w-3" strokeWidth={2} />
+      {SEDE_LABEL[sedeId] ?? sedeId}
+    </span>
+  );
+}
+
+/* ─────────────────── Vista lista (desktop tabla / mobile cards) ────────── */
+
+function ListView({ rows, onOpen }) {
   return (
     <>
-      {/* Móvil/Tablet: cards (< md) */}
+      {/* Móvil: cards */}
       <ul className="md:hidden space-y-2.5" role="list">
         {rows.map((o) => (
           <li key={o.id}>
@@ -349,139 +355,90 @@ function ListView({ rows, total, abiertas, hasMore, onOpen }) {
         ))}
       </ul>
 
-      {/* Desktop: tabla (≥ md) */}
+      {/* Desktop: tabla */}
       <div
-        className="hidden md:block overflow-hidden rounded-[10px] border"
-        style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+        className="hidden md:block overflow-x-auto rounded-xl border"
+        style={{ borderColor: "hsl(var(--border))" }}
       >
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <Th width={90}>#</Th>
-                <Th width={210}>Cliente</Th>
-                <Th>Equipo</Th>
-                <Th width={150}>Técnico</Th>
-                <Th width={140}>Autorización</Th>
-                <Th width={180}>Estado</Th>
-                <Th width={90} right>
-                  Días
-                </Th>
-                <Th width={130} right>
-                  Total
-                </Th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((o) => (
-                <OrdenFila key={o.id} orden={o} onClick={() => onOpen(o.id)} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div
-          className="flex items-center justify-between border-t px-5 py-3.5 text-xs"
-          style={{
-            borderColor: "var(--n-100)",
-            backgroundColor: "var(--n-50)",
-            color: "var(--n-500)",
-          }}
-        >
-          <span>
-            Mostrando{" "}
-            <b className="font-mono" style={{ color: "var(--n-950)" }}>
-              {rows.length}
-            </b>{" "}
-            de{" "}
-            <b className="font-mono" style={{ color: "var(--n-950)" }}>
-              {total}
-              {hasMore ? "+" : ""}
-            </b>{" "}
-            órdenes
-          </span>
-          <span className="font-mono">
-            {abiertas} abierta{abiertas === 1 ? "" : "s"}
-          </span>
-        </div>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr style={{ backgroundColor: "hsl(var(--muted) / 0.3)" }}>
+              <Th>OT</Th>
+              <Th>Cliente / Equipo</Th>
+              <Th>Estado</Th>
+              <Th>Sede</Th>
+              <Th center>Días en taller</Th>
+              <Th right>Total</Th>
+              <Th right>Saldo</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((o) => (
+              <OrdenFila key={o.id} orden={o} onClick={() => onOpen(o.id)} />
+            ))}
+          </tbody>
+        </table>
       </div>
     </>
   );
 }
 
-function Th({ children, width, right }) {
+function Th({ children, right, center }) {
   return (
     <th
-      style={{ width, backgroundColor: "var(--n-50)", color: "var(--n-500)" }}
       className={
-        "whitespace-nowrap border-b px-3 py-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.1em] " +
-        (right ? "text-right" : "text-left")
+        "whitespace-nowrap border-b px-3 py-3 text-[11px] font-semibold uppercase tracking-wide " +
+        (right ? "text-right" : center ? "text-center" : "text-left")
       }
+      style={{
+        borderColor: "hsl(var(--border))",
+        color: "hsl(var(--muted-foreground))",
+      }}
     >
       {children}
     </th>
   );
 }
 
-function Td({ children, right }) {
+function Td({ children, right, center }) {
   return (
     <td
       className={
-        "whitespace-nowrap border-b px-3 py-2.5 align-middle text-[13px] " +
-        (right ? "text-right" : "text-left")
+        "border-b px-3 py-2.5 align-middle text-sm " +
+        (right ? "text-right" : center ? "text-center" : "text-left")
       }
-      style={{ borderColor: "var(--n-100)" }}
+      style={{ borderColor: "hsl(var(--border))" }}
     >
       {children}
     </td>
   );
 }
 
-function OrdenFila({ orden, onClick }) {
-  const pill = ordenEstadoPill(orden.estado);
-  const aPill = autorizacionPill(orden.estado_autorizacion);
-  const tec = tecnicoAvatar(orden.tecnico?.nombre);
-  const dias = diasEnEstado(orden);
-  const rowCls = [
-    "cursor-pointer transition-colors",
-    dias.vencida ? "ot-row-warn" : "",
-    orden.estado === "entregada" ? "ot-row-done" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+function OrdenFila({ orden: o, onClick }) {
   return (
     <tr
       onClick={onClick}
-      className={rowCls}
-      onMouseEnter={(e) => {
-        if (!dias.vencida)
-          e.currentTarget.style.backgroundColor = "var(--n-50)";
+      className="cursor-pointer transition-colors"
+      style={{
+        backgroundColor: "transparent",
+        opacity: o._propia ? 1 : 0.7,
       }}
-      onMouseLeave={(e) => {
-        if (!dias.vencida) e.currentTarget.style.backgroundColor = "";
-      }}
+      onMouseEnter={(e) =>
+        (e.currentTarget.style.backgroundColor = "hsl(var(--muted) / 0.4)")
+      }
+      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
     >
       <Td>
-        <span
-          className="font-mono text-[12.5px] font-medium"
-          style={{ color: "var(--n-950)" }}
-        >
-          #{orden.numero}
-        </span>
-      </Td>
-      <Td>
-        <div className="flex min-w-0 flex-col leading-tight">
+        <div className="flex flex-col leading-tight">
           <span
-            className="max-w-[200px] truncate text-[13px] font-medium"
-            style={{ color: "var(--n-950)" }}
+            className="font-semibold"
+            style={{ color: "hsl(var(--primary))" }}
           >
-            {orden.cliente_nombre}
+            {o.numero}
           </span>
-          {orden.cliente_telefono && (
-            <span
-              className="font-mono text-[11px]"
-              style={{ color: "var(--n-500)" }}
-            >
-              {orden.cliente_telefono}
+          {o._vencida && (
+            <span className="mt-0.5">
+              <VencidaBadge />
             </span>
           )}
         </div>
@@ -489,225 +446,219 @@ function OrdenFila({ orden, onClick }) {
       <Td>
         <div className="flex min-w-0 flex-col leading-tight">
           <span
-            className="text-[13px] font-medium"
-            style={{ color: "var(--n-950)" }}
+            className="font-medium"
+            style={{ color: "hsl(var(--foreground))" }}
           >
-            {orden.equipo_descripcion}
+            {o.cliente_nombre}
           </span>
-          {orden.equipo_serie && (
-            <span
-              className="font-mono text-[11.5px]"
-              style={{ color: "var(--n-500)" }}
-            >
-              {orden.equipo_serie}
-            </span>
-          )}
+          <span
+            className="text-xs"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            {o.equipo_descripcion}
+            {o.equipo_serie ? ` · ${o.equipo_serie}` : ""}
+          </span>
         </div>
       </Td>
       <Td>
-        {orden.tecnico?.nombre ? (
+        <EstadoPill estado={o.estado} />
+      </Td>
+      <Td>
+        {o._propia ? (
           <span
-            className="inline-flex items-center gap-2 text-[12.5px]"
-            style={{ color: "var(--n-800)" }}
+            className="text-xs"
+            style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            <span className={`av-tec ${tec.variant}`}>{tec.ini}</span>
-            {orden.tecnico.nombre}
+            {SEDE_LABEL[o.sede_id] ?? o.sede_id}
           </span>
         ) : (
-          <span style={{ color: "var(--n-300)" }}>—</span>
+          <CandadoSede sedeId={o.sede_id} />
         )}
       </Td>
-      <Td>
-        <span className={aPill.cls}>
-          <span className="dot" />
-          {aPill.label}
-        </span>
-      </Td>
-      <Td>
-        <div className="flex flex-wrap items-center gap-1">
-          {dias.vencida && <span className="bdg-vencida">VENCIDA</span>}
-          <span className={pill.cls}>
-            <span className="dot" />
-            {pill.label}
-          </span>
-        </div>
-      </Td>
-      <Td right>
+      <Td center>
         <span
-          className={
-            "font-mono text-[12.5px] " +
-            (dias.tone === "warn"
-              ? "days-warn"
-              : dias.tone === "dang"
-                ? "days-dang"
-                : "")
-          }
-          style={dias.tone ? undefined : { color: "var(--n-500)" }}
+          className="text-sm font-medium tabular-nums"
+          style={{
+            color: o._vencida
+              ? "hsl(var(--destructive))"
+              : "hsl(var(--muted-foreground))",
+          }}
         >
-          {dias.label}
+          {o._dias}
         </span>
       </Td>
       <Td right>
         <span
-          className="font-mono text-[13.5px] font-medium tabular-nums"
-          style={{ color: "var(--n-950)" }}
+          className="text-sm tabular-nums"
+          style={{ color: "hsl(var(--foreground))" }}
         >
-          {formatCOP(orden.total ?? 0)}
+          {formatCOP(o._total)}
+        </span>
+      </Td>
+      <Td right>
+        <span
+          className="text-sm font-semibold tabular-nums"
+          style={{
+            color:
+              o._saldo > 0 ? "hsl(var(--foreground))" : "hsl(var(--success))",
+          }}
+        >
+          {formatCOP(o._saldo)}
         </span>
       </Td>
     </tr>
   );
 }
 
-function OrdenCard({ orden, onClick }) {
-  const pill = ordenEstadoPill(orden.estado);
-  const tec = tecnicoAvatar(orden.tecnico?.nombre);
-  const dias = diasEnEstado(orden);
+function OrdenCard({ orden: o, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-[10px] border px-4 py-3.5 text-left shadow-sm transition-all duration-100 active:scale-[0.985] active:shadow-none"
+      className="w-full rounded-xl border px-4 py-4 text-left transition-all active:scale-[0.99]"
       style={{
-        borderColor: dias.vencida ? "var(--dang-border)" : "var(--n-150)",
-        backgroundColor: dias.vencida ? "var(--warn-50)" : "var(--n-0)",
+        backgroundColor: "hsl(var(--card))",
+        borderColor: o._vencida
+          ? "hsl(var(--destructive) / 0.4)"
+          : "hsl(var(--border))",
+        opacity: o._propia ? 1 : 0.7,
       }}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <span
-              className="font-mono text-[11px] font-semibold"
-              style={{ color: "var(--p-600)" }}
+              className="text-xs font-semibold"
+              style={{ color: "hsl(var(--primary))" }}
             >
-              #{orden.numero}
+              {o.numero}
             </span>
-            {dias.vencida && <span className="bdg-vencida">VENCIDA</span>}
-            <span className={pill.cls}>
-              <span className="dot" />
-              {pill.label}
-            </span>
+            {o._vencida && <VencidaBadge />}
+            <EstadoPill estado={o.estado} />
           </div>
           <p
-            className="truncate text-[14px] font-medium leading-tight"
-            style={{ color: "var(--n-950)" }}
+            className="truncate text-sm font-medium leading-tight"
+            style={{ color: "hsl(var(--foreground))" }}
           >
-            {orden.cliente_nombre}
+            {o.cliente_nombre}
           </p>
           <p
-            className="mt-0.5 truncate text-[12px]"
-            style={{ color: "var(--n-500)" }}
+            className="mt-0.5 truncate text-xs"
+            style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            {orden.equipo_descripcion}
+            {o.equipo_descripcion}
+            {o.equipo_serie ? ` · ${o.equipo_serie}` : ""}
           </p>
-          <p
-            className="mt-0.5 flex items-center gap-1.5 text-[11.5px]"
-            style={{ color: "var(--n-500)" }}
-          >
-            {orden.tecnico?.nombre && (
-              <span className={`av-tec ${tec.variant}`}>{tec.ini}</span>
-            )}
-            {formatDate(orden.fecha)}
-            {orden.tecnico?.nombre && ` · ${orden.tecnico.nombre}`}
-            {dias.dias != null && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            {o._propia ? (
               <span
-                className={
-                  "ml-auto font-mono " +
-                  (dias.tone === "warn"
-                    ? "days-warn"
-                    : dias.tone === "dang"
-                      ? "days-dang"
-                      : "")
-                }
+                className="text-[11px]"
+                style={{ color: "hsl(var(--muted-foreground))" }}
               >
-                {dias.label}
+                {SEDE_LABEL[o.sede_id] ?? o.sede_id}
               </span>
+            ) : (
+              <CandadoSede sedeId={o.sede_id} />
             )}
+            <span
+              className="text-[11px]"
+              style={{
+                color: o._vencida
+                  ? "hsl(var(--destructive))"
+                  : "hsl(var(--muted-foreground))",
+              }}
+            >
+              {o._dias} {o._dias === 1 ? "día" : "días"} en taller
+            </span>
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <p
+            className="text-sm font-semibold tabular-nums"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            {formatCOP(o._total)}
+          </p>
+          <p
+            className="mt-0.5 text-xs tabular-nums"
+            style={{
+              color:
+                o._saldo > 0
+                  ? "hsl(var(--muted-foreground))"
+                  : "hsl(var(--success))",
+            }}
+          >
+            Saldo {formatCOP(o._saldo)}
           </p>
         </div>
-        <p
-          className="shrink-0 font-mono text-[15px] font-semibold tabular-nums"
-          style={{ color: "var(--n-950)" }}
-        >
-          {formatCOP(orden.total ?? 0)}
-        </p>
       </div>
     </button>
   );
 }
 
-/* ─────────────────────────── Vista tablero (kanban) ────────────────────── */
+/* ─────────────────────────── Vista kanban ─────────────────────────────── */
 
 function KanbanView({ rows, onOpen }) {
   return (
-    <div className="kanban">
-      {OT_KANBAN_COLS.map((col) => {
-        const items = rows.filter((r) => r.estado === col.id);
+    <div className="flex gap-3.5 overflow-x-auto pb-2">
+      {ESTADOS_FLUJO.map((grupo) => {
+        const items = rows.filter((r) => r._grupo === grupo);
+        const s = estadoEstilo(grupo);
         return (
-          <div key={col.id} className="kcol">
-            <div className="kcol-h">
-              <div className="ttl">
-                <span
-                  className={`kdot ${col.pulse ? "pulse" : ""}`}
-                  style={{ background: col.dot }}
-                />
-                {col.label}
-              </div>
-              <span className="kct">{items.length}</span>
-            </div>
-            {items.map((r) => {
-              const tec = tecnicoAvatar(r.tecnico?.nombre);
-              const dias = diasEnEstado(r);
-              const cardCls = [
-                "kcard text-left",
-                dias.vencida ? "dang" : dias.tone === "warn" ? "warn" : "",
-                r.estado === "entregada" ? "done" : "",
-              ]
-                .filter(Boolean)
-                .join(" ");
-              return (
-                <button
-                  key={r.id}
-                  onClick={() => onOpen(r.id)}
-                  className={cardCls}
-                >
-                  <div className="ktop">
-                    <span className="knum">#{r.numero}</span>
-                    {dias.dias != null && (
-                      <span
-                        className={
-                          "font-mono text-[10.5px] " +
-                          (dias.tone === "warn"
-                            ? "days-warn"
-                            : dias.tone === "dang"
-                              ? "days-dang"
-                              : "")
-                        }
-                      >
-                        {dias.label}
-                      </span>
-                    )}
-                  </div>
-                  <div className="kcli">{r.cliente_nombre}</div>
-                  <div className="keqp">{r.equipo_descripcion}</div>
-                  <div className="kft">
-                    {r.tecnico?.nombre && (
-                      <span className={`av-tec ${tec.variant}`}>{tec.ini}</span>
-                    )}
-                    <span className="nm">
-                      {r.tecnico?.nombre ?? "Sin asignar"}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-            {items.length === 0 && (
-              <div
-                className="rounded-md border border-dashed p-4 text-center text-[11px]"
-                style={{ borderColor: "var(--n-200)", color: "var(--n-500)" }}
+          <div
+            key={grupo}
+            className="flex max-h-[74vh] flex-col rounded-xl border"
+            style={{
+              flex: "0 0 270px",
+              backgroundColor: "hsl(var(--muted) / 0.3)",
+              borderColor: "hsl(var(--border))",
+            }}
+          >
+            <div
+              className="flex items-center gap-2 border-b px-3.5 py-3"
+              style={{ borderColor: "hsl(var(--border))" }}
+            >
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: s.dot }}
+              />
+              <span
+                className="text-xs font-semibold"
+                style={{ color: "hsl(var(--foreground))" }}
               >
-                Sin OT
-              </div>
-            )}
+                {ESTADO_LABEL[grupo] ?? grupo}
+              </span>
+              <span
+                className="ml-auto rounded-full border px-2 py-0.5 text-[11px] tabular-nums"
+                style={{
+                  backgroundColor: "hsl(var(--card))",
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--muted-foreground))",
+                }}
+              >
+                {items.length}
+              </span>
+            </div>
+            <div className="flex flex-col gap-2.5 overflow-y-auto p-2.5">
+              {items.length === 0 ? (
+                <div
+                  className="rounded-lg border border-dashed p-4 text-center text-[11px]"
+                  style={{
+                    borderColor: "hsl(var(--border))",
+                    color: "hsl(var(--muted-foreground))",
+                  }}
+                >
+                  Sin OT
+                </div>
+              ) : (
+                items.map((o) => (
+                  <KanbanCard
+                    key={o.id}
+                    orden={o}
+                    onClick={() => onOpen(o.id)}
+                  />
+                ))
+              )}
+            </div>
           </div>
         );
       })}
@@ -715,38 +666,127 @@ function KanbanView({ rows, onOpen }) {
   );
 }
 
-/* ─────────────────────────── Estados ──────────────────────────────────── */
-
-function Skeleton() {
+function KanbanCard({ orden: o, onClick }) {
   return (
-    <div className="space-y-3">
-      {[...Array(5)].map((_, i) => (
+    <button
+      onClick={onClick}
+      className="w-full rounded-lg border px-3 py-3 text-left transition-all active:scale-[0.99]"
+      style={{
+        backgroundColor: "hsl(var(--card))",
+        borderColor: o._vencida
+          ? "hsl(var(--destructive) / 0.4)"
+          : "hsl(var(--border))",
+        opacity: o._propia ? 1 : 0.7,
+      }}
+    >
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <span
+          className="text-xs font-semibold"
+          style={{ color: "hsl(var(--primary))" }}
+        >
+          {o.numero}
+        </span>
+        {!o._propia ? (
+          <CandadoSede sedeId={o.sede_id} />
+        ) : o._vencida ? (
+          <VencidaBadge />
+        ) : null}
+      </div>
+      <div
+        className="truncate text-sm font-medium leading-tight"
+        style={{ color: "hsl(var(--foreground))" }}
+      >
+        {o.cliente_nombre}
+      </div>
+      <div
+        className="mt-0.5 truncate text-xs"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
+        {o.equipo_descripcion}
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <span
+          className="text-[11px]"
+          style={{
+            color: o._vencida
+              ? "hsl(var(--destructive))"
+              : "hsl(var(--muted-foreground))",
+          }}
+        >
+          {o._dias} {o._dias === 1 ? "día" : "días"}
+        </span>
+        <span
+          className="text-xs font-semibold tabular-nums"
+          style={{
+            color:
+              o._saldo > 0 ? "hsl(var(--foreground))" : "hsl(var(--success))",
+          }}
+        >
+          {formatCOP(o._saldo)}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+/* ─────────────────────────── Estados de carga / vacío ─────────────────── */
+
+function Skeleton({ view }) {
+  if (view === "kanban") {
+    return (
+      <div className="flex gap-3.5 overflow-hidden">
+        {[...Array(4)].map((_, i) => (
+          <div
+            key={i}
+            className="h-64 animate-pulse rounded-xl border"
+            style={{
+              flex: "0 0 270px",
+              backgroundColor: "hsl(var(--muted) / 0.3)",
+              borderColor: "hsl(var(--border))",
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2.5">
+      {[...Array(6)].map((_, i) => (
         <div
           key={i}
-          className="h-16 animate-pulse rounded-[10px] border"
-          style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
+          className="h-16 animate-pulse rounded-xl border"
+          style={{
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+          }}
         />
       ))}
     </div>
   );
 }
 
-function Empty({ q }) {
+function Empty({ filtro }) {
   return (
     <div className="flex flex-col items-center justify-center px-8 py-20 text-center">
       <div
-        className="mb-4 grid h-14 w-14 place-items-center rounded-[12px]"
-        style={{ backgroundColor: "var(--p-50)", color: "var(--p-600)" }}
+        className="mb-4 grid h-14 w-14 place-items-center rounded-xl"
+        style={{
+          backgroundColor: "hsl(var(--muted) / 0.5)",
+          color: "hsl(var(--muted-foreground))",
+        }}
       >
         <Wrench className="h-7 w-7" strokeWidth={1.5} />
       </div>
-      <p className="font-semibold" style={{ color: "var(--n-950)" }}>
-        {q ? "Sin resultados" : "Sin órdenes registradas"}
+      <p className="font-semibold" style={{ color: "hsl(var(--foreground))" }}>
+        No hay órdenes
       </p>
-      <p className="mt-1 text-sm" style={{ color: "var(--n-500)" }}>
-        {q
-          ? `No se encontraron órdenes para "${q}"`
-          : 'Crea la primera con "Nueva orden"'}
+      <p
+        className="mt-1 text-sm"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
+        {filtro
+          ? "Ninguna orden coincide con los filtros."
+          : 'Crea la primera con "Nueva OT".'}
       </p>
     </div>
   );

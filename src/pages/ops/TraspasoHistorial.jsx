@@ -52,9 +52,10 @@ function conteo(t) {
     );
     return { productos, unidades };
   }
-  // Sin detalle disponible: deriva de bultos como aproximación honesta.
+  // Sin detalle disponible: no inventamos el # de productos (se muestra "—").
+  // `unidades` cae a bultos solo como proxy para el KPI agregado.
   const bultos = t.bultos ?? 0;
-  return { productos: bultos || 0, unidades: bultos || 0 };
+  return { productos: null, unidades: bultos || 0 };
 }
 
 /** Responsable mostrado: picker > solicitante (lo más representativo del flujo). */
@@ -477,7 +478,7 @@ function BoardCard({ t, onOpen }) {
         className="font-mono text-[11.5px]"
         style={{ color: "var(--n-500)" }}
       >
-        {productos} productos · {unidades} unidades
+        {productos ?? "—"} productos · {unidades} unidades
       </div>
 
       {t.observaciones && (
@@ -597,7 +598,8 @@ function ListaTabla({ rows, onOpen }) {
                           className="text-[13px] font-medium"
                           style={{ color: "var(--n-950)" }}
                         >
-                          {productos} producto{productos !== 1 ? "s" : ""}
+                          {productos ?? "—"} producto
+                          {productos === 1 ? "" : "s"}
                           <TipoBadge badge={badge} compact />
                         </span>
                         <span
