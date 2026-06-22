@@ -1271,6 +1271,7 @@ function DetalleCierreAvanzado({ detalle }) {
         <MiniTable
           titulo="Por cuenta bancaria"
           cols={["Sede", "Cuenta", "Ingresos", "Egresos"]}
+          align={["left", "left", "right", "right"]}
           rows={porCuenta.map((r) => [
             r.sede_nombre,
             cuentaLabel(r.cuenta),
@@ -1283,6 +1284,7 @@ function DetalleCierreAvanzado({ detalle }) {
         <MiniTable
           titulo="Egresos — en qué se fue el dinero"
           cols={["Sede", "Detalle", "Método", "Cuenta", "Total"]}
+          align={["left", "left", "left", "left", "right"]}
           rows={egresosDet.map((e) => [
             e.sede_nombre,
             e.es_caja_menor
@@ -1300,6 +1302,7 @@ function DetalleCierreAvanzado({ detalle }) {
         <MiniTable
           titulo="Productos vendidos por sede"
           cols={["Sede", "Referencia", "Producto", "Unidades", "Ingreso"]}
+          align={["left", "left", "left", "right", "right"]}
           rows={porProducto.map((p) => [
             p.sede_nombre,
             p.referencia,
@@ -1371,7 +1374,7 @@ function MatrizSedeMetodo({ porSedeMetodo, porSede }) {
   );
 }
 
-function MiniTable({ titulo, cols, rows }) {
+function MiniTable({ titulo, cols, rows, align }) {
   return (
     <div
       className="rounded-lg border overflow-hidden"
@@ -1387,48 +1390,73 @@ function MiniTable({ titulo, cols, rows }) {
       >
         {titulo}
       </p>
-      <table className="w-full border-collapse text-xs">
-        <thead>
-          <tr style={{ color: "hsl(var(--muted-foreground))" }}>
-            {cols.map((col, i) => (
-              <th
-                key={col}
-                className={`px-3 py-1.5 font-medium ${
-                  i === 0 ? "text-left" : "text-right"
-                }`}
-              >
-                {col}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, ri) => (
-            <tr
-              key={ri}
-              className="border-t"
-              style={{ borderColor: "hsl(var(--border))" }}
-            >
-              {row.map((cell, ci) => (
-                <td
-                  key={ci}
-                  className={`px-3 py-1.5 tabular-nums ${
-                    ci === 0 ? "text-left" : "text-right"
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr style={{ color: "hsl(var(--muted-foreground))" }}>
+              {cols.map((col, i) => (
+                <th
+                  key={col}
+                  className={`px-3 py-1.5 font-medium whitespace-nowrap ${
+                    alineacion(align, i, cols.length) === "left"
+                      ? "text-left"
+                      : "text-right"
                   }`}
-                  style={{
-                    color:
-                      ci === 0
-                        ? "hsl(var(--foreground))"
-                        : "hsl(var(--muted-foreground))",
-                  }}
                 >
-                  {cell}
-                </td>
+                  {col}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={cols.length}
+                  className="px-3 py-3 text-center italic"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                >
+                  Sin movimientos
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, ri) => (
+                <tr
+                  key={ri}
+                  className="border-t"
+                  style={{ borderColor: "hsl(var(--border))" }}
+                >
+                  {row.map((cell, ci) => {
+                    const left = alineacion(align, ci, cols.length) === "left";
+                    return (
+                      <td
+                        key={ci}
+                        className={`px-3 py-1.5 tabular-nums ${
+                          left ? "text-left" : "text-right"
+                        }`}
+                        style={{
+                          color: left
+                            ? "hsl(var(--foreground))"
+                            : "hsl(var(--muted-foreground))",
+                        }}
+                      >
+                        {cell}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
+}
+
+// Alineación de columna: usa `align` (array 'left'|'right') si se pasa; por
+// defecto la primera columna a la izquierda y el resto a la derecha (números).
+function alineacion(align, i, total) {
+  if (Array.isArray(align) && align[i]) return align[i];
+  return i === 0 ? "left" : "right";
 }
