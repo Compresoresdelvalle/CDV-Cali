@@ -702,7 +702,6 @@ function AccionPanel(props) {
     onIniciarPicking,
     onEnviar,
     onIrPicking,
-    onVerificar,
     onRecibir,
     onCancelar,
   } = props;
@@ -721,7 +720,6 @@ function AccionPanel(props) {
     onIniciarPicking,
     onEnviar,
     onIrPicking,
-    onVerificar,
     onRecibir,
   });
 
@@ -1019,6 +1017,29 @@ function construirConfig(p) {
       desc: "Un Admin canceló este traspaso. Si ya estaba en tránsito, el stock se devolvió a la sede origen.",
       progreso: null,
       tone: "danger",
+      actions: [],
+    };
+  }
+  // Guía pasiva — sede DESTINO: aún se prepara en origen, solo hay que esperar.
+  if (
+    ["borrador", "picking", "verificado"].includes(estado) &&
+    yoSoyDeSedeDestino
+  ) {
+    return {
+      icon: <Clock className="h-4 w-4" strokeWidth={2} />,
+      title: "En preparación en origen",
+      desc: `${sedeLabel(traspaso.sede_origen_id)} está preparando este traspaso. Podrás confirmar la recepción cuando llegue a tu sede.`,
+      progreso: null,
+      actions: [],
+    };
+  }
+  // Guía pasiva — sede ORIGEN: ya se envió, espera la confirmación de recepción.
+  if (estado === "en_transito" && yoSoyDeSedeOrigen) {
+    return {
+      icon: <Truck className="h-4 w-4" strokeWidth={2} />,
+      title: "En camino a destino",
+      desc: `Enviado. Esperando que ${sedeLabel(traspaso.sede_destino_id)} confirme la recepción.`,
+      progreso: null,
       actions: [],
     };
   }

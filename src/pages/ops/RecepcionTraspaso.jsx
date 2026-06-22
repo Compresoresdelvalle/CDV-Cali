@@ -197,7 +197,7 @@ export default function RecepcionTraspaso() {
             className="font-mono text-[11px] uppercase tracking-[0.1em]"
             style={{ color: "var(--n-500)" }}
           >
-            Sin diferencia
+            Ítems que coinciden
           </span>
           <div
             className="font-mono text-[22px] font-medium"
@@ -361,7 +361,7 @@ export default function RecepcionTraspaso() {
                       className="rounded-lg border text-center font-mono text-sm font-bold outline-none"
                       style={{
                         width: 56,
-                        height: 40,
+                        height: 44,
                         borderColor: hasDiff
                           ? "var(--dang-border)"
                           : "var(--n-150)",
@@ -513,8 +513,8 @@ function QtyBtn({ children, onClick }) {
       onClick={onClick}
       className="flex items-center justify-center rounded-lg border font-bold"
       style={{
-        width: 40,
-        height: 40,
+        width: 44,
+        height: 44,
         fontSize: 18,
         borderColor: "var(--n-150)",
         backgroundColor: "var(--n-50)",

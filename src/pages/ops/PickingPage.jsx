@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { X, Check, RotateCcw } from "lucide-react";
+import { X, Check, SkipForward } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
@@ -345,7 +345,7 @@ export default function PickingPage() {
           {/* Acciones — botones de 64px */}
           <div className="pk-actions mx-auto w-full max-w-[600px]">
             <button className="pk-btn pk-btn-skip" onClick={saltar}>
-              <RotateCcw className="h-[18px] w-[18px]" strokeWidth={1.7} />
+              <SkipForward className="h-[18px] w-[18px]" strokeWidth={1.7} />
               Saltar
             </button>
             <button
