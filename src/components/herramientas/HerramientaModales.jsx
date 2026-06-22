@@ -35,9 +35,42 @@ export function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
   const [observaciones, setObservaciones] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // REQ7 — préstamo por lote: cuántas unidades disponibles de esta referencia.
+  const [cantidad, setCantidad] = useState(1);
+  const [disponibles, setDisponibles] = useState(1);
 
   const usuarioSel = usuarios.find((u) => u.id === usuarioId) ?? null;
   const pill = estadoPill(herramienta.estado);
+
+  // Cuenta las unidades DISPONIBLES de la misma referencia en la sede, para
+  // permitir prestar varias de una (mismo producto_id, o nombre+código si es
+  // una herramienta manual sin producto vinculado).
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      let q = supabase
+        .from("herramientas_prestamo")
+        .select("id", { count: "exact", head: true })
+        .eq("sede_id", herramienta.sede_id)
+        .eq("estado", "disponible")
+        .eq("activo", true);
+      if (herramienta.producto_id) {
+        q = q.eq("producto_id", herramienta.producto_id);
+      } else {
+        q = q.is("producto_id", null);
+        q = q.eq("herramienta_nombre", herramienta.herramienta_nombre);
+        q = herramienta.herramienta_codigo
+          ? q.eq("herramienta_codigo", herramienta.herramienta_codigo)
+          : q.is("herramienta_codigo", null);
+      }
+      const { count, error: e } = await q;
+      if (cancel) return;
+      setDisponibles(e ? 1 : Math.max(count ?? 1, 1));
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [herramienta]);
 
   const guardar = async (e) => {
     e.preventDefault();
@@ -54,29 +87,29 @@ export function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
       const fechaEsperadaISO = new Date(
         `${fechaEsperada}T17:00:00-05:00`,
       ).toISOString();
-      // Defensa en profundidad: restringir UPDATE a la sede del usuario.
-      // `.eq("estado","disponible")` evita prestar dos veces la misma
-      // herramienta (race entre dos modales abiertos en paralelo).
-      let q = supabase
-        .from("herramientas_prestamo")
-        .update({
-          estado: "prestada",
-          estado_prestamo: "activo",
-          prestada_a: usuarioId,
-          fecha_prestamo: new Date().toISOString(),
-          fecha_devolucion_esperada: fechaEsperadaISO,
-          fecha_devolucion_real: null,
-          observaciones: observaciones || null,
-        })
-        .eq("id", herramienta.id)
-        .eq("estado", "disponible");
-      if (perfil?.rol !== "Admin" && perfil?.sede_id)
-        q = q.eq("sede_id", perfil.sede_id);
-      const { data, error: e2 } = await q.select("id");
+      const cant = Math.max(1, Math.min(cantidad || 1, disponibles));
+      // REQ7 — préstamo por lote: presta hasta `cant` unidades disponibles de la
+      // misma referencia en la sede, atómicamente (RPC con FOR UPDATE).
+      const { data, error: e2 } = await supabase.rpc(
+        "fn_prestar_herramientas_lote",
+        {
+          p_herramienta_id: herramienta.id,
+          p_usuario_id: usuarioId,
+          p_cantidad: cant,
+          p_fecha_esperada: fechaEsperadaISO,
+          p_observaciones: observaciones || null,
+        },
+      );
       if (e2) throw e2;
-      if (!data || data.length === 0) {
+      const prestadas = data?.prestadas ?? 0;
+      if (prestadas === 0) {
         setError("La herramienta ya no está disponible o no tienes permiso.");
         return;
+      }
+      if (prestadas < cant) {
+        setError(
+          `Solo había ${prestadas} unidad(es) disponible(s); se prestaron ${prestadas} de ${cant}.`,
+        );
       }
       await onSaved();
     } catch (err) {
@@ -146,6 +179,54 @@ export function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
               </div>
             </div>
             <Pill cls={pill.cls} label={pill.label} small />
+          </div>
+
+          {/* REQ7 — cantidad a prestar (varias unidades de la misma referencia) */}
+          <div className="mt-2.5 flex items-center justify-between gap-3">
+            <div>
+              <FieldLabel>Cantidad a prestar</FieldLabel>
+              <p
+                className="mt-0.5 text-[11px]"
+                style={{ color: "var(--n-500)" }}
+              >
+                {disponibles} disponible{disponibles === 1 ? "" : "s"} de esta
+                referencia en la sede
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <QtyStep
+                onClick={() => setCantidad((c) => Math.max(1, c - 1))}
+                disabled={cantidad <= 1}
+              >
+                −
+              </QtyStep>
+              <input
+                type="number"
+                value={cantidad}
+                min={1}
+                max={disponibles}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setCantidad(
+                    Number.isNaN(n) ? 1 : Math.max(1, Math.min(n, disponibles)),
+                  );
+                }}
+                className="rounded-md border text-center font-mono text-sm font-bold outline-none"
+                style={{
+                  width: 56,
+                  height: 40,
+                  borderColor: "var(--n-150)",
+                  backgroundColor: "var(--n-0)",
+                  color: "var(--n-950)",
+                }}
+              />
+              <QtyStep
+                onClick={() => setCantidad((c) => Math.min(disponibles, c + 1))}
+                disabled={cantidad >= disponibles}
+              >
+                +
+              </QtyStep>
+            </div>
           </div>
         </Section>
 
@@ -752,6 +833,28 @@ function FieldLabel({ children }) {
     >
       {children}
     </span>
+  );
+}
+
+/* Botón +/- para el contador de cantidad (REQ7). */
+function QtyStep({ children, onClick, disabled }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center justify-center rounded-md border font-bold disabled:opacity-40"
+      style={{
+        width: 40,
+        height: 40,
+        fontSize: 18,
+        borderColor: "var(--n-150)",
+        backgroundColor: "var(--n-50)",
+        color: "var(--n-700)",
+      }}
+    >
+      {children}
+    </button>
   );
 }
 

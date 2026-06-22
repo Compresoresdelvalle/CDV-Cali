@@ -13,8 +13,23 @@
  *   lenguaje visual Lovable SIN inventar estados que el backend no soporta.
  */
 
-/** Pestañas de filtro reales (mapeadas a la query de CompraHistorial). */
+/** Pestañas de filtro por estado (mapeadas a la query de CompraHistorial). */
 export const COMPRAS_TABS = ["Todas", "Registrada", "Recibida", "Garantía"];
+
+/** Pestañas de filtro por tipo: orden de compra formal vs. gasto de caja menor. */
+export const COMPRAS_TIPO_TABS = ["Todos", "Órdenes de compra", "Caja menor"];
+
+/**
+ * Badge de tipo de registro de compra. Distingue una orden de compra formal
+ * de un gasto de caja menor (misma tabla `compras`, campo `es_caja_menor`).
+ * @param {boolean|null|undefined} esCajaMenor
+ * @returns {{ cls: string, label: string }}
+ */
+export function compraTipoBadge(esCajaMenor) {
+  return esCajaMenor
+    ? { cls: "s-pill s-env", label: "Caja menor" }
+    : { cls: "s-pill s-borr", label: "Orden de compra" };
+}
 
 /**
  * Estado real de una compra → clase `.s-pill` + etiqueta.
@@ -85,7 +100,9 @@ export function construirTimelineCompra(compra, garantias, fmtDate) {
   const eventos = [];
   eventos.push({
     tone: "info",
-    act: "Orden de compra registrada",
+    act: compra.es_caja_menor
+      ? "Gasto de caja menor registrado"
+      : "Orden de compra registrada",
     meta: `${compra.proveedor}${
       compra.registrador?.nombre ? ` · ${compra.registrador.nombre}` : ""
     }`,

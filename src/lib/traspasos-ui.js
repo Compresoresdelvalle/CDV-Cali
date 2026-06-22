@@ -59,7 +59,6 @@ export const TRASPASO_TABS = [
   { v: "Todos", label: "Todos" },
   { v: "borrador", label: "Pendiente" },
   { v: "picking", label: "En Picking" },
-  { v: "verificado", label: "Verificado" },
   { v: "en_transito", label: "En Tránsito" },
   { v: "recibido", label: "Recibido" },
   { v: "con_diferencia", label: "Con Diferencia" },
@@ -119,7 +118,7 @@ export function traspasoTipoTag(tipo) {
 export const KANBAN_COLS = [
   {
     key: "pendiente",
-    label: "Pendiente",
+    label: "Preparación",
     dotVar: "var(--n-400)",
     pulse: false,
   },
@@ -227,10 +226,9 @@ export function avatarGradient(nombre) {
  * `con_diferencia` se trata como variante del paso final "recibido".
  */
 export const TRASPASO_FLUJO = [
-  { key: "borrador", label: "Pendiente" },
+  { key: "borrador", label: "Solicitud" },
   { key: "picking", label: "Picking" },
-  { key: "verificado", label: "Verificado" },
-  { key: "en_transito", label: "En Tránsito" },
+  { key: "en_transito", label: "En tránsito" },
   { key: "recibido", label: "Recibido" },
 ];
 
