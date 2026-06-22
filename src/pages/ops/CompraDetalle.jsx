@@ -64,7 +64,7 @@ export default function CompraDetalle() {
           .select(
             `id, numero, fecha, fecha_recepcion, proveedor, factura_proveedor,
              observaciones, subtotal, iva, total, recibida, estado, sede_destino_id,
-             metodo_pago, cuenta_bancaria, descuento_valor,
+             metodo_pago, cuenta_bancaria, descuento_valor, es_caja_menor, concepto,
              registrador:registrado_por(nombre)`,
           )
           .eq("id", id)
@@ -183,9 +183,19 @@ export default function CompraDetalle() {
         style={{ borderColor: "var(--n-100)" }}
       >
         <div className="min-w-0 flex-1">
-          <div className="ph-eyebrow">Compra</div>
+          <div className="ph-eyebrow">
+            {compra.es_caja_menor ? "Caja menor" : "Orden de compra"}
+          </div>
           <div className="ph-num">#{compra.numero}</div>
           <div className="ph-client">{compra.proveedor}</div>
+          {compra.es_caja_menor && compra.concepto && (
+            <div
+              className="mt-0.5 text-[13px]"
+              style={{ color: "var(--n-600)" }}
+            >
+              {compra.concepto}
+            </div>
+          )}
           <div className="ph-sub">
             {compra.recibida && compra.fecha_recepcion ? (
               <>
