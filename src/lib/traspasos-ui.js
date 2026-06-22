@@ -59,7 +59,6 @@ export const TRASPASO_TABS = [
   { v: "Todos", label: "Todos" },
   { v: "borrador", label: "Pendiente" },
   { v: "picking", label: "En Picking" },
-  { v: "verificado", label: "Verificado" },
   { v: "en_transito", label: "En Tránsito" },
   { v: "recibido", label: "Recibido" },
   { v: "con_diferencia", label: "Con Diferencia" },

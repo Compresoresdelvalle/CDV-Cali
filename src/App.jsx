@@ -37,7 +37,6 @@ import TraspasoHistorial from "./pages/ops/TraspasoHistorial";
 import TraspasoNuevo from "./pages/ops/TraspasoNuevo";
 import TraspasoDetalle from "./pages/ops/TraspasoDetalle";
 import PickingPage from "./pages/ops/PickingPage";
-import VerificacionTraspaso from "./pages/ops/VerificacionTraspaso";
 import RecepcionTraspaso from "./pages/ops/RecepcionTraspaso";
 import Herramientas from "./pages/ops/Herramientas";
 import OrdenHistorial from "./pages/ops/OrdenHistorial";
@@ -255,14 +254,6 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <PickingPage />
-              </RoleGuard>
-            }
-          />
-          <Route
-            path="traspasos/:id/verificar"
-            element={
-              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
-                <VerificacionTraspaso />
               </RoleGuard>
             }
           />

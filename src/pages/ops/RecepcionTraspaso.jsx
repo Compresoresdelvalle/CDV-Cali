@@ -467,9 +467,9 @@ export default function RecepcionTraspaso() {
         </div>
       )}
 
-      {/* Barra de acción fija */}
+      {/* Barra de acción fija — offset sobre el bottom-nav móvil (FALLA 6) */}
       <div
-        className="fixed bottom-0 left-0 right-0 border-t p-4"
+        className="fixed bottom-20 left-0 right-0 z-40 border-t p-4 lg:bottom-0"
         style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
       >
         <div className="mx-auto max-w-xl">
