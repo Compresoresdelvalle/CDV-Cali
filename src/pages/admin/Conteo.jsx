@@ -6,6 +6,7 @@ import {
   Plus,
   Target,
   Scale,
+  Trash2,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -34,6 +35,7 @@ export default function Conteo() {
   const [filtro, setFiltro] = useState("Pendientes");
   const [modalNuevo, setModalNuevo] = useState(false);
   const [aplicandoId, setAplicandoId] = useState(null);
+  const [borrandoId, setBorrandoId] = useState(null);
   const mountedRef = useRef(true);
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -101,6 +103,35 @@ export default function Conteo() {
       setErrorMsg(safeError(err, "Error al aplicar ajuste"));
     } finally {
       setAplicandoId(null);
+    }
+  };
+
+  // REQ6 — borrar un conteo PENDIENTE creado por error. El trigger
+  // trg_before_delete_conteo blinda: solo pendientes y solo Admin.
+  const borrarConteo = async (conteo) => {
+    const ok = await confirm({
+      titulo: "Eliminar conteo pendiente",
+      mensaje: `Se eliminará el conteo de "${conteo.producto?.nombre ?? "producto"}" (sistema ${conteo.stock_sistema} → físico ${conteo.stock_fisico}). Esta acción no se puede deshacer. Solo aplica a conteos NO aplicados.`,
+      confirmLabel: "Eliminar conteo",
+      danger: true,
+    });
+    if (!ok) return;
+    setBorrandoId(conteo.id);
+    setErrorMsg("");
+    setOkMsg("");
+    try {
+      const { error } = await supabase
+        .from("conteos")
+        .delete()
+        .eq("id", conteo.id)
+        .eq("ajuste_aplicado", false);
+      if (error) throw error;
+      setOkMsg("Conteo eliminado");
+      await cargar();
+    } catch (err) {
+      setErrorMsg(safeError(err, "No se pudo eliminar el conteo"));
+    } finally {
+      setBorrandoId(null);
     }
   };
 
@@ -363,17 +394,43 @@ export default function Conteo() {
                       </td>
                       <td className="px-3 py-3 text-right">
                         {!c.ajuste_aplicado && isAdmin && (
-                          <button
-                            onClick={() => aplicarAjuste(c)}
-                            disabled={aplicandoId === c.id}
-                            className="inline-flex h-9 items-center rounded-md px-3 text-[12px] font-semibold transition-opacity cursor-pointer hover:opacity-90 disabled:opacity-50"
-                            style={{
-                              backgroundColor: "hsl(var(--primary))",
-                              color: "hsl(var(--primary-foreground))",
-                            }}
-                          >
-                            {aplicandoId === c.id ? "…" : "Aplicar"}
-                          </button>
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              onClick={() => aplicarAjuste(c)}
+                              disabled={
+                                aplicandoId === c.id || borrandoId === c.id
+                              }
+                              className="inline-flex h-9 items-center rounded-md px-3 text-[12px] font-semibold transition-opacity cursor-pointer hover:opacity-90 disabled:opacity-50"
+                              style={{
+                                backgroundColor: "hsl(var(--primary))",
+                                color: "hsl(var(--primary-foreground))",
+                              }}
+                            >
+                              {aplicandoId === c.id ? "…" : "Aplicar"}
+                            </button>
+                            <button
+                              onClick={() => borrarConteo(c)}
+                              disabled={
+                                aplicandoId === c.id || borrandoId === c.id
+                              }
+                              title="Eliminar conteo pendiente"
+                              aria-label="Eliminar conteo pendiente"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border transition-colors cursor-pointer disabled:opacity-50"
+                              style={{
+                                borderColor: "hsl(var(--border))",
+                                color: "hsl(var(--destructive))",
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.backgroundColor =
+                                  "hsl(var(--destructive) / 0.08)")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.backgroundColor = "")
+                              }
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -446,17 +503,31 @@ export default function Conteo() {
                       </span>
                     </div>
                     {!c.ajuste_aplicado && isAdmin && (
-                      <button
-                        onClick={() => aplicarAjuste(c)}
-                        disabled={aplicandoId === c.id}
-                        className="h-11 shrink-0 rounded-lg px-4 text-xs font-semibold cursor-pointer disabled:opacity-50"
-                        style={{
-                          backgroundColor: "hsl(var(--primary))",
-                          color: "hsl(var(--primary-foreground))",
-                        }}
-                      >
-                        {aplicandoId === c.id ? "…" : "Aplicar"}
-                      </button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          onClick={() => aplicarAjuste(c)}
+                          disabled={aplicandoId === c.id || borrandoId === c.id}
+                          className="h-11 rounded-lg px-4 text-xs font-semibold cursor-pointer disabled:opacity-50"
+                          style={{
+                            backgroundColor: "hsl(var(--primary))",
+                            color: "hsl(var(--primary-foreground))",
+                          }}
+                        >
+                          {aplicandoId === c.id ? "…" : "Aplicar"}
+                        </button>
+                        <button
+                          onClick={() => borrarConteo(c)}
+                          disabled={aplicandoId === c.id || borrandoId === c.id}
+                          aria-label="Eliminar conteo pendiente"
+                          className="grid h-11 w-11 place-items-center rounded-lg border cursor-pointer disabled:opacity-50"
+                          style={{
+                            borderColor: "hsl(var(--border))",
+                            color: "hsl(var(--destructive))",
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </li>

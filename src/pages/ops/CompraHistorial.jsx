@@ -7,7 +7,9 @@ import { formatCOP, formatDate, sanitizeSearch } from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import {
   COMPRAS_TABS,
+  COMPRAS_TIPO_TABS,
   compraEstadoPill,
+  compraTipoBadge,
   comprasHeaderStats,
 } from "../../lib/compras-ui";
 
@@ -22,6 +24,7 @@ export default function CompraHistorial() {
   const [compras, setCompras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState("Todas");
+  const [tipo, setTipo] = useState("Todos");
   const [busqueda, setBusqueda] = useState("");
   const [busquedaActiva, setBusquedaActiva] = useState("");
   const [page, setPage] = useState(0);
@@ -43,7 +46,7 @@ export default function CompraHistorial() {
           .from("compras")
           .select(
             `id, numero, fecha, fecha_recepcion, proveedor, factura_proveedor,
-             total, recibida, estado,
+             total, recibida, estado, es_caja_menor, concepto,
              registrador:registrado_por(nombre)`,
           )
           .order("fecha", { ascending: false })
@@ -55,13 +58,17 @@ export default function CompraHistorial() {
         if (filtro === "Recibida") query = query.eq("recibida", true);
         if (filtro === "Garantía")
           query = query.eq("estado", "devolucion_garantia");
+        // Filtro por tipo: orden de compra formal vs. gasto de caja menor.
+        if (tipo === "Órdenes de compra")
+          query = query.eq("es_caja_menor", false);
+        if (tipo === "Caja menor") query = query.eq("es_caja_menor", true);
 
-        // Búsqueda server-side por número de factura o proveedor (ilike).
+        // Búsqueda server-side por proveedor, factura o concepto (caja menor).
         const needle = busquedaActiva.trim();
         if (needle.length >= 2) {
           const safe = sanitizeSearch(needle);
           query = query.or(
-            `proveedor.ilike.%${safe}%,factura_proveedor.ilike.%${safe}%`,
+            `proveedor.ilike.%${safe}%,factura_proveedor.ilike.%${safe}%,concepto.ilike.%${safe}%`,
           );
         }
 
@@ -86,13 +93,13 @@ export default function CompraHistorial() {
     },
     // page se lee dentro pero la recarga siempre es reset salvo "Cargar más".
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filtro, busquedaActiva, perfil?.rol, perfil?.sede_id],
+    [filtro, tipo, busquedaActiva, perfil?.rol, perfil?.sede_id],
   );
 
   useEffect(() => {
     cargarCompras(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtro, busquedaActiva]);
+  }, [filtro, tipo, busquedaActiva]);
 
   // Debounce 400ms (estándar UX de operarios — ver CLAUDE.md).
   const aplicarBusqueda = useDebouncedCallback((val) => {
@@ -221,6 +228,30 @@ export default function CompraHistorial() {
               );
             })}
           </div>
+
+          {/* Filtro por tipo: orden de compra vs. caja menor */}
+          <div
+            className="inline-flex items-center gap-0.5 rounded-lg p-[3px]"
+            style={{ backgroundColor: "var(--n-100)" }}
+          >
+            {COMPRAS_TIPO_TABS.map((t) => {
+              const active = tipo === t;
+              return (
+                <button
+                  key={t}
+                  onClick={() => setTipo(t)}
+                  className="rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors"
+                  style={{
+                    backgroundColor: active ? "var(--n-0)" : "transparent",
+                    color: active ? "var(--n-950)" : "var(--n-500)",
+                    boxShadow: active ? "0 1px 2px rgba(14,16,24,.06)" : "none",
+                  }}
+                >
+                  {t}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* ── Búsqueda server-side ──────────────────────────────────── */}
@@ -240,7 +271,7 @@ export default function CompraHistorial() {
           <input
             value={busqueda}
             onChange={handleBusqueda}
-            placeholder="Buscar por proveedor o N° de factura…"
+            placeholder="Buscar por proveedor, N° de factura o concepto…"
             className="flex-1 border-none bg-transparent text-[13.5px] outline-none"
             style={{ color: "var(--n-700)" }}
           />
@@ -472,6 +503,7 @@ function CompraFila({
   onClick,
 }) {
   const pill = compraEstadoPill(c);
+  const tipoBadge = compraTipoBadge(c.es_caja_menor);
   return (
     <tr
       onClick={onClick}
@@ -498,9 +530,20 @@ function CompraFila({
         </span>
       </Td>
       <Td>
-        <span className="font-medium" style={{ color: "var(--n-950)" }}>
-          {c.proveedor}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className={tipoBadge.cls} style={{ width: "fit-content" }}>
+            <span className="dot" />
+            {tipoBadge.label}
+          </span>
+          <span className="font-medium" style={{ color: "var(--n-950)" }}>
+            {c.proveedor}
+          </span>
+          {c.es_caja_menor && c.concepto && (
+            <span className="text-[11.5px]" style={{ color: "var(--n-500)" }}>
+              {c.concepto}
+            </span>
+          )}
+        </div>
       </Td>
       <Td>
         <span
@@ -547,6 +590,7 @@ function CompraCard({
   onClick,
 }) {
   const pill = compraEstadoPill(c);
+  const tipoBadge = compraTipoBadge(c.es_caja_menor);
   return (
     <div
       onClick={onClick}
@@ -562,6 +606,10 @@ function CompraCard({
             >
               #{c.numero}
             </span>
+            <span className={tipoBadge.cls}>
+              <span className="dot" />
+              {tipoBadge.label}
+            </span>
             <span className={pill.cls}>
               <span className="dot" />
               {pill.label}
@@ -573,6 +621,14 @@ function CompraCard({
           >
             {c.proveedor}
           </p>
+          {c.es_caja_menor && c.concepto && (
+            <p
+              className="mt-0.5 truncate text-[12px]"
+              style={{ color: "var(--n-600)" }}
+            >
+              {c.concepto}
+            </p>
+          )}
           <p className="mt-0.5 text-[11.5px]" style={{ color: "var(--n-500)" }}>
             {formatDate(c.fecha)}
             {c.factura_proveedor && ` · Fact: ${c.factura_proveedor}`}
