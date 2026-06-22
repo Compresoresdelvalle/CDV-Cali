@@ -127,7 +127,7 @@ export function BadgeGarantia({ compact = false }) {
       }}
     >
       <Shield className="h-2.5 w-2.5" strokeWidth={2} />
-      {compact ? "Garantía F12" : "Garantía"}
+      Garantía
     </span>
   );
 }

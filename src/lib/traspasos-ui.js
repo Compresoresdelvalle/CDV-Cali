@@ -118,7 +118,7 @@ export function traspasoTipoTag(tipo) {
 export const KANBAN_COLS = [
   {
     key: "pendiente",
-    label: "Pendiente",
+    label: "Preparación",
     dotVar: "var(--n-400)",
     pulse: false,
   },
