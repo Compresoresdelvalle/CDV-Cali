@@ -1153,16 +1153,16 @@ function ArqueoCaptura({ esperado, arqueo, setArqueo }) {
           return (
             <div
               key={e.sede_id}
-              className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 px-3 py-2.5"
+              className="grid grid-cols-2 sm:grid-cols-4 items-center gap-2 px-3 py-2.5"
             >
               <span
-                className="text-[13px] font-medium"
+                className="truncate text-[13px] font-medium"
                 style={{ color: "hsl(var(--foreground))" }}
               >
                 {e.sede_nombre}
               </span>
               <span
-                className="text-[12px] tabular-nums"
+                className="text-right text-[12px] tabular-nums sm:text-left"
                 style={{ color: "hsl(var(--muted-foreground))" }}
               >
                 Esperado: {formatCOP(esp)}
@@ -1182,7 +1182,16 @@ function ArqueoCaptura({ esperado, arqueo, setArqueo }) {
                 style={inputStyle}
               />
               <span
-                className="text-[12px] font-semibold tabular-nums"
+                title={
+                  dif === null
+                    ? "Pendiente de contar"
+                    : dif === 0
+                      ? "Cuadra"
+                      : dif > 0
+                        ? "Sobrante"
+                        : "Faltante"
+                }
+                className="text-right text-[12px] font-semibold tabular-nums"
                 style={{
                   color:
                     dif === null
@@ -1240,22 +1249,24 @@ function DetalleCierreAvanzado({ detalle }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div
+        className="inline-flex flex-wrap items-center gap-0.5 self-start rounded-lg p-[3px]"
+        style={{ backgroundColor: "hsl(var(--muted) / 0.6)" }}
+      >
         {disponibles.map((t) => {
           const on = t.id === activo;
           return (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
+              aria-pressed={on}
               className="rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors cursor-pointer"
               style={{
-                backgroundColor: on ? "hsl(var(--primary))" : "transparent",
+                backgroundColor: on ? "hsl(var(--card))" : "transparent",
                 color: on
-                  ? "hsl(var(--primary-foreground))"
+                  ? "hsl(var(--foreground))"
                   : "hsl(var(--muted-foreground))",
-                border: on
-                  ? "1px solid transparent"
-                  : "1px solid hsl(var(--border))",
+                boxShadow: on ? "0 1px 2px rgba(14,16,24,.08)" : "none",
               }}
             >
               {t.label}
@@ -1390,10 +1401,16 @@ function MiniTable({ titulo, cols, rows, align }) {
       >
         {titulo}
       </p>
-      <div className="overflow-x-auto">
+      <div className="overflow-auto" style={{ maxHeight: 420 }}>
         <table className="w-full border-collapse text-xs">
-          <thead>
-            <tr style={{ color: "hsl(var(--muted-foreground))" }}>
+          <thead className="sticky top-0 z-10">
+            <tr
+              style={{
+                color: "hsl(var(--muted-foreground))",
+                backgroundColor: "hsl(var(--card))",
+                boxShadow: "inset 0 -1px 0 hsl(var(--border))",
+              }}
+            >
               {cols.map((col, i) => (
                 <th
                   key={col}

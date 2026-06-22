@@ -176,7 +176,7 @@ export default function CompraHistorial() {
               {loading && compras.length === 0 ? "…" : stats.count}
               {hasMore ? "+" : ""}
             </b>{" "}
-            órdenes ·{" "}
+            registros ·{" "}
             <b
               className="font-mono font-medium"
               style={{ color: "var(--n-700)" }}
@@ -240,6 +240,7 @@ export default function CompraHistorial() {
                 <button
                   key={t}
                   onClick={() => setTipo(t)}
+                  aria-pressed={active}
                   className="rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors"
                   style={{
                     backgroundColor: active ? "var(--n-0)" : "transparent",
