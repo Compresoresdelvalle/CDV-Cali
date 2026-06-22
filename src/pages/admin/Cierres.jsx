@@ -21,8 +21,12 @@ const METODO_LABELS = {
   transferencia: "Transferencia",
   tarjeta: "Tarjeta",
   crédito: "Crédito",
+  varios: "Varios",
   otro: "Otro",
 };
+
+const metodoLabel = (m) => METODO_LABELS[m] ?? m ?? "—";
+const cuentaLabel = (c) => c || "Sin cuenta / efectivo";
 
 // Día de hoy en zona Colombia, formato YYYY-MM-DD (en-CA → ISO).
 const hoyBogota = () =>
@@ -49,6 +53,7 @@ export default function Cierres() {
   const [preview, setPreview] = useState(null);
   const [previewing, setPreviewing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [arqueo, setArqueo] = useState({}); // sede_id -> efectivo contado (string)
 
   const [historial, setHistorial] = useState([]);
   const [loadingHist, setLoadingHist] = useState(true);
@@ -95,6 +100,7 @@ export default function Cierres() {
   const invalidarPreview = () => {
     previewSeqRef.current += 1;
     setPreview(null);
+    setArqueo({});
   };
 
   // Mantiene hasta = desde cuando el cierre es diario.
@@ -173,16 +179,26 @@ export default function Cierres() {
     setOkMsg("");
     setGenerating(true);
     try {
+      const arqueoArr = (preview.detalle?.arqueo_esperado ?? [])
+        .filter(
+          (e) => arqueo[e.sede_id] !== undefined && arqueo[e.sede_id] !== "",
+        )
+        .map((e) => ({
+          sede_id: e.sede_id,
+          efectivo_contado: Number(arqueo[e.sede_id]) || 0,
+        }));
       const { data, error } = await supabase.rpc("fn_generar_cierre", {
         p_desde: desde,
         p_hasta: hasta,
         p_tipo: tipo,
         p_observaciones: observaciones.trim() || null,
+        p_arqueo: arqueoArr.length ? arqueoArr : null,
       });
       if (!mountedRef.current) return;
       if (error) throw error;
       setOkMsg(`Cierre #${data?.numero ?? ""} generado correctamente`);
       setPreview(null);
+      setArqueo({});
       setObservaciones("");
       await cargarHistorial();
     } catch (err) {
@@ -240,8 +256,8 @@ export default function Cierres() {
             className="mt-1 text-[13px]"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            Conciliación de ingresos, egresos y margen. Cada cierre es
-            inmutable.
+            Verificación previa al cierre: revisa ingresos, egresos y margen por
+            sede antes de sellar. Cada cierre es inmutable.
           </p>
         </div>
       </div>
@@ -398,9 +414,19 @@ export default function Cierres() {
                 />
               </div>
 
-              {preview.detalle?.por_sede?.length > 0 && (
+              {preview.detalle && (
                 <div className="mt-4">
-                  <DetalleCierre detalle={preview.detalle} />
+                  <DetalleCierreAvanzado detalle={preview.detalle} />
+                </div>
+              )}
+
+              {preview.detalle?.arqueo_esperado?.length > 0 && (
+                <div className="mt-4">
+                  <ArqueoCaptura
+                    esperado={preview.detalle.arqueo_esperado}
+                    arqueo={arqueo}
+                    setArqueo={setArqueo}
+                  />
                 </div>
               )}
 
@@ -658,7 +684,7 @@ function ChecklistCierre({ preview, checklist, done, progreso }) {
               className="text-[11px] uppercase tracking-wide"
               style={{ color: "hsl(var(--muted-foreground))" }}
             >
-              Checklist de conciliación
+              Verificación previa
             </p>
             <p
               className="mt-0.5 text-[15px] font-semibold"
@@ -699,7 +725,9 @@ function ChecklistCierre({ preview, checklist, done, progreso }) {
         >
           <FileText className="h-7 w-7" strokeWidth={1.25} />
           <p className="text-[12.5px]">
-            Previsualiza un periodo para conciliar sus partidas antes de cerrar.
+            Previsualiza un periodo para revisar sus partidas antes de cerrar.
+            Esta lista no es un botón: se completa sola con los datos del
+            periodo y el cierre se firma al pulsar “Generar cierre”.
           </p>
         </div>
       ) : (
@@ -994,7 +1022,7 @@ function CierreRow({ c, expanded, onToggle }) {
         <tr style={{ backgroundColor: "hsl(var(--muted) / 0.2)" }}>
           <td colSpan={9} className="px-4 py-3">
             <CierreMeta c={c} />
-            <DetalleCierre detalle={c.detalle} />
+            <DetalleCierreAvanzado detalle={c.detalle} />
           </td>
         </tr>
       )}
@@ -1056,7 +1084,7 @@ function CierreCard({ c, expanded, onToggle }) {
           style={{ borderColor: "hsl(var(--border))" }}
         >
           <CierreMeta c={c} />
-          <DetalleCierre detalle={c.detalle} />
+          <DetalleCierreAvanzado detalle={c.detalle} />
         </div>
       )}
     </div>
@@ -1095,36 +1123,251 @@ function CierreMeta({ c }) {
   );
 }
 
-function DetalleCierre({ detalle }) {
-  const porSede = detalle?.por_sede ?? [];
-  const porMetodo = detalle?.por_metodo_pago ?? [];
-  if (porSede.length === 0 && porMetodo.length === 0) return null;
+/**
+ * Captura del arqueo de caja por sede en la vista previa. El "esperado" es
+ * server-authoritative (solo lectura); el usuario digita el "contado" y se ve
+ * la diferencia en vivo. Es opcional: lo que no se llene no se envía.
+ */
+function ArqueoCaptura({ esperado, arqueo, setArqueo }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-      {porSede.length > 0 && (
+    <div
+      className="rounded-lg border overflow-hidden"
+      style={{ borderColor: "hsl(var(--border))" }}
+    >
+      <p
+        className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide border-b"
+        style={{
+          color: "hsl(var(--muted-foreground))",
+          borderColor: "hsl(var(--border))",
+          backgroundColor: "hsl(var(--muted) / 0.3)",
+        }}
+      >
+        Arqueo de caja · efectivo esperado vs. contado (opcional)
+      </p>
+      <div className="divide-y" style={{ borderColor: "hsl(var(--border))" }}>
+        {esperado.map((e) => {
+          const esp = Number(e.efectivo_esperado);
+          const raw = arqueo[e.sede_id];
+          const tiene = raw !== undefined && raw !== "";
+          const dif = tiene ? Number(raw || 0) - esp : null;
+          return (
+            <div
+              key={e.sede_id}
+              className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 px-3 py-2.5"
+            >
+              <span
+                className="text-[13px] font-medium"
+                style={{ color: "hsl(var(--foreground))" }}
+              >
+                {e.sede_nombre}
+              </span>
+              <span
+                className="text-[12px] tabular-nums"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                Esperado: {formatCOP(esp)}
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={raw ?? ""}
+                onChange={(ev) =>
+                  setArqueo((prev) => ({
+                    ...prev,
+                    [e.sede_id]: ev.target.value,
+                  }))
+                }
+                placeholder="Efectivo contado"
+                className="w-full px-3 rounded-lg border text-sm min-h-[48px]"
+                style={inputStyle}
+              />
+              <span
+                className="text-[12px] font-semibold tabular-nums"
+                style={{
+                  color:
+                    dif === null
+                      ? "hsl(var(--muted-foreground))"
+                      : dif === 0
+                        ? "hsl(var(--success))"
+                        : "hsl(var(--destructive))",
+                }}
+              >
+                {dif === null ? "—" : `${dif > 0 ? "+" : ""}${formatCOP(dif)}`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const DETALLE_TABS = [
+  { id: "sede", label: "Por sede" },
+  { id: "cuentas", label: "Cuentas" },
+  { id: "egresos", label: "Egresos" },
+  { id: "productos", label: "Productos" },
+  { id: "arqueo", label: "Arqueo" },
+];
+
+/**
+ * Vista avanzada del detalle de un cierre (preview o histórico). Renderiza el
+ * jsonb `detalle` con tabs. Cada tab se muestra solo si tiene datos, de modo
+ * que los cierres viejos (sin los campos nuevos) caen al tab "Por sede" legacy.
+ */
+function DetalleCierreAvanzado({ detalle }) {
+  const porSede = detalle?.por_sede ?? [];
+  const porSedeMetodo = detalle?.por_sede_metodo ?? [];
+  const porCuenta = detalle?.por_cuenta ?? [];
+  const egresosDet = detalle?.egresos_detalle ?? [];
+  const porProducto = detalle?.por_producto ?? [];
+  const arqueo = detalle?.arqueo ?? [];
+
+  const disponibles = DETALLE_TABS.filter((t) => {
+    if (t.id === "sede") return porSede.length > 0 || porSedeMetodo.length > 0;
+    if (t.id === "cuentas") return porCuenta.length > 0;
+    if (t.id === "egresos") return egresosDet.length > 0;
+    if (t.id === "productos") return porProducto.length > 0;
+    if (t.id === "arqueo") return arqueo.length > 0;
+    return false;
+  });
+
+  const [tab, setTab] = useState(disponibles[0]?.id ?? "sede");
+  if (disponibles.length === 0) return null;
+  const activo = disponibles.some((t) => t.id === tab)
+    ? tab
+    : disponibles[0].id;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {disponibles.map((t) => {
+          const on = t.id === activo;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className="rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors cursor-pointer"
+              style={{
+                backgroundColor: on ? "hsl(var(--primary))" : "transparent",
+                color: on
+                  ? "hsl(var(--primary-foreground))"
+                  : "hsl(var(--muted-foreground))",
+                border: on
+                  ? "1px solid transparent"
+                  : "1px solid hsl(var(--border))",
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activo === "sede" && (
+        <MatrizSedeMetodo porSedeMetodo={porSedeMetodo} porSede={porSede} />
+      )}
+      {activo === "cuentas" && (
         <MiniTable
-          titulo="Por sede"
-          cols={["Sede", "Productos", "Servicios", "Egresos"]}
-          rows={porSede.map((s) => [
-            s.sede_nombre,
-            formatCOP(Number(s.productos)),
-            formatCOP(Number(s.servicios)),
-            formatCOP(Number(s.egresos)),
+          titulo="Por cuenta bancaria"
+          cols={["Sede", "Cuenta", "Ingresos", "Egresos"]}
+          rows={porCuenta.map((r) => [
+            r.sede_nombre,
+            cuentaLabel(r.cuenta),
+            formatCOP(Number(r.ingresos)),
+            formatCOP(Number(r.egresos)),
           ])}
         />
       )}
-      {porMetodo.length > 0 && (
+      {activo === "egresos" && (
         <MiniTable
-          titulo="Por método de pago"
-          cols={["Método", "Productos", "Servicios"]}
-          rows={porMetodo.map((m) => [
-            METODO_LABELS[m.metodo] ?? m.metodo,
-            formatCOP(Number(m.productos)),
-            formatCOP(Number(m.servicios)),
+          titulo="Egresos — en qué se fue el dinero"
+          cols={["Sede", "Detalle", "Método", "Cuenta", "Total"]}
+          rows={egresosDet.map((e) => [
+            e.sede_nombre,
+            e.es_caja_menor
+              ? `Caja menor: ${e.concepto || "—"}`
+              : e.proveedor +
+                (e.factura ? ` · ${e.factura}` : "") +
+                (e.concepto ? ` · ${e.concepto}` : ""),
+            metodoLabel(e.metodo),
+            cuentaLabel(e.cuenta),
+            formatCOP(Number(e.total)),
+          ])}
+        />
+      )}
+      {activo === "productos" && (
+        <MiniTable
+          titulo="Productos vendidos por sede"
+          cols={["Sede", "Referencia", "Producto", "Unidades", "Ingreso"]}
+          rows={porProducto.map((p) => [
+            p.sede_nombre,
+            p.referencia,
+            p.nombre,
+            String(p.unidades),
+            formatCOP(Number(p.ingreso)),
+          ])}
+        />
+      )}
+      {activo === "arqueo" && (
+        <MiniTable
+          titulo="Arqueo de caja"
+          cols={["Sede", "Esperado", "Contado", "Diferencia"]}
+          rows={arqueo.map((a) => [
+            a.sede_nombre,
+            formatCOP(Number(a.efectivo_esperado)),
+            formatCOP(Number(a.efectivo_contado)),
+            `${Number(a.diferencia) > 0 ? "+" : ""}${formatCOP(Number(a.diferencia))}`,
           ])}
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Matriz sede × método: filas=sede, columnas=métodos presentes (ingresos) +
+ * Egresos. Si no hay desglose por método (cierre viejo) cae a la tabla legacy
+ * productos/servicios/egresos.
+ */
+function MatrizSedeMetodo({ porSedeMetodo, porSede }) {
+  if (porSedeMetodo.length === 0) {
+    if (porSede.length === 0) return null;
+    return (
+      <MiniTable
+        titulo="Por sede"
+        cols={["Sede", "Productos", "Servicios", "Egresos"]}
+        rows={porSede.map((s) => [
+          s.sede_nombre,
+          formatCOP(Number(s.productos)),
+          formatCOP(Number(s.servicios)),
+          formatCOP(Number(s.egresos)),
+        ])}
+      />
+    );
+  }
+  const metodos = [...new Set(porSedeMetodo.map((r) => r.metodo))].sort();
+  const sedesMap = new Map();
+  for (const r of porSedeMetodo) {
+    if (!sedesMap.has(r.sede_id)) {
+      sedesMap.set(r.sede_id, {
+        nombre: r.sede_nombre,
+        ing: {},
+        egr: 0,
+      });
+    }
+    const e = sedesMap.get(r.sede_id);
+    e.ing[r.metodo] = (e.ing[r.metodo] ?? 0) + Number(r.ingresos);
+    e.egr += Number(r.egresos);
+  }
+  const cols = ["Sede", ...metodos.map((m) => metodoLabel(m)), "Egresos"];
+  const rows = [...sedesMap.values()].map((s) => [
+    s.nombre,
+    ...metodos.map((m) => formatCOP(Number(s.ing[m] ?? 0))),
+    formatCOP(s.egr),
+  ]);
+  return (
+    <MiniTable titulo="Por sede × método de pago" cols={cols} rows={rows} />
   );
 }
 
