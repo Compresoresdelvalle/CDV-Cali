@@ -871,16 +871,17 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
 
   const seleccionar = (p) => {
     const inv = (p.inventario ?? []).find((i) => i.sede_id === sedeConteo);
+    setError("");
     if (!inv) {
-      // Producto sin fila de inventario en la sede a contar.
-      // Avisamos en vez de continuar con stock=0 silencioso.
-      setError(
-        `"${p.nombre}" no tiene inventario en ${SEDE_LABELS[sedeConteo] ?? sedeConteo}. Pídele a un Admin que lo agregue antes de contar.`,
-      );
+      // La sede aún no tiene el producto: no bloqueamos. El RPC inicializa la
+      // fila en 0 al guardar (empresa de toderos). Lo avisamos en el modal.
+      setProductoSel({ ...p, inventario_id: null, sinInventario: true });
+      setStockSistema(0);
+      setSearch("");
+      setResultados([]);
       return;
     }
-    setError("");
-    setProductoSel({ ...p, inventario_id: inv.id });
+    setProductoSel({ ...p, inventario_id: inv.id, sinInventario: false });
     // Conteo consciente del pool: los productos insumo (vendible=false) cuentan
     // contra cantidad_insumo, no contra el stock vendible (LEDGER-01).
     setStockSistema(
@@ -1066,6 +1067,20 @@ function ModalNuevoConteo({ perfil, onClose, onSaved }) {
                 Cambiar
               </button>
             </div>
+
+            {productoSel.sinInventario && (
+              <div
+                className="rounded-lg border px-3 py-2 text-xs"
+                style={{
+                  backgroundColor: "hsl(var(--warning) / 0.1)",
+                  borderColor: "hsl(var(--warning) / 0.4)",
+                  color: "hsl(var(--warning))",
+                }}
+              >
+                Esta sede aún no tenía este producto. Se inicializará en{" "}
+                <strong>0</strong> y se contará con el físico que registres.
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Stock sistema">
