@@ -455,6 +455,8 @@ export default function OrdenDetalle() {
           montos={montos}
           historial={historial}
           cerrada={cerrada}
+          updateOrden={updateOrden}
+          ro={ro}
         />
       </div>
     </div>
@@ -2150,7 +2152,99 @@ function ResumenMini({ montos }) {
 
 /* ════════════════════════════════ SIDEBAR ══════════════════════════════════ */
 
-function Sidebar({ orden, montos, historial }) {
+/**
+ * Bloque lateral de Técnico. Editable (selector) mientras la OT no esté
+ * cerrada (ro=false); si no, muestra el nombre en solo lectura. Permite
+ * asignar/reasignar el técnico desde cualquier punto, no solo en el paso
+ * de Diagnóstico.
+ */
+function TecnicoSidebarBlock({ orden, updateOrden, ro }) {
+  const [tecnicos, setTecnicos] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    supabase
+      .from("usuarios")
+      .select("id, nombre, rol")
+      .eq("activo", true)
+      .in("rol", ["Tecnico", "Admin"])
+      .order("nombre")
+      .then(({ data }) => setTecnicos(data ?? []));
+  }, []);
+
+  const cambiar = async (val) => {
+    setSaving(true);
+    setErr("");
+    try {
+      await updateOrden({ tecnico_id: val || null });
+    } catch (e) {
+      setErr(safeError(e, "No se pudo asignar el técnico"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border overflow-hidden" style={card}>
+      <div
+        className="px-4 py-3 border-b"
+        style={{ borderColor: "hsl(var(--border))", ...sectionHeaderBg }}
+      >
+        <p
+          className="text-xs font-semibold uppercase tracking-wide"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Técnico asignado
+        </p>
+      </div>
+      <div className="p-4">
+        {ro ? (
+          <p className="text-sm" style={{ color: "hsl(var(--foreground))" }}>
+            {orden.tecnico?.nombre ?? "Sin asignar"}
+            {orden.tecnico?.rol && (
+              <span style={{ color: "hsl(var(--muted-foreground))" }}>
+                {" "}
+                · {orden.tecnico.rol}
+              </span>
+            )}
+          </p>
+        ) : (
+          <>
+            <select
+              value={orden.tecnico_id ?? ""}
+              disabled={saving}
+              onChange={(e) => cambiar(e.target.value)}
+              className="h-11 w-full rounded-lg border px-3 text-sm outline-none disabled:opacity-60"
+              style={{
+                backgroundColor: "hsl(var(--card))",
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--foreground))",
+              }}
+            >
+              <option value="">— Sin asignar —</option>
+              {tecnicos.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nombre} ({t.rol})
+                </option>
+              ))}
+            </select>
+            {err && (
+              <p
+                className="mt-1.5 text-xs"
+                style={{ color: "hsl(var(--destructive))" }}
+              >
+                {err}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Sidebar({ orden, montos, historial, updateOrden, ro }) {
   const saldoCubierto = (montos.saldo ?? 0) <= 0;
   return (
     <aside className="space-y-3 lg:sticky lg:top-4 self-start">
@@ -2284,31 +2378,7 @@ function Sidebar({ orden, montos, historial }) {
       </div>
 
       {/* Técnico */}
-      <div className="rounded-xl border overflow-hidden" style={card}>
-        <div
-          className="px-4 py-3 border-b"
-          style={{ borderColor: "hsl(var(--border))", ...sectionHeaderBg }}
-        >
-          <p
-            className="text-xs font-semibold uppercase tracking-wide"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Técnico asignado
-          </p>
-        </div>
-        <div
-          className="p-4 text-sm"
-          style={{ color: "hsl(var(--foreground))" }}
-        >
-          {orden.tecnico?.nombre ?? "Sin asignar"}
-          {orden.tecnico?.rol && (
-            <span style={{ color: "hsl(var(--muted-foreground))" }}>
-              {" "}
-              · {orden.tecnico.rol}
-            </span>
-          )}
-        </div>
-      </div>
+      <TecnicoSidebarBlock orden={orden} updateOrden={updateOrden} ro={ro} />
 
       {/* Historial */}
       <div className="rounded-xl border overflow-hidden" style={card}>
