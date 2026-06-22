@@ -477,7 +477,7 @@ function TraspasoStepper({ estado }) {
   const cur = flujoIndex(estado);
   return (
     <div
-      className="overflow-x-auto rounded-[10px] border p-3.5"
+      className="shrink-0 overflow-x-auto overflow-y-hidden rounded-[10px] border p-3.5"
       style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
     >
       <div className="flex items-start" style={{ minWidth: 460 }}>
