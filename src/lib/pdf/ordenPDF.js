@@ -62,6 +62,21 @@ export function generarOrdenPDF({
   const doc = new jsPDF({ unit: "mm", format: "letter", compress: true });
   let y = LAYOUT.margenSup;
 
+  // Título de sección con cuadrito de acento (estética limpia y consistente).
+  const sectionTitle = (label) => {
+    if (y > LAYOUT.pageHeight - 30) {
+      doc.addPage();
+      y = LAYOUT.margenSup;
+    }
+    doc.setFillColor(...COLORES.primario);
+    doc.roundedRect(LAYOUT.margenIzq, y - 3, 2, 2, 0.4, 0.4, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(...COLORES.textoOscuro);
+    doc.text(String(label).toUpperCase(), LAYOUT.margenIzq + 4, y);
+    y += 6;
+  };
+
   // ── Header ───────────────────────────────────────────────────────────
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
@@ -111,32 +126,57 @@ export function generarOrdenPDF({
   y += 6;
 
   // ── Cliente + equipo ─────────────────────────────────────────────────
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(...COLORES.textoOscuro);
-  doc.text("CLIENTE Y EQUIPO", LAYOUT.margenIzq, y);
-  y += 5;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...COLORES.textoMedio);
-  const datos = [
-    `Cliente: ${orden.cliente_nombre ?? "—"}`,
-    orden.cliente_telefono ? `Teléfono: ${orden.cliente_telefono}` : null,
-    `Equipo: ${orden.equipo_descripcion ?? "—"}`,
-    orden.equipo_serie ? `Serie: ${orden.equipo_serie}` : null,
-    // Ítem 2: el teléfono de la sede ahora va en el encabezado (junto a la
-    // dirección), no aquí en los datos del cliente.
-    `Sede: ${orden.sede_id ?? "—"}`,
-    orden.fecha_entrega
-      ? `Entregado: ${new Date(orden.fecha_entrega).toLocaleDateString("es-CO", { timeZone: "America/Bogota" })}`
-      : null,
-  ].filter(Boolean);
-  for (const d of datos) {
-    doc.text(d, LAYOUT.margenIzq, y);
-    y += 4.5;
+  sectionTitle("Cliente y equipo");
+  {
+    const pares = [
+      ["Cliente", orden.cliente_nombre ?? "—"],
+      ["Teléfono", orden.cliente_telefono ?? "—"],
+      ["Equipo", orden.equipo_descripcion ?? "—"],
+      ["Serie", orden.equipo_serie ?? "—"],
+      ["Sede", orden.sede_id ?? "—"],
+      [
+        orden.fecha_entrega ? "Entregado" : "Recibido",
+        orden.fecha_entrega
+          ? new Date(orden.fecha_entrega).toLocaleDateString("es-CO", {
+              timeZone: "America/Bogota",
+            })
+          : fecha,
+      ],
+    ];
+    const colW = LAYOUT.contentWidth / 2;
+    const rowH = 5.4;
+    const filas = Math.ceil(pares.length / 2);
+    const boxH = filas * rowH + 4;
+    doc.setFillColor(...COLORES.fondo);
+    doc.setDrawColor(...COLORES.borde);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(
+      LAYOUT.margenIzq,
+      y,
+      LAYOUT.contentWidth,
+      boxH,
+      1.5,
+      1.5,
+      "FD",
+    );
+    const py = y + 5;
+    pares.forEach((p, i) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x = LAYOUT.margenIzq + 4 + col * colW;
+      const yy = py + row * rowH;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.8);
+      doc.setTextColor(...COLORES.textoMedio);
+      doc.text(p[0], x, yy);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(...COLORES.textoOscuro);
+      const v = doc.splitTextToSize(String(p[1]), colW - 24)[0] || "—";
+      doc.text(v, x + 20, yy);
+    });
+    y += boxH + 6;
   }
-  y += 3;
 
   // ── Diagnóstico / trabajo ────────────────────────────────────────────
   // En la constancia de recepción no se imprime diagnóstico ni trabajo (aún no
@@ -162,31 +202,82 @@ export function generarOrdenPDF({
   // ── Checklist de recepción (#24) ─────────────────────────────────────
   // Marcado = el cliente lo trajo. Sin marcar = no llegó (soporte legal).
   if (checklist.length > 0) {
-    if (y > LAYOUT.pageHeight - 55) {
+    if (y > LAYOUT.pageHeight - 60) {
       doc.addPage();
       y = LAYOUT.margenSup;
     }
+    const marcados = checklist.filter((c) => c.marcado).length;
+    sectionTitle("Estado de recepción del equipo");
+
+    // Subtítulo + contador a la derecha
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...COLORES.textoMedio);
+    doc.text(
+      "Marcado = el equipo ingresó con ese componente. Sin marcar = no ingresó.",
+      LAYOUT.margenIzq,
+      y,
+    );
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(...COLORES.textoOscuro);
-    doc.text("CHECKLIST DE RECEPCIÓN", LAYOUT.margenIzq, y);
-    y += 5;
-    doc.setFontSize(9);
+    doc.setFontSize(8);
+    doc.setTextColor(...COLORES.primario);
+    doc.text(
+      `${marcados} de ${checklist.length} componentes`,
+      LAYOUT.pageWidth - LAYOUT.margenDer,
+      y,
+      { align: "right" },
+    );
+    y += 3;
+
     const colW = LAYOUT.contentWidth / 2;
+    const rowH = 5.6;
     const half = Math.ceil(checklist.length / 2);
-    const startY = y;
+    const startY = y + 4;
+    const panelH = half * rowH + 4;
+    doc.setFillColor(...COLORES.fondo);
+    doc.setDrawColor(...COLORES.borde);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(
+      LAYOUT.margenIzq,
+      y,
+      LAYOUT.contentWidth,
+      panelH,
+      1.5,
+      1.5,
+      "FD",
+    );
+
     checklist.forEach((c, i) => {
       const col = i < half ? 0 : 1;
       const row = col === 0 ? i : i - half;
-      const x = LAYOUT.margenIzq + col * colW;
-      const yy = startY + row * 4.8;
+      const x = LAYOUT.margenIzq + 4 + col * colW;
+      const yy = startY + row * rowH;
+      // Casilla dibujada: rellena azul con check (sí trajo) / vacía gris (no).
+      const bs = 3;
+      const bx = x;
+      const by = yy - 2.6;
+      if (c.marcado) {
+        doc.setFillColor(...COLORES.primario);
+        doc.roundedRect(bx, by, bs, bs, 0.5, 0.5, "F");
+        doc.setDrawColor(255, 255, 255);
+        doc.setLineWidth(0.45);
+        doc.line(bx + 0.7, by + 1.6, bx + 1.25, by + 2.25);
+        doc.line(bx + 1.25, by + 2.25, bx + 2.4, by + 0.8);
+      } else {
+        doc.setDrawColor(...COLORES.textoClaro);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(bx, by, bs, bs, 0.5, 0.5, "S");
+      }
+      // Etiqueta: marcado resalta, no marcado se atenúa.
       doc.setFont("helvetica", c.marcado ? "bold" : "normal");
+      doc.setFontSize(8.5);
       doc.setTextColor(
-        ...(c.marcado ? COLORES.textoOscuro : COLORES.textoMedio),
+        ...(c.marcado ? COLORES.textoOscuro : COLORES.textoClaro),
       );
-      doc.text(`${c.marcado ? "[X]" : "[  ]"} ${c.nombre}`, x, yy);
+      const label = doc.splitTextToSize(c.nombre ?? "—", colW - 12)[0] || "—";
+      doc.text(label, x + 4.8, yy);
     });
-    y = startY + half * 4.8 + 4;
+    y = startY + half * rowH + 6;
     doc.setTextColor(...COLORES.textoOscuro);
   }
 
