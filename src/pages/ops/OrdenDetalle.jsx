@@ -418,6 +418,7 @@ export default function OrdenDetalle() {
               key={paso.key}
               paso={paso}
               actual={activo}
+              reachableUntil={orden.estado === "terminada" ? 6 : activo}
               abierto={pasoAbierto === paso.i}
               onToggle={() =>
                 setPasoAbierto((cur) => (cur === paso.i ? null : paso.i))
@@ -620,10 +621,21 @@ function Header({
 
 /* ═══════════════════════════ ACORDEÓN DE PASO ══════════════════════════════ */
 
-function PasoAcordeon({ paso, actual, abierto, onToggle, ctx, children }) {
+function PasoAcordeon({
+  paso,
+  actual,
+  reachableUntil,
+  abierto,
+  onToggle,
+  ctx,
+  children,
+}) {
   const completado = paso.i < actual;
   const esActivo = paso.i === actual;
-  const alcanzable = paso.i <= actual;
+  // Un paso es alcanzable hasta `reachableUntil` (mismo criterio que el stepper).
+  // Clave en estado "terminada": permite abrir el paso de Entrega (i=6) aunque
+  // `actual` sea 5; sin esto el acordeón decía "aún no disponible" (callejón).
+  const alcanzable = paso.i <= (reachableUntil ?? actual);
   const cumplido = gateCumplido(paso.i, ctx);
 
   const accent = completado
@@ -996,6 +1008,7 @@ function PasoCotizacion({
   ro,
   ctx,
   draft,
+  detalles = [],
   montos,
   continuar,
   updateOrden,
@@ -1197,14 +1210,56 @@ function PasoCotizacion({
         </ul>
       )}
 
-      {/* Líneas del borrador */}
+      {/* Líneas del borrador (o, si ya se descargaron, las líneas reales) */}
       {draft.length === 0 ? (
-        <p
-          className="text-xs italic"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          Aún no hay repuestos en la cotización.
-        </p>
+        detalles.length > 0 ? (
+          <div className="space-y-2">
+            <p
+              className="text-xs font-medium"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              Repuestos ya descargados del inventario:
+            </p>
+            <ul className="space-y-2" role="list">
+              {detalles.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
+                  style={card}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="truncate text-sm font-medium"
+                      style={{ color: "hsl(var(--foreground))" }}
+                    >
+                      {d.producto?.nombre ?? "—"}
+                    </p>
+                    <p
+                      className="font-mono text-xs"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      {d.producto?.referencia ?? "?"} ·{" "}
+                      {formatCOP(d.precio_unitario)} × {d.cantidad}
+                    </p>
+                  </div>
+                  <span
+                    className="font-mono text-sm font-semibold tabular-nums"
+                    style={{ color: "hsl(var(--foreground))" }}
+                  >
+                    {formatCOP(d.subtotal)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p
+            className="text-xs italic"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Aún no hay repuestos en la cotización.
+          </p>
+        )
       ) : (
         <ul className="space-y-2" role="list">
           {draft.map((l) => (
