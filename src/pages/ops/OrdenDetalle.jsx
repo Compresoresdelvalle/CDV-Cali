@@ -36,6 +36,7 @@ import ClientePicker from "../../components/forms/ClientePicker";
 import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
 import OrdenStepper from "../../components/ot/OrdenStepper";
 import { generarOrdenPDF } from "../../lib/pdf/ordenPDF";
+import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
 import {
   PASOS,
   pasoActual,
@@ -312,17 +313,65 @@ export default function OrdenDetalle() {
   const est = estadoEstilo(orden.estado);
 
   /* ── Imprimir constancia de recepción ───────────────────────────────── */
-  const imprimirConstancia = () => {
+  // Checklist real de recepción (qué trajo el equipo) para la constancia.
+  const cargarChecklistPDF = async () => {
+    const { data } = await supabase
+      .from("ot_checklist")
+      .select("marcado, componente:componente_id!inner(nombre, orden, activo)")
+      .eq("orden_id", id)
+      .eq("componente.activo", true);
+    return (data ?? [])
+      .slice()
+      .sort((a, b) => (a.componente?.orden ?? 0) - (b.componente?.orden ?? 0))
+      .map((r) => ({
+        marcado: r.marcado,
+        nombre: r.componente?.nombre ?? "—",
+      }));
+  };
+
+  const imprimirConstancia = async () => {
     try {
+      const checklist = await cargarChecklistPDF();
       generarOrdenPDF({
         orden,
-        checklist: [],
-        tecnico: "-",
+        checklist,
+        tecnico: orden.tecnico?.nombre ?? "-",
         incluirCostos: false,
         modo: "recepcion",
       }).print();
     } catch (err) {
       setErrorMsg(safeError(err, "No se pudo generar la constancia"));
+    }
+  };
+
+  // Recibo de la venta generada por la OT: EL MISMO documento POS del módulo
+  // de Ventas (precio de venta, repuestos + mano de obra, consistente). Sirve
+  // tanto al convertir como para reimprimir una OT ya entregada.
+  const imprimirReciboVenta = async (ventaId) => {
+    const vid = ventaId ?? orden.venta_id;
+    if (!vid) {
+      setErrorMsg("Esta OT aún no tiene venta generada.");
+      return;
+    }
+    try {
+      const [{ data: v }, { data: items }] = await Promise.all([
+        supabase
+          .from("ventas")
+          .select("*, vendedor:vendedor_id(nombre)")
+          .eq("id", vid)
+          .single(),
+        supabase
+          .from("detalle_venta")
+          .select("*, producto:producto_id(nombre, referencia, unidad_medida)")
+          .eq("venta_id", vid),
+      ]);
+      generarVentaPOS({
+        venta: v,
+        items: items ?? [],
+        vendedor: v?.vendedor?.nombre ?? "—",
+      }).print();
+    } catch (err) {
+      setErrorMsg(safeError(err, "No se pudo generar el recibo de venta"));
     }
   };
 
@@ -445,6 +494,7 @@ export default function OrdenDetalle() {
                 setAviso={setAviso}
                 setChecklistTocado={setChecklistTocado}
                 imprimirConstancia={imprimirConstancia}
+                imprimirReciboVenta={imprimirReciboVenta}
               />
             </PasoAcordeon>
           ))}
@@ -1958,6 +2008,7 @@ function PasoEntrega({
   cargar,
   setErrorMsg,
   setAviso,
+  imprimirReciboVenta,
 }) {
   const [monto, setMonto] = useState("");
   const [metodo, setMetodo] = useState("efectivo");
@@ -1998,37 +2049,14 @@ function PasoEntrega({
     setGenerando(true);
     setErrorMsg("");
     try {
-      const { error } = await supabase.rpc("fn_generar_venta_ot", {
+      const { data, error } = await supabase.rpc("fn_generar_venta_ot", {
         p_orden_id: id,
       });
       if (error) throw error;
       await cargar();
-      setAviso("OT convertida a venta. Generando factura…");
-      // Recargar detalles/orden para la factura final.
-      const { data: o } = await supabase
-        .from("ordenes_servicio")
-        .select("*, tecnico:tecnico_id(nombre, rol)")
-        .eq("id", id)
-        .maybeSingle();
-      const { data: d } = await supabase
-        .from("detalle_orden")
-        .select(
-          "id, cantidad, costo_unitario, precio_unitario, subtotal, producto:producto_id(id, referencia, nombre)",
-        )
-        .eq("orden_id", id);
-      const { data: ab } = await supabase
-        .from("abonos")
-        .select("fecha, monto, metodo_pago")
-        .eq("orden_id", id);
-      generarOrdenPDF({
-        orden: o ?? orden,
-        repuestos: d ?? [],
-        tecnico: o?.tecnico?.nombre ?? "-",
-        checklist: [],
-        abonos: ab ?? [],
-        incluirCostos: true,
-        modo: "final",
-      }).print();
+      setAviso("OT convertida a venta. Generando recibo…");
+      // Recibo = el MISMO documento POS del módulo de Ventas (precio de venta).
+      await imprimirReciboVenta?.(data?.venta_id);
     } catch (err) {
       setErrorMsg(safeError(err, "No se pudo convertir a venta"));
     } finally {
@@ -2153,14 +2181,22 @@ function PasoEntrega({
           {generando ? "Generando…" : TX.convertirVenta}
         </PrimaryButton>
       ) : (
-        <div
-          className="flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold"
-          style={{
-            backgroundColor: "hsl(var(--success) / 0.12)",
-            color: "hsl(var(--success))",
-          }}
-        >
-          <Check className="h-4 w-4" /> OT entregada y convertida a venta.
+        <div className="space-y-3">
+          <div
+            className="flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold"
+            style={{
+              backgroundColor: "hsl(var(--success) / 0.12)",
+              color: "hsl(var(--success))",
+            }}
+          >
+            <Check className="h-4 w-4" /> OT entregada y convertida a venta.
+          </div>
+          <OutlineButton
+            onClick={() => imprimirReciboVenta?.()}
+            style={{ width: "100%" }}
+          >
+            <Printer className="h-4 w-4" /> Reimprimir recibo de venta
+          </OutlineButton>
         </div>
       )}
     </div>
