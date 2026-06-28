@@ -276,7 +276,7 @@ export default function App() {
           <Route
             path="ordenes/nueva"
             element={
-              <RoleGuard roles={["Admin", "Tecnico", "Vendedor"]}>
+              <RoleGuard roles={["Admin", "Vendedor"]}>
                 <OrdenNueva />
               </RoleGuard>
             }
@@ -408,6 +408,15 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin", "Vendedor"]}>
                 <Clientes />
+              </RoleGuard>
+            }
+          />
+          {/* Cierre solo-lectura para Bodega/caja (Admin lo genera en /admin/cierres). */}
+          <Route
+            path="cierre"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <Cierres />
               </RoleGuard>
             }
           />

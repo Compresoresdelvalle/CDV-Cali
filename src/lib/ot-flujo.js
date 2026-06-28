@@ -350,10 +350,14 @@ export const METODO_PAGO = [
 /** Umbral de "vencida": días en taller sin recoger. */
 export const OT_DIAS_VENCIDA = 30;
 
-/** ¿Puede el usuario MANIPULAR esta OT? (Admin todo; demás, solo su sede). */
+/** ¿Puede el usuario MANIPULAR esta OT? (Admin todo; Ventas en su sede). */
 export function puedeManipular(perfil, orden) {
   if (!perfil || !orden) return false;
   if (perfil.rol === "Admin") return true;
+  // Los técnicos solo se ASIGNAN a las OT (lo hace Ventas); no ejecutan el flujo
+  // (recepción, diagnóstico, cotización, autorización, descarga, entrega/factura).
+  // Ven la OT en solo-lectura.
+  if (perfil.rol === "Tecnico") return false;
   return orden.sede_id === perfil.sede_id;
 }
 

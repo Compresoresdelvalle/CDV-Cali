@@ -91,6 +91,7 @@ export const ROLE_MODULES = {
     "Devoluciones",
     "Herramientas",
     "Productos",
+    "Cierre",
   ],
   Vendedor: [
     "Inventario",
@@ -124,6 +125,7 @@ export const MODULE_ICONS = {
   Garantías: "🛡️",
   Recibos: "🧾",
   Clientes: "👤",
+  Cierre: "🧮",
   "→ Panel Admin": "📊",
 };
 
@@ -142,6 +144,7 @@ export const MODULE_ROUTES = {
   Garantías: "/ops/garantias",
   Recibos: "/ops/recibos",
   Clientes: "/ops/clientes",
+  Cierre: "/ops/cierre",
   "→ Panel Admin": "/admin",
 };
 
