@@ -182,7 +182,13 @@ export function calcularMontos(orden = {}, detalles = null, abonos = []) {
   const descuento = Number(orden.descuento_valor) || 0;
   const ivaPct = Number(orden.iva_pct) || 0;
 
-  const base = Math.max(0, mano + repuestos + revision - descuento);
+  // Si el cliente NO autorizó, solo se cobra la revisión/diagnóstico: los
+  // repuestos y la mano de obra cotizados NO se cobran. Debe coincidir con
+  // trg_orden_recalcular_total_mo (backend).
+  const noAutoriza = orden.estado_autorizacion === "no_autorizado";
+  const base = noAutoriza
+    ? Math.max(0, revision)
+    : Math.max(0, mano + repuestos + revision - descuento);
   const iva = ivaPct ? base * (ivaPct / 100) : 0;
   const total = Math.round((base + iva) * 100) / 100;
   const anticipos = abonos.reduce((s, a) => s + (Number(a.monto) || 0), 0);

@@ -261,6 +261,8 @@ Se agregó un botón **"Registrar cambio"** dentro de la **factura de venta orig
 
 > **Nota:** en esta primera versión, la diferencia se cobra en **efectivo o transferencia** y, cuando hay que devolver al cliente, se hace en **efectivo**. La opción de "nota de crédito / saldo a favor" para usar en una compra futura puede agregarse más adelante como mejora aparte.
 
+> **¿Cómo deshacer un cambio?** La venta que registra la diferencia **no se anula por separado** (hacerlo descuadraría el inventario). Para revertir un cambio se registra el **cambio inverso**: se devuelve el producto nuevo y se entrega de vuelta el original. El sistema muestra una nota recordándolo en esa venta.
+
 ---
 
 ## Aclaraciones — puntos revisados que NO son errores del sistema
@@ -304,7 +306,7 @@ Estos puntos fueron reportados y revisados a fondo; **funcionan correctamente po
 
 ## Estado y próximos pasos
 
-- **Correcciones de base de datos (puntos 1 a 5, 7, 8, la parte de servidor del 11, y el motor del nuevo cambio de producto #14):** **aplicadas y activas en producción.**
+- **Correcciones de base de datos (puntos 1 a 5, 7, 8, la parte de servidor del 11, el cierre correcto de la OT no autorizada #13, y el motor del nuevo cambio de producto #14):** **aplicadas y activas en producción.**
 - **Ajustes de pantalla (puntos 6, 11, 12 y 13, las mejoras 9 y 10, y la pantalla del cambio de producto #14):** **listos**, se activan con la próxima publicación de la aplicación.
 - Todo el trabajo está versionado y respaldado en los repositorios del proyecto.
 

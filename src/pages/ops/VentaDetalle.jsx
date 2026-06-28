@@ -237,6 +237,14 @@ export default function VentaDetalle() {
     formatDate,
   );
 
+  // Una venta generada por un CAMBIO de producto (es la diferencia cobrada) no
+  // debe anularse por separado: anularla reingresaría el producto nuevo dejando
+  // también reingresado el viejo (de la devolución del cambio), inflando el
+  // inventario. Para revertir un cambio se registra el cambio inverso.
+  const obs = venta.observaciones || "";
+  const esCambio = obs.startsWith("Cambio por venta #");
+  const cambioRefNum = esCambio ? (obs.match(/#(\d+)/)?.[1] ?? null) : null;
+
   return (
     <div className="mx-auto w-full max-w-[1240px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
       <button
@@ -360,7 +368,7 @@ export default function VentaDetalle() {
             Registrar cambio
           </button>
         )}
-        {esAdmin && !venta.anulada && !confirmAnular && (
+        {esAdmin && !venta.anulada && !confirmAnular && !esCambio && (
           <button
             onClick={() => setConfirmAnular(true)}
             className="btn btn-out"
@@ -371,6 +379,25 @@ export default function VentaDetalle() {
           </button>
         )}
       </div>
+
+      {/* ── Nota: venta generada por un cambio (no se anula por separado) ── */}
+      {esCambio && !venta.anulada && (
+        <div
+          className="mt-4 rounded-[10px] border px-4 py-3"
+          style={{
+            backgroundColor: "var(--info-50)",
+            borderColor: "var(--info-border, var(--n-200))",
+          }}
+        >
+          <p className="text-[13px]" style={{ color: "var(--info-700)" }}>
+            Esta venta es la <b>diferencia de un cambio</b>
+            {cambioRefNum ? ` sobre la venta #${cambioRefNum}` : ""}. No se
+            anula por separado (dejaría el inventario descuadrado). Para
+            revertir el cambio, usa <b>“Registrar cambio”</b> a la inversa:
+            devuelve el producto nuevo y entrega de vuelta el original.
+          </p>
+        </div>
+      )}
 
       {/* ── Confirmación de anulación ──────────────────────────────── */}
       {confirmAnular && (
