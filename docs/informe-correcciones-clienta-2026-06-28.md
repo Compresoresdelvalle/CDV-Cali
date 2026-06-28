@@ -29,6 +29,7 @@ Se realizó una auditoría a fondo del manejo del dinero en el sistema (cierre d
 | 14  | Nuevo: cambio de producto con cobro/devolución de la diferencia       | Función nueva     | —       |
 | 15  | Técnicos podían ejecutar y facturar órdenes (debe ser solo Ventas)    | Permisos          | Medio   |
 | 16  | Perfil de Bodega/caja sin acceso de solo-lectura al cierre            | Permisos          | Medio   |
+| 17  | Nuevo: pago mixto (efectivo + transferencia) en una sola factura      | Función nueva     | —       |
 
 También se revisaron dos puntos reportados que **resultaron no ser errores** del sistema (cantidades decimales y precios decimales). Se explican en la sección **"Aclaraciones"** al final.
 
@@ -301,6 +302,31 @@ Un perfil para quien recibe caja, que pueda **ver el cierre** y el **inventario 
 
 ---
 
+## PARTE G — Pago mixto
+
+### 17. Nuevo: pago combinado (efectivo + transferencia) en una sola factura
+
+**¿Qué se pidió?**
+Que cuando un cliente pague una factura **combinando efectivo y transferencia**, el sistema permita registrar **ambas formas** sobre la misma venta, validando que la suma sea igual al total, y que el **cierre las muestre por separado**.
+
+**¿Cómo funciona ahora?**
+En **Nueva venta**, además de Efectivo / Transferencia / Tarjeta / Crédito, hay una opción **"Mixto"**:
+
+1. Se ingresa el **monto en efectivo** y el **monto por transferencia** (con su cuenta).
+2. El sistema muestra en vivo la **suma vs. el total** y solo deja confirmar cuando **cuadra exactamente**.
+3. Al guardar, cada forma de pago queda registrada en su medio correspondiente.
+
+**En el cierre de caja:** la venta cuenta **una sola vez** en los ingresos (sin doble conteo), pero el dinero se reparte por separado:
+
+- El **efectivo** entra a la caja (y al **arqueo**, que espera solo esa parte en efectivo, no el total).
+- La **transferencia** entra a su cuenta bancaria.
+
+Así el desglose por método y por cuenta, y el arqueo de efectivo, reflejan exactamente cómo se pagó.
+
+**Beneficio:** se pueden cobrar facturas con pago combinado sin inventar dos ventas, y la caja del día cuadra con el efectivo real recibido.
+
+---
+
 ## Aclaraciones — puntos revisados que NO son errores del sistema
 
 Estos puntos fueron reportados y revisados a fondo; **funcionan correctamente por diseño**. Se documentan aquí para dejar claro el porqué y cómo funcionan.
@@ -342,8 +368,8 @@ Estos puntos fueron reportados y revisados a fondo; **funcionan correctamente po
 
 ## Estado y próximos pasos
 
-- **Correcciones de base de datos (puntos 1 a 5, 7, 8, la parte de servidor del 11, el cierre correcto de la OT no autorizada #13, el motor del cambio de producto #14, los permisos de técnicos en OT #15 y el acceso de lectura al cierre #16):** **aplicadas y activas en producción.**
-- **Ajustes de pantalla (puntos 6, 11, 12 y 13, las mejoras 9 y 10, la pantalla del cambio de producto #14, y las pantallas de los puntos #15 y #16):** **listos**, se activan con la próxima publicación de la aplicación.
+- **Correcciones de base de datos (puntos 1 a 5, 7, 8, la parte de servidor del 11, el cierre correcto de la OT no autorizada #13, el motor del cambio de producto #14, los permisos de técnicos en OT #15, el acceso de lectura al cierre #16 y el motor del pago mixto #17):** **aplicadas y activas en producción.**
+- **Ajustes de pantalla (puntos 6, 11, 12 y 13, las mejoras 9 y 10, la pantalla del cambio de producto #14, y las pantallas de los puntos #15, #16 y #17):** **listos**, se activan con la próxima publicación de la aplicación.
 - Todo el trabajo está versionado y respaldado en los repositorios del proyecto.
 
 > **Nota sobre el reporte de caja menor:** se revisó a fondo y la caja menor **ya se registra correctamente como egreso** (tanto en el cálculo interno como en la pantalla del cierre, donde aparece bajo "Egresos — en qué se fue el dinero"). No se encontró ningún punto donde caja menor se sume a las ventas. Si en alguna pantalla específica se sigue viendo distinto, por favor indicarla para revisarla (puede tratarse de información en caché del navegador).
