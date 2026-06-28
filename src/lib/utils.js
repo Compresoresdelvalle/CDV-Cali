@@ -42,10 +42,15 @@ export const formatDate = (date) =>
 // También limita longitud a 100 chars para prevenir DOS por strings largos.
 export const sanitizeSearch = (q) => {
   const s = (q ?? "").toString().trim().slice(0, 100);
-  return s
-    .replace(/\\/g, "\\\\") // primero: escapar backslash existente
-    .replace(/[%_]/g, "\\$&") // luego: escapar wildcards SQL
-    .replace(/[,.*():]/g, ""); // finalmente: eliminar metacaracteres PostgREST
+  return (
+    s
+      .replace(/\\/g, "\\\\") // primero: escapar backslash existente
+      .replace(/[%_]/g, "\\$&") // luego: escapar wildcards SQL
+      // finalmente: eliminar metacaracteres que rompen el filtro .or() de PostgREST.
+      // Se MANTIENE el punto (.) para poder buscar referencias decimales (ej. polea
+      // "2.5"): dentro del valor de un ilike es literal y no rompe el filtro.
+      .replace(/[,*():]/g, "")
+  );
 };
 
 // Mensaje seguro para mostrar al usuario sin filtrar schema/columnas.
