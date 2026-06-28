@@ -27,6 +27,8 @@ Se realizó una auditoría a fondo del manejo del dinero en el sistema (cierre d
 | 12  | No se podía buscar por referencias con punto decimal (ej. "2.5")      | Error de búsqueda | Medio   |
 | 13  | OT no autorizada obligaba a descargar repuestos para poder cerrarla   | Error de flujo    | Alto    |
 | 14  | Nuevo: cambio de producto con cobro/devolución de la diferencia       | Función nueva     | —       |
+| 15  | Técnicos podían ejecutar y facturar órdenes (debe ser solo Ventas)    | Permisos          | Medio   |
+| 16  | Perfil de Bodega/caja sin acceso de solo-lectura al cierre            | Permisos          | Medio   |
 
 También se revisaron dos puntos reportados que **resultaron no ser errores** del sistema (cantidades decimales y precios decimales). Se explican en la sección **"Aclaraciones"** al final.
 
@@ -265,6 +267,40 @@ Se agregó un botón **"Registrar cambio"** dentro de la **factura de venta orig
 
 ---
 
+## PARTE F — Roles y permisos
+
+### 15. Los técnicos ya no ejecutan ni facturan órdenes (solo se asignan)
+
+**¿Qué pasaba antes?**
+Un técnico podía **operar toda la orden de trabajo** (diagnóstico, cotización, autorización, descarga de repuestos e incluso **facturar/entregar**), igual que Ventas. Eso mezclaba responsabilidades.
+
+**¿Cómo funciona ahora?**
+Se separó claramente:
+
+- **Técnicos:** quedan **disponibles para asignarse** a una orden y la **ven en solo-lectura**. Ya no pueden crear, avanzar ni facturar órdenes; tampoco les aparece el botón "Nueva OT".
+- **Ventas / Administración:** ejecutan **todo** el proceso (recepción, diagnóstico, autorización, descarga, facturación y cierre).
+
+El control se aplica **en la pantalla y en el servidor** (la base de datos rechaza que un técnico cree, modifique o facture una orden), para que no pueda saltarse.
+
+**Beneficio:** vista más simple para los técnicos, sin confusiones, y el proceso de venta/facturación centralizado en el perfil correcto.
+
+---
+
+### 16. Perfil de Bodega/caja puede consultar el cierre (solo lectura)
+
+**¿Qué se pidió?**
+Un perfil para quien recibe caja, que pueda **ver el cierre** y el **inventario de todas las bodegas** en solo lectura, con buen uso desde el celular, **sin** poder configurar, eliminar ni modificar registros críticos.
+
+**¿Cómo funciona ahora?**
+
+- El perfil **Bodega** ahora tiene, en su menú, **"Cierre"** (solo lectura): elige fechas, **previsualiza** los totales (ingresos, egresos, margen, desglose por sede/método/cuenta y arqueo de caja) y consulta el **histórico** de cierres. **No** puede generar/firmar cierres (eso sigue siendo solo de Administración).
+- **Ver inventario de todas las bodegas:** ya estaba disponible para el perfil Bodega (puede ver el stock de todas las sedes). Si un usuario puntual no lo veía, era un tema de su cuenta, no del sistema de permisos.
+- Sin acceso al Panel de Administración (configuración, usuarios, eliminación de registros): se mantiene restringido.
+
+**Beneficio:** quien maneja la caja puede cuadrar y revisar el cierre del día sin poder alterar nada, desde el celular o el PC.
+
+---
+
 ## Aclaraciones — puntos revisados que NO son errores del sistema
 
 Estos puntos fueron reportados y revisados a fondo; **funcionan correctamente por diseño**. Se documentan aquí para dejar claro el porqué y cómo funcionan.
@@ -306,8 +342,8 @@ Estos puntos fueron reportados y revisados a fondo; **funcionan correctamente po
 
 ## Estado y próximos pasos
 
-- **Correcciones de base de datos (puntos 1 a 5, 7, 8, la parte de servidor del 11, el cierre correcto de la OT no autorizada #13, y el motor del nuevo cambio de producto #14):** **aplicadas y activas en producción.**
-- **Ajustes de pantalla (puntos 6, 11, 12 y 13, las mejoras 9 y 10, y la pantalla del cambio de producto #14):** **listos**, se activan con la próxima publicación de la aplicación.
+- **Correcciones de base de datos (puntos 1 a 5, 7, 8, la parte de servidor del 11, el cierre correcto de la OT no autorizada #13, el motor del cambio de producto #14, los permisos de técnicos en OT #15 y el acceso de lectura al cierre #16):** **aplicadas y activas en producción.**
+- **Ajustes de pantalla (puntos 6, 11, 12 y 13, las mejoras 9 y 10, la pantalla del cambio de producto #14, y las pantallas de los puntos #15 y #16):** **listos**, se activan con la próxima publicación de la aplicación.
 - Todo el trabajo está versionado y respaldado en los repositorios del proyecto.
 
 > **Nota sobre el reporte de caja menor:** se revisó a fondo y la caja menor **ya se registra correctamente como egreso** (tanto en el cálculo interno como en la pantalla del cierre, donde aparece bajo "Egresos — en qué se fue el dinero"). No se encontró ningún punto donde caja menor se sume a las ventas. Si en alguna pantalla específica se sigue viendo distinto, por favor indicarla para revisarla (puede tratarse de información en caché del navegador).

@@ -23,6 +23,7 @@ import {
   Menu,
   LogOut,
   Users,
+  Calculator,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { ROLE_MODULES, MODULE_ROUTES } from "../../lib/constants";
@@ -56,6 +57,7 @@ const MODULE_ICONS = {
   Ensambles: Puzzle,
   Herramientas: Wrench,
   Clientes: Users,
+  Cierre: Calculator,
 };
 
 /** Cada módulo se ubica en una sección del sidebar (estilo Lovable). */
@@ -73,6 +75,7 @@ const MODULE_SECTION = {
   Órdenes: "Taller",
   Ensambles: "Taller",
   Herramientas: "Soporte",
+  Cierre: "Soporte",
 };
 
 const SECTION_ORDER = [

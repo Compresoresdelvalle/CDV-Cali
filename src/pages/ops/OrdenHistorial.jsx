@@ -164,18 +164,21 @@ export default function OrdenHistorial() {
         actions={
           <>
             <ViewToggle view={view} setView={setView} />
-            <button
-              onClick={() => navigate("/ops/ordenes/nueva")}
-              className="inline-flex items-center gap-2 rounded-lg px-4 text-sm font-semibold"
-              style={{
-                height: 48,
-                backgroundColor: "hsl(var(--primary))",
-                color: "hsl(var(--primary-foreground))",
-              }}
-            >
-              <Plus className="h-4 w-4" strokeWidth={2.2} />
-              <span className="hidden sm:inline">Nueva OT</span>
-            </button>
+            {/* Crear OT solo Ventas/Admin: los técnicos ven sus OT en solo-lectura. */}
+            {perfil?.rol !== "Tecnico" && (
+              <button
+                onClick={() => navigate("/ops/ordenes/nueva")}
+                className="inline-flex items-center gap-2 rounded-lg px-4 text-sm font-semibold"
+                style={{
+                  height: 48,
+                  backgroundColor: "hsl(var(--primary))",
+                  color: "hsl(var(--primary-foreground))",
+                }}
+              >
+                <Plus className="h-4 w-4" strokeWidth={2.2} />
+                <span className="hidden sm:inline">Nueva OT</span>
+              </button>
+            )}
           </>
         }
       />

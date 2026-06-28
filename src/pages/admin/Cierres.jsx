@@ -13,6 +13,7 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import FeedbackBanners from "../../components/ui/FeedbackBanners";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
+import { useAuthStore } from "../../stores/authStore";
 
 const TABS_HIST = ["Todos", "Diarios", "Periodo"];
 
@@ -45,6 +46,10 @@ const fmtFecha = (s) => {
 };
 
 export default function Cierres() {
+  // Solo Admin GENERA cierres; los demás roles con acceso (Bodega/caja) los
+  // CONSULTAN en solo-lectura: ven totales, arqueo e histórico, sin firmar nada.
+  const perfil = useAuthStore((s) => s.perfil);
+  const readOnly = perfil?.rol !== "Admin";
   const hoy = hoyBogota();
   const [desde, setDesde] = useState(hoy);
   const [hasta, setHasta] = useState(hoy);
@@ -304,7 +309,11 @@ export default function Cierres() {
       {/* ── Generador + checklist (master-detail Lovable) ────────────── */}
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <div className="flex flex-col gap-4">
-          <SectionCard title="Generar cierre">
+          <SectionCard
+            title={
+              readOnly ? "Consultar cierre (solo lectura)" : "Generar cierre"
+            }
+          >
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <Field label="Tipo de cierre">
                 <select
@@ -430,19 +439,21 @@ export default function Cierres() {
                 </div>
               )}
 
-              <div className="flex justify-end pt-4">
-                <button
-                  onClick={generar}
-                  disabled={generating || preview.ya_cubierto}
-                  className="h-12 px-5 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-50"
-                  style={{
-                    backgroundColor: "hsl(var(--primary))",
-                    color: "hsl(var(--primary-foreground))",
-                  }}
-                >
-                  {generating ? "Generando…" : "Generar cierre"}
-                </button>
-              </div>
+              {!readOnly && (
+                <div className="flex justify-end pt-4">
+                  <button
+                    onClick={generar}
+                    disabled={generating || preview.ya_cubierto}
+                    className="h-12 px-5 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-50"
+                    style={{
+                      backgroundColor: "hsl(var(--primary))",
+                      color: "hsl(var(--primary-foreground))",
+                    }}
+                  >
+                    {generating ? "Generando…" : "Generar cierre"}
+                  </button>
+                </div>
+              )}
             </SectionCard>
           )}
         </div>
