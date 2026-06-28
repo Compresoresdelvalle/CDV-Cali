@@ -8,10 +8,11 @@
  * Formatos aceptados (separador `/` o `-`):
  *   - `dd/mm/aaaa`  → ese día
  *   - `mm/aaaa`     → ese mes completo
- *   - `dd/mm`       → ese día del año actual
  *
- * Se omite a propósito el año suelto (`aaaa`) para no chocar con la búsqueda
- * por número de documento.
+ * Se exige el año explícito a propósito: evita ambigüedad (un `dd/mm` con año
+ * implícito) y hace que, al teclear una fecha completa, los estados intermedios
+ * no se interpreten como fecha (sin recargas innecesarias). El año suelto
+ * (`aaaa`) tampoco se interpreta, para no chocar con el número de documento.
  */
 
 const TZ = "-05:00"; // America/Bogota (sin DST)
@@ -60,16 +61,6 @@ export function parseRangoFecha(term) {
       `${anio}-${pad(mo)}-01T00:00:00.000`,
       `${anio}-${pad(mo)}-${pad(ultimoDia(anio, mo))}T23:59:59.999`,
     );
-  }
-
-  // dd/mm (año actual)
-  m = t.match(/^(\d{1,2})[/-](\d{1,2})$/);
-  if (m) {
-    const d = +m[1],
-      mo = +m[2],
-      anio = new Date().getFullYear();
-    if (!mesValido(mo) || d < 1 || d > ultimoDia(anio, mo)) return null;
-    return dia(anio, mo, d);
   }
 
   return null;

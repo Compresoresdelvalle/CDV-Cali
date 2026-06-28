@@ -418,8 +418,8 @@ export default function CotizacionHistorial() {
               </div>
             </div>
 
-            {/* Cargar más */}
-            {hasMore && !busqueda.trim() && (
+            {/* Cargar más (también con filtro de fecha server-side) */}
+            {hasMore && (!busqueda.trim() || rangoFecha) && (
               <button
                 onClick={() => cargarCotizaciones(false)}
                 disabled={loading}

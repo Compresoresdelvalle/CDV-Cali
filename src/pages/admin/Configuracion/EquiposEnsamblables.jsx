@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Info, Plus, Pencil, Power, Boxes } from "lucide-react";
+import { Info, Plus, Pencil, Minus, Boxes } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { formatCOP, safeError } from "../../../lib/utils";
 import { useConfirm } from "../../../components/ui/ConfirmDialog";
@@ -102,13 +102,13 @@ export default function EquiposEnsamblables() {
         if (error) throw error;
         setOkMsg(`Equipo "${nombre}" agregado`);
       } else {
+        // Si vacían la referencia, se regenera (NOT NULL + UNIQUE: nunca "").
+        const referencia =
+          editando.referencia?.trim() ||
+          `ENS-${Date.now().toString(36).toUpperCase()}`;
         const { error } = await supabase
           .from("productos")
-          .update({
-            nombre,
-            referencia: editando.referencia?.trim() || editando.referencia,
-            precio_venta: precio,
-          })
+          .update({ nombre, referencia, precio_venta: precio })
           .eq("id", editando.id);
         if (error) throw error;
         setOkMsg(`Equipo "${nombre}" actualizado`);
@@ -123,23 +123,25 @@ export default function EquiposEnsamblables() {
     }
   };
 
-  const toggleActivo = async (e) => {
+  // Quitar de la lista = desmarcar `ensamblable` (NO toca `activo`): el producto
+  // sigue vendible/en inventario si lo era; solo deja de ofrecerse al ensamblar.
+  // Clave: la lista incluye compresores reales (seed) — nunca debe deshabilitar
+  // un producto vendible en toda la app.
+  const quitar = async (e) => {
     const ok = await confirm({
-      titulo: `${e.activo ? "Desactivar" : "Activar"} equipo`,
-      mensaje: `${e.activo ? "Desactivar" : "Activar"} "${e.nombre}"?${
-        e.activo ? " Dejará de aparecer al crear un ensamble." : ""
-      }`,
-      confirmLabel: e.activo ? "Desactivar" : "Activar",
-      danger: e.activo,
+      titulo: "Quitar de ensamblables",
+      mensaje: `Quitar "${e.nombre}" de la lista de equipos ensamblables? Dejará de aparecer al crear un ensamble. No afecta su venta ni su inventario.`,
+      confirmLabel: "Quitar",
+      danger: true,
     });
     if (!ok) return;
     try {
       const { error } = await supabase
         .from("productos")
-        .update({ activo: !e.activo })
+        .update({ ensamblable: false })
         .eq("id", e.id);
       if (error) throw error;
-      setOkMsg(`Equipo ${e.activo ? "desactivado" : "activado"}`);
+      setOkMsg(`"${e.nombre}" quitado de ensamblables`);
       await cargar();
     } catch (err) {
       setErrorMsg(safeError(err, "Error"));
@@ -156,8 +158,9 @@ export default function EquiposEnsamblables() {
       <InfoBanner title="Equipos para ensamble (solo Admin)">
         Son los equipos que aparecen como objetivo al crear un ensamble. Puedes
         agregar uno con <b>nombre provisional</b> cuando aún no conoces el
-        definitivo y <b>renombrarlo después</b>. La referencia se genera sola si
-        la dejas vacía.
+        definitivo y <b>renombrarlo después</b> (la referencia se genera sola si
+        la dejas vacía). <b>Quitar</b> solo lo saca de esta lista — no afecta su
+        venta ni su inventario.
       </InfoBanner>
 
       <div className="flex items-center justify-between gap-3">
@@ -274,11 +277,11 @@ export default function EquiposEnsamblables() {
                           <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
                         </IconBtn>
                         <IconBtn
-                          label={e.activo ? "Desactivar" : "Activar"}
-                          token={e.activo ? "--destructive" : "--success"}
-                          onClick={() => toggleActivo(e)}
+                          label="Quitar de ensamblables"
+                          token="--destructive"
+                          onClick={() => quitar(e)}
                         >
-                          <Power className="h-3.5 w-3.5" strokeWidth={1.75} />
+                          <Minus className="h-3.5 w-3.5" strokeWidth={1.75} />
                         </IconBtn>
                       </div>
                     </td>
@@ -326,18 +329,14 @@ export default function EquiposEnsamblables() {
                     Editar
                   </button>
                   <button
-                    onClick={() => toggleActivo(e)}
+                    onClick={() => quitar(e)}
                     className="h-11 flex-1 rounded-lg border text-xs font-semibold cursor-pointer"
                     style={{
-                      borderColor: e.activo
-                        ? "hsl(var(--destructive))"
-                        : "hsl(var(--success))",
-                      color: e.activo
-                        ? "hsl(var(--destructive))"
-                        : "hsl(var(--success))",
+                      borderColor: "hsl(var(--destructive))",
+                      color: "hsl(var(--destructive))",
                     }}
                   >
-                    {e.activo ? "Desactivar" : "Activar"}
+                    Quitar
                   </button>
                 </div>
               </li>
