@@ -8,10 +8,12 @@ import {
   Clock,
   MoreHorizontal,
   RefreshCw,
+  Search,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate } from "../../lib/utils";
+import { parseRangoFecha } from "../../lib/busquedaFecha";
 import {
   estadoToKanban,
   traspasoBadge,
@@ -73,12 +75,16 @@ export default function TraspasoHistorial() {
 
   const [vista, setVista] = useState("board");
   const [sedeFiltro, setSedeFiltro] = useState("ALL");
+  const [busqueda, setBusqueda] = useState("");
   const [traspasos, setTraspasos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
   const [errorMsg, setErrorMsg] = useState(null);
   const reqIdRef = useRef(0);
+
+  // Fecha escrita en la barra → filtro server-side por rango.
+  const rangoFecha = useMemo(() => parseRangoFecha(busqueda), [busqueda]);
 
   // `silent`: refresco en segundo plano (Realtime) sin parpadear el skeleton
   // ni mostrar error de un refresco de fondo.
@@ -105,6 +111,10 @@ export default function TraspasoHistorial() {
           `sede_origen_id.eq.${perfil?.sede_id},sede_destino_id.eq.${perfil?.sede_id}`,
         );
       }
+      if (rangoFecha)
+        query = query
+          .gte("fecha", rangoFecha.desde)
+          .lte("fecha", rangoFecha.hasta);
 
       const { data, error } = await query;
       if (myReq !== reqIdRef.current) return;
@@ -129,7 +139,7 @@ export default function TraspasoHistorial() {
   useEffect(() => {
     cargar(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [rangoFecha?.desde, rangoFecha?.hasta]);
 
   // Realtime: refresca la lista en vivo cuando cualquier traspaso cambia de
   // estado (la RLS de lectura sigue aplicando al re-cargar). Debounce para
@@ -155,14 +165,20 @@ export default function TraspasoHistorial() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* Filtro por sede (cliente) — origen o destino. */
+  /* Filtro por sede (cliente) + texto/fecha de la barra. */
   const filtrados = useMemo(() => {
-    if (sedeFiltro === "ALL") return traspasos;
-    return traspasos.filter(
-      (t) =>
-        t.sede_origen_id === sedeFiltro || t.sede_destino_id === sedeFiltro,
-    );
-  }, [traspasos, sedeFiltro]);
+    const needle = busqueda.trim().toLowerCase();
+    return traspasos.filter((t) => {
+      const okSede =
+        sedeFiltro === "ALL" ||
+        t.sede_origen_id === sedeFiltro ||
+        t.sede_destino_id === sedeFiltro;
+      if (!okSede) return false;
+      // Fecha ya filtrada server-side; el texto suelto busca por número.
+      if (rangoFecha || !needle) return true;
+      return `#${t.numero}`.toLowerCase().includes(needle);
+    });
+  }, [traspasos, sedeFiltro, busqueda, rangoFecha]);
 
   /* Agrupación por columna Kanban. */
   const grupos = useMemo(() => {
@@ -246,6 +262,29 @@ export default function TraspasoHistorial() {
               onClick={() => setVista("list")}
               icon={<ListIcon className="h-3.5 w-3.5" strokeWidth={2} />}
               label="Lista"
+            />
+          </div>
+
+          <div
+            className="flex items-center gap-2 rounded-lg border px-3"
+            style={{
+              height: 36,
+              borderColor: "var(--n-150)",
+              backgroundColor: "var(--n-0)",
+            }}
+          >
+            <Search
+              className="h-4 w-4 shrink-0"
+              strokeWidth={1.5}
+              style={{ color: "var(--n-500)" }}
+            />
+            <input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="N° o fecha (23/06/2026)…"
+              className="min-w-0 border-none bg-transparent text-[13px] outline-none"
+              style={{ color: "var(--n-950)", width: 150 }}
+              aria-label="Buscar por número o fecha"
             />
           </div>
 

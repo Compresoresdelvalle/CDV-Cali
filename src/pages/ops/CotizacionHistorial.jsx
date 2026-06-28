@@ -12,6 +12,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { parseRangoFecha } from "../../lib/busquedaFecha";
 import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
 import {
   ESTADOS_COTIZACION,
@@ -71,6 +72,9 @@ export default function CotizacionHistorial() {
   const reqIdRef = useRef(0);
   const convirtiendoRef = useRef(false);
 
+  // Fecha escrita en la barra → filtro server-side por rango.
+  const rangoFecha = useMemo(() => parseRangoFecha(busqueda), [busqueda]);
+
   const cargarCotizaciones = async (reset = false) => {
     const myReq = ++reqIdRef.current;
     setLoading(true);
@@ -93,6 +97,10 @@ export default function CotizacionHistorial() {
 
       if (!esAdmin) query = query.eq("sede_id", perfil?.sede_id);
       if (filtroEstado !== "Todos") query = query.eq("estado", filtroEstado);
+      if (rangoFecha)
+        query = query
+          .gte("fecha", rangoFecha.desde)
+          .lte("fecha", rangoFecha.hasta);
 
       const { data, error } = await query;
       if (myReq !== reqIdRef.current) return; // respuesta obsoleta
@@ -117,7 +125,7 @@ export default function CotizacionHistorial() {
   useEffect(() => {
     cargarCotizaciones(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroEstado]);
+  }, [filtroEstado, rangoFecha?.desde, rangoFecha?.hasta]);
 
   const convertirEnVenta = async (e, cotizacionId) => {
     e.stopPropagation();
@@ -145,6 +153,7 @@ export default function CotizacionHistorial() {
 
   // Búsqueda client-side sobre lo ya cargado (número, cliente, productos).
   const filtradas = useMemo(() => {
+    if (rangoFecha) return cotizaciones; // ya filtrado server-side por fecha
     const needle = busqueda.trim().toLowerCase();
     if (!needle) return cotizaciones;
     return cotizaciones.filter((c) => {
@@ -157,7 +166,7 @@ export default function CotizacionHistorial() {
         num.includes(needle) || cli.includes(needle) || prods.includes(needle)
       );
     });
-  }, [cotizaciones, busqueda]);
+  }, [cotizaciones, busqueda, rangoFecha]);
 
   // KPIs honestos derivados de lo cargado en vista (no inventados).
   const kpis = useMemo(() => {
@@ -282,7 +291,7 @@ export default function CotizacionHistorial() {
           />
           <input
             type="search"
-            placeholder="Buscar por #, cliente o producto…"
+            placeholder="Buscar por #, cliente, producto o fecha (23/06/2026)…"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"

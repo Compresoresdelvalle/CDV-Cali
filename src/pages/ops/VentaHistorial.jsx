@@ -4,6 +4,7 @@ import { Plus, Search, ShoppingCart } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate } from "../../lib/utils";
+import { parseRangoFecha } from "../../lib/busquedaFecha";
 import {
   METODOS_PAGO_VENTA,
   metodoPagoClass,
@@ -29,6 +30,10 @@ export default function VentaHistorial() {
   const [hasMore, setHasMore] = useState(true);
   const reqIdRef = useRef(0);
 
+  // Si lo escrito en la barra es una fecha (dd/mm/aaaa, mm/aaaa, dd/mm), se
+  // filtra server-side por rango; si no, se mantiene la búsqueda de texto.
+  const rangoFecha = useMemo(() => parseRangoFecha(busqueda), [busqueda]);
+
   const cargarVentas = async (reset = false) => {
     const myReq = ++reqIdRef.current;
     setLoading(true);
@@ -50,6 +55,10 @@ export default function VentaHistorial() {
       if (!esAdmin) query = query.eq("sede_id", perfil.sede_id);
       if (filtroMetodo !== "Todos")
         query = query.eq("metodo_pago", filtroMetodo);
+      if (rangoFecha)
+        query = query
+          .gte("fecha", rangoFecha.desde)
+          .lte("fecha", rangoFecha.hasta);
 
       const { data, error } = await query;
       if (myReq !== reqIdRef.current) return;
@@ -73,12 +82,14 @@ export default function VentaHistorial() {
   useEffect(() => {
     cargarVentas(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroMetodo]);
+  }, [filtroMetodo, rangoFecha?.desde, rangoFecha?.hasta]);
 
   // Búsqueda client-side sobre lo ya cargado (número, cliente, productos).
   // El listado original no tenía búsqueda; se añade sin tocar la paginación
   // server-side ni el filtro por método de pago.
   const ventasFiltradas = useMemo(() => {
+    // Cuando la barra es una fecha, el filtrado ya ocurrió server-side.
+    if (rangoFecha) return ventas;
     const needle = busqueda.trim().toLowerCase();
     if (!needle) return ventas;
     return ventas.filter((v) => {
@@ -89,7 +100,7 @@ export default function VentaHistorial() {
         num.includes(needle) || cli.includes(needle) || prods.includes(needle)
       );
     });
-  }, [ventas, busqueda]);
+  }, [ventas, busqueda, rangoFecha]);
 
   // KPIs honestos derivados de lo cargado en vista (no inventados).
   const kpis = useMemo(() => {
@@ -215,7 +226,7 @@ export default function VentaHistorial() {
           <input
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar venta por número, cliente o producto…"
+            placeholder="Buscar por número, cliente, producto o fecha (23/06/2026)…"
             className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
             style={{ color: "var(--n-950)" }}
           />

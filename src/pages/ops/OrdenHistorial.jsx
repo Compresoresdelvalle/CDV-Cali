@@ -14,6 +14,7 @@ import { Search, Plus, List, LayoutGrid, X, Wrench, Lock } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
+import { parseRangoFecha, coincideRangoFecha } from "../../lib/busquedaFecha";
 import PageHeader from "../../components/layout/PageHeader";
 import {
   estadoEstilo,
@@ -132,17 +133,22 @@ export default function OrdenHistorial() {
     });
   }, [ordenes, abonosPorOt, perfil]);
 
+  // Si lo escrito es una fecha (dd/mm/aaaa, mm/aaaa, dd/mm) se filtra por fecha;
+  // si no, por texto. Como aquí se cargan todas las OT, el match es en memoria.
+  const rangoFecha = useMemo(() => parseRangoFecha(q), [q]);
+
   const filtradas = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return enriquecidas.filter((o) => {
       if (estado !== "todos" && o._grupo !== estado) return false;
+      if (rangoFecha) return coincideRangoFecha(o.fecha, rangoFecha);
       if (!needle) return true;
       const hay = `${o.cliente_nombre ?? ""} ${o.equipo_descripcion ?? ""} ${
         o.equipo_serie ?? ""
       }`.toLowerCase();
       return hay.includes(needle);
     });
-  }, [enriquecidas, q, estado]);
+  }, [enriquecidas, q, estado, rangoFecha]);
 
   const open = (id) => navigate(`/ops/ordenes/${id}`);
   const sedeLabel = SEDE_LABEL[perfil?.sede_id] ?? perfil?.sede_id ?? "tu sede";
@@ -206,7 +212,7 @@ export default function OrdenHistorial() {
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por cliente, equipo o serie…"
+            placeholder="Buscar por cliente, equipo, serie o fecha (23/06/2026)…"
             className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
             style={{ color: "hsl(var(--foreground))" }}
           />
