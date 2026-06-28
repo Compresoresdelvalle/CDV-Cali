@@ -272,7 +272,9 @@ export function mensajeGate(i, ctx) {
     3: noAutoriza
       ? "Cliente no autoriza: se cobra la revisión."
       : "Autorizada con anticipo.",
-    4: "Repuestos descargados.",
+    4: noAutoriza
+      ? "Sin descarga: el cliente no autorizó."
+      : "Repuestos descargados.",
     5: "Trabajo terminado.",
     6: "Saldo cubierto. Lista para entregar.",
   };

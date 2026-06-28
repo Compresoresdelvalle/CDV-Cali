@@ -25,6 +25,8 @@ Se realizó una auditoría a fondo del manejo del dinero en el sistema (cierre d
 | 10  | Filtro por fecha en los listados                                      | Mejora            | —       |
 | 11  | Los técnicos podían registrar devoluciones de herramientas            | Permisos          | Medio   |
 | 12  | No se podía buscar por referencias con punto decimal (ej. "2.5")      | Error de búsqueda | Medio   |
+| 13  | OT no autorizada obligaba a descargar repuestos para poder cerrarla   | Error de flujo    | Alto    |
+| 14  | Nuevo: cambio de producto con cobro/devolución de la diferencia       | Función nueva     | —       |
 
 También se revisaron dos puntos reportados que **resultaron no ser errores** del sistema (cantidades decimales y precios decimales). Se explican en la sección **"Aclaraciones"** al final.
 
@@ -218,6 +220,49 @@ La búsqueda **respeta el punto**. Escribir **"2.5"** encuentra los productos cu
 
 ---
 
+## PARTE E — Órdenes de trabajo y cambios de producto
+
+### 13. La OT no autorizada ya no obliga a descargar repuestos
+
+**¿Qué pasaba antes?**
+Cuando se cotizaban repuestos en una orden de trabajo y luego el cliente **no autorizaba** la reparación, el sistema **no dejaba cerrar la orden** a menos que se **descargaran del inventario** esos repuestos. Es decir, obligaba a sacar del stock unas piezas que **no se iban a usar**, solo para poder marcar la orden como terminada y cobrar la revisión.
+
+**¿Cómo funciona ahora?**
+Si el cliente **no autoriza**, la orden se cierra **cobrando únicamente la revisión / diagnóstico**, **sin tocar el inventario**:
+
+- Ya **no** aparece el botón de "Descargar del inventario" en ese caso.
+- Una nota explica que los repuestos cotizados **no se descargan** porque no hubo autorización.
+- Al marcar como terminada, la cotización de repuestos **se descarta sola**, sin afectar el stock.
+
+**Beneficio:** una orden no autorizada se cierra de forma correcta y rápida, cobrando solo la revisión, sin consumir repuestos que el cliente no aprobó.
+
+---
+
+### 14. Nuevo: cambio de producto con cobro o devolución de la diferencia
+
+**¿Qué se pidió?**
+Que cuando un cliente regrese a **cambiar un producto por otro de distinto precio**, el sistema gestione la **diferencia**: cobrar el excedente si el nuevo es más caro, o devolverlo si es más barato, con todo vinculado a la factura original.
+
+**¿Cómo funciona ahora?**
+Se agregó un botón **"Registrar cambio"** dentro de la **factura de venta original** (no hay que teclear números ni buscar la venta: se hace desde la venta misma). El flujo es:
+
+1. Se elige, de la factura, **qué producto devuelve** el cliente y la cantidad.
+2. Se busca y elige el **producto nuevo** que se lleva y su cantidad.
+3. El sistema calcula **automáticamente la diferencia** y muestra si hay que **cobrar** o **devolver**, y cuánto.
+4. Al confirmar:
+   - El producto devuelto **vuelve al inventario** (entra stock).
+   - El producto nuevo **sale del inventario**.
+   - Si el nuevo es **más caro**, se **cobra solo la diferencia** (efectivo o transferencia).
+   - Si el nuevo es **más barato**, se **devuelve la diferencia** al cliente (en efectivo, queda como egreso del día).
+
+**En el dinero:** el cierre registra **solo la diferencia** (lo que realmente entró o salió), una sola vez, sin doble conteo. El cambio queda **vinculado a la venta original** para su trazabilidad.
+
+**Beneficio:** los cambios de producto se hacen en un solo paso, con el inventario y la caja siempre cuadrados.
+
+> **Nota:** en esta primera versión, la diferencia se cobra en **efectivo o transferencia** y, cuando hay que devolver al cliente, se hace en **efectivo**. La opción de "nota de crédito / saldo a favor" para usar en una compra futura puede agregarse más adelante como mejora aparte.
+
+---
+
 ## Aclaraciones — puntos revisados que NO son errores del sistema
 
 Estos puntos fueron reportados y revisados a fondo; **funcionan correctamente por diseño**. Se documentan aquí para dejar claro el porqué y cómo funcionan.
@@ -259,8 +304,8 @@ Estos puntos fueron reportados y revisados a fondo; **funcionan correctamente po
 
 ## Estado y próximos pasos
 
-- **Correcciones de base de datos (puntos 1 a 5, 7, 8 y la parte de servidor del 11):** **aplicadas y activas en producción.**
-- **Ajustes de pantalla (puntos 6, 11 y 12, y mejoras 9 y 10):** **listos**, se activan con la próxima publicación de la aplicación.
+- **Correcciones de base de datos (puntos 1 a 5, 7, 8, la parte de servidor del 11, y el motor del nuevo cambio de producto #14):** **aplicadas y activas en producción.**
+- **Ajustes de pantalla (puntos 6, 11, 12 y 13, las mejoras 9 y 10, y la pantalla del cambio de producto #14):** **listos**, se activan con la próxima publicación de la aplicación.
 - Todo el trabajo está versionado y respaldado en los repositorios del proyecto.
 
 > **Nota sobre el reporte de caja menor:** se revisó a fondo y la caja menor **ya se registra correctamente como egreso** (tanto en el cálculo interno como en la pantalla del cierre, donde aparece bajo "Egresos — en qué se fue el dinero"). No se encontró ningún punto donde caja menor se sume a las ventas. Si en alguna pantalla específica se sigue viendo distinto, por favor indicarla para revisarla (puede tratarse de información en caché del navegador).

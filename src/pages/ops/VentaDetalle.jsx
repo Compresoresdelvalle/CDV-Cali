@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import {
   ArrowLeftCircle,
+  ArrowRightLeft,
   User,
   Package,
   Wallet,
@@ -15,6 +16,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import ModalAbrirGarantiaVenta from "../../components/garantias/ModalAbrirGarantiaVenta";
+import ModalCambioProducto from "../../components/ventas/ModalCambioProducto";
 import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
 import {
   metodoPagoClass,
@@ -40,6 +42,7 @@ export default function VentaDetalle() {
   const [motivoAnular, setMotivoAnular] = useState("");
   const [error, setError] = useState(null);
   const [modalGarantia, setModalGarantia] = useState(false);
+  const [modalCambio, setModalCambio] = useState(false);
   const [imprimiendo, setImprimiendo] = useState(false);
   const [reciboUrl, setReciboUrl] = useState(null);
   // B10: saldo de una venta a crédito (abonos de cotización + cobros directos).
@@ -263,6 +266,23 @@ export default function VentaDetalle() {
         />
       )}
 
+      {modalCambio && (
+        <ModalCambioProducto
+          venta={venta}
+          items={items}
+          sedeId={perfil?.sede_id}
+          onClose={() => setModalCambio(false)}
+          onDone={(res) => {
+            setModalCambio(false);
+            if (res?.venta_nueva_id) {
+              navigate(`/ops/ventas/${res.venta_nueva_id}`);
+            } else {
+              navigate(0);
+            }
+          }}
+        />
+      )}
+
       {/* ── Header ─────────────────────────────────────────────────── */}
       <div
         className="mt-4 flex flex-col items-start gap-4 border-b pb-4 md:flex-row md:gap-6"
@@ -327,6 +347,17 @@ export default function VentaDetalle() {
           >
             <Shield className="h-3.5 w-3.5" />
             Cliente reclama garantía
+          </button>
+        )}
+        {!venta.anulada && items.some((i) => i.producto_id != null) && (
+          <button
+            onClick={() => setModalCambio(true)}
+            className="btn btn-out"
+            style={{ height: 48, color: "var(--p-600)" }}
+            title="Cambiar un producto de esta venta por otro"
+          >
+            <ArrowRightLeft className="h-3.5 w-3.5" />
+            Registrar cambio
           </button>
         )}
         {esAdmin && !venta.anulada && !confirmAnular && (

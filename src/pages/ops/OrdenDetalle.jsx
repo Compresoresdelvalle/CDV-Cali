@@ -1699,23 +1699,34 @@ function PasoTrabajo({
   orden,
   id,
   ro,
-  ctx,
   draft,
   updateOrden,
   setPasoAbierto,
   setErrorMsg,
   setAviso,
 }) {
+  // Si el cliente NO autorizó, no hay descarga de repuestos: la OT se cierra
+  // cobrando solo la revisión/diagnóstico y la cotización (borrador) se descarta
+  // sin tocar el inventario.
+  const noAutoriza = orden.estado_autorizacion === "no_autorizado";
   const [descargando, setDescargando] = useState(false);
   const [conv, setConv] = useState(null); // { producto_id, faltante }
-  const [trabajo, setTrabajo] = useState(orden.trabajo_realizado ?? "");
+  const [trabajo, setTrabajo] = useState(
+    orden.trabajo_realizado ??
+      (noAutoriza
+        ? "El cliente no autorizó la reparación; se cobra solo la revisión/diagnóstico."
+        : ""),
+  );
   const [terminando, setTerminando] = useState(false);
   const esperando = orden.estado === "esperando_repuesto";
 
-  // Habilitar "Marcar como terminado" solo si: editable, no quedan repuestos
-  // pendientes en el borrador y hay descripción del trabajo realizado.
+  // Habilitar "Marcar como terminado": editable y con descripción. Si el cliente
+  // autorizó, además no deben quedar repuestos pendientes en el borrador; si NO
+  // autorizó, el borrador se descarta al terminar (no se exige vaciarlo antes).
   const puedeTerminar =
-    !ro && (draft?.length ?? 0) === 0 && Boolean((trabajo || "").trim());
+    !ro &&
+    (noAutoriza || (draft?.length ?? 0) === 0) &&
+    Boolean((trabajo || "").trim());
 
   const guardarTrabajo = async () => {
     if (ro) return;
@@ -1733,10 +1744,14 @@ function PasoTrabajo({
     setTerminando(true);
     setErrorMsg("");
     try {
-      await updateOrden({
+      const payload = {
         estado: "terminada",
         trabajo_realizado: trabajo || null,
-      });
+      };
+      // Cliente no autorizó: descarta la cotización (borrador) SIN descargar
+      // inventario; esos repuestos nunca se usaron.
+      if (noAutoriza && (draft?.length ?? 0) > 0) payload.cotizacion_draft = [];
+      await updateOrden(payload);
       setAviso("OT marcada como terminada.");
       setPasoAbierto?.(5);
     } catch (err) {
@@ -1832,8 +1847,23 @@ function PasoTrabajo({
 
   return (
     <div className="space-y-4">
-      {/* Líneas del draft pendientes de descargar */}
-      {draft.length > 0 ? (
+      {/* Cliente no autorizó: nota; si autorizó, líneas pendientes de descargar */}
+      {noAutoriza ? (
+        <div
+          className="rounded-lg border px-4 py-3"
+          style={{
+            backgroundColor: "hsl(var(--info) / 0.1)",
+            borderColor: "hsl(var(--info) / 0.3)",
+          }}
+        >
+          <p className="text-sm" style={{ color: "hsl(var(--foreground))" }}>
+            El cliente <strong>no autorizó</strong> la reparación. Los repuestos
+            cotizados <strong>no se descargan del inventario</strong>: solo se
+            cobra la revisión / diagnóstico. Al marcar como terminado se
+            descarta la cotización sin afectar el stock.
+          </p>
+        </div>
+      ) : draft.length > 0 ? (
         <div className="rounded-xl border overflow-hidden" style={card}>
           <div
             className="px-4 py-3 border-b"
@@ -1907,28 +1937,33 @@ function PasoTrabajo({
         </div>
       )}
 
-      <div className="flex flex-col gap-2 sm:flex-row">
-        {draft.length > 0 && (
-          <PrimaryButton
-            disabled={ro || descargando}
-            onClick={descargar}
+      {!noAutoriza && (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {draft.length > 0 && (
+            <PrimaryButton
+              disabled={ro || descargando}
+              onClick={descargar}
+              style={{ flex: 1 }}
+            >
+              <Package className="h-4 w-4" />
+              {descargando ? "Descargando…" : TX.descargarInventario}
+            </PrimaryButton>
+          )}
+          <OutlineButton
+            tone="warning"
+            disabled={ro}
+            onClick={togglePausa}
             style={{ flex: 1 }}
           >
-            <Package className="h-4 w-4" />
-            {descargando ? "Descargando…" : TX.descargarInventario}
-          </PrimaryButton>
-        )}
-        <OutlineButton
-          tone="warning"
-          disabled={ro}
-          onClick={togglePausa}
-          style={{ flex: 1 }}
-        >
-          {esperando ? TX.reanudar : TX.pausarEsperando}
-        </OutlineButton>
-      </div>
+            {esperando ? TX.reanudar : TX.pausarEsperando}
+          </OutlineButton>
+        </div>
+      )}
 
-      <Field label="Trabajo realizado" htmlFor="ot-trab">
+      <Field
+        label={noAutoriza ? "Observación" : "Trabajo realizado"}
+        htmlFor="ot-trab"
+      >
         <textarea
           id="ot-trab"
           rows={4}
@@ -1936,7 +1971,11 @@ function PasoTrabajo({
           value={trabajo}
           onChange={(e) => setTrabajo(e.target.value)}
           onBlur={guardarTrabajo}
-          placeholder="Describe lo que se hizo en el equipo"
+          placeholder={
+            noAutoriza
+              ? "Motivo por el que el cliente no autorizó / observaciones"
+              : "Describe lo que se hizo en el equipo"
+          }
           className="rounded-lg border px-3 py-2 text-sm outline-none disabled:opacity-60"
           style={inputStyle}
         />
