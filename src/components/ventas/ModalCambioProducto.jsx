@@ -29,14 +29,36 @@ export default function ModalCambioProducto({
   onClose,
   onDone,
 }) {
-  // Solo líneas de PRODUCTO (no servicios) pueden devolverse en un cambio.
-  const lineasProducto = useMemo(
-    () => (items ?? []).filter((i) => i.producto_id != null),
-    [items],
-  );
+  // Solo PRODUCTOS (no servicios) pueden devolverse en un cambio. Se agrupan por
+  // producto (sumando líneas) para reflejar EXACTAMENTE lo que hace el backend:
+  // crédito = subtotal_total / cantidad_total (promedio ponderado) y tope = total
+  // vendido del producto. Así el preview coincide con fn_registrar_cambio.
+  const productosDevolubles = useMemo(() => {
+    const map = new Map();
+    for (const it of items ?? []) {
+      if (it.producto_id == null) continue;
+      const g = map.get(it.producto_id) ?? {
+        producto_id: it.producto_id,
+        nombre: it.producto?.nombre ?? it.descripcion ?? "—",
+        referencia: it.producto?.referencia ?? "",
+        cantidad: 0,
+        subtotal: 0,
+      };
+      g.cantidad += Number(it.cantidad) || 0;
+      g.subtotal +=
+        Number(it.subtotal) ||
+        Number(it.precio_unitario) * Number(it.cantidad) ||
+        0;
+      map.set(it.producto_id, g);
+    }
+    return [...map.values()].map((g) => ({
+      ...g,
+      precio: g.cantidad ? g.subtotal / g.cantidad : 0,
+    }));
+  }, [items]);
 
-  const [lineaId, setLineaId] = useState(
-    lineasProducto.length === 1 ? lineasProducto[0].id : "",
+  const [prodDevId, setProdDevId] = useState(
+    productosDevolubles.length === 1 ? productosDevolubles[0].producto_id : "",
   );
   const [cantDev, setCantDev] = useState(1);
 
@@ -58,7 +80,8 @@ export default function ModalCambioProducto({
     };
   }, []);
 
-  const lineaDev = lineasProducto.find((l) => l.id === lineaId) || null;
+  const devSel =
+    productosDevolubles.find((p) => p.producto_id === prodDevId) || null;
 
   // Buscar producto nuevo (reusa el patrón de búsqueda saneada del resto de la app).
   const buscar = async (q) => {
@@ -88,10 +111,7 @@ export default function ModalCambioProducto({
   // ── Cálculo de la diferencia (espejo exacto del backend) ──────────────────
   const ivaPct = Number(venta?.iva_pct ?? 0);
   const factor = 1 + ivaPct / 100;
-  const precioDev = lineaDev
-    ? Number(lineaDev.precio_unitario) ||
-      Number(lineaDev.subtotal) / Number(lineaDev.cantidad || 1)
-    : 0;
+  const precioDev = devSel ? devSel.precio : 0;
   const valorDev = Math.round(precioDev * cantDev);
   const valorNuevo = nuevo
     ? Math.round(Number(nuevo.precio_venta) * cantNuevo)
@@ -100,14 +120,14 @@ export default function ModalCambioProducto({
   const difConIva = Math.round(difNeta * factor);
   const accion = difNeta > 0 ? "cobro" : difNeta < 0 ? "devolucion" : "par";
 
-  const maxDev = lineaDev ? Number(lineaDev.cantidad) : 1;
+  const maxDev = devSel ? Number(devSel.cantidad) : 1;
   const puedeGuardar =
-    !!lineaDev &&
+    !!devSel &&
     cantDev >= 1 &&
     cantDev <= maxDev &&
     !!nuevo &&
     cantNuevo >= 1 &&
-    nuevo.id !== lineaDev.producto_id &&
+    nuevo.id !== devSel.producto_id &&
     !guardando;
 
   const registrar = async () => {
@@ -120,7 +140,7 @@ export default function ModalCambioProducto({
         "fn_registrar_cambio",
         {
           p_venta_original_id: venta.id,
-          p_producto_devuelto_id: lineaDev.producto_id,
+          p_producto_devuelto_id: devSel.producto_id,
           p_cant_dev: cantDev,
           p_producto_nuevo_id: nuevo.id,
           p_cant_nuevo: cantNuevo,
@@ -191,7 +211,7 @@ export default function ModalCambioProducto({
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {/* 1 · Producto que DEVUELVE */}
           <Section titulo="1 · Producto que devuelve el cliente">
-            {lineasProducto.length === 0 ? (
+            {productosDevolubles.length === 0 ? (
               <p
                 className="text-sm"
                 style={{ color: "hsl(var(--destructive))" }}
@@ -201,13 +221,13 @@ export default function ModalCambioProducto({
               </p>
             ) : (
               <div className="space-y-2">
-                {lineasProducto.map((l) => {
-                  const on = l.id === lineaId;
+                {productosDevolubles.map((g) => {
+                  const on = g.producto_id === prodDevId;
                   return (
                     <button
-                      key={l.id}
+                      key={g.producto_id}
                       onClick={() => {
-                        setLineaId(l.id);
+                        setProdDevId(g.producto_id);
                         setCantDev(1);
                       }}
                       className="flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left"
@@ -225,14 +245,14 @@ export default function ModalCambioProducto({
                           className="truncate text-sm font-medium"
                           style={{ color: "hsl(var(--foreground))" }}
                         >
-                          {l.producto?.nombre ?? l.descripcion ?? "—"}
+                          {g.nombre}
                         </p>
                         <p
                           className="font-mono text-[11px]"
                           style={{ color: "hsl(var(--muted-foreground))" }}
                         >
-                          {l.producto?.referencia ?? ""} · ×{l.cantidad} ·{" "}
-                          {formatCOP(l.precio_unitario)}
+                          {g.referencia} · ×{g.cantidad} ·{" "}
+                          {formatCOP(Math.round(g.precio))}
                         </p>
                       </div>
                       {on && (
@@ -244,7 +264,7 @@ export default function ModalCambioProducto({
                     </button>
                   );
                 })}
-                {lineaDev && (
+                {devSel && (
                   <div className="flex items-center gap-2 pt-1">
                     <span
                       className="text-xs"
@@ -376,7 +396,7 @@ export default function ModalCambioProducto({
                 />
               </div>
             )}
-            {nuevo && lineaDev && nuevo.id === lineaDev.producto_id && (
+            {nuevo && devSel && nuevo.id === devSel.producto_id && (
               <p
                 className="mt-1 text-xs"
                 style={{ color: "hsl(var(--destructive))" }}
@@ -387,7 +407,7 @@ export default function ModalCambioProducto({
           </Section>
 
           {/* 3 · Diferencia */}
-          {lineaDev && nuevo && nuevo.id !== lineaDev.producto_id && (
+          {devSel && nuevo && nuevo.id !== devSel.producto_id && (
             <Section titulo="3 · Diferencia y pago">
               <div className="space-y-1.5 text-sm">
                 <Row
