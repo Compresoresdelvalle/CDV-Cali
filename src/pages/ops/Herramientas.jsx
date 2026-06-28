@@ -56,8 +56,9 @@ const TABS = [
 export default function Herramientas() {
   const perfil = useAuthStore((s) => s.perfil);
   const isAdmin = perfil?.rol === "Admin";
-  // Bodeguero puede crear/prestar/devolver; solo Admin consume y regresa a insumo.
-  const puedeCrear = isAdmin || perfil?.rol === "Bodeguero";
+  const esBodega = perfil?.rol === "Bodeguero";
+  // Crear, prestar y devolver: solo Admin o Bodega. Consumir y regresar a insumo: solo Admin.
+  const puedeCrear = isAdmin || esBodega;
 
   const [herramientas, setHerramientas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -404,6 +405,7 @@ export default function Herramientas() {
             disponiblesCount={disponibles.length}
             accionando={accionando}
             esAdmin={isAdmin}
+            esBodega={esBodega}
             onOpen={setDetalleId}
             onDevolver={devolver}
           />
@@ -428,6 +430,7 @@ export default function Herramientas() {
           herramienta={detalle}
           accionando={accionando === detalle.id}
           esAdmin={isAdmin}
+          esBodega={esBodega}
           onClose={() => setDetalleId(null)}
           onDevolver={() => devolver(detalle)}
           onConsumir={() => consumir(detalle)}
@@ -472,6 +475,7 @@ function TabActivos({
   disponiblesCount,
   accionando,
   esAdmin,
+  esBodega,
   onOpen,
   onDevolver,
 }) {
@@ -587,6 +591,7 @@ function TabActivos({
                 h={h}
                 accionando={accionando === h.id}
                 esAdmin={esAdmin}
+                esBodega={esBodega}
                 onOpen={() => onOpen(h.id)}
                 onDevolver={() => onDevolver(h)}
               />
@@ -621,6 +626,7 @@ function TabActivos({
               h={h}
               accionando={accionando === h.id}
               esAdmin={esAdmin}
+              esBodega={esBodega}
               onOpen={() => onOpen(h.id)}
               onDevolver={() => onDevolver(h)}
             />
@@ -631,11 +637,12 @@ function TabActivos({
   );
 }
 
-function LoanRow({ h, accionando, esAdmin, onOpen, onDevolver }) {
+function LoanRow({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
   const tono = prestamoTono(h);
   const dang = tono === "danger";
-  // Devolver una inventariable la regresa al insumo (retiro) → solo Admin.
-  const puedeDevolver = !h.producto_id || esAdmin;
+  // Solo Admin o Bodega pueden devolver. Una inventariable la regresa al insumo
+  // (retiro) → solo Admin.
+  const puedeDevolver = (esAdmin || esBodega) && (!h.producto_id || esAdmin);
   return (
     <tr
       className={dang ? "hrm-row-dang" : undefined}
@@ -756,10 +763,10 @@ function LoanRow({ h, accionando, esAdmin, onOpen, onDevolver }) {
   );
 }
 
-function LoanCard({ h, accionando, esAdmin, onOpen, onDevolver }) {
+function LoanCard({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
   const tono = prestamoTono(h);
   const dang = tono === "danger";
-  const puedeDevolver = !h.producto_id || esAdmin;
+  const puedeDevolver = (esAdmin || esBodega) && (!h.producto_id || esAdmin);
   return (
     <div
       className="rounded-xl border px-4 py-4"

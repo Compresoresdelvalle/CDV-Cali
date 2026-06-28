@@ -39,6 +39,7 @@ export default function HerramientaDetalle({
   herramienta,
   accionando,
   esAdmin,
+  esBodega,
   onClose,
   onDevolver,
   onConsumir,
@@ -134,24 +135,26 @@ export default function HerramientaDetalle({
 
         {/* ── Fila de acciones ─────────────────────────────────────── */}
         <div className="mb-5 flex flex-wrap gap-2">
-          {/* Devolver una inventariable la regresa al insumo (retiro) → solo Admin.
-              Una manual vuelve a 'disponible' y puede hacerlo Bodeguero/misma sede. */}
-          {esPrestada && (!esInventariable || esAdmin) && (
-            <button
-              onClick={onDevolver}
-              disabled={accionando}
-              className="btn btn-pri inline-flex items-center gap-1.5 disabled:opacity-50"
-              style={{ height: 48 }}
-              title={
-                esInventariable
-                  ? "Al devolverla, su unidad regresa al stock de insumo"
-                  : undefined
-              }
-            >
-              <Check className="h-3.5 w-3.5" strokeWidth={2} />
-              {accionando ? "Procesando…" : "Marcar devuelta"}
-            </button>
-          )}
+          {/* Devolver: solo Admin o Bodega. Una inventariable la regresa al insumo
+              (retiro) → solo Admin; una manual vuelve a 'disponible'. */}
+          {esPrestada &&
+            (esAdmin || esBodega) &&
+            (!esInventariable || esAdmin) && (
+              <button
+                onClick={onDevolver}
+                disabled={accionando}
+                className="btn btn-pri inline-flex items-center gap-1.5 disabled:opacity-50"
+                style={{ height: 48 }}
+                title={
+                  esInventariable
+                    ? "Al devolverla, su unidad regresa al stock de insumo"
+                    : undefined
+                }
+              >
+                <Check className="h-3.5 w-3.5" strokeWidth={2} />
+                {accionando ? "Procesando…" : "Marcar devuelta"}
+              </button>
+            )}
           {/* B11: consumido — no regresa al inventario; la herramienta desaparece. Solo Admin. */}
           {esPrestada && onConsumir && esAdmin && (
             <button
