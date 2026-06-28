@@ -34,6 +34,8 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
   const [obs, setObs] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState("");
+  const [anularId, setAnularId] = useState(null); // id del cobro/pago a anular
+  const [motivoAnular, setMotivoAnular] = useState("");
 
   const cargar = useCallback(async () => {
     const { data } = await supabase
@@ -108,17 +110,20 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
     }
   };
 
-  const eliminar = async (id) => {
+  const eliminar = async (id, motivo) => {
     setErr("");
     try {
       const { error } = await supabase.rpc("fn_eliminar_pago_cuenta", {
         p_id: id,
+        p_motivo: motivo?.trim() || null,
       });
       if (error) throw new Error(error.message);
+      setAnularId(null);
+      setMotivoAnular("");
       await cargar();
       onChanged?.();
     } catch (e) {
-      setErr(safeError(e, "No se pudo eliminar el movimiento"));
+      setErr(safeError(e, "No se pudo anular el movimiento"));
     }
   };
 
@@ -233,45 +238,107 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
               {pagos.map((p) => (
                 <li
                   key={p.id}
-                  className="flex items-center gap-2 rounded-lg border px-3 py-2"
+                  className="rounded-lg border px-3 py-2"
                   style={{ borderColor: "hsl(var(--border))" }}
                 >
-                  <span
-                    className="font-mono text-[11px]"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {formatDate(p.fecha)}
-                  </span>
-                  <span
-                    className="font-mono text-[13px] font-semibold tabular-nums"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {formatCOP(p.monto)}
-                  </span>
-                  <span
-                    className="rounded px-1.5 py-0.5 text-[10px] font-medium"
-                    style={{
-                      backgroundColor: "hsl(var(--muted) / 0.5)",
-                      color: "hsl(var(--muted-foreground))",
-                    }}
-                  >
-                    {p.metodo_pago}
-                  </span>
-                  <span
-                    className="min-w-0 flex-1 truncate text-[11px] italic"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {p.cuenta_bancaria || p.observaciones || ""}
-                  </span>
-                  <button
-                    onClick={() => eliminar(p.id)}
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md cursor-pointer"
-                    style={{ color: "hsl(var(--destructive))" }}
-                    aria-label="Eliminar movimiento"
-                    title="Eliminar"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="font-mono text-[11px]"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      {formatDate(p.fecha)}
+                    </span>
+                    <span
+                      className="font-mono text-[13px] font-semibold tabular-nums"
+                      style={{ color: "hsl(var(--foreground))" }}
+                    >
+                      {formatCOP(p.monto)}
+                    </span>
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                      style={{
+                        backgroundColor: "hsl(var(--muted) / 0.5)",
+                        color: "hsl(var(--muted-foreground))",
+                      }}
+                    >
+                      {p.metodo_pago}
+                    </span>
+                    <span
+                      className="min-w-0 flex-1 truncate text-[11px] italic"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      {p.cuenta_bancaria || p.observaciones || ""}
+                    </span>
+                    {anularId !== p.id && (
+                      <button
+                        onClick={() => {
+                          setAnularId(p.id);
+                          setMotivoAnular("");
+                          setErr("");
+                        }}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md cursor-pointer"
+                        style={{ color: "hsl(var(--destructive))" }}
+                        aria-label="Anular movimiento"
+                        title="Anular"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      </button>
+                    )}
+                  </div>
+
+                  {anularId === p.id && (
+                    <div
+                      className="mt-2 flex flex-col gap-2 rounded-md border p-2"
+                      style={{
+                        borderColor: "hsl(var(--destructive) / 0.4)",
+                        backgroundColor: "hsl(var(--destructive) / 0.06)",
+                      }}
+                    >
+                      <p
+                        className="text-[12px] font-medium"
+                        style={{ color: "hsl(var(--destructive))" }}
+                      >
+                        ¿Anular este {esCobro ? "cobro" : "pago"} de{" "}
+                        {formatCOP(p.monto)}? Queda registrado en la auditoría.
+                      </p>
+                      <input
+                        type="text"
+                        value={motivoAnular}
+                        onChange={(e) => setMotivoAnular(e.target.value)}
+                        placeholder="Motivo (opcional)"
+                        className="h-10 w-full rounded-md border bg-transparent px-2 text-[13px] outline-none"
+                        style={{
+                          borderColor: "hsl(var(--border))",
+                          color: "hsl(var(--foreground))",
+                        }}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setAnularId(null);
+                            setMotivoAnular("");
+                          }}
+                          className="h-10 flex-1 rounded-md border text-[13px] font-medium cursor-pointer"
+                          style={{
+                            borderColor: "hsl(var(--border))",
+                            color: "hsl(var(--muted-foreground))",
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => eliminar(p.id, motivoAnular)}
+                          className="h-10 flex-1 rounded-md text-[13px] font-semibold cursor-pointer"
+                          style={{
+                            backgroundColor: "hsl(var(--destructive))",
+                            color: "hsl(var(--primary-foreground))",
+                          }}
+                        >
+                          Anular
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
