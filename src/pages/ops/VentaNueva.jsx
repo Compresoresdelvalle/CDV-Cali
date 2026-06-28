@@ -25,7 +25,13 @@ import { SEDE_LABELS, sedeLabel } from "../../lib/traspasos-ui";
 import { SEDES } from "../../lib/constants";
 import { upsertCliente } from "../../lib/clientes";
 
-const METODOS_PAGO = ["Efectivo", "Transferencia", "Tarjeta", "Crédito"];
+const METODOS_PAGO = [
+  "Efectivo",
+  "Transferencia",
+  "Tarjeta",
+  "Crédito",
+  "Mixto",
+];
 const IVA_DEFAULT = 19;
 const IVA_PRESETS = [0, 19];
 const SEDE_IDS = Object.values(SEDES); // BODEGA, CV, L3, CHV
@@ -48,6 +54,9 @@ export default function VentaNueva() {
   const [clienteDireccion, setClienteDireccion] = useState("");
   const [metodoPago, setMetodoPago] = useState("Efectivo");
   const [cuentaBancaria, setCuentaBancaria] = useState(""); // #13
+  // Pago mixto (#2): montos por forma de pago sobre una sola factura.
+  const [pagoEfectivo, setPagoEfectivo] = useState("");
+  const [pagoTransfer, setPagoTransfer] = useState("");
   // B1 (ít 6): cuentas bancarias reales para elegir la cuenta destino del pago.
   const [cuentasBanco, setCuentasBanco] = useState([]);
   useEffect(() => {
@@ -342,6 +351,14 @@ export default function VentaNueva() {
   const iva = baseIva * (ivaPct / 100);
   const total = baseIva * (1 + ivaPct / 100) + Math.max(0, domicilio);
 
+  // Pago mixto: la suma de las formas debe igualar el total (COP, tolerancia 1).
+  const totalRedondeado = Math.round(total);
+  const sumaMixto =
+    Math.round(Number(pagoEfectivo) || 0) +
+    Math.round(Number(pagoTransfer) || 0);
+  const mixtoCuadra =
+    metodoPago !== "Mixto" || Math.abs(sumaMixto - totalRedondeado) <= 1;
+
   // Paso activo del stepper, derivado del estado real de la venta en curso.
   const pasoActivo = useMemo(() => {
     if (confirmando) return 3;
@@ -359,6 +376,19 @@ export default function VentaNueva() {
     ) {
       setError("Selecciona la cuenta bancaria donde entró el pago.");
       return;
+    }
+    // Pago mixto: la suma de efectivo + transferencia debe igualar el total.
+    if (metodoPago === "Mixto") {
+      if (!mixtoCuadra) {
+        setError(
+          `La suma de los pagos (${formatCOP(sumaMixto)}) no coincide con el total (${formatCOP(totalRedondeado)}).`,
+        );
+        return;
+      }
+      if (Math.round(Number(pagoTransfer) || 0) > 0 && !cuentaBancaria) {
+        setError("Indica la cuenta bancaria de la parte por transferencia.");
+        return;
+      }
     }
     // B3: NO se permite vender sin stock. Bloquear si algún PRODUCTO excede lo
     // disponible (los servicios no tienen stock). Antes solo se avisaba después.
@@ -386,7 +416,30 @@ export default function VentaNueva() {
         p_descuento_valor: descuento,
         p_domicilio: Math.max(0, domicilio),
         p_iva_pct: ivaPct,
-        p_cuenta_bancaria: cuentaBancaria || null,
+        p_cuenta_bancaria:
+          metodoPago === "Mixto" ? null : cuentaBancaria || null,
+        p_pagos:
+          metodoPago === "Mixto"
+            ? [
+                ...(Math.round(Number(pagoEfectivo) || 0) > 0
+                  ? [
+                      {
+                        metodo_pago: "Efectivo",
+                        monto: Math.round(Number(pagoEfectivo)),
+                      },
+                    ]
+                  : []),
+                ...(Math.round(Number(pagoTransfer) || 0) > 0
+                  ? [
+                      {
+                        metodo_pago: "Transferencia",
+                        monto: Math.round(Number(pagoTransfer)),
+                        cuenta_bancaria: cuentaBancaria || null,
+                      },
+                    ]
+                  : []),
+              ]
+            : null,
         p_observaciones: observaciones || null,
         p_items: carrito.map((i) =>
           i.tipo === "servicio"
@@ -969,6 +1022,105 @@ export default function VentaNueva() {
             </div>
           )}
 
+          {/* Pago mixto (#2): efectivo + transferencia sobre una sola factura. */}
+          {metodoPago === "Mixto" && (
+            <div
+              className="space-y-2.5 rounded-[10px] border p-3"
+              style={{
+                borderColor: "var(--n-200)",
+                backgroundColor: "var(--n-50)",
+              }}
+            >
+              <div className="flex flex-wrap items-center gap-2.5">
+                <label className="text-sm" style={{ color: "var(--n-500)" }}>
+                  Efectivo $
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={pagoEfectivo}
+                  onChange={(e) => setPagoEfectivo(e.target.value)}
+                  className="h-10 w-32 rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+                  style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
+                />
+                <label className="text-sm" style={{ color: "var(--n-500)" }}>
+                  Transferencia $
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={pagoTransfer}
+                  onChange={(e) => setPagoTransfer(e.target.value)}
+                  className="h-10 w-32 rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+                  style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPagoTransfer(
+                      String(
+                        Math.max(
+                          0,
+                          totalRedondeado -
+                            Math.round(Number(pagoEfectivo) || 0),
+                        ),
+                      ),
+                    )
+                  }
+                  className="h-9 rounded-[10px] border px-3 text-[12px] font-medium"
+                  style={{ borderColor: "var(--n-200)", color: "var(--n-700)" }}
+                >
+                  Resto a transferencia
+                </button>
+              </div>
+              {Math.round(Number(pagoTransfer) || 0) > 0 && (
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <label className="text-sm" style={{ color: "var(--n-500)" }}>
+                    Cuenta de la transferencia
+                    <span style={{ color: "var(--dang-700)" }}> *</span>
+                  </label>
+                  <select
+                    value={cuentaBancaria}
+                    onChange={(e) => setCuentaBancaria(e.target.value)}
+                    className="h-10 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+                    style={{
+                      borderColor: "var(--n-200)",
+                      color: "var(--n-950)",
+                    }}
+                  >
+                    <option value="">Sin especificar</option>
+                    {cuentasBanco.map((c) => {
+                      const ref = `${c.banco} ${c.tipo} ${c.numero}${c.titular ? " · " + c.titular : ""}`;
+                      return (
+                        <option key={c.id} value={ref}>
+                          {ref}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+              <div
+                className="flex items-center justify-between text-[12.5px] font-medium"
+                style={{
+                  color: mixtoCuadra ? "var(--succ-700)" : "var(--dang-700)",
+                }}
+              >
+                <span>
+                  Suma: {formatCOP(sumaMixto)} / Total:{" "}
+                  {formatCOP(totalRedondeado)}
+                </span>
+                <span>
+                  {mixtoCuadra
+                    ? "✓ Cuadra"
+                    : `Falta ${formatCOP(Math.abs(totalRedondeado - sumaMixto))}`}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm" style={{ color: "var(--n-500)" }}>
               Descuento $
@@ -1091,7 +1243,7 @@ export default function VentaNueva() {
           </div>
           <button
             onClick={confirmarVenta}
-            disabled={carrito.length === 0 || confirmando}
+            disabled={carrito.length === 0 || confirmando || !mixtoCuadra}
             className="btn btn-pri mt-1 w-full justify-center disabled:opacity-40"
             style={{ height: 48 }}
           >
