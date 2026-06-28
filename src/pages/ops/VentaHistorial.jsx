@@ -331,8 +331,8 @@ export default function VentaHistorial() {
               </div>
             </div>
 
-            {/* Cargar más */}
-            {hasMore && !busqueda.trim() && (
+            {/* Cargar más (también con filtro de fecha server-side) */}
+            {hasMore && (!busqueda.trim() || rangoFecha) && (
               <button
                 onClick={() => cargarVentas(false)}
                 disabled={loading}
