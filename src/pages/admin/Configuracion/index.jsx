@@ -1,11 +1,18 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { CreditCard, ClipboardList, Sliders, Wrench } from "lucide-react";
+import {
+  CreditCard,
+  ClipboardList,
+  Sliders,
+  Wrench,
+  Boxes,
+} from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import CuentasBancarias from "./CuentasBancarias";
 import ChecklistOT from "./ChecklistOT";
 import Parametros from "./Parametros";
 import Servicios from "./Servicios";
+import EquiposEnsamblables from "./EquiposEnsamblables";
 
 const TABS = [
   {
@@ -25,6 +32,12 @@ const TABS = [
     label: "Checklist OT",
     icon: ClipboardList,
     desc: "Catálogo oficial de recepción de equipos en Órdenes de Trabajo",
+  },
+  {
+    id: "ensamblables",
+    label: "Equipos ensamblables",
+    icon: Boxes,
+    desc: "Equipos que se pueden ensamblar (admite nombre provisional, editable)",
   },
   {
     id: "parametros",
@@ -58,6 +71,7 @@ export default function Configuracion() {
     cuentas: null,
     servicios: null,
     checklist: null,
+    ensamblables: null,
   });
   useEffect(() => {
     let activo = true;
@@ -69,13 +83,18 @@ export default function Configuracion() {
       supabase
         .from("checklist_componentes")
         .select("id", { count: "exact", head: true }),
+      supabase
+        .from("productos")
+        .select("id", { count: "exact", head: true })
+        .eq("ensamblable", true),
     ])
-      .then(([c, sv, k]) => {
+      .then(([c, sv, k, en]) => {
         if (!activo) return;
         setCounts({
           cuentas: c.error ? null : (c.count ?? 0),
           servicios: sv.error ? null : (sv.count ?? 0),
           checklist: k.error ? null : (k.count ?? 0),
+          ensamblables: en.error ? null : (en.count ?? 0),
         });
       })
       .catch(() => {
@@ -93,6 +112,8 @@ export default function Configuracion() {
       return String(counts.servicios);
     if (id === "checklist" && counts.checklist != null)
       return `${counts.checklist} ítems`;
+    if (id === "ensamblables" && counts.ensamblables != null)
+      return String(counts.ensamblables);
     return null;
   };
 
@@ -169,6 +190,7 @@ export default function Configuracion() {
         {tab === "cuentas" && <CuentasBancarias />}
         {tab === "servicios" && <Servicios />}
         {tab === "checklist" && <ChecklistOT />}
+        {tab === "ensamblables" && <EquiposEnsamblables />}
         {tab === "parametros" && <Parametros />}
       </div>
     </div>
