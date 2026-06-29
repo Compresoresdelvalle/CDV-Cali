@@ -107,7 +107,7 @@ export const ROLE_MODULES = {
     "Productos",
     "Clientes",
   ],
-  Tecnico: ["Órdenes", "Ensambles", "Herramientas", "Productos"],
+  Tecnico: ["Órdenes", "Ensambles", "Herramientas"],
 };
 
 // Iconos por módulo

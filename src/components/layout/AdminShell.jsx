@@ -1,14 +1,61 @@
-import { Outlet, Link, NavLink, useLocation } from "react-router-dom";
-import { ArrowLeftCircle, Bell, LogOut } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import {
+  Outlet,
+  Link,
+  NavLink,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import {
+  ArrowLeftCircle,
+  Bell,
+  LogOut,
+  Menu,
+  X,
+  LayoutDashboard,
+  ClipboardList,
+  ClipboardCheck,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import ThemeToggle from "../ui/ThemeToggle";
 import NotificacionesBell from "../admin/NotificacionesBell";
 import Logo from "../ui/Logo";
-import {
-  SECCIONES_ADMIN,
-  MODULOS_ADMIN,
-  getInitials,
-} from "../../lib/admin-shell-ui";
+import { supabase } from "../../lib/supabase";
+import { SECCIONES_ADMIN, getInitials } from "../../lib/admin-shell-ui";
+
+/* ── Hook: conteo de alertas de stock (admin = todas las sedes) ─────────── */
+function useAlertasCountAdmin(perfil) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!perfil?.id) return;
+
+    const fetchCount = async () => {
+      const { count: c } = await supabase
+        .from("inventario")
+        .select("id", { count: "exact", head: true })
+        .in("estado_stock", ["Bajo", "Agotado"]);
+      setCount(c ?? 0);
+    };
+
+    fetchCount();
+
+    const channel = supabase
+      .channel("alertas-stock-admin")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inventario" },
+        fetchCount,
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [perfil?.id]);
+
+  return count;
+}
 
 /* ── Sidebar admin (desktop ≥ lg) ─────────────────────────────────────── */
 function SidebarAdminItem({ href, label, icon }) {
@@ -127,77 +174,326 @@ function HeaderAdmin({ perfil, initials, onLogout }) {
   );
 }
 
-/* ── Header móvil/tablet (< lg) ───────────────────────────────────────── */
-function MobileHeaderAdmin({ perfil, initials, onLogout }) {
+/* ── Header móvil/tablet (< lg) ───────────────────────────────────────────
+ * Salida rápida a Operaciones, alertas con contador y avatar que abre el menú
+ * admin completo (drawer). Respeta el notch con env(safe-area-inset-top).
+ * ──────────────────────────────────────────────────────────────────────── */
+function MobileHeaderAdmin({ initials, alertCount, onBell, onMenu }) {
   return (
-    <header className="chv-topbar chv-topbar-admin sticky top-0 z-30 flex lg:hidden h-14 items-center justify-between px-4">
-      <div className="flex items-center gap-2.5">
+    <header
+      className="chv-topbar chv-topbar-admin sticky top-0 z-30 flex lg:hidden items-center justify-between px-4"
+      style={{
+        paddingTop: "env(safe-area-inset-top)",
+        height: "calc(3.5rem + env(safe-area-inset-top))",
+      }}
+    >
+      <div className="flex min-w-0 items-center gap-2.5">
         <Logo className="h-7 w-7" />
         <span className="font-mono text-[12px] font-semibold uppercase tracking-[0.1em] text-white">
           Panel Admin
         </span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <ThemeToggle />
         <Link
           to="/ops"
-          className="focus-ring grid h-9 w-9 place-items-center rounded-md text-white/85 hover:bg-white/10"
+          className="focus-ring grid h-10 w-10 place-items-center rounded-md text-white/90 hover:bg-white/10"
           aria-label="Volver a Operaciones"
           title="Volver a Operaciones"
         >
-          <ArrowLeftCircle className="h-4 w-4" strokeWidth={1.75} />
+          <ArrowLeftCircle className="h-[18px] w-[18px]" strokeWidth={1.75} />
         </Link>
-        <span className="hidden sm:inline text-[12px] text-white/85">
-          {perfil?.nombre?.split(" ")[0]}
-        </span>
-        <div className="grid h-7 w-7 place-items-center rounded-full bg-white/15 ring-1 ring-white/25 font-mono text-[10px] font-semibold text-white">
-          {initials}
-        </div>
         <button
-          onClick={onLogout}
-          className="focus-ring grid h-9 w-9 place-items-center rounded-md text-white/85 hover:bg-white/10"
-          aria-label="Cerrar sesión"
-          title="Cerrar sesión"
+          onClick={onBell}
+          className="focus-ring relative grid h-10 w-10 place-items-center rounded-md text-white/90 hover:bg-white/10"
+          aria-label={
+            alertCount > 0
+              ? `${alertCount} alertas de stock`
+              : "Sin alertas de stock"
+          }
         >
-          <LogOut className="h-4 w-4" strokeWidth={1.75} />
+          <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          {alertCount > 0 && (
+            <span
+              className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold leading-none text-white"
+              style={{ backgroundColor: "var(--dang-500)" }}
+            >
+              {alertCount > 99 ? "99+" : alertCount}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={onMenu}
+          className="focus-ring grid h-10 w-10 place-items-center rounded-full bg-white/15 font-mono text-[11px] font-semibold text-white ring-1 ring-white/25"
+          aria-label="Abrir menú administrativo"
+        >
+          {initials}
         </button>
       </div>
     </header>
   );
 }
 
-/* ── Bottom nav admin (móvil/tablet < lg) ─────────────────────────────── */
-function BottomNavAdmin() {
-  const items = MODULOS_ADMIN.slice(0, 5);
+/* ── Drawer admin "Más" (móvil/tablet < lg) ───────────────────────────────
+ * Acceso a los 12 módulos del panel admin agrupados por sección + salida
+ * destacada a Operaciones. Cierra con Escape y restaura el foco.
+ * ──────────────────────────────────────────────────────────────────────── */
+function AdminSheetLink({ to, end, icon, label, onClose }) {
+  const Icon = icon;
   return (
-    <nav className="chv-bottomnav lg:hidden sticky bottom-0 z-30 flex">
-      {items.map((it) => {
+    <NavLink
+      to={to}
+      end={end}
+      onClick={onClose}
+      className="flex min-h-[56px] items-center gap-3 rounded-xl border px-3 text-[13.5px] font-medium transition-colors"
+      style={({ isActive }) => ({
+        borderColor: isActive ? "var(--info-500)" : "var(--n-150)",
+        backgroundColor: isActive ? "var(--info-50)" : "var(--n-0)",
+        color: isActive ? "var(--info-700)" : "var(--n-800)",
+      })}
+    >
+      <span
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px]"
+        style={{
+          backgroundColor: "var(--info-50)",
+          color: "var(--info-700)",
+        }}
+      >
+        <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+      </span>
+      <span className="truncate">{label}</span>
+    </NavLink>
+  );
+}
+
+function MoreSheetAdmin({ open, onClose, perfil, initials, onLogout }) {
+  const closeRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const prevFocus = document.activeElement;
+    closeRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      if (prevFocus instanceof HTMLElement) prevFocus.focus();
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="lg:hidden fixed inset-0 z-50"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Menú administrativo"
+    >
+      <div
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40"
+        aria-hidden="true"
+      />
+      <div
+        className="absolute inset-x-0 bottom-0 flex max-h-[90vh] flex-col overflow-hidden rounded-t-3xl"
+        style={{
+          backgroundColor: "var(--n-0)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
+        <div className="flex justify-center pt-2.5">
+          <span
+            className="h-1 w-10 rounded-full"
+            style={{ backgroundColor: "var(--n-150)" }}
+          />
+        </div>
+
+        {/* Header del drawer */}
+        <div
+          className="flex items-center justify-between border-b px-4 py-3"
+          style={{ borderColor: "var(--n-150)" }}
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full font-mono text-[12px] font-semibold text-white"
+              style={{ backgroundColor: "var(--info-600)" }}
+            >
+              {initials}
+            </div>
+            <div className="min-w-0 leading-tight">
+              <div
+                className="truncate text-[14px] font-semibold"
+                style={{ color: "var(--n-950)" }}
+              >
+                {perfil?.nombre}
+              </div>
+              <div
+                className="font-mono text-[10.5px] uppercase tracking-[0.1em]"
+                style={{ color: "var(--info-700)" }}
+              >
+                Modo administrador
+              </div>
+            </div>
+          </div>
+          <button
+            ref={closeRef}
+            onClick={onClose}
+            aria-label="Cerrar menú"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-md"
+            style={{ color: "var(--n-500)" }}
+          >
+            <X className="h-5 w-5" strokeWidth={1.75} />
+          </button>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-3 py-3">
+          {/* Salida destacada a Operaciones */}
+          <NavLink
+            to="/ops"
+            onClick={onClose}
+            className="flex min-h-[52px] items-center gap-3 rounded-xl border px-3 text-[13.5px] font-semibold"
+            style={{
+              borderColor: "var(--info-500)",
+              backgroundColor: "var(--info-50)",
+              color: "var(--info-700)",
+            }}
+          >
+            <span
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px]"
+              style={{
+                backgroundColor: "var(--n-0)",
+                color: "var(--info-700)",
+              }}
+            >
+              <ArrowLeftCircle
+                className="h-[18px] w-[18px]"
+                strokeWidth={1.75}
+              />
+            </span>
+            Volver a Operaciones
+          </NavLink>
+
+          {SECCIONES_ADMIN.map((seccion) => (
+            <div key={seccion.id} className="mt-3">
+              <div
+                className="px-1 pb-1.5 font-mono text-[10px] uppercase tracking-[0.1em]"
+                style={{ color: "var(--n-300)" }}
+              >
+                {seccion.label}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {seccion.modulos.map((m) => (
+                  <AdminSheetLink
+                    key={m.id}
+                    to={m.href}
+                    end={m.href === "/admin"}
+                    icon={m.icon}
+                    label={m.label}
+                    onClose={onClose}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <button
+            onClick={onLogout}
+            className="mt-4 flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-xl border text-[14px] font-semibold"
+            style={{
+              borderColor: "var(--n-150)",
+              color: "var(--dang-600)",
+            }}
+          >
+            <LogOut className="h-[18px] w-[18px]" strokeWidth={1.75} />
+            Cerrar sesión
+          </button>
+        </nav>
+      </div>
+    </div>
+  );
+}
+
+/* ── Bottom nav admin (móvil/tablet < lg) ─────────────────────────────────
+ * Barra CONTEXTUAL de administración: Resumen · Alertas · Conteo · Auditoría
+ * + "Más" (drawer con los 12 módulos). No muestra accesos de Operaciones.
+ * ──────────────────────────────────────────────────────────────────────── */
+const ADMIN_TABS = [
+  {
+    id: "resumen",
+    label: "Resumen",
+    href: "/admin",
+    icon: LayoutDashboard,
+    end: true,
+  },
+  {
+    id: "alertas",
+    label: "Alertas",
+    href: "/admin/alertas",
+    icon: Bell,
+    badge: true,
+  },
+  { id: "conteo", label: "Conteo", href: "/admin/conteo", icon: ClipboardList },
+  {
+    id: "auditoria",
+    label: "Auditoría",
+    href: "/admin/auditoria",
+    icon: ClipboardCheck,
+  },
+];
+
+function BottomNavAdmin({ alertCount, onMore }) {
+  return (
+    <nav
+      className="chv-bottomnav lg:hidden sticky bottom-0 z-30 grid grid-cols-5"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      {ADMIN_TABS.map((it) => {
         const { icon: Icon } = it;
         return (
           <NavLink
             key={it.id}
             to={it.href}
-            end={it.href === "/admin"}
-            className="flex flex-1 min-w-[60px] flex-col items-center justify-center gap-0.5 py-2 text-[10px] min-h-[56px]"
+            end={it.end}
+            className="relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 py-2 text-[10px]"
           >
             {({ isActive }) => (
               <>
                 <Icon
-                  className={`h-[18px] w-[18px] ${isActive ? "text-white" : "text-white/70"}`}
+                  className={`h-[18px] w-[18px] ${isActive ? "text-white" : "text-white/85"}`}
                   strokeWidth={isActive ? 2 : 1.75}
                 />
                 <span
                   className={`leading-tight text-center ${
-                    isActive ? "font-medium text-white" : "text-white/70"
+                    isActive ? "font-medium text-white" : "text-white/85"
                   }`}
                 >
-                  {it.label.replace("Análisis ", "")}
+                  {it.label}
                 </span>
+                {it.badge && alertCount > 0 && (
+                  <span
+                    className="absolute right-[18%] top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold leading-none text-white"
+                    style={{ backgroundColor: "var(--dang-500)" }}
+                  >
+                    {alertCount > 99 ? "99+" : alertCount}
+                  </span>
+                )}
               </>
             )}
           </NavLink>
         );
       })}
+
+      <button
+        onClick={onMore}
+        className="flex min-h-[56px] flex-col items-center justify-center gap-0.5 py-2 text-[10px] text-white/85"
+        aria-label="Más opciones administrativas"
+      >
+        <Menu className="h-[18px] w-[18px]" strokeWidth={1.75} />
+        <span>Más</span>
+      </button>
     </nav>
   );
 }
@@ -205,7 +501,25 @@ function BottomNavAdmin() {
 /* ── AdminShell ───────────────────────────────────────────────────────── */
 export default function AdminShell() {
   const { perfil, logout } = useAuthStore();
+  const location = useLocation();
+  const navigate = useNavigate();
   const initials = getInitials(perfil?.nombre || "");
+  const alertCount = useAlertasCountAdmin(perfil);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMoreOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [moreOpen]);
 
   const handleLogout = async () => {
     await logout();
@@ -231,9 +545,10 @@ export default function AdminShell() {
 
         {/* Header móvil/tablet */}
         <MobileHeaderAdmin
-          perfil={perfil}
           initials={initials}
-          onLogout={handleLogout}
+          alertCount={alertCount}
+          onBell={() => navigate("/admin/alertas")}
+          onMenu={() => setMoreOpen(true)}
         />
 
         {/* Página */}
@@ -242,8 +557,20 @@ export default function AdminShell() {
         </main>
 
         {/* Bottom nav móvil/tablet */}
-        <BottomNavAdmin />
+        <BottomNavAdmin
+          alertCount={alertCount}
+          onMore={() => setMoreOpen(true)}
+        />
       </div>
+
+      {/* Drawer admin "Más" */}
+      <MoreSheetAdmin
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        perfil={perfil}
+        initials={initials}
+        onLogout={handleLogout}
+      />
     </div>
   );
 }

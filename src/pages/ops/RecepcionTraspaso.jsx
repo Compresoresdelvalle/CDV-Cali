@@ -467,9 +467,11 @@ export default function RecepcionTraspaso() {
         </div>
       )}
 
-      {/* Barra de acción fija — offset sobre el bottom-nav móvil (FALLA 6) */}
+      {/* Barra de acción fija — offset sobre el bottom-nav móvil (FALLA 6).
+          Suma la safe-area inferior para no solaparse con el bottom-nav en
+          móviles con notch/indicador de gestos. */}
       <div
-        className="fixed bottom-20 left-0 right-0 z-40 border-t p-4 lg:bottom-0"
+        className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t p-4 lg:bottom-0"
         style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-150)" }}
       >
         <div className="mx-auto max-w-xl">

@@ -30,6 +30,16 @@ Se realizó una auditoría a fondo del manejo del dinero en el sistema (cierre d
 | 15  | Técnicos podían ejecutar y facturar órdenes (debe ser solo Ventas)    | Permisos          | Medio   |
 | 16  | Perfil de Bodega/caja sin acceso de solo-lectura al cierre            | Permisos          | Medio   |
 | 17  | Nuevo: pago mixto (efectivo + transferencia) en una sola factura      | Función nueva     | —       |
+| 18  | Cambio sobre factura con descuento global acreditaba de más           | Afinado           | Bajo    |
+| 19  | "Ingreso por producto" del cierre no descontaba el descuento          | Afinado           | Bajo    |
+| 20  | El tope de cantidad en el cambio no restaba lo ya devuelto            | Afinado           | Bajo    |
+| 21  | Acceso completo a los módulos desde el celular (menú "Más")           | Mejora            | —       |
+| 22  | Panel de administración navegable en el celular                       | Mejora            | —       |
+| 23  | Botones más grandes para uso con guantes (ventas y cambios)           | Mejora            | Medio   |
+| 24  | Cierre: previsualización habilitada para el perfil de Bodega          | Permisos          | Medio   |
+| 25  | Ajustes finos de menú y permisos por rol (Técnico)                    | Permisos          | Bajo    |
+
+Los puntos **18 a 20** salieron de una **revisión final de calidad** posterior a la implementación (detalles de borde, sin impacto en la operación normal). Se detallan en la **PARTE H**. Los puntos **21 a 25** son el resultado de una **revisión a fondo de la experiencia en celular** (navegación, uso con guantes y permisos por rol); se detallan en la **PARTE I**.
 
 También se revisaron dos puntos reportados que **resultaron no ser errores** del sistema (cantidades decimales y precios decimales). Se explican en la sección **"Aclaraciones"** al final.
 
@@ -327,6 +337,81 @@ Así el desglose por método y por cuenta, y el arqueo de efectivo, reflejan exa
 
 ---
 
+## PARTE H — Revisión final de calidad (afinado de los arreglos)
+
+Después de implementar todo lo anterior se hizo una **segunda revisión** de la lógica de dinero. No se encontraron errores que afectaran la operación normal, pero se afinaron **tres detalles de borde** para dejarlos correctos:
+
+### 18. Cambio de producto sobre una factura con descuento
+
+Si la **factura original tenía un descuento global**, el crédito por el producto devuelto se calculaba sobre el precio de lista (sin aplicar ese descuento), acreditando **de más**. Ahora el crédito refleja **lo que el cliente realmente pagó** (se aplica la misma proporción de descuento de la factura). Las facturas **sin** descuento no cambian en nada.
+
+### 19. "Ingreso por producto" del cierre, neto de descuento
+
+En el desglose **por producto** del cierre, el ingreso de cada producto ahora **descuenta proporcionalmente** el descuento de su venta. Antes mostraba el valor de lista, lo que inflaba el reporte de cualquier venta con descuento (incluido el producto nuevo de un cambio). **Es solo el desglose analítico:** los totales de caja (ingresos, egresos, margen y arqueo) **no cambian**.
+
+### 20. Tope de cantidad en la pantalla de cambio
+
+La pantalla de cambio ahora **resta lo ya devuelto** de esa misma factura, de modo que no permite pedir más unidades de las que quedan. (El sistema ya lo impedía por seguridad en el servidor; ahora también se refleja en la pantalla, con el mensaje "quedan N".)
+
+> Los puntos **#18 y #19** son de **base de datos** (aplicados y activos en producción). El **#20** es de **pantalla** (se activa con la próxima publicación).
+
+---
+
+## PARTE I — Experiencia en celular (revisión a fondo)
+
+Se hizo una **auditoría completa del uso desde el celular** (navegación, ergonomía con guantes y permisos por rol). El hallazgo de fondo: en el celular la barra inferior de 5 botones era la **única** vía de navegación, por lo que cada rol solo alcanzaba el 30–50% de sus módulos. Se rediseñó la navegación móvil y se corrigieron varios detalles.
+
+### 21. Acceso completo a los módulos desde el celular
+
+**¿Qué pasaba antes?**
+En el celular solo se veían 5 botones abajo; el resto de los módulos del rol **quedaban inalcanzables** (no había forma de abrirlos).
+
+**¿Cómo funciona ahora?**
+Se agregó un **menú "Más"** (se abre desde el botón inferior derecho o tocando el avatar arriba) que muestra **todos los módulos del rol**, agrupados por sección, más la **búsqueda global**. La barra inferior conserva los accesos más usados con un botón central destacado (Vender / Orden / Inventario según el rol). **Cobertura: del 30–50% al 100%.**
+
+**Beneficio:** desde el celular se llega a todo lo que el rol puede hacer, no solo a 5 atajos.
+
+### 22. Panel de administración navegable en el celular
+
+**¿Qué pasaba antes?**
+En el celular el Panel Admin solo mostraba 5 de sus 12 herramientas; las otras 7 (Reorden, Cierres, Notas crédito, Cuentas, Configuración, Usuarios…) no se podían abrir.
+
+**¿Cómo funciona ahora?**
+El Panel Admin tiene su propia barra inferior (**Resumen · Alertas · Conteo · Auditoría · Más**) y un menú "Más" con **las 12 herramientas** y una salida clara a **Operaciones**. Todo alcanzable desde el celular.
+
+**Beneficio:** la administración se puede operar completa desde el teléfono.
+
+### 23. Botones más grandes para uso con guantes
+
+**¿Qué pasaba antes?**
+En la pantalla de venta (la más usada) los botones de **cantidad y precio** eran muy pequeños (~32 px), difíciles de tocar con guantes; el modal de cambio igual. Además, en una pantalla, la barra de acción fija podía **quedar tapada por el menú inferior** en celulares con notch.
+
+**¿Cómo funciona ahora?**
+Los controles de cantidad/precio y los del cambio se **agrandaron a 48 px** (estándar para uso con guantes), y la barra de acción fija ahora **respeta el margen del sistema** para no solaparse con el menú inferior.
+
+**Beneficio:** menos errores de toque y nada queda oculto en celulares con notch.
+
+### 24. Cierre: previsualización habilitada para el perfil de Bodega
+
+**¿Qué pasaba antes?**
+El perfil de **Bodega** ya tenía el módulo "Cierre" (solo lectura, punto #16), pero al **previsualizar** los totales el sistema respondía con un error ("solo el Admin puede consultar cierres") — quedaba a medias.
+
+**¿Cómo funciona ahora?**
+Bodega puede **previsualizar** el cierre y ver el **histórico** sin problemas. **Generar/firmar** el cierre sigue siendo exclusivo de Administración.
+
+**Beneficio:** el perfil de caja puede cuadrar el día de verdad, sin poder alterar nada.
+
+### 25. Ajustes finos de menú y permisos por rol
+
+- **Técnico:** se quitó "Productos" de su menú (aparecía pero la pantalla lo rechazaba y lo devolvía al inicio); su menú queda en Órdenes, Ensambles y Herramientas, coherente con su rol.
+- **Abonos de OT:** alineado con que el técnico es **solo lectura** en órdenes, el registro de abonos queda en Ventas/Administración (la pantalla ya lo hacía; se reforzó también en el servidor).
+
+**Beneficio:** cada rol ve solo lo que realmente puede usar, sin menús que "engañan".
+
+> **Nota técnica:** durante la auditoría se verificó además que la conversión de stock "venta → insumo" en Ensambles **ya funcionaba** para Bodega/Técnico/Vendedor (no era un error). Toda la navegación de escritorio quedó **intacta**.
+
+---
+
 ## Aclaraciones — puntos revisados que NO son errores del sistema
 
 Estos puntos fueron reportados y revisados a fondo; **funcionan correctamente por diseño**. Se documentan aquí para dejar claro el porqué y cómo funcionan.
@@ -368,8 +453,8 @@ Estos puntos fueron reportados y revisados a fondo; **funcionan correctamente po
 
 ## Estado y próximos pasos
 
-- **Correcciones de base de datos (puntos 1 a 5, 7, 8, la parte de servidor del 11, el cierre correcto de la OT no autorizada #13, el motor del cambio de producto #14, los permisos de técnicos en OT #15, el acceso de lectura al cierre #16 y el motor del pago mixto #17):** **aplicadas y activas en producción.**
-- **Ajustes de pantalla (puntos 6, 11, 12 y 13, las mejoras 9 y 10, la pantalla del cambio de producto #14, y las pantallas de los puntos #15, #16 y #17):** **listos**, se activan con la próxima publicación de la aplicación.
+- **Correcciones de base de datos (puntos 1 a 5, 7, 8, la parte de servidor del 11, el cierre correcto de la OT no autorizada #13, el motor del cambio de producto #14, los permisos de técnicos en OT #15, el acceso de lectura al cierre #16, el motor del pago mixto #17, los afinados #18 y #19, y los permisos de la revisión móvil #24 y #25):** **aplicadas y activas en producción.**
+- **Ajustes de pantalla (puntos 6, 11, 12 y 13, las mejoras 9 y 10, la pantalla del cambio de producto #14 y #20, las pantallas de los puntos #15, #16 y #17, y toda la experiencia móvil #21, #22, #23 y el menú del #25):** **listos**, se activan con la próxima publicación de la aplicación.
 - Todo el trabajo está versionado y respaldado en los repositorios del proyecto.
 
 > **Nota sobre el reporte de caja menor:** se revisó a fondo y la caja menor **ya se registra correctamente como egreso** (tanto en el cálculo interno como en la pantalla del cierre, donde aparece bajo "Egresos — en qué se fue el dinero"). No se encontró ningún punto donde caja menor se sume a las ventas. Si en alguna pantalla específica se sigue viendo distinto, por favor indicarla para revisarla (puede tratarse de información en caché del navegador).
