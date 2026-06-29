@@ -1409,7 +1409,7 @@ function NegativoModal({ count, onClose }) {
 function QtyControl({ value, danger, onDec, onInc, onSet, max, incDisabled }) {
   return (
     <div
-      className="inline-flex h-9 items-center overflow-hidden rounded-md border"
+      className="inline-flex h-12 items-center overflow-hidden rounded-md border"
       style={
         danger
           ? {
@@ -1421,7 +1421,7 @@ function QtyControl({ value, danger, onDec, onInc, onSet, max, incDisabled }) {
     >
       <button
         onClick={onDec}
-        className="grid h-full w-8 place-items-center transition-colors"
+        className="grid h-full w-11 place-items-center transition-colors"
         style={{ color: "var(--n-700)" }}
         aria-label="Disminuir cantidad"
       >
@@ -1433,13 +1433,13 @@ function QtyControl({ value, danger, onDec, onInc, onSet, max, incDisabled }) {
         max={max}
         value={value}
         onChange={(e) => onSet(e.target.value)}
-        className="w-10 border-0 bg-transparent text-center font-mono text-[13px] font-medium outline-none"
+        className="w-12 border-0 bg-transparent text-center font-mono text-[13px] font-medium outline-none"
         style={{ color: danger ? "var(--dang-700)" : "var(--n-950)" }}
       />
       <button
         onClick={onInc}
         disabled={incDisabled}
-        className="grid h-full w-8 place-items-center transition-colors disabled:opacity-40"
+        className="grid h-full w-11 place-items-center transition-colors disabled:opacity-40"
         style={{ color: "var(--n-700)" }}
         aria-label="Aumentar cantidad"
       >
@@ -1454,7 +1454,7 @@ function QtyControl({ value, danger, onDec, onInc, onSet, max, incDisabled }) {
 function PriceInput({ value, onSet }) {
   return (
     <div
-      className="inline-flex h-9 items-center overflow-hidden rounded-md border"
+      className="inline-flex h-12 items-center overflow-hidden rounded-md border"
       style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
     >
       <span

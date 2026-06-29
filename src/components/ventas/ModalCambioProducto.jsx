@@ -57,6 +57,24 @@ export default function ModalCambioProducto({
     }));
   }, [items]);
 
+  // Unidades YA devueltas de esta venta (por producto). El backend
+  // (fn_registrar_devolucion) topa la devolución en vendido − ya_devuelto; aquí
+  // se refleja para no permitir pedir de más en la UI.
+  const [devPrev, setDevPrev] = useState(null); // Map producto_id -> qty (null=cargando)
+  const disponibles = useMemo(
+    () =>
+      productosDevolubles
+        .map((g) => ({
+          ...g,
+          restante: Math.max(
+            0,
+            g.cantidad - (devPrev?.get(g.producto_id) ?? 0),
+          ),
+        }))
+        .filter((g) => g.restante > 0),
+    [productosDevolubles, devPrev],
+  );
+
   const [prodDevId, setProdDevId] = useState(
     productosDevolubles.length === 1 ? productosDevolubles[0].producto_id : "",
   );
@@ -80,8 +98,30 @@ export default function ModalCambioProducto({
     };
   }, []);
 
-  const devSel =
-    productosDevolubles.find((p) => p.producto_id === prodDevId) || null;
+  // Carga lo ya devuelto de esta venta para topar correctamente la cantidad.
+  useEffect(() => {
+    if (!venta?.id) return;
+    let alive = true;
+    (async () => {
+      const { data } = await supabase
+        .from("devoluciones")
+        .select("producto_id, cantidad")
+        .eq("venta_id", venta.id);
+      if (!alive) return;
+      const m = new Map();
+      for (const d of data ?? [])
+        m.set(
+          d.producto_id,
+          (m.get(d.producto_id) ?? 0) + (Number(d.cantidad) || 0),
+        );
+      setDevPrev(m);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [venta?.id]);
+
+  const devSel = disponibles.find((p) => p.producto_id === prodDevId) || null;
 
   // Buscar producto nuevo (reusa el patrón de búsqueda saneada del resto de la app).
   const buscar = async (q) => {
@@ -111,8 +151,20 @@ export default function ModalCambioProducto({
   // ── Cálculo de la diferencia (espejo exacto del backend) ──────────────────
   const ivaPct = Number(venta?.iva_pct ?? 0);
   const factor = 1 + ivaPct / 100;
+  // Proporción realmente pagada en la venta original (espejo del backend): si tuvo
+  // descuento global, el crédito por lo devuelto se reduce en esa misma proporción.
+  const ratioPagado = useMemo(() => {
+    const sub = Number(venta?.subtotal) || 0;
+    if (sub <= 0) return 1;
+    const descRaw =
+      venta?.descuento_valor != null
+        ? Number(venta.descuento_valor)
+        : (sub * (Number(venta?.descuento_pct) || 0)) / 100;
+    const desc = Math.max(0, Math.min(descRaw, sub));
+    return (sub - desc) / sub;
+  }, [venta]);
   const precioDev = devSel ? devSel.precio : 0;
-  const valorDev = Math.round(precioDev * cantDev);
+  const valorDev = Math.round(precioDev * cantDev * ratioPagado);
   const valorNuevo = nuevo
     ? Math.round(Number(nuevo.precio_venta) * cantNuevo)
     : 0;
@@ -120,7 +172,7 @@ export default function ModalCambioProducto({
   const difConIva = Math.round(difNeta * factor);
   const accion = difNeta > 0 ? "cobro" : difNeta < 0 ? "devolucion" : "par";
 
-  const maxDev = devSel ? Number(devSel.cantidad) : 1;
+  const maxDev = devSel ? Number(devSel.restante) : 1;
   const puedeGuardar =
     !!devSel &&
     cantDev >= 1 &&
@@ -219,9 +271,17 @@ export default function ModalCambioProducto({
                 Esta venta no tiene productos (solo servicios): no admite
                 cambio.
               </p>
+            ) : disponibles.length === 0 ? (
+              <p
+                className="text-sm"
+                style={{ color: "hsl(var(--destructive))" }}
+              >
+                Todos los productos de esta venta ya fueron devueltos: no queda
+                nada por cambiar.
+              </p>
             ) : (
               <div className="space-y-2">
-                {productosDevolubles.map((g) => {
+                {disponibles.map((g) => {
                   const on = g.producto_id === prodDevId;
                   return (
                     <button
@@ -251,8 +311,8 @@ export default function ModalCambioProducto({
                           className="font-mono text-[11px]"
                           style={{ color: "hsl(var(--muted-foreground))" }}
                         >
-                          {g.referencia} · ×{g.cantidad} ·{" "}
-                          {formatCOP(Math.round(g.precio))}
+                          {g.referencia} · quedan {g.restante} ·{" "}
+                          {formatCOP(Math.round(g.precio * ratioPagado))}
                         </p>
                       </div>
                       {on && (
@@ -577,7 +637,7 @@ function Stepper({ value, min, max, onChange }) {
     <div className="flex items-center gap-1.5">
       <button
         onClick={() => set(value - 1)}
-        className="grid h-9 w-9 place-items-center rounded-lg border text-lg font-bold"
+        className="grid h-11 w-11 place-items-center rounded-lg border text-lg font-bold"
         style={{
           borderColor: "hsl(var(--border))",
           color: "hsl(var(--foreground))",
@@ -591,7 +651,7 @@ function Stepper({ value, min, max, onChange }) {
         min={min}
         max={max}
         onChange={(e) => set(parseInt(e.target.value, 10) || min)}
-        className="w-14 rounded-lg border py-2 text-center font-mono text-sm font-bold outline-none"
+        className="h-11 w-14 rounded-lg border text-center font-mono text-sm font-bold outline-none"
         style={{
           borderColor: "hsl(var(--border))",
           color: "hsl(var(--foreground))",
@@ -600,7 +660,7 @@ function Stepper({ value, min, max, onChange }) {
       />
       <button
         onClick={() => set(value + 1)}
-        className="grid h-9 w-9 place-items-center rounded-lg border text-lg font-bold"
+        className="grid h-11 w-11 place-items-center rounded-lg border text-lg font-bold"
         style={{
           borderColor: "hsl(var(--border))",
           color: "hsl(var(--foreground))",

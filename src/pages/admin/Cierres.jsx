@@ -1429,7 +1429,12 @@ function MiniTable({ titulo, cols, rows, align }) {
                     alineacion(align, i, cols.length) === "left"
                       ? "text-left"
                       : "text-right"
-                  }`}
+                  } ${i === 0 ? "sticky left-0 z-20" : ""}`}
+                  style={
+                    i === 0
+                      ? { backgroundColor: "hsl(var(--card))" }
+                      : undefined
+                  }
                 >
                   {col}
                 </th>
@@ -1461,11 +1466,14 @@ function MiniTable({ titulo, cols, rows, align }) {
                         key={ci}
                         className={`px-3 py-1.5 tabular-nums ${
                           left ? "text-left" : "text-right"
-                        }`}
+                        } ${ci === 0 ? "sticky left-0 z-10" : ""}`}
                         style={{
                           color: left
                             ? "hsl(var(--foreground))"
                             : "hsl(var(--muted-foreground))",
+                          ...(ci === 0
+                            ? { backgroundColor: "hsl(var(--card))" }
+                            : null),
                         }}
                       >
                         {cell}
