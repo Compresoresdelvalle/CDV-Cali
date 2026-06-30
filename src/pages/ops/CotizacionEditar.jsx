@@ -324,7 +324,10 @@ export default function CotizacionEditar() {
   const descuento = Math.min(Math.max(0, descuentoValor), subtotal);
   const baseIva = subtotal - descuento;
   const iva = baseIva * (ivaPct / 100);
-  const total = baseIva * (1 + ivaPct / 100) + Math.max(0, domicilio);
+  // Redondeo a pesos enteros (sin centavos), igual que el servidor.
+  const total = Math.round(
+    baseIva * (1 + ivaPct / 100) + Math.max(0, domicilio),
+  );
 
   /* ── Guardar cambios ───────────────────────────────────────────────── */
   const validar = () => {
