@@ -349,7 +349,10 @@ export default function VentaNueva() {
   const descuento = Math.min(Math.max(0, descuentoValor), subtotal);
   const baseIva = subtotal - descuento;
   const iva = baseIva * (ivaPct / 100);
-  const total = baseIva * (1 + ivaPct / 100) + Math.max(0, domicilio);
+  // Redondeo a pesos enteros (sin centavos), igual que el servidor.
+  const total = Math.round(
+    baseIva * (1 + ivaPct / 100) + Math.max(0, domicilio),
+  );
 
   // Pago mixto: la suma de las formas debe igualar el total (COP, tolerancia 1).
   const totalRedondeado = Math.round(total);
