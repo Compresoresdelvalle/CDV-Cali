@@ -281,6 +281,27 @@ export function generarOrdenPDF({
     doc.setTextColor(...COLORES.textoOscuro);
   }
 
+  // ── Observaciones ────────────────────────────────────────────────────
+  // Notas de recepción de la OT. Se imprimen junto al checklist, tanto en la
+  // constancia de recepción como en el documento final.
+  if ((orden.observaciones || "").trim()) {
+    if (y > LAYOUT.pageHeight - 40) {
+      doc.addPage();
+      y = LAYOUT.margenSup;
+    }
+    sectionTitle("Observaciones");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...COLORES.textoMedio);
+    const wrapObs = doc.splitTextToSize(
+      orden.observaciones.trim(),
+      LAYOUT.contentWidth,
+    );
+    doc.text(wrapObs, LAYOUT.margenIzq, y);
+    y += wrapObs.length * 4.5 + 4;
+    doc.setTextColor(...COLORES.textoOscuro);
+  }
+
   // ── Constancia de recepción: nota + fin ──────────────────────────────
   // En modo recepción no se imprimen repuestos, totales, abonos ni saldo:
   // es solo la prueba de qué equipo y en qué estado ingresó.

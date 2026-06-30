@@ -87,7 +87,7 @@ export const PASOS = [
     key: "autorizada",
     label: "Autorización",
     titulo: "Autorización y anticipo",
-    sub: "El cliente aprueba y abona",
+    sub: "El cliente aprueba; el anticipo es opcional",
     rol: "Vendedora",
   },
   {
@@ -235,10 +235,11 @@ export function gateCumplido(i, ctx) {
             detalles.length > 0 ||
             (Number(orden.costo_mano_obra) || 0) > 0;
     case 3:
-      if (noAutoriza) return true; // no autoriza: no requiere anticipo
-      return Boolean(
-        orden.estado_autorizacion === "autorizado" && montos.anticipos > 0,
-      );
+      // El anticipo es OPCIONAL: basta con que el cliente decida. Si autoriza,
+      // se puede iniciar el trabajo con o sin abono (refleja el backend, que ya
+      // no exige anticipo > 0 para pasar a en_proceso).
+      if (noAutoriza) return true;
+      return orden.estado_autorizacion === "autorizado";
     case 4:
       // Si no autoriza, no hay descarga; basta marcar terminado luego.
       // Si autoriza, no debe quedar ningún repuesto pendiente en el borrador.
@@ -263,10 +264,7 @@ export function mensajeGate(i, ctx) {
     2: noAutoriza
       ? "Indica el valor a cobrar por la revisión."
       : "Agrega al menos un repuesto o define la mano de obra.",
-    3:
-      !orden.estado_autorizacion || orden.estado_autorizacion === "pendiente"
-        ? "Marca si el cliente autoriza o no la reparación."
-        : "Registra el anticipo del cliente (se sugiere el 50%).",
+    3: "Marca si el cliente autoriza o no la reparación.",
     4: "Descarga los repuestos del inventario.",
     5: "Describe el trabajo realizado en el equipo.",
     6: "Registra el pago del saldo pendiente.",
@@ -277,7 +275,7 @@ export function mensajeGate(i, ctx) {
     2: "Cotización lista.",
     3: noAutoriza
       ? "Cliente no autoriza: se cobra la revisión."
-      : "Autorizada con anticipo.",
+      : "Autorizada. El anticipo es opcional.",
     4: noAutoriza
       ? "Sin descarga: el cliente no autorizó."
       : "Repuestos descargados.",
