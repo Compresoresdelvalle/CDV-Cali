@@ -1,0 +1,3151 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+          rel="stylesheet"
+        />
+        <style>
+          html,
+          body {
+            margin: 0;
+            padding: 0;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          .scl::-webkit-scrollbar {
+            width: 0;
+            height: 0;
+          }
+          .scl {
+            scrollbar-width: none;
+          }
+        </style>
+      </helmet>
+
+      <div
+        style="
+          min-height: 100vh;
+          background: #e7e9ef;
+          font-family: &quot;IBM Plex Sans&quot;, system-ui, sans-serif;
+          color: #101828;
+          padding: 40px 24px 64px;
+          -webkit-font-smoothing: antialiased;
+        "
+      >
+        <div style="max-width: 1080px; margin: 0 auto">
+          <!-- Header del documento -->
+          <div style="margin-bottom: 22px">
+            <div
+              style="
+                font-family: &quot;IBM Plex Mono&quot;, monospace;
+                font-size: 11px;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                color: #667085;
+                margin-bottom: 8px;
+              "
+            >
+              Compresores del Valle · Rediseño
+            </div>
+            <h1
+              style="
+                font-size: 28px;
+                font-weight: 600;
+                letter-spacing: -0.02em;
+                margin: 0;
+              "
+            >
+              App — prototipo funcional y responsive
+            </h1>
+            <p
+              style="
+                font-size: 14px;
+                color: #475467;
+                margin: 10px 0 0;
+                max-width: 640px;
+                line-height: 1.55;
+              "
+            >
+              Toca para navegar. Cambia de rol y de dispositivo. La misma app se
+              adapta de iPhone y Android a PC; todos los módulos del rol son
+              alcanzables y el Admin ve todo desde su panel.
+            </p>
+          </div>
+
+          <!-- Controles -->
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 20px;
+              flex-wrap: wrap;
+              margin-bottom: 26px;
+            "
+          >
+            <div style="display: flex; align-items: center; gap: 10px">
+              <span
+                style="
+                  font-family: &quot;IBM Plex Mono&quot;, monospace;
+                  font-size: 11px;
+                  text-transform: uppercase;
+                  letter-spacing: 0.08em;
+                  color: #667085;
+                "
+                >Rol</span
+              >
+              <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                <sc-for
+                  list="{{ rolesView }}"
+                  as="r"
+                  hint-placeholder-count="4"
+                >
+                  <button onClick="{{ r.onClick }}" style="{{ r.btnStyle }}">
+                    {{ r.label }}
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px">
+              <span
+                style="
+                  font-family: &quot;IBM Plex Mono&quot;, monospace;
+                  font-size: 11px;
+                  text-transform: uppercase;
+                  letter-spacing: 0.08em;
+                  color: #667085;
+                "
+                >Pantalla</span
+              >
+              <div style="display: flex; gap: 6px">
+                <sc-for
+                  list="{{ devicesView }}"
+                  as="d"
+                  hint-placeholder-count="3"
+                >
+                  <button onClick="{{ d.onClick }}" style="{{ d.btnStyle }}">
+                    {{ d.label }}
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════════ VISTA MÓVIL (iPhone / Android) ════════ -->
+          <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ true }}">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 393px minmax(0, 1fr);
+                gap: 40px;
+                align-items: start;
+              "
+            >
+              <!-- PHONE -->
+              <div style="{{ bezelStyle }}">
+                <div class="scl" style="{{ screenStyle }}">
+                  <!-- Status bar -->
+                  <div
+                    style="
+                      background: #2531c8;
+                      height: 30px;
+                      display: flex;
+                      align-items: center;
+                      justify-content: space-between;
+                      padding: 0 20px;
+                      position: relative;
+                      flex-shrink: 0;
+                    "
+                  >
+                    <span
+                      style="
+                        font-family: &quot;IBM Plex Mono&quot;, monospace;
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: #fff;
+                      "
+                      >9:41</span
+                    >
+                    <sc-if
+                      value="{{ isIphone }}"
+                      hint-placeholder-val="{{ true }}"
+                    >
+                      <span
+                        style="
+                          position: absolute;
+                          left: 50%;
+                          transform: translateX(-50%);
+                          top: 7px;
+                          width: 90px;
+                          height: 18px;
+                          background: #0b1320;
+                          border-radius: 0 0 14px 14px;
+                        "
+                      ></span>
+                    </sc-if>
+                    <sc-if
+                      value="{{ isAndroid }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <span
+                        style="
+                          position: absolute;
+                          left: 50%;
+                          transform: translateX(-50%);
+                          top: 9px;
+                          width: 7px;
+                          height: 7px;
+                          border-radius: 999px;
+                          background: #0b1320;
+                        "
+                      ></span>
+                    </sc-if>
+                    <span
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 5px;
+                        color: #fff;
+                      "
+                    >
+                      <svg
+                        width="16"
+                        height="12"
+                        viewBox="0 0 24 18"
+                        fill="currentColor"
+                      >
+                        <rect x="0" y="11" width="4" height="7" rx="1" />
+                        <rect x="6" y="7" width="4" height="11" rx="1" />
+                        <rect
+                          x="12"
+                          y="3"
+                          width="4"
+                          height="15"
+                          rx="1"
+                          opacity="0.5"
+                        />
+                        <rect
+                          x="18"
+                          y="0"
+                          width="4"
+                          height="18"
+                          rx="1"
+                          opacity="0.5"
+                        />
+                      </svg>
+                      <svg
+                        width="16"
+                        height="12"
+                        viewBox="0 0 24 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <rect x="1" y="3" width="18" height="10" rx="2" />
+                        <rect
+                          x="3"
+                          y="5"
+                          width="11"
+                          height="6"
+                          rx="1"
+                          fill="currentColor"
+                          stroke="none"
+                        />
+                        <path d="M21 6v4" />
+                      </svg>
+                    </span>
+                  </div>
+
+                  <!-- App header -->
+                  <div
+                    style="
+                      background: #2531c8;
+                      padding: 8px 16px 12px;
+                      display: flex;
+                      align-items: center;
+                      justify-content: space-between;
+                      gap: 8px;
+                      flex-shrink: 0;
+                    "
+                  >
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 9px;
+                        min-width: 0;
+                      "
+                    >
+                      <div
+                        style="
+                          width: 30px;
+                          height: 30px;
+                          border-radius: 9px;
+                          background: rgba(255, 255, 255, 0.16);
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          flex-shrink: 0;
+                        "
+                      >
+                        <span
+                          style="
+                            font-family: &quot;IBM Plex Mono&quot;, monospace;
+                            font-size: 13px;
+                            font-weight: 700;
+                            color: #fff;
+                          "
+                          >C</span
+                        >
+                      </div>
+                      <div style="min-width: 0">
+                        <div
+                          style="
+                            font-size: 13.5px;
+                            font-weight: 600;
+                            color: #fff;
+                            line-height: 1.1;
+                          "
+                        >
+                          CDV Gestión
+                        </div>
+                        <div
+                          style="
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 5px;
+                            margin-top: 2px;
+                          "
+                        >
+                          <span
+                            style="
+                              width: 6px;
+                              height: 6px;
+                              border-radius: 999px;
+                              background: #34d583;
+                            "
+                          ></span>
+                          <span
+                            style="
+                              font-family: &quot;IBM Plex Mono&quot;, monospace;
+                              font-size: 10.5px;
+                              color: rgba(255, 255, 255, 0.8);
+                            "
+                            >Sede {{ sede }}</span
+                          >
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 4px;
+                        flex-shrink: 0;
+                      "
+                    >
+                      <button
+                        onClick="{{ openSearch }}"
+                        aria-label="Buscar"
+                        style="
+                          width: 38px;
+                          height: 38px;
+                          border: none;
+                          background: transparent;
+                          color: rgba(255, 255, 255, 0.92);
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          cursor: pointer;
+                          border-radius: 10px;
+                        "
+                      >
+                        <svg
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <circle cx="11" cy="11" r="7"></circle>
+                          <path d="M20 20l-4-4"></path>
+                        </svg>
+                      </button>
+                      <button
+                        onClick="{{ goAlertas }}"
+                        aria-label="Alertas de stock"
+                        style="
+                          position: relative;
+                          width: 38px;
+                          height: 38px;
+                          border: none;
+                          background: transparent;
+                          color: rgba(255, 255, 255, 0.92);
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          cursor: pointer;
+                          border-radius: 10px;
+                        "
+                      >
+                        <svg
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.8"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path
+                            d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"
+                          ></path>
+                          <path d="M10 21h4"></path>
+                        </svg>
+                        <span
+                          style="
+                            position: absolute;
+                            top: 5px;
+                            right: 5px;
+                            min-width: 16px;
+                            height: 16px;
+                            padding: 0 4px;
+                            border-radius: 999px;
+                            background: #f04438;
+                            color: #fff;
+                            font-size: 9px;
+                            font-weight: 700;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            line-height: 1;
+                          "
+                          >{{ alertCount }}</span
+                        >
+                      </button>
+                      <button
+                        onClick="{{ openDrawer }}"
+                        aria-label="Menú"
+                        style="
+                          width: 34px;
+                          height: 34px;
+                          border-radius: 999px;
+                          background: rgba(255, 255, 255, 0.18);
+                          border: 1px solid rgba(255, 255, 255, 0.28);
+                          color: #fff;
+                          font-family: &quot;IBM Plex Mono&quot;, monospace;
+                          font-size: 11px;
+                          font-weight: 600;
+                          cursor: pointer;
+                          flex-shrink: 0;
+                        "
+                      >
+                        {{ initials }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Screen body -->
+                  <div
+                    class="scl"
+                    style="flex: 1; overflow-y: auto; background: #fbfbfc"
+                  >
+                    <!-- INICIO -->
+                    <sc-if
+                      value="{{ isInicio }}"
+                      hint-placeholder-val="{{ true }}"
+                    >
+                      <div style="padding: 18px 16px 24px">
+                        <p style="margin: 0; font-size: 13px; color: #667085">
+                          Hola, {{ firstName }}
+                        </p>
+                        <h2
+                          style="
+                            margin: 2px 0 0;
+                            font-size: 22px;
+                            font-weight: 600;
+                            letter-spacing: -0.01em;
+                            color: #101828;
+                          "
+                        >
+                          Resumen de hoy
+                        </h2>
+                        <div
+                          style="
+                            display: grid;
+                            grid-template-columns: 1fr 1fr;
+                            gap: 10px;
+                            margin-top: 16px;
+                          "
+                        >
+                          <button
+                            onClick="{{ goAlertas }}"
+                            style="
+                              text-align: left;
+                              cursor: pointer;
+                              padding: 14px;
+                              border-radius: 14px;
+                              border: 1px solid #fecdca;
+                              background: #fef3f2;
+                            "
+                          >
+                            <div
+                              style="
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 30px;
+                                font-weight: 600;
+                                color: #b42318;
+                                line-height: 1;
+                              "
+                            >
+                              {{ alertCount }}
+                            </div>
+                            <div
+                              style="
+                                font-size: 12px;
+                                color: #b42318;
+                                margin-top: 6px;
+                              "
+                            >
+                              Alertas de stock
+                            </div>
+                          </button>
+                          <div
+                            style="
+                              padding: 14px;
+                              border-radius: 14px;
+                              border: 1px solid #e4e7ec;
+                              background: #fff;
+                            "
+                          >
+                            <div
+                              style="
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 20px;
+                                font-weight: 600;
+                                color: #101828;
+                                line-height: 1.1;
+                              "
+                            >
+                              $2.4M
+                            </div>
+                            <div
+                              style="
+                                font-size: 12px;
+                                color: #667085;
+                                margin-top: 6px;
+                              "
+                            >
+                              Ventas hoy
+                            </div>
+                          </div>
+                          <div
+                            style="
+                              padding: 14px;
+                              border-radius: 14px;
+                              border: 1px solid #e4e7ec;
+                              background: #fff;
+                            "
+                          >
+                            <div
+                              style="
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 20px;
+                                font-weight: 600;
+                                color: #101828;
+                                line-height: 1.1;
+                              "
+                            >
+                              7
+                            </div>
+                            <div
+                              style="
+                                font-size: 12px;
+                                color: #667085;
+                                margin-top: 6px;
+                              "
+                            >
+                              Cotizaciones abiertas
+                            </div>
+                          </div>
+                          <div
+                            style="
+                              padding: 14px;
+                              border-radius: 14px;
+                              border: 1px solid #e4e7ec;
+                              background: #fff;
+                            "
+                          >
+                            <div
+                              style="
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 20px;
+                                font-weight: 600;
+                                color: #101828;
+                                line-height: 1.1;
+                              "
+                            >
+                              5
+                            </div>
+                            <div
+                              style="
+                                font-size: 12px;
+                                color: #667085;
+                                margin-top: 6px;
+                              "
+                            >
+                              Órdenes activas
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          style="
+                            margin-top: 22px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: space-between;
+                          "
+                        >
+                          <span
+                            style="
+                              font-family: &quot;IBM Plex Mono&quot;, monospace;
+                              font-size: 10.5px;
+                              font-weight: 600;
+                              text-transform: uppercase;
+                              letter-spacing: 0.08em;
+                              color: #667085;
+                            "
+                            >Accesos rápidos</span
+                          >
+                          <button
+                            onClick="{{ openDrawer }}"
+                            style="
+                              border: none;
+                              background: transparent;
+                              font-size: 12px;
+                              font-weight: 500;
+                              color: #2d3ce5;
+                              cursor: pointer;
+                            "
+                          >
+                            Ver todos
+                          </button>
+                        </div>
+                        <div
+                          style="
+                            margin-top: 12px;
+                            display: grid;
+                            grid-template-columns: repeat(4, 1fr);
+                            gap: 8px;
+                          "
+                        >
+                          <sc-for
+                            list="{{ quickActions }}"
+                            as="q"
+                            hint-placeholder-count="8"
+                          >
+                            <button
+                              onClick="{{ q.onClick }}"
+                              style="
+                                display: flex;
+                                flex-direction: column;
+                                align-items: center;
+                                gap: 7px;
+                                padding: 12px 4px;
+                                border: 1px solid #e4e7ec;
+                                border-radius: 13px;
+                                background: #fff;
+                                cursor: pointer;
+                              "
+                            >
+                              <span
+                                style="width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:{{ q.bg }}; color:{{ q.fg }};"
+                              >
+                                <svg
+                                  width="20"
+                                  height="20"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  stroke-width="1.7"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                >
+                                  <path d="{{ q.d }}"></path>
+                                </svg>
+                              </span>
+                              <span
+                                style="
+                                  font-size: 10.5px;
+                                  font-weight: 500;
+                                  color: #344054;
+                                  text-align: center;
+                                  line-height: 1.15;
+                                "
+                                >{{ q.label }}</span
+                              >
+                            </button>
+                          </sc-for>
+                        </div>
+                        <div style="margin-top: 24px">
+                          <span
+                            style="
+                              font-family: &quot;IBM Plex Mono&quot;, monospace;
+                              font-size: 10.5px;
+                              font-weight: 600;
+                              text-transform: uppercase;
+                              letter-spacing: 0.08em;
+                              color: #667085;
+                            "
+                            >Actividad reciente</span
+                          >
+                          <div
+                            style="
+                              margin-top: 12px;
+                              border: 1px solid #e4e7ec;
+                              border-radius: 14px;
+                              background: #fff;
+                              overflow: hidden;
+                            "
+                          >
+                            <sc-for
+                              list="{{ activity }}"
+                              as="a"
+                              hint-placeholder-count="3"
+                            >
+                              <div style="{{ a.rowStyle }}">
+                                <span
+                                  style="width:8px; height:8px; border-radius:999px; flex-shrink:0; background:{{ a.dot }};"
+                                ></span>
+                                <div style="flex: 1; min-width: 0">
+                                  <div
+                                    style="
+                                      font-size: 13px;
+                                      font-weight: 500;
+                                      color: #101828;
+                                      line-height: 1.3;
+                                    "
+                                  >
+                                    {{ a.title }}
+                                  </div>
+                                  <div
+                                    style="
+                                      font-size: 11.5px;
+                                      color: #667085;
+                                      margin-top: 1px;
+                                    "
+                                  >
+                                    {{ a.meta }}
+                                  </div>
+                                </div>
+                                <span
+                                  style="
+                                    font-family:
+                                      &quot;IBM Plex Mono&quot;, monospace;
+                                    font-size: 11px;
+                                    color: #98a2b3;
+                                    flex-shrink: 0;
+                                  "
+                                  >{{ a.time }}</span
+                                >
+                              </div>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </div>
+                    </sc-if>
+
+                    <!-- INVENTARIO -->
+                    <sc-if
+                      value="{{ isInventario }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div>
+                        <div
+                          style="
+                            position: sticky;
+                            top: 0;
+                            z-index: 5;
+                            background: #fbfbfc;
+                            padding: 16px 16px 10px;
+                            border-bottom: 1px solid #eef1f5;
+                          "
+                        >
+                          <h2
+                            style="
+                              margin: 0 0 12px;
+                              font-size: 20px;
+                              font-weight: 600;
+                              letter-spacing: -0.01em;
+                              color: #101828;
+                            "
+                          >
+                            Inventario
+                          </h2>
+                          <div style="display: flex; gap: 8px">
+                            <button
+                              onClick="{{ openSearch }}"
+                              style="
+                                flex: 1;
+                                display: flex;
+                                align-items: center;
+                                gap: 9px;
+                                height: 46px;
+                                padding: 0 14px;
+                                border-radius: 12px;
+                                border: 1px solid #d0d5dd;
+                                background: #fff;
+                                cursor: pointer;
+                                color: #98a2b3;
+                              "
+                            >
+                              <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.7"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <circle cx="11" cy="11" r="7"></circle>
+                                <path d="M20 20l-4-4"></path>
+                              </svg>
+                              <span style="font-size: 13.5px"
+                                >Buscar referencia…</span
+                              >
+                            </button>
+                            <button
+                              aria-label="Escanear QR"
+                              style="
+                                width: 46px;
+                                height: 46px;
+                                border-radius: 12px;
+                                border: none;
+                                background: #2d3ce5;
+                                color: #fff;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                cursor: pointer;
+                              "
+                            >
+                              <svg
+                                width="20"
+                                height="20"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.7"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <path
+                                  d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"
+                                ></path>
+                                <path d="M14 14h3v3h-3M19 19h1"></path>
+                              </svg>
+                            </button>
+                          </div>
+                          <div
+                            class="scl"
+                            style="
+                              display: flex;
+                              gap: 7px;
+                              margin-top: 10px;
+                              overflow-x: auto;
+                              padding-bottom: 2px;
+                            "
+                          >
+                            <sc-for
+                              list="{{ chips }}"
+                              as="c"
+                              hint-placeholder-count="4"
+                            >
+                              <button
+                                onClick="{{ c.onClick }}"
+                                style="{{ c.style }}"
+                              >
+                                {{ c.label }}
+                              </button>
+                            </sc-for>
+                          </div>
+                        </div>
+                        <div
+                          style="
+                            padding: 12px 16px 24px;
+                            display: flex;
+                            flex-direction: column;
+                            gap: 10px;
+                          "
+                        >
+                          <sc-for
+                            list="{{ products }}"
+                            as="p"
+                            hint-placeholder-count="6"
+                          >
+                            <button
+                              style="
+                                text-align: left;
+                                cursor: pointer;
+                                width: 100%;
+                                padding: 14px;
+                                border-radius: 14px;
+                                border: 1px solid #e4e7ec;
+                                background: #fff;
+                                display: flex;
+                                align-items: flex-start;
+                                justify-content: space-between;
+                                gap: 12px;
+                              "
+                            >
+                              <div style="min-width: 0; flex: 1">
+                                <div
+                                  style="
+                                    font-size: 14px;
+                                    font-weight: 500;
+                                    color: #101828;
+                                    line-height: 1.25;
+                                  "
+                                >
+                                  {{ p.nombre }}
+                                </div>
+                                <div
+                                  style="
+                                    font-family:
+                                      &quot;IBM Plex Mono&quot;, monospace;
+                                    font-size: 11px;
+                                    color: #667085;
+                                    margin-top: 3px;
+                                  "
+                                >
+                                  {{ p.ref }} · {{ p.marca }}
+                                </div>
+                                <div
+                                  style="
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 7px;
+                                    margin-top: 8px;
+                                  "
+                                >
+                                  <span style="{{ p.catStyle }}"
+                                    >{{ p.cat }}</span
+                                  >
+                                  <span style="font-size: 11px; color: #667085"
+                                    >{{ p.sede }}</span
+                                  >
+                                </div>
+                                <div
+                                  style="
+                                    font-family:
+                                      &quot;IBM Plex Mono&quot;, monospace;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: #101828;
+                                    margin-top: 8px;
+                                  "
+                                >
+                                  {{ p.precio }}
+                                </div>
+                              </div>
+                              <div
+                                style="
+                                  display: flex;
+                                  flex-direction: column;
+                                  align-items: flex-end;
+                                  gap: 7px;
+                                  flex-shrink: 0;
+                                "
+                              >
+                                <span
+                                  style="
+                                    font-family:
+                                      &quot;IBM Plex Mono&quot;, monospace;
+                                    font-size: 26px;
+                                    font-weight: 600;
+                                    color: #101828;
+                                    line-height: 1;
+                                  "
+                                  >{{ p.cant }}</span
+                                >
+                                <span style="{{ p.estadoStyle }}"
+                                  >{{ p.estadoLabel }}</span
+                                >
+                              </div>
+                            </button>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </sc-if>
+
+                    <!-- PANEL ADMIN -->
+                    <sc-if
+                      value="{{ isAdminPanel }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div style="padding: 18px 16px 24px">
+                        <div
+                          style="display: flex; align-items: center; gap: 12px"
+                        >
+                          <span
+                            style="
+                              width: 44px;
+                              height: 44px;
+                              border-radius: 13px;
+                              display: flex;
+                              align-items: center;
+                              justify-content: center;
+                              background: #fef3f2;
+                              color: #b42318;
+                            "
+                          >
+                            <svg
+                              width="22"
+                              height="22"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.7"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path
+                                d="M12 3 5 6v5c0 4 3 7 7 9 4-2 7-5 7-9V6z"
+                              ></path>
+                            </svg>
+                          </span>
+                          <div>
+                            <h2
+                              style="
+                                margin: 0;
+                                font-size: 20px;
+                                font-weight: 600;
+                                letter-spacing: -0.01em;
+                                color: #101828;
+                              "
+                            >
+                              Panel Admin
+                            </h2>
+                            <p
+                              style="
+                                margin: 2px 0 0;
+                                font-size: 12.5px;
+                                color: #667085;
+                              "
+                            >
+                              Control total · {{ fullName }}
+                            </p>
+                          </div>
+                        </div>
+                        <div
+                          style="
+                            display: grid;
+                            grid-template-columns: 1fr 1fr 1fr;
+                            gap: 8px;
+                            margin-top: 18px;
+                          "
+                        >
+                          <div
+                            style="
+                              padding: 12px;
+                              border-radius: 12px;
+                              border: 1px solid #e4e7ec;
+                              background: #fff;
+                            "
+                          >
+                            <div
+                              style="
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 16px;
+                                font-weight: 600;
+                                color: #101828;
+                              "
+                            >
+                              $48.2M
+                            </div>
+                            <div
+                              style="
+                                font-size: 11px;
+                                color: #667085;
+                                margin-top: 4px;
+                              "
+                            >
+                              Ventas mes
+                            </div>
+                          </div>
+                          <div
+                            style="
+                              padding: 12px;
+                              border-radius: 12px;
+                              border: 1px solid #e4e7ec;
+                              background: #fff;
+                            "
+                          >
+                            <div
+                              style="
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 16px;
+                                font-weight: 600;
+                                color: #027a48;
+                              "
+                            >
+                              31%
+                            </div>
+                            <div
+                              style="
+                                font-size: 11px;
+                                color: #667085;
+                                margin-top: 4px;
+                              "
+                            >
+                              Margen
+                            </div>
+                          </div>
+                          <div
+                            style="
+                              padding: 12px;
+                              border-radius: 12px;
+                              border: 1px solid #fedf89;
+                              background: #fffaeb;
+                            "
+                          >
+                            <div
+                              style="
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 16px;
+                                font-weight: 600;
+                                color: #b54708;
+                              "
+                            >
+                              2
+                            </div>
+                            <div
+                              style="
+                                font-size: 11px;
+                                color: #b54708;
+                                margin-top: 4px;
+                              "
+                            >
+                              Conteos pend.
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          style="
+                            margin-top: 20px;
+                            font-family: &quot;IBM Plex Mono&quot;, monospace;
+                            font-size: 10.5px;
+                            font-weight: 600;
+                            text-transform: uppercase;
+                            letter-spacing: 0.08em;
+                            color: #667085;
+                          "
+                        >
+                          Herramientas de administración
+                        </div>
+                        <div
+                          style="
+                            margin-top: 12px;
+                            display: grid;
+                            grid-template-columns: repeat(3, 1fr);
+                            gap: 8px;
+                          "
+                        >
+                          <sc-for
+                            list="{{ adminModules }}"
+                            as="m"
+                            hint-placeholder-count="12"
+                          >
+                            <button
+                              style="
+                                display: flex;
+                                flex-direction: column;
+                                align-items: center;
+                                gap: 8px;
+                                padding: 14px 6px;
+                                border: 1px solid #e4e7ec;
+                                border-radius: 13px;
+                                background: #fff;
+                                cursor: pointer;
+                              "
+                            >
+                              <span
+                                style="
+                                  width: 38px;
+                                  height: 38px;
+                                  border-radius: 11px;
+                                  display: flex;
+                                  align-items: center;
+                                  justify-content: center;
+                                  background: #f0f2ff;
+                                  color: #2531c8;
+                                "
+                              >
+                                <svg
+                                  width="19"
+                                  height="19"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  stroke-width="1.7"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                >
+                                  <path d="{{ m.d }}"></path>
+                                </svg>
+                              </span>
+                              <span
+                                style="
+                                  font-size: 10.5px;
+                                  font-weight: 500;
+                                  color: #344054;
+                                  text-align: center;
+                                  line-height: 1.15;
+                                "
+                                >{{ m.label }}</span
+                              >
+                            </button>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </sc-if>
+
+                    <!-- GENÉRICO -->
+                    <sc-if
+                      value="{{ isGeneric }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div style="padding: 18px 16px 24px">
+                        <div
+                          style="display: flex; align-items: center; gap: 12px"
+                        >
+                          <span
+                            style="width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:{{ genBg }}; color:{{ genFg }};"
+                          >
+                            <svg
+                              width="24"
+                              height="24"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.7"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path d="{{ genIcon }}"></path>
+                            </svg>
+                          </span>
+                          <div>
+                            <h2
+                              style="
+                                margin: 0;
+                                font-size: 20px;
+                                font-weight: 600;
+                                letter-spacing: -0.01em;
+                                color: #101828;
+                              "
+                            >
+                              {{ genTitle }}
+                            </h2>
+                            <p
+                              style="
+                                margin: 2px 0 0;
+                                font-size: 12.5px;
+                                color: #667085;
+                              "
+                            >
+                              Sede {{ sede }} · {{ roleLabel }}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          style="
+                            margin-top: 18px;
+                            width: 100%;
+                            height: 50px;
+                            border: none;
+                            border-radius: 13px;
+                            background: #2d3ce5;
+                            color: #fff;
+                            font-size: 14px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            gap: 8px;
+                          "
+                        >
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="M12 5v14M5 12h14"></path>
+                          </svg>
+                          Nuevo en {{ genTitle }}
+                        </button>
+                        <div
+                          style="
+                            margin-top: 14px;
+                            display: flex;
+                            flex-direction: column;
+                            gap: 10px;
+                          "
+                        >
+                          <sc-for
+                            list="{{ genRows }}"
+                            as="g"
+                            hint-placeholder-count="4"
+                          >
+                            <div
+                              style="
+                                padding: 14px;
+                                border: 1px solid #e4e7ec;
+                                border-radius: 13px;
+                                background: #fff;
+                                display: flex;
+                                align-items: center;
+                                justify-content: space-between;
+                                gap: 10px;
+                              "
+                            >
+                              <div>
+                                <div
+                                  style="
+                                    font-size: 13.5px;
+                                    font-weight: 500;
+                                    color: #101828;
+                                  "
+                                >
+                                  {{ g.title }}
+                                </div>
+                                <div
+                                  style="
+                                    font-family:
+                                      &quot;IBM Plex Mono&quot;, monospace;
+                                    font-size: 11px;
+                                    color: #667085;
+                                    margin-top: 2px;
+                                  "
+                                >
+                                  {{ g.meta }}
+                                </div>
+                              </div>
+                              <span style="{{ g.pillStyle }}"
+                                >{{ g.pill }}</span
+                              >
+                            </div>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </div>
+
+                  <!-- Bottom nav (FAB al ras) -->
+                  <div
+                    style="
+                      background: #2531c8;
+                      display: grid;
+                      grid-template-columns: repeat(5, 1fr);
+                      padding: 7px 4px 6px;
+                      flex-shrink: 0;
+                    "
+                  >
+                    <sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
+                      <div
+                        style="
+                          display: flex;
+                          flex-direction: column;
+                          align-items: center;
+                          min-width: 0;
+                        "
+                      >
+                        <sc-if
+                          value="{{ n.fab }}"
+                          hint-placeholder-val="{{ false }}"
+                        >
+                          <button
+                            onClick="{{ n.onClick }}"
+                            aria-label="{{ n.label }}"
+                            style="
+                              display: flex;
+                              flex-direction: column;
+                              align-items: center;
+                              gap: 4px;
+                              padding: 5px 2px;
+                              border: none;
+                              background: transparent;
+                              cursor: pointer;
+                              min-height: 52px;
+                              justify-content: center;
+                            "
+                          >
+                            <span
+                              style="
+                                width: 46px;
+                                height: 30px;
+                                border-radius: 9px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                background: #fff;
+                                color: #2531c8;
+                              "
+                            >
+                              <svg
+                                width="21"
+                                height="21"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.85"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <path d="{{ n.d }}"></path>
+                              </svg>
+                            </span>
+                            <span
+                              style="
+                                font-size: 9.5px;
+                                font-weight: 600;
+                                color: #fff;
+                              "
+                              >{{ n.label }}</span
+                            >
+                          </button>
+                        </sc-if>
+                        <sc-if
+                          value="{{ n.tab }}"
+                          hint-placeholder-val="{{ true }}"
+                        >
+                          <button
+                            onClick="{{ n.onClick }}"
+                            style="display:flex; flex-direction:column; align-items:center; gap:4px; padding:5px 2px; border:none; background:transparent; cursor:pointer; min-height:52px; justify-content:center; color:{{ n.color }};"
+                          >
+                            <svg
+                              width="22"
+                              height="22"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="{{ n.sw }}"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path d="{{ n.d }}"></path>
+                            </svg>
+                            <span
+                              style="font-size:9.5px; font-weight:{{ n.weight }};"
+                              >{{ n.label }}</span
+                            >
+                          </button>
+                        </sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+
+                  <!-- Safe area / indicador inferior -->
+                  <div
+                    style="background:#2531c8; display:flex; align-items:center; justify-content:center; flex-shrink:0; {{ safeAreaStyle }}"
+                  >
+                    <sc-if
+                      value="{{ isIphone }}"
+                      hint-placeholder-val="{{ true }}"
+                    >
+                      <span
+                        style="
+                          width: 128px;
+                          height: 5px;
+                          border-radius: 999px;
+                          background: rgba(255, 255, 255, 0.85);
+                        "
+                      ></span>
+                    </sc-if>
+                    <sc-if
+                      value="{{ isAndroid }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <span
+                        style="
+                          width: 60px;
+                          height: 4px;
+                          border-radius: 999px;
+                          background: rgba(255, 255, 255, 0.5);
+                        "
+                      ></span>
+                    </sc-if>
+                  </div>
+
+                  <!-- OVERLAY: Drawer "Más" -->
+                  <sc-if
+                    value="{{ drawerOpen }}"
+                    hint-placeholder-val="{{ false }}"
+                  >
+                    <div style="position: absolute; inset: 0; z-index: 40">
+                      <div
+                        onClick="{{ closeDrawer }}"
+                        style="
+                          position: absolute;
+                          inset: 0;
+                          background: rgba(11, 19, 32, 0.45);
+                        "
+                      ></div>
+                      <div
+                        class="scl"
+                        style="
+                          position: absolute;
+                          left: 0;
+                          right: 0;
+                          bottom: 0;
+                          max-height: 90%;
+                          background: #fbfbfc;
+                          border-radius: 24px 24px 0 0;
+                          display: flex;
+                          flex-direction: column;
+                          overflow: hidden;
+                        "
+                      >
+                        <div
+                          style="
+                            padding: 14px 16px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: space-between;
+                            border-bottom: 1px solid #e4e7ec;
+                          "
+                        >
+                          <div
+                            style="
+                              display: flex;
+                              align-items: center;
+                              gap: 11px;
+                              min-width: 0;
+                            "
+                          >
+                            <div
+                              style="
+                                width: 38px;
+                                height: 38px;
+                                border-radius: 999px;
+                                background: #2d3ce5;
+                                color: #fff;
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 13px;
+                                font-weight: 600;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                flex-shrink: 0;
+                              "
+                            >
+                              {{ initials }}
+                            </div>
+                            <div style="min-width: 0">
+                              <div
+                                style="
+                                  font-size: 14px;
+                                  font-weight: 600;
+                                  color: #101828;
+                                  line-height: 1.2;
+                                "
+                              >
+                                {{ fullName }}
+                              </div>
+                              <div style="font-size: 11.5px; color: #667085">
+                                {{ roleLabel }} · Sede {{ sede }}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            onClick="{{ closeDrawer }}"
+                            aria-label="Cerrar"
+                            style="
+                              width: 36px;
+                              height: 36px;
+                              border: none;
+                              background: transparent;
+                              color: #667085;
+                              cursor: pointer;
+                              display: flex;
+                              align-items: center;
+                              justify-content: center;
+                            "
+                          >
+                            <svg
+                              width="22"
+                              height="22"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path d="M6 6l12 12M18 6 6 18"></path>
+                            </svg>
+                          </button>
+                        </div>
+                        <div
+                          class="scl"
+                          style="overflow-y: auto; padding: 14px 16px 22px"
+                        >
+                          <sc-for
+                            list="{{ drawerSections }}"
+                            as="s"
+                            hint-placeholder-count="4"
+                          >
+                            <div style="margin-bottom: 16px">
+                              <div
+                                style="
+                                  font-family:
+                                    &quot;IBM Plex Mono&quot;, monospace;
+                                  font-size: 10px;
+                                  font-weight: 600;
+                                  text-transform: uppercase;
+                                  letter-spacing: 0.1em;
+                                  color: #98a2b3;
+                                  margin-bottom: 9px;
+                                "
+                              >
+                                {{ s.label }}
+                              </div>
+                              <div
+                                style="
+                                  display: grid;
+                                  grid-template-columns: 1fr 1fr;
+                                  gap: 8px;
+                                "
+                              >
+                                <sc-for
+                                  list="{{ s.items }}"
+                                  as="m"
+                                  hint-placeholder-count="4"
+                                >
+                                  <button
+                                    onClick="{{ m.onClick }}"
+                                    style="{{ m.style }}"
+                                  >
+                                    <span
+                                      style="width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:{{ m.bg }}; color:{{ m.fg }}; flex-shrink:0;"
+                                    >
+                                      <svg
+                                        width="18"
+                                        height="18"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="1.7"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                      >
+                                        <path d="{{ m.d }}"></path>
+                                      </svg>
+                                    </span>
+                                    <span
+                                      style="
+                                        font-size: 13px;
+                                        font-weight: 500;
+                                        color: #1d2939;
+                                        text-align: left;
+                                        line-height: 1.2;
+                                      "
+                                      >{{ m.label }}</span
+                                    >
+                                  </button>
+                                </sc-for>
+                              </div>
+                            </div>
+                          </sc-for>
+                          <button
+                            onClick="{{ logout }}"
+                            style="
+                              margin-top: 4px;
+                              width: 100%;
+                              min-height: 48px;
+                              border: 1px solid #fecdca;
+                              background: #fef3f2;
+                              border-radius: 12px;
+                              color: #b42318;
+                              font-size: 13.5px;
+                              font-weight: 600;
+                              cursor: pointer;
+                              display: flex;
+                              align-items: center;
+                              justify-content: center;
+                              gap: 8px;
+                            "
+                          >
+                            <svg
+                              width="18"
+                              height="18"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path
+                                d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 17l5-5-5-5M21 12H9"
+                              ></path>
+                            </svg>
+                            Cerrar sesión
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <!-- OVERLAY: Búsqueda -->
+                  <sc-if
+                    value="{{ searchOpen }}"
+                    hint-placeholder-val="{{ false }}"
+                  >
+                    <div
+                      style="
+                        position: absolute;
+                        inset: 0;
+                        z-index: 45;
+                        background: #fbfbfc;
+                        display: flex;
+                        flex-direction: column;
+                      "
+                    >
+                      <div
+                        style="
+                          padding: 14px 12px;
+                          display: flex;
+                          align-items: center;
+                          gap: 8px;
+                          border-bottom: 1px solid #e4e7ec;
+                          background: #fff;
+                        "
+                      >
+                        <button
+                          onClick="{{ closeSearch }}"
+                          aria-label="Volver"
+                          style="
+                            width: 38px;
+                            height: 38px;
+                            border: none;
+                            background: transparent;
+                            color: #475467;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            flex-shrink: 0;
+                          "
+                        >
+                          <svg
+                            width="22"
+                            height="22"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="M15 6l-6 6 6 6"></path>
+                          </svg>
+                        </button>
+                        <div
+                          style="
+                            flex: 1;
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                            height: 42px;
+                            padding: 0 12px;
+                            border-radius: 11px;
+                            background: #f2f4f7;
+                          "
+                        >
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#98a2b3"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <circle cx="11" cy="11" r="7"></circle>
+                            <path d="M20 20l-4-4"></path>
+                          </svg>
+                          <input
+                            value="{{ query }}"
+                            onInput="{{ onQuery }}"
+                            placeholder="Buscar en toda la app…"
+                            style="
+                              flex: 1;
+                              border: none;
+                              background: transparent;
+                              outline: none;
+                              font-family:
+                                &quot;IBM Plex Sans&quot;, sans-serif;
+                              font-size: 14px;
+                              color: #101828;
+                            "
+                          />
+                        </div>
+                      </div>
+                      <div
+                        class="scl"
+                        style="flex: 1; overflow-y: auto; padding: 16px"
+                      >
+                        <div
+                          style="
+                            font-family: &quot;IBM Plex Mono&quot;, monospace;
+                            font-size: 10px;
+                            font-weight: 600;
+                            text-transform: uppercase;
+                            letter-spacing: 0.1em;
+                            color: #98a2b3;
+                            margin-bottom: 10px;
+                          "
+                        >
+                          {{ searchHeading }}
+                        </div>
+                        <div
+                          style="
+                            display: flex;
+                            flex-direction: column;
+                            gap: 8px;
+                          "
+                        >
+                          <sc-for
+                            list="{{ searchResults }}"
+                            as="r"
+                            hint-placeholder-count="4"
+                          >
+                            <button
+                              onClick="{{ r.onClick }}"
+                              style="
+                                text-align: left;
+                                cursor: pointer;
+                                width: 100%;
+                                padding: 12px 14px;
+                                border: 1px solid #e4e7ec;
+                                border-radius: 12px;
+                                background: #fff;
+                                display: flex;
+                                align-items: center;
+                                justify-content: space-between;
+                                gap: 10px;
+                              "
+                            >
+                              <div style="min-width: 0">
+                                <div
+                                  style="
+                                    font-size: 13.5px;
+                                    font-weight: 500;
+                                    color: #101828;
+                                    line-height: 1.25;
+                                  "
+                                >
+                                  {{ r.nombre }}
+                                </div>
+                                <div
+                                  style="
+                                    font-family:
+                                      &quot;IBM Plex Mono&quot;, monospace;
+                                    font-size: 11px;
+                                    color: #667085;
+                                    margin-top: 2px;
+                                  "
+                                >
+                                  {{ r.ref }} · {{ r.sede }}
+                                </div>
+                              </div>
+                              <span style="{{ r.estadoStyle }}"
+                                >{{ r.estadoLabel }}</span
+                              >
+                            </button>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+
+              <!-- NOTAS UX -->
+              <div>
+                <div
+                  style="
+                    font-family: &quot;IBM Plex Mono&quot;, monospace;
+                    font-size: 11px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.08em;
+                    color: #667085;
+                    margin-bottom: 16px;
+                  "
+                >
+                  Decisiones de diseño
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 14px">
+                  <div
+                    style="
+                      border: 1px solid #e4e7ec;
+                      border-radius: 14px;
+                      background: #fff;
+                      padding: 18px;
+                    "
+                  >
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 9px;
+                        margin-bottom: 8px;
+                      "
+                    >
+                      <span
+                        style="
+                          font-family: &quot;IBM Plex Mono&quot;, monospace;
+                          font-size: 10px;
+                          font-weight: 600;
+                          color: #027a48;
+                          background: #ecfdf3;
+                          border: 1px solid #a6f4c5;
+                          padding: 2px 7px;
+                          border-radius: 5px;
+                        "
+                        >ACCESO</span
+                      ><span style="font-size: 14px; font-weight: 600"
+                        >Nada queda fuera de alcance</span
+                      >
+                    </div>
+                    <p
+                      style="
+                        margin: 0;
+                        font-size: 13px;
+                        color: #475467;
+                        line-height: 1.55;
+                      "
+                    >
+                      4 destinos del rol + acción primaria, y el botón "Más" (o
+                      el avatar) abre el menú con
+                      <strong style="color: #101828">todos</strong> los módulos
+                      + Panel Admin.
+                    </p>
+                  </div>
+                  <div
+                    style="
+                      border: 1px solid #e4e7ec;
+                      border-radius: 14px;
+                      background: #fff;
+                      padding: 18px;
+                    "
+                  >
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 9px;
+                        margin-bottom: 8px;
+                      "
+                    >
+                      <span
+                        style="
+                          font-family: &quot;IBM Plex Mono&quot;, monospace;
+                          font-size: 10px;
+                          font-weight: 600;
+                          color: #2531c8;
+                          background: #f0f2ff;
+                          border: 1px solid #c2ccff;
+                          padding: 2px 7px;
+                          border-radius: 5px;
+                        "
+                        >FAB</span
+                      ><span style="font-size: 14px; font-weight: 600"
+                        >Botón central al ras</span
+                      >
+                    </div>
+                    <p
+                      style="
+                        margin: 0;
+                        font-size: 13px;
+                        color: #475467;
+                        line-height: 1.55;
+                      "
+                    >
+                      La acción primaria (Vender / Orden / Inventario) ya no
+                      sobresale: queda dentro de la barra, resaltada con un
+                      fondo claro. Más limpio y sin tapar contenido.
+                    </p>
+                  </div>
+                  <div
+                    style="
+                      border: 1px solid #e4e7ec;
+                      border-radius: 14px;
+                      background: #fff;
+                      padding: 18px;
+                    "
+                  >
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 9px;
+                        margin-bottom: 8px;
+                      "
+                    >
+                      <span
+                        style="
+                          font-family: &quot;IBM Plex Mono&quot;, monospace;
+                          font-size: 10px;
+                          font-weight: 600;
+                          color: #b54708;
+                          background: #fffaeb;
+                          border: 1px solid #fedf89;
+                          padding: 2px 7px;
+                          border-radius: 5px;
+                        "
+                        >RESPONSIVE</span
+                      ><span style="font-size: 14px; font-weight: 600"
+                        >iPhone, Android y PC</span
+                      >
+                    </div>
+                    <p
+                      style="
+                        margin: 0;
+                        font-size: 13px;
+                        color: #475467;
+                        line-height: 1.55;
+                      "
+                    >
+                      Respeta las safe-areas (notch e indicador de iOS, gesto de
+                      Android) y en PC pasa a barra lateral + tabla. Cambia el
+                      selector "Pantalla" arriba para verlo.
+                    </p>
+                  </div>
+                  <div
+                    style="
+                      border: 1px solid #e4e7ec;
+                      border-radius: 14px;
+                      background: #fff;
+                      padding: 18px;
+                    "
+                  >
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 9px;
+                        margin-bottom: 8px;
+                      "
+                    >
+                      <span
+                        style="
+                          font-family: &quot;IBM Plex Mono&quot;, monospace;
+                          font-size: 10px;
+                          font-weight: 600;
+                          color: #475467;
+                          background: #f7f8fa;
+                          border: 1px solid #e4e7ec;
+                          padding: 2px 7px;
+                          border-radius: 5px;
+                        "
+                        >ADMIN</span
+                      ><span style="font-size: 14px; font-weight: 600"
+                        >El Admin ve todo</span
+                      >
+                    </div>
+                    <p
+                      style="
+                        margin: 0;
+                        font-size: 13px;
+                        color: #475467;
+                        line-height: 1.55;
+                      "
+                    >
+                      El Panel Admin agrupa las 12 herramientas (Cierres,
+                      Auditoría, Usuarios, Conteo…) con sus KPIs. Selecciona el
+                      rol <strong style="color: #101828">Admin</strong> y entra
+                      desde "Más".
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ════════ VISTA PC ════════ -->
+          <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ false }}">
+            <div
+              style="
+                border-radius: 14px;
+                overflow: hidden;
+                box-shadow: 0 24px 48px -16px rgba(16, 24, 40, 0.28);
+                border: 1px solid #d0d5dd;
+                background: #fff;
+              "
+            >
+              <!-- Barra de ventana -->
+              <div
+                style="
+                  height: 38px;
+                  background: #f2f4f7;
+                  border-bottom: 1px solid #e4e7ec;
+                  display: flex;
+                  align-items: center;
+                  gap: 8px;
+                  padding: 0 14px;
+                "
+              >
+                <span
+                  style="
+                    width: 11px;
+                    height: 11px;
+                    border-radius: 999px;
+                    background: #ff5f57;
+                  "
+                ></span>
+                <span
+                  style="
+                    width: 11px;
+                    height: 11px;
+                    border-radius: 999px;
+                    background: #febc2e;
+                  "
+                ></span>
+                <span
+                  style="
+                    width: 11px;
+                    height: 11px;
+                    border-radius: 999px;
+                    background: #28c840;
+                  "
+                ></span>
+                <span
+                  style="
+                    margin-left: 12px;
+                    font-family: &quot;IBM Plex Mono&quot;, monospace;
+                    font-size: 11.5px;
+                    color: #667085;
+                  "
+                  >app.compresoresdelvalle.com/ops/inventario</span
+                >
+              </div>
+              <div
+                style="
+                  display: grid;
+                  grid-template-columns: 240px minmax(0, 1fr);
+                  height: 600px;
+                "
+              >
+                <!-- Sidebar -->
+                <div
+                  class="scl"
+                  style="
+                    background: #0b1320;
+                    overflow-y: auto;
+                    display: flex;
+                    flex-direction: column;
+                  "
+                >
+                  <div
+                    style="
+                      height: 56px;
+                      display: flex;
+                      align-items: center;
+                      gap: 9px;
+                      padding: 0 16px;
+                      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                    "
+                  >
+                    <div
+                      style="
+                        width: 28px;
+                        height: 28px;
+                        border-radius: 8px;
+                        background: #2531c8;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                      "
+                    >
+                      <span
+                        style="
+                          font-family: &quot;IBM Plex Mono&quot;, monospace;
+                          font-size: 12px;
+                          font-weight: 700;
+                          color: #fff;
+                        "
+                        >C</span
+                      >
+                    </div>
+                    <div style="line-height: 1.1">
+                      <div
+                        style="
+                          font-size: 13px;
+                          font-weight: 600;
+                          color: rgba(255, 255, 255, 0.92);
+                        "
+                      >
+                        Compresores
+                      </div>
+                      <div
+                        style="
+                          font-family: &quot;IBM Plex Mono&quot;, monospace;
+                          font-size: 9.5px;
+                          letter-spacing: 0.1em;
+                          color: rgba(255, 255, 255, 0.4);
+                          text-transform: uppercase;
+                        "
+                      >
+                        del Valle
+                      </div>
+                    </div>
+                  </div>
+                  <div style="padding: 12px 10px; flex: 1">
+                    <div
+                      style="
+                        padding: 0 8px 6px;
+                        font-family: &quot;IBM Plex Mono&quot;, monospace;
+                        font-size: 9.5px;
+                        text-transform: uppercase;
+                        letter-spacing: 0.1em;
+                        color: rgba(255, 255, 255, 0.32);
+                      "
+                    >
+                      Principal
+                    </div>
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        height: 34px;
+                        padding: 0 10px;
+                        border-radius: 8px;
+                        color: rgba(255, 255, 255, 0.7);
+                        font-size: 13px;
+                        margin-bottom: 8px;
+                      "
+                    >
+                      <svg
+                        width="15"
+                        height="15"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.7"
+                      >
+                        <path d="M3 10.5 12 3l9 7.5M5 9.5V20h14V9.5"></path>
+                      </svg>
+                      Inicio
+                    </div>
+                    <sc-for
+                      list="{{ desktopSections }}"
+                      as="s"
+                      hint-placeholder-count="4"
+                    >
+                      <div style="margin-bottom: 10px">
+                        <div
+                          style="
+                            padding: 0 8px 6px;
+                            font-family: &quot;IBM Plex Mono&quot;, monospace;
+                            font-size: 9.5px;
+                            text-transform: uppercase;
+                            letter-spacing: 0.1em;
+                            color: rgba(255, 255, 255, 0.32);
+                          "
+                        >
+                          {{ s.label }}
+                        </div>
+                        <sc-for
+                          list="{{ s.items }}"
+                          as="m"
+                          hint-placeholder-count="3"
+                        >
+                          <div style="{{ m.style }}">
+                            <svg
+                              width="15"
+                              height="15"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.7"
+                            >
+                              <path d="{{ m.d }}"></path>
+                            </svg>
+                            {{ m.label }}
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+                <!-- Main -->
+                <div
+                  style="display: flex; flex-direction: column; min-width: 0"
+                >
+                  <!-- Topbar -->
+                  <div
+                    style="
+                      height: 56px;
+                      background: #2531c8;
+                      display: flex;
+                      align-items: center;
+                      gap: 14px;
+                      padding: 0 18px;
+                      flex-shrink: 0;
+                    "
+                  >
+                    <div
+                      style="
+                        flex: 1;
+                        max-width: 420px;
+                        display: flex;
+                        align-items: center;
+                        gap: 9px;
+                        height: 36px;
+                        padding: 0 13px;
+                        border-radius: 9px;
+                        background: rgba(255, 255, 255, 0.14);
+                      "
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.75)"
+                        stroke-width="1.8"
+                      >
+                        <circle cx="11" cy="11" r="7"></circle>
+                        <path d="M20 20l-4-4"></path>
+                      </svg>
+                      <span
+                        style="font-size: 13px; color: rgba(255, 255, 255, 0.7)"
+                        >Buscar productos, ventas, OTs…</span
+                      >
+                    </div>
+                    <div style="flex: 1"></div>
+                    <div
+                      style="
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 7px;
+                        height: 30px;
+                        padding: 0 11px;
+                        border-radius: 8px;
+                        border: 1px solid rgba(255, 255, 255, 0.18);
+                        background: rgba(255, 255, 255, 0.1);
+                      "
+                    >
+                      <span
+                        style="
+                          width: 6px;
+                          height: 6px;
+                          border-radius: 999px;
+                          background: #34d583;
+                        "
+                      ></span
+                      ><span
+                        style="
+                          font-family: &quot;IBM Plex Mono&quot;, monospace;
+                          font-size: 12px;
+                          color: #fff;
+                        "
+                        >{{ sede }}</span
+                      >
+                    </div>
+                    <div
+                      style="
+                        position: relative;
+                        width: 34px;
+                        height: 34px;
+                        border-radius: 8px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: rgba(255, 255, 255, 0.9);
+                      "
+                    >
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                      >
+                        <path
+                          d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"
+                        ></path>
+                        <path d="M10 21h4"></path>
+                      </svg>
+                      <span
+                        style="
+                          position: absolute;
+                          top: 3px;
+                          right: 3px;
+                          min-width: 15px;
+                          height: 15px;
+                          padding: 0 4px;
+                          border-radius: 999px;
+                          background: #f04438;
+                          color: #fff;
+                          font-size: 9px;
+                          font-weight: 700;
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                        "
+                        >{{ alertCount }}</span
+                      >
+                    </div>
+                    <div
+                      style="
+                        width: 32px;
+                        height: 32px;
+                        border-radius: 999px;
+                        background: rgba(255, 255, 255, 0.16);
+                        border: 1px solid rgba(255, 255, 255, 0.25);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-family: &quot;IBM Plex Mono&quot;, monospace;
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: #fff;
+                      "
+                    >
+                      {{ initials }}
+                    </div>
+                  </div>
+                  <!-- Contenido: inventario tabla -->
+                  <div
+                    class="scl"
+                    style="
+                      flex: 1;
+                      overflow-y: auto;
+                      background: #fbfbfc;
+                      padding: 22px;
+                    "
+                  >
+                    <div
+                      style="
+                        display: flex;
+                        align-items: flex-end;
+                        justify-content: space-between;
+                        gap: 12px;
+                      "
+                    >
+                      <div>
+                        <div
+                          style="
+                            font-family: &quot;IBM Plex Mono&quot;, monospace;
+                            font-size: 11px;
+                            text-transform: uppercase;
+                            letter-spacing: 0.06em;
+                            color: #98a2b3;
+                          "
+                        >
+                          Operaciones · Catálogo y stock
+                        </div>
+                        <h2
+                          style="
+                            margin: 6px 0 0;
+                            font-size: 24px;
+                            font-weight: 600;
+                            letter-spacing: -0.018em;
+                            color: #101828;
+                          "
+                        >
+                          Inventario
+                        </h2>
+                      </div>
+                      <button
+                        style="
+                          height: 40px;
+                          padding: 0 16px;
+                          border: none;
+                          border-radius: 8px;
+                          background: #2d3ce5;
+                          color: #fff;
+                          font-size: 13px;
+                          font-weight: 500;
+                          cursor: pointer;
+                          display: inline-flex;
+                          align-items: center;
+                          gap: 7px;
+                        "
+                      >
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          <path d="M12 5v14M5 12h14"></path>
+                        </svg>
+                        Nuevo producto
+                      </button>
+                    </div>
+                    <div
+                      style="
+                        display: grid;
+                        grid-template-columns: repeat(4, 1fr);
+                        gap: 12px;
+                        margin-top: 18px;
+                      "
+                    >
+                      <div
+                        style="
+                          padding: 14px;
+                          border: 1px solid #e4e7ec;
+                          border-radius: 12px;
+                          background: #fff;
+                        "
+                      >
+                        <div
+                          style="
+                            font-family: &quot;IBM Plex Mono&quot;, monospace;
+                            font-size: 22px;
+                            font-weight: 600;
+                            color: #101828;
+                          "
+                        >
+                          2.847
+                        </div>
+                        <div
+                          style="
+                            font-size: 12px;
+                            color: #667085;
+                            margin-top: 4px;
+                          "
+                        >
+                          Productos
+                        </div>
+                      </div>
+                      <div
+                        style="
+                          padding: 14px;
+                          border: 1px solid #fecdca;
+                          border-radius: 12px;
+                          background: #fef3f2;
+                        "
+                      >
+                        <div
+                          style="
+                            font-family: &quot;IBM Plex Mono&quot;, monospace;
+                            font-size: 22px;
+                            font-weight: 600;
+                            color: #b42318;
+                          "
+                        >
+                          {{ alertCount }}
+                        </div>
+                        <div
+                          style="
+                            font-size: 12px;
+                            color: #b42318;
+                            margin-top: 4px;
+                          "
+                        >
+                          Stock bajo/agotado
+                        </div>
+                      </div>
+                      <div
+                        style="
+                          padding: 14px;
+                          border: 1px solid #e4e7ec;
+                          border-radius: 12px;
+                          background: #fff;
+                        "
+                      >
+                        <div
+                          style="
+                            font-family: &quot;IBM Plex Mono&quot;, monospace;
+                            font-size: 22px;
+                            font-weight: 600;
+                            color: #101828;
+                          "
+                        >
+                          4
+                        </div>
+                        <div
+                          style="
+                            font-size: 12px;
+                            color: #667085;
+                            margin-top: 4px;
+                          "
+                        >
+                          Sedes
+                        </div>
+                      </div>
+                      <div
+                        style="
+                          padding: 14px;
+                          border: 1px solid #e4e7ec;
+                          border-radius: 12px;
+                          background: #fff;
+                        "
+                      >
+                        <div
+                          style="
+                            font-family: &quot;IBM Plex Mono&quot;, monospace;
+                            font-size: 22px;
+                            font-weight: 600;
+                            color: #027a48;
+                          "
+                        >
+                          $612M
+                        </div>
+                        <div
+                          style="
+                            font-size: 12px;
+                            color: #667085;
+                            margin-top: 4px;
+                          "
+                        >
+                          Valor inventario
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      style="
+                        margin-top: 18px;
+                        border: 1px solid #e4e7ec;
+                        border-radius: 12px;
+                        overflow: hidden;
+                        background: #fff;
+                      "
+                    >
+                      <table
+                        style="
+                          width: 100%;
+                          border-collapse: collapse;
+                          font-size: 13px;
+                        "
+                      >
+                        <thead>
+                          <tr style="background: #f7f8fa">
+                            <th
+                              style="
+                                text-align: left;
+                                padding: 11px 14px;
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 10.5px;
+                                font-weight: 600;
+                                text-transform: uppercase;
+                                letter-spacing: 0.06em;
+                                color: #667085;
+                                border-bottom: 1px solid #eef1f5;
+                              "
+                            >
+                              Referencia
+                            </th>
+                            <th
+                              style="
+                                text-align: left;
+                                padding: 11px 14px;
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 10.5px;
+                                font-weight: 600;
+                                text-transform: uppercase;
+                                letter-spacing: 0.06em;
+                                color: #667085;
+                                border-bottom: 1px solid #eef1f5;
+                              "
+                            >
+                              Producto
+                            </th>
+                            <th
+                              style="
+                                text-align: left;
+                                padding: 11px 14px;
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 10.5px;
+                                font-weight: 600;
+                                text-transform: uppercase;
+                                letter-spacing: 0.06em;
+                                color: #667085;
+                                border-bottom: 1px solid #eef1f5;
+                              "
+                            >
+                              Categoría
+                            </th>
+                            <th
+                              style="
+                                text-align: left;
+                                padding: 11px 14px;
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 10.5px;
+                                font-weight: 600;
+                                text-transform: uppercase;
+                                letter-spacing: 0.06em;
+                                color: #667085;
+                                border-bottom: 1px solid #eef1f5;
+                              "
+                            >
+                              Sede
+                            </th>
+                            <th
+                              style="
+                                text-align: center;
+                                padding: 11px 14px;
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 10.5px;
+                                font-weight: 600;
+                                text-transform: uppercase;
+                                letter-spacing: 0.06em;
+                                color: #667085;
+                                border-bottom: 1px solid #eef1f5;
+                              "
+                            >
+                              Stock
+                            </th>
+                            <th
+                              style="
+                                text-align: right;
+                                padding: 11px 14px;
+                                font-family:
+                                  &quot;IBM Plex Mono&quot;, monospace;
+                                font-size: 10.5px;
+                                font-weight: 600;
+                                text-transform: uppercase;
+                                letter-spacing: 0.06em;
+                                color: #667085;
+                                border-bottom: 1px solid #eef1f5;
+                              "
+                            >
+                              Precio
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <sc-for
+                            list="{{ allProducts }}"
+                            as="p"
+                            hint-placeholder-count="6"
+                          >
+                            <tr style="border-bottom: 1px solid #f2f4f7">
+                              <td
+                                style="
+                                  padding: 12px 14px;
+                                  font-family:
+                                    &quot;IBM Plex Mono&quot;, monospace;
+                                  font-size: 12px;
+                                  font-weight: 500;
+                                  color: #101828;
+                                "
+                              >
+                                {{ p.ref }}
+                              </td>
+                              <td style="padding: 12px 14px">
+                                <div style="font-weight: 500; color: #101828">
+                                  {{ p.nombre }}
+                                </div>
+                                <div
+                                  style="
+                                    font-family:
+                                      &quot;IBM Plex Mono&quot;, monospace;
+                                    font-size: 11px;
+                                    color: #667085;
+                                  "
+                                >
+                                  {{ p.marca }}
+                                </div>
+                              </td>
+                              <td style="padding: 12px 14px">
+                                <span style="{{ p.catStyle }}"
+                                  >{{ p.cat }}</span
+                                >
+                              </td>
+                              <td style="padding: 12px 14px; color: #475467">
+                                {{ p.sede }}
+                              </td>
+                              <td
+                                style="padding: 12px 14px; text-align: center"
+                              >
+                                <span style="{{ p.estadoStyle }}"
+                                  >{{ p.cant }}</span
+                                >
+                              </td>
+                              <td
+                                style="
+                                  padding: 12px 14px;
+                                  text-align: right;
+                                  font-family:
+                                    &quot;IBM Plex Mono&quot;, monospace;
+                                  font-weight: 500;
+                                  color: #101828;
+                                "
+                              >
+                                {{ p.precio }}
+                              </td>
+                            </tr>
+                          </sc-for>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p
+              style="
+                margin: 16px 0 0;
+                font-size: 13px;
+                color: #667085;
+                line-height: 1.55;
+                max-width: 680px;
+              "
+            >
+              En PC la barra inferior y el drawer desaparecen: el menú completo
+              vive en la barra lateral fija y las listas pasan de tarjetas a
+              tabla densa. El mismo código responde a iPhone, Android, tablet y
+              escritorio con un solo punto de quiebre.
+            </p>
+          </sc-if>
+        </div>
+      </div>
+    </x-dc>
+    <script
+      type="text/x-dc"
+      data-dc-script
+      data-props='{"$preview": {"width": 1080, "height": 920}}'
+    >
+      class Component extends DCLogic {
+        ICON = {
+          Inicio: "M3 10.5 12 3l9 7.5M5 9.5V20h14V9.5",
+          Inventario: "M12 3 3 7.5l9 4.5 9-4.5zM3 7.5v9l9 4.5 9-4.5v-9M12 12v9",
+          Ventas: "M5 6h2l1.4 8.5a1.2 1.2 0 0 0 1.2 1h7a1.2 1.2 0 0 0 1.2-1L20 9H7M10 20a1 1 0 1 1-2 0 1 1 0 0 1 2 0M18 20a1 1 0 1 1-2 0 1 1 0 0 1 2 0",
+          Vender: "M5 6h2l1.4 8.5a1.2 1.2 0 0 0 1.2 1h7a1.2 1.2 0 0 0 1.2-1L20 9H7M10 20a1 1 0 1 1-2 0 1 1 0 0 1 2 0M18 20a1 1 0 1 1-2 0 1 1 0 0 1 2 0",
+          Compras: "M3 5h2l1.5 11h11M6 8h13l-1.5 6H8M8 19a1 1 0 1 0 .001 2A1 1 0 0 0 8 19m9 0a1 1 0 1 0 .001 2A1 1 0 0 0 17 19",
+          Traspasos: "M4 9h13l-3-3M20 15H7l3 3",
+          Órdenes: "M14.5 6.5a3.5 3.5 0 0 1-4.6 4.6l-5.4 5.4 2 2 5.4-5.4a3.5 3.5 0 0 1 4.6-4.6l-2.2 2.2-1.8-1.8z",
+          Orden: "M14.5 6.5a3.5 3.5 0 0 1-4.6 4.6l-5.4 5.4 2 2 5.4-5.4a3.5 3.5 0 0 1 4.6-4.6l-2.2 2.2-1.8-1.8z",
+          Ensambles: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5",
+          Cotizaciones: "M7 3h7l4 4v14H7zM14 3v4h4M9 12h6M9 16h4",
+          Garantías: "M12 3 5 6v5c0 4 3 7 7 9 4-2 7-5 7-9V6zM9 12l2 2 4-4",
+          Recibos: "M6 3h12v18l-2.5-1.6L13 21l-2.5-1.6L8 21l-2-1.6V3zM9 8h6M9 12h6",
+          Clientes: "M16.5 19a4.5 4.5 0 0 0-9 0M12 11.5a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4",
+          Productos: "M4 7.5 12 4l8 3.5M4 7.5v9L12 20l8-3.5v-9M4 7.5 12 11l8-3.5M12 11v9",
+          Devoluciones: "M9 7 5 11l4 4M5 11h9a4 4 0 0 1 0 8h-2",
+          Herramientas: "M14.5 6.5a3.5 3.5 0 0 1-4.6 4.6l-5.4 5.4 2 2 5.4-5.4a3.5 3.5 0 0 1 4.6-4.6l-2.2 2.2-1.8-1.8z",
+          Mas: "M5 7h14M5 12h14M5 17h14",
+          Panel: "M4 13h6V4H4zM14 9h6V4h-6zM14 20h6v-9h-6zM4 20h6v-5H4z",
+        };
+
+        ADMIN_MODULES = [
+          { label: "Dashboard", d: "M4 13h6V4H4zM14 9h6V4h-6zM14 20h6v-9h-6zM4 20h6v-5H4z" },
+          { label: "Cierres", d: "M6 3h12v18H6zM9 7h6M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01" },
+          { label: "Alertas", d: "M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M10 21h4" },
+          { label: "Conteo", d: "M7 4h10v16H7zM10 8h4M10 12h4M10 16h4" },
+          { label: "Análisis ABC", d: "M4 20V10M10 20V4M16 20v-7M21 20H3" },
+          { label: "Reorden", d: "M4 9a8 8 0 0 1 14-3l2 2M20 15a8 8 0 0 1-14 3l-2-2M18 4v4h-4M6 20v-4h4" },
+          { label: "Auditoría", d: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14M20 20l-4-4" },
+          { label: "Usuarios", d: "M16 19a4 4 0 0 0-8 0M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19 19a3.5 3.5 0 0 0-4-3.2" },
+          { label: "Top 10", d: "M7 4h10v3a5 5 0 0 1-10 0zM5 5H3v2a3 3 0 0 0 3 3M19 5h2v2a3 3 0 0 1-3 3M9 14h6l-1 6h-4z" },
+          { label: "Configuración", d: "M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.3 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.3-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.3-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.3 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z" },
+          { label: "Notas crédito", d: "M3 7h18v10H3zM3 11h18M7 15h4" },
+          { label: "Cuentas", d: "M4 10h16M5 10 12 4l7 6M6 10v7M10 10v7M14 10v7M18 10v7M4 20h16" },
+        ];
+
+        ACCENT = {
+          Inventario: ["#eef2ff", "#4456c2"], Productos: ["#eef2ff", "#4456c2"],
+          Ventas: ["#e8faf6", "#0e5f5a"], Cotizaciones: ["#e8faf6", "#0e5f5a"],
+          Recibos: ["#e8faf6", "#0e5f5a"], Clientes: ["#e8faf6", "#0e5f5a"], Devoluciones: ["#e8faf6", "#0e5f5a"],
+          Compras: ["#fef3d6", "#7a340b"], Traspasos: ["#fef3d6", "#7a340b"], Garantías: ["#fef3d6", "#7a340b"],
+          Órdenes: ["#f5f0ff", "#5b21b6"], Ensambles: ["#f5f0ff", "#5b21b6"],
+          Herramientas: ["#f7f8fa", "#475467"], Panel: ["#fef3f2", "#b42318"],
+        };
+
+        MODULE_SECTION = {
+          Inventario: "Catálogo y stock", Productos: "Catálogo y stock",
+          Ventas: "Operación comercial", Cotizaciones: "Operación comercial",
+          Recibos: "Operación comercial", Clientes: "Operación comercial", Devoluciones: "Operación comercial",
+          Compras: "Bodega y movimiento", Traspasos: "Bodega y movimiento", Garantías: "Bodega y movimiento",
+          Órdenes: "Taller", Ensambles: "Taller", Herramientas: "Soporte",
+        };
+        SECTION_ORDER = ["Catálogo y stock", "Operación comercial", "Bodega y movimiento", "Taller", "Soporte"];
+
+        ROLE_MODULES = {
+          Vendedor: ["Inventario","Traspasos","Ventas","Compras","Órdenes","Ensambles","Cotizaciones","Garantías","Recibos","Herramientas","Productos","Clientes"],
+          Bodeguero: ["Inventario","Compras","Traspasos","Ensambles","Garantías","Devoluciones","Herramientas","Productos"],
+          Tecnico: ["Órdenes","Ensambles","Herramientas","Productos"],
+          Admin: ["Inventario","Ventas","Compras","Traspasos","Órdenes","Ensambles","Cotizaciones","Garantías","Recibos","Herramientas","Devoluciones","Productos","Clientes","→ Panel Admin"],
+        };
+
+        ROLE_META = {
+          Vendedor: { label: "Vendedor", name: "María Restrepo", sede: "CV" },
+          Bodeguero: { label: "Bodeguero", name: "Pedro Gómez", sede: "BODEGA" },
+          Tecnico: { label: "Técnico", name: "Luis Tobón", sede: "BODEGA" },
+          Admin: { label: "Admin", name: "Maritza Ríos", sede: "CV" },
+        };
+
+        PRODUCTS = [
+          { nombre: "Compresor 2HP 100L", ref: "CMP-2H100", marca: "Schulz", sede: "CV", precio: 1850000, cant: 4, estado: "OK", cat: "Compresor", catKey: "cmp" },
+          { nombre: "Filtro de aire 1/2\"", ref: "RPT-FA12", marca: "Chicago Pn.", sede: "CV", precio: 38000, cant: 2, estado: "Bajo", cat: "Repuesto", catKey: "rpt" },
+          { nombre: "Manguera neumática 8mm", ref: "ACC-MN08", marca: "Genérica", sede: "L3", precio: 12500, cant: 0, estado: "Agotado", cat: "Accesorio", catKey: "acc" },
+          { nombre: "Aceite compresor ISO 1L", ref: "RPT-AC1L", marca: "Shell", sede: "CV", precio: 45000, cant: 18, estado: "OK", cat: "Repuesto", catKey: "rpt" },
+          { nombre: "Pistola pintura HVLP", ref: "HRM-PP01", marca: "Truper", sede: "CHV", precio: 128000, cant: 1, estado: "Bajo", cat: "Herramienta", catKey: "hrm" },
+          { nombre: "Racor rápido 1/4\"", ref: "ACC-RR14", marca: "Genérica", sede: "CV", precio: 6500, cant: 64, estado: "OK", cat: "Accesorio", catKey: "acc" },
+        ];
+
+        CAT_STYLE = {
+          cmp: "background:#eef2ff;color:#2a3478;border:1px solid #c7d0f2;",
+          rpt: "background:#e8faf6;color:#0e5f5a;border:1px solid #99e8dd;",
+          acc: "background:#feeef4;color:#9b226b;border:1px solid #fbc8dd;",
+          hrm: "background:#f5f0ff;color:#5b21b6;border:1px solid #d9c2ff;",
+        };
+
+        state = { role: "Vendedor", screen: "inicio", drawer: false, search: false, query: "", estado: "all", device: "iphone" };
+
+        fmt(n) { return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 }).format(n); }
+        initialsOf(name) { return name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase(); }
+        iconFor(m) { return this.ICON[m] || this.ICON.Inventario; }
+        accentFor(m) { return this.ACCENT[m] || ["#f7f8fa", "#475467"]; }
+
+        estadoStyleFor(estado) {
+          const base = "font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;padding:3px 8px;border-radius:6px;white-space:nowrap;border:1px solid;";
+          if (estado === "OK") return base + "background:#ecfdf3;color:#027a48;border-color:#a6f4c5;";
+          if (estado === "Bajo") return base + "background:#fffaeb;color:#b54708;border-color:#fedf89;";
+          return base + "background:#fef3f2;color:#b42318;border-color:#fecdca;";
+        }
+        estadoLabelFor(e) { return e === "OK" ? "Disponible" : e; }
+
+        buildNav(modules) {
+          const has = (m) => modules.includes(m);
+          const go = (screen) => () => this.setState({ screen, drawer: false, search: false });
+          const inicio = { key: "inicio", label: "Inicio", tab: true, screen: "inicio", d: this.ICON.Inicio };
+          const fabModule = has("Ventas") ? "Ventas" : has("Órdenes") ? "Órdenes" : "Inventario";
+          const fabLabel = { Ventas: "Vender", Órdenes: "Orden", Inventario: "Inventario" }[fabModule];
+          const fab = { key: "fab", label: fabLabel, fab: true, screen: fabModule, d: this.ICON[fabLabel] };
+          const PRIOR = ["Inventario", "Órdenes", "Ventas", "Compras", "Traspasos", "Cotizaciones", "Ensambles", "Herramientas"];
+          const dests = PRIOR.filter((m) => m !== fabModule && has(m)).slice(0, 2)
+            .map((m) => ({ key: m, label: m, tab: true, screen: m, d: this.ICON[m] }));
+          const mas = { key: "mas", label: "Más", tab: true, more: true, d: this.ICON.Mas };
+          let items = [inicio, dests[0], fab, dests[1], mas].filter(Boolean);
+          let guard = 0;
+          while (items.length < 5 && guard++ < 4) items.splice(3, 0, { key: "sp" + items.length, spacer: true });
+          items = items.slice(0, 5);
+          return items.map((it) => {
+            if (it.spacer) return it;
+            const active = it.more ? this.state.drawer : this.state.screen === it.screen;
+            return { ...it,
+              onClick: it.more ? () => this.setState({ drawer: true }) : go(it.screen),
+              color: active ? "#fff" : "rgba(255,255,255,0.72)",
+              sw: active ? 2.1 : 1.7, weight: active ? 600 : 500 };
+          });
+        }
+
+        // Barra inferior cuando estás DENTRO del Panel Admin: navegación de
+        // administración + salida a Operaciones. Nada de Inventario/Vender/Órdenes.
+        buildAdminNav() {
+          const go = (screen) => () => this.setState({ screen, drawer: false, search: false });
+          const defs = [
+            { key: "resumen", label: "Resumen", screen: "Panel Admin", d: this.ICON.Panel },
+            { key: "alertas", label: "Alertas", screen: "Alertas", d: "M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M10 21h4" },
+            { key: "conteo", label: "Conteo", screen: "Conteo", d: "M7 4h10v16H7zM10 8h4M10 12h4M10 16h4" },
+            { key: "auditoria", label: "Auditoría", screen: "Auditoría", d: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14M20 20l-4-4" },
+            { key: "ops", label: "Operaciones", screen: "inicio", d: "M14 5l-7 7 7 7M21 12H8", exit: true },
+          ];
+          return defs.map((it) => {
+            const active = !it.exit && this.state.screen === it.screen;
+            return { ...it, tab: true, onClick: go(it.screen),
+              color: it.exit ? "rgba(255,255,255,0.95)" : active ? "#fff" : "rgba(255,255,255,0.72)",
+              sw: active ? 2.1 : 1.7, weight: it.exit ? 600 : active ? 600 : 500 };
+          });
+        }
+
+        buildGroups(modules) {
+          const groups = {};
+          modules.filter((m) => m !== "→ Panel Admin").forEach((m) => {
+            const sec = this.MODULE_SECTION[m] || "Otros";
+            (groups[sec] = groups[sec] || []).push(m);
+          });
+          return this.SECTION_ORDER.filter((s) => groups[s]).map((s) => ({ label: s, mods: groups[s] }));
+        }
+
+        buildDrawer(modules, isAdmin) {
+          const go = (screen) => () => this.setState({ screen, drawer: false });
+          const tile = "display:flex;align-items:center;gap:10px;padding:11px;min-height:58px;border:1px solid #e4e7ec;border-radius:13px;background:#fff;cursor:pointer;";
+          const sections = this.buildGroups(modules).map((g) => ({
+            label: g.label,
+            items: g.mods.map((m) => { const [bg, fg] = this.accentFor(m); return { key: m, label: m, d: this.iconFor(m), bg, fg, style: tile, onClick: go(m) }; }),
+          }));
+          if (isAdmin) sections.push({ label: "Control", items: [{ key: "panel", label: "Panel Admin", d: this.ICON.Panel, bg: "#fef3f2", fg: "#b42318",
+            style: "display:flex;align-items:center;gap:10px;padding:11px;min-height:58px;border:1px solid #fecdca;border-radius:13px;background:#fef3f2;cursor:pointer;", onClick: go("Panel Admin") }] });
+          return sections;
+        }
+
+        renderVals() {
+          const { role, screen, drawer, search, query, estado, device } = this.state;
+          const meta = this.ROLE_META[role];
+          const modules = this.ROLE_MODULES[role] || [];
+          const isAdmin = modules.includes("→ Panel Admin");
+
+          // Rol
+          const setRole = (r) => this.setState({ role: r, screen: "inicio", drawer: false, search: false, estado: "all" });
+          const rolesView = ["Vendedor", "Bodeguero", "Tecnico", "Admin"].map((r) => {
+            const active = r === role;
+            const b = "font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;font-weight:500;padding:8px 15px;border-radius:9px;cursor:pointer;min-height:38px;";
+            return { id: r, label: this.ROLE_META[r].label, onClick: () => setRole(r),
+              btnStyle: b + (active ? "background:#2531c8;color:#fff;border:1px solid #2531c8;" : "background:#fff;color:#475467;border:1px solid #d0d5dd;") };
+          });
+
+          // Dispositivo
+          const setDevice = (d) => this.setState({ device: d });
+          const devicesView = [{ id: "iphone", label: "iPhone" }, { id: "android", label: "Android" }, { id: "desktop", label: "PC" }].map((d) => {
+            const active = d.id === device;
+            const b = "font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;font-weight:500;padding:8px 15px;border-radius:9px;cursor:pointer;min-height:38px;";
+            return { id: d.id, label: d.label, onClick: () => setDevice(d.id),
+              btnStyle: b + (active ? "background:#101828;color:#fff;border:1px solid #101828;" : "background:#fff;color:#475467;border:1px solid #d0d5dd;") };
+          });
+          const isIphone = device === "iphone", isAndroid = device === "android", isDesktop = device === "desktop";
+          const isMobile = !isDesktop;
+          const bezelRad = isAndroid ? 30 : 46, padBezel = isAndroid ? 10 : 11, scrRad = isAndroid ? 22 : 36;
+          const bezelStyle = `position:relative;width:393px;height:820px;background:#0b1320;border-radius:${bezelRad}px;padding:${padBezel}px;box-shadow:0 32px 64px -16px rgba(16,24,40,0.4);flex-shrink:0;`;
+          const screenStyle = `position:relative;width:100%;height:100%;background:#fbfbfc;border-radius:${scrRad}px;overflow:hidden;display:flex;flex-direction:column;`;
+          const safeAreaStyle = isIphone ? "height:22px;" : "height:14px;";
+
+          const alertCount = this.PRODUCTS.filter((p) => p.estado !== "OK").length;
+
+          // Accesos rápidos
+          const quickActions = modules.filter((m) => m !== "→ Panel Admin").slice(0, 8).map((m) => {
+            const [bg, fg] = this.accentFor(m);
+            return { key: m, label: m, d: this.iconFor(m), bg, fg, onClick: () => this.setState({ screen: m }) };
+          });
+
+          const activity = [
+            { title: "Venta #1042 registrada", meta: "María · $480.000", time: "9:24", dot: "#12b76a", border: true },
+            { title: "Stock bajo: Filtro 1/2\"", meta: "Sede CV · quedan 2", time: "8:51", dot: "#f79009", border: true },
+            { title: "Traspaso TR-318 recibido", meta: "BODEGA → CV", time: "8:02", dot: "#2e90fa", border: false },
+          ].map((a) => ({ ...a, rowStyle: "display:flex;align-items:center;gap:11px;padding:13px 14px;" + (a.border ? "border-bottom:1px solid #eef1f5;" : "") }));
+
+          // Inventario
+          const chipsDef = [{ v: "all", label: "Todos" }, { v: "OK", label: "Disponible" }, { v: "Bajo", label: "Stock bajo" }, { v: "Agotado", label: "Agotado" }];
+          const chips = chipsDef.map((c) => {
+            const on = estado === c.v;
+            const b = "white-space:nowrap;font-size:12px;font-weight:500;padding:7px 13px;border-radius:999px;cursor:pointer;border:1px solid;";
+            return { key: c.v, label: c.label, onClick: () => this.setState({ estado: c.v }),
+              style: b + (on ? "background:#2531c8;color:#fff;border-color:#2531c8;" : "background:#fff;color:#475467;border-color:#d0d5dd;") };
+          });
+          const fmtProd = (p) => ({ ...p, precio: this.fmt(p.precio),
+            catStyle: "font-size:10.5px;font-weight:500;padding:2px 8px;border-radius:5px;" + this.CAT_STYLE[p.catKey],
+            estadoStyle: this.estadoStyleFor(p.estado), estadoLabel: this.estadoLabelFor(p.estado) });
+          const products = this.PRODUCTS.filter((p) => estado === "all" || p.estado === estado).map(fmtProd);
+          const allProducts = this.PRODUCTS.map(fmtProd);
+
+          // Estados de pantalla
+          const isInicio = screen === "inicio";
+          const isInventario = screen === "Inventario";
+          const ADMIN_SUB = {
+            Alertas: "M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M10 21h4",
+            Conteo: "M7 4h10v16H7zM10 8h4M10 12h4M10 16h4",
+            "Auditoría": "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14M20 20l-4-4",
+          };
+          const adminSub = ADMIN_SUB[screen];
+          const isAdminPanel = screen === "Panel Admin";
+          const isAdminZone = isAdminPanel || !!adminSub;
+          const isGeneric = !isInicio && !isInventario && !isAdminPanel;
+          const genTitle = screen;
+          const [genBg, genFg] = adminSub ? ["#f0f2ff", "#2531c8"] : this.accentFor(screen);
+          const genIcon = adminSub || this.iconFor(screen);
+          const genRows = [
+            { title: "Registro #3121", meta: "Hoy · 10:14", tone: "info", pill: "Abierto" },
+            { title: "Registro #3120", meta: "Hoy · 09:02", tone: "warn", pill: "En proceso" },
+            { title: "Registro #3119", meta: "Ayer · 17:40", tone: "ok", pill: "Completado" },
+            { title: "Registro #3118", meta: "Ayer · 15:11", tone: "ok", pill: "Completado" },
+          ].map((g) => {
+            const m = { ok: "background:#ecfdf3;color:#027a48;border-color:#a6f4c5;", warn: "background:#fffaeb;color:#b54708;border-color:#fedf89;", info: "background:#eff8ff;color:#175cd3;border-color:#b2ddff;" }[g.tone];
+            return { ...g, pillStyle: "font-size:11px;font-weight:500;padding:4px 10px;border-radius:999px;white-space:nowrap;border:1px solid;" + m };
+          });
+
+          // Búsqueda
+          const q = query.trim().toLowerCase();
+          const matches = this.PRODUCTS.filter((p) => !q || p.nombre.toLowerCase().includes(q) || p.ref.toLowerCase().includes(q));
+          const searchResults = matches.map((p) => ({ key: p.ref, nombre: p.nombre, ref: p.ref, sede: p.sede,
+            estadoStyle: this.estadoStyleFor(p.estado), estadoLabel: this.estadoLabelFor(p.estado),
+            onClick: () => this.setState({ search: false, screen: "Inventario" }) }));
+
+          // Desktop sidebar
+          const dtItem = "display:flex;align-items:center;gap:10px;height:33px;padding:0 10px;border-radius:8px;font-size:13px;margin-bottom:2px;";
+          const desktopSections = this.buildGroups(modules).map((g) => ({
+            label: g.label,
+            items: g.mods.map((m) => {
+              const on = m === "Inventario";
+              return { key: m, label: m, d: this.iconFor(m),
+                style: dtItem + (on ? "background:rgba(45,60,229,0.22);color:#fff;box-shadow:inset 2px 0 0 #4b5bf5;" : "color:rgba(255,255,255,0.7);") };
+            }),
+          }));
+
+          return {
+            rolesView, devicesView,
+            isMobile, isDesktop, isIphone, isAndroid,
+            bezelStyle, screenStyle, safeAreaStyle,
+            role, roleLabel: meta.label, sede: meta.sede,
+            fullName: meta.name, firstName: meta.name.split(" ")[0], initials: this.initialsOf(meta.name),
+            alertCount,
+            nav: isAdminZone ? this.buildAdminNav() : this.buildNav(modules),
+            drawerSections: this.buildDrawer(modules, isAdmin),
+            quickActions, activity, chips, products, allProducts,
+            adminModules: this.ADMIN_MODULES,
+            desktopSections,
+            isInicio, isInventario, isAdminPanel, isGeneric,
+            genTitle, genBg, genFg, genIcon, genRows,
+            drawerOpen: drawer, searchOpen: search, query,
+            searchHeading: q ? matches.length + " resultados" : "Sugerencias",
+            searchResults,
+            openDrawer: () => this.setState({ drawer: true }),
+            closeDrawer: () => this.setState({ drawer: false }),
+            openSearch: () => this.setState({ search: true }),
+            closeSearch: () => this.setState({ search: false, query: "" }),
+            onQuery: (e) => this.setState({ query: e.target.value }),
+            goAlertas: () => this.setState({ screen: "Inventario", estado: "Bajo", drawer: false, search: false }),
+            logout: () => this.setState({ drawer: false }),
+          };
+        }
+      }
+    </script>
+  </body>
+</html>
