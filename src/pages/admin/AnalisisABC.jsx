@@ -478,7 +478,8 @@ export default function AnalisisABC() {
             </span>
             <span>
               Ventas reales de {labelPeriodoRanking(periodo).toLowerCase()} ·
-              clase recalculada sobre 90 días · timeout 30s
+              clase recalculada sobre 90 días (ventas directas + repuestos de
+              OT), automática cada mes · timeout 30s
             </span>
           </footer>
         </section>

@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Package, ShoppingCart, Check, Building2 } from "lucide-react";
+import {
+  Package,
+  ShoppingCart,
+  Check,
+  Building2,
+  AlertTriangle,
+} from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -19,6 +25,7 @@ export default function Reorden() {
   const [sedeFiltro, setSedeFiltro] = useState(TODAS_SEDES);
   // Selección de SKUs para generar una orden de compra (estado de UI local).
   const [seleccion, setSeleccion] = useState(() => new Set());
+  const [agotadosSinConfig, setAgotadosSinConfig] = useState(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -48,8 +55,29 @@ export default function Reorden() {
     }
   };
 
+  const cargarAgotadosSinConfig = async () => {
+    try {
+      const { count, error } = await supabase
+        .from("inventario")
+        .select("id, producto:producto_id!inner(id)", {
+          count: "exact",
+          head: true,
+        })
+        .lte("cantidad", 0)
+        .eq("producto.activo", true)
+        .eq("producto.stock_minimo", 0);
+      if (!mountedRef.current) return;
+      if (error) throw error;
+      setAgotadosSinConfig(count ?? 0);
+    } catch {
+      // Silencioso: es un dato informativo adicional, no crítico para la página.
+      if (mountedRef.current) setAgotadosSinConfig(null);
+    }
+  };
+
   useEffect(() => {
     cargar();
+    cargarAgotadosSinConfig();
   }, []);
 
   const keyOf = (i) => `${i.producto_id}-${i.sede_id}`;
@@ -205,6 +233,32 @@ export default function Reorden() {
           sub="Costo · cantidad sugerida"
         />
       </div>
+
+      {/* Aviso: agotados sin stock mínimo configurado (no aparecen abajo) */}
+      {!loading && agotadosSinConfig > 0 && (
+        <div
+          className="flex items-start gap-2.5 rounded-xl border px-4 py-3 text-[12.5px]"
+          style={{
+            backgroundColor: "hsl(var(--warning) / 0.08)",
+            borderColor: "hsl(var(--warning) / 0.35)",
+            color: "hsl(var(--foreground))",
+          }}
+        >
+          <AlertTriangle
+            className="h-4 w-4 shrink-0 mt-0.5"
+            strokeWidth={1.75}
+            style={{ color: "hsl(var(--warning))" }}
+          />
+          <p className="m-0">
+            <strong>{agotadosSinConfig}</strong>{" "}
+            {agotadosSinConfig === 1
+              ? "referencia agotada no aparece"
+              : "referencias agotadas no aparecen"}{" "}
+            en esta lista porque no tienen stock mínimo configurado. Configura
+            mínimo y máximo en el producto para recibir sugerencias.
+          </p>
+        </div>
+      )}
 
       {/* Filtro por sede */}
       {!loading && sedes.length > 2 && (
