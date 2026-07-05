@@ -32,7 +32,11 @@ cerca del despacho); KPIs núcleo: rotación, días de inventario, stockout, exa
 
 ---
 
-## BLOQUE A — Reparar los datos (EN CURSO)
+## BLOQUE A — Reparar los datos (✅ HECHO 2026-07-05, commit 0ba7d40)
+
+> Aplicado en prod y verificado: 71 A / 110 B / 1.797 C; cron `abc-mensual` en
+> `cron.job`; `v_sugerencias_reorden` 518→71 filas (0 con sugerencia 0); banner
+> de agotados sin mínimo en Reorden.jsx; build verde.
 
 **Objetivo:** que ABC/Top/Reorden digan la verdad. Sin UI nueva, solo correcciones.
 
@@ -81,6 +85,14 @@ sugerencia 0 ni insumos con pool equivocado; job en `cron.job`; `npm run build` 
   ya prellenado con el producto. Marcar ítem al registrar el conteo (hook en el flujo actual).
 - Opcional (flag): **conteo ciego** — ocultar `stock_sistema` en el modal hasta registrar.
 - KPI "Precisión" pasa a calcularse del ciclo, no de los últimos 100.
+
+**Verificación C (criterios de aceptación):** generar un plan de 30 y uno de 90 días
+para una sede y comprobar que TODOS los SKUs con stock quedan repartidos (suma de
+items = SKUs con stock de esa sede); los clase A reaparecen ≥1 vez por ciclo de 4-6
+semanas; registrar un conteo desde "los de hoy" marca el ítem (`contado_en`,
+`conteo_id`); % cobertura sube al contar; roles: Bodeguero cuenta, solo Admin
+genera/regenera plan; conteo ciego oculta stock hasta registrar; `npm run build` verde.
+Datos base: ~2.517 SKUs con stock; clases 71 A / 110 B / 1.797 C.
 
 ## BLOQUE B — Min/Max asistidos
 
