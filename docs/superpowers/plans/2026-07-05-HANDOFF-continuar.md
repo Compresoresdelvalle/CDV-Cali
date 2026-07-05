@@ -1,0 +1,75 @@
+# HANDOFF — Continuar mejoras admin (leer PRIMERO en sesión nueva)
+
+> Actualizado: 2026-07-05. Este doc es el punto de entrada tras un /compact o chat nuevo.
+> Contiene: estado exacto, protocolo de trabajo barato, qué sigue, y backlog para no perder nada.
+> El plan técnico detallado de los bloques vive en `2026-07-05-admin-inventario-mejoras.md` (mismo directorio) — LEERLO también antes de ejecutar.
+
+---
+
+## 1. Qué estamos haciendo
+
+Mejoras a la sección Admin de inventario/analítica, en 5 bloques aprobados por el usuario.
+**Orden: A → C → B → D → E.**
+
+| Bloque | Contenido                                                                                                                    | Estado                                                                                                                                                        |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A**  | ABC real (incluye OT) + cron mensual + Reorden confiable                                                                     | ✅ **HECHO** (commit `0ba7d40`, aplicado en prod, verificado: 71 A / 110 B / 1.797 C; cron `abc-mensual` activo; Reorden pasó de 518 filas ruido a 71 reales) |
+| **C**  | Plan de conteo cíclico programado ("los N de hoy", horizonte elegible 1/3 meses, cobertura del ciclo, opcional conteo ciego) | ⬅️ **SIGUIENTE**                                                                                                                                              |
+| **B**  | Min/Max asistidos (sugerencia por demanda 90d ventas+OT, aprobación en lote)                                                 | Pendiente                                                                                                                                                     |
+| **D**  | Ubicaciones + slotting + mapita SVG (layout BODEGA en memoria `bodega-layout-slotting`)                                      | Pendiente                                                                                                                                                     |
+| **E**  | KPIs de inventario en Dashboard (rotación, días inv., stockouts, exactitud, merma)                                           | Pendiente                                                                                                                                                     |
+
+## 2. Protocolo de trabajo (ACORDADO con el usuario — costo bajo, misma calidad)
+
+1. **Sesión nueva por bloque** (por eso existe este doc).
+2. **Preview antes de implementar cada bloque**: presentar el detalle al usuario y esperar su OK (regla firme, está en memoria `feedback-preview-antes-de-cada-bloque`).
+3. **Fable/Opus planea y supervisa; Sonnet implementa**: usar `Agent` con `model: "sonnet"` para escribir migraciones/frontend. Prompts a Sonnet a nivel de REQUISITOS (no código completo — no pagar el código 3 veces).
+4. **Revisión por `git diff`**, no relectura de archivos completos. La sesión principal SÍ revisa línea a línea toda migración que toque dinero/stock/permisos.
+5. **Solo la sesión principal aplica migraciones a prod** (`mcp apply_migration`) y verifica con SQL — verificaciones AGRUPADAS en 1-2 queries.
+6. El subagente NUNCA: aplica a prod, hace git, ni decide diseño de dinero.
+
+## 3. Entorno y reglas del repo (resumen operativo)
+
+- Rama actual: **`fix/correcciones-3`**. Push SIEMPRE a los 2 remotes: `origin` y `cdv-cali`. Merge a `main` solo cuando el usuario lo pida (fast-forward habitual).
+- **La única BD es PRODUCCIÓN** (Supabase). Migraciones: archivo en `supabase/migrations/` + `apply_migration`. Probar con productos "INVENTARIO DE PRUEBA" (999). E2E con login los corre el usuario. NO tocar auth ni el candado de `movimientos`.
+- Build: `npm run build` antes de commit. Hay un hook formateador que retoca archivos tras editar.
+- Commits: convencionales en español, terminar con `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+- Diseño: SOLO tokens CSS (`hsl(var(--token))`), nunca hex ni `bg-white`; patrón PageHeader + SectionCard; tabla desktop/cards móvil; botones ≥48px; dinero COP en pesos enteros (todo redondeado, migración `20260630000001`).
+- Memorias relevantes (auto-cargadas): `proyecto-mejoras-admin-inventario`, `bodega-layout-slotting`, `testing-compresores-constraints`, `feedback-preview-antes-de-cada-bloque`, `feedback-fix-bugs-as-found`.
+
+## 4. Lo ya hecho en esta rama (fix/correcciones-3) — para no rehacer nada
+
+1. `20260630000002_ot_abono_opcional.sql` — **anticipo de OT opcional**: el gate del backend (`trg_orden_validar_transicion`) ya NO exige abono para iniciar trabajo; front (`ot-flujo.js` paso 3) igual. La entrega SIGUE exigiendo pago completo (`fn_generar_venta_ot`: abonado ≥ total). Técnico sigue solo-lectura.
+2. `ordenPDF.js` — sección **"Observaciones"** se imprime bajo el checklist en constancia de recepción Y documento final (solo si la OT tiene observaciones; se capturan al crear la OT en `OrdenNueva.jsx`).
+3. `20260630000003` — eliminada función huérfana `trg_orden_validar_anticipo` (era código muerto).
+4. `20260705000001_venta_ot_metodo_abonos.sql` — ventas de OT ya no dicen **"Varios"** sino **"Abonos OT"** (11 backfilled). El cierre las excluye por `origen='ot'`, no por método → cero impacto en dinero.
+5. `Cierres.jsx` — KPIs ya no se truncan con "..." (fuente responsiva + break-words en `Stat` y `Kpi`).
+6. `20260705000002_abc_ot_cron_reorden.sql` — **Bloque A completo** (ver tabla arriba).
+
+## 5. Conocimiento de negocio ganado (NO perder)
+
+- **Cierre de caja**: el dinero de OT entra por `abonos` en su FECHA (aunque la venta se genere días después); ventas `origen='ot'` excluidas de todo lo monetario del cierre (documento fiscal). El arqueo cuenta abonos efectivo por fecha. "Pagó hoy, recoge mañana" = registrar abono hoy + convertir a venta el día de recogida → verificado sin doble conteo. RLS de abonos permite abonar mientras la OT no esté entregada/cancelada.
+- **Caso embobinada (servicio tercerizado)**: productos `EMB*` existen en catálogo con stock 0; NO agregarlos como repuesto en OT (se traba la descarga). Instrucción operativa: quitar el ítem y poner el valor en **mano de obra**. (Idea futura: tipo de ítem "servicio tercerizado" en OT.)
+- **Diferencias de caja de la clienta (2-jul)**: CHV descuadraba por $1.000.000 consignado en efectivo al banco (el sistema no registra consignaciones); CV por compra de aceite $245.000 no registrada. L3 cuadró. El sistema calculaba bien.
+- **Decimales**: eran centavos del IVA 19%; ya TODO se redondea a pesos enteros (triggers + funciones + backfill). No deben volver a aparecer.
+
+## 6. Backlog fuera del roadmap (ideas aprobadas a medias o pendientes de decisión)
+
+- **Registrar consignación de efectivo al banco** (sacar plata de caja → banco) para que el arqueo cuadre los días que consignan. La clienta lo sufre cada semana. El usuario dijo "solo arregla lo de Varios" — queda PENDIENTE de proponerse formalmente.
+- **Ítem "servicio tercerizado" en OT** (caso embobinada) — a prueba de bobos.
+- **Abonos con cuenta bancaria**: los abonos no piden cuenta destino; en el cierre "por cuenta" caen como "sin cuenta". Limitación conocida, mejora futura.
+- **Top 10 menores**: netear descuentos (consistencia con cierre) + toggle "incluir OT" visible.
+- **NotasCredito**: KPI "agotadas" solo tiene sentido con filtro "Todas" (aclarar u ocultar).
+- Bloques C/B/D/E del roadmap (arriba).
+
+## 7. Contexto de la clienta (cómo comunicar)
+
+La dueña reporta por WhatsApp con lenguaje enredado; pide explicaciones simples. Patrón que funciona: verificar SIEMPRE contra datos reales de prod antes de responder, explicarle con sus propios números (cuaderno vs app), y mensajes listos para reenviar con emojis moderados. Los empleados: vendedoras registran; Yesid = tercero que hace embobinadas.
+
+## 8. Qué hacer al arrancar sesión nueva (Bloque C)
+
+1. Leer este doc + `2026-07-05-admin-inventario-mejoras.md` (spec del Bloque C) + memoria.
+2. Diseñar el detalle fino del Bloque C (tablas `plan_conteo`/`plan_conteo_items`, RPCs `fn_generar_plan_conteo`/`fn_cola_conteo_hoy`, pestaña "Plan" en `Conteo.jsx`, conteo ciego opcional) y **presentar preview al usuario** → esperar OK.
+3. Tras OK: delegar implementación a Sonnet (spec de requisitos), revisar diff, aplicar migración, verificar con SQL agrupado, `npm run build`, commit y push a ambos remotes.
+
+Datos útiles para C (ya medidos): ~2.517 SKUs con stock; 323 contados alguna vez (~13% cobertura); clases reales 71 A / 110 B / 1.797 C; mejores prácticas: A cada 4-6 semanas, B trimestral, C semestral; conteo ciego = best practice (hoy el modal muestra el stock del sistema — hacerlo opcional/configurable).
