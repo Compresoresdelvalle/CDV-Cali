@@ -69,7 +69,15 @@ sugerencia 0 ni insumos con pool equivocado; job en `cron.job`; `npm run build` 
 
 ---
 
-## BLOQUE C — Conteo cíclico programado
+## BLOQUE C — Conteo cíclico programado (✅ HECHO 2026-07-05, commit 619f335)
+
+> Migración `20260705000003_plan_conteo_ciclico.sql` aplicada en prod y verificada
+> end-to-end en L3: plan 30d = 410 ítems (= SKUs con stock, balance 105/103/101/101);
+> plan 90d = 451 ítems (41 clase A ×2, uno por mitad del ciclo); trigger marcó el
+> ítem al registrar conteo del producto PRUEBA; progreso/cola/precisión correctos;
+> datos de prueba limpiados. El plan real lo genera el Admin desde la UI.
+> Nota de auditoría: se corrigió el reparto de divergencias históricas (round-robin
+> solo en la primera mitad de su rango, no en todo el rango).
 
 **Objetivo:** "los N de hoy": nunca más inventarios eternos.
 
