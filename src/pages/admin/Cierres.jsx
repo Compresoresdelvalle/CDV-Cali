@@ -833,7 +833,7 @@ function Kpi({ label, value, sub, token, last, icon: Icon }) {
         {label}
       </div>
       <div
-        className="truncate font-mono text-[20px] font-semibold leading-tight tracking-[-0.02em] tabular-nums"
+        className="font-mono text-[17px] sm:text-[20px] font-semibold leading-tight tracking-[-0.02em] tabular-nums break-words"
         style={{
           color: token ? `hsl(var(${token}))` : "hsl(var(--foreground))",
         }}
@@ -918,7 +918,7 @@ function Stat({ label, value, sub, tone }) {
         {label}
       </p>
       <p
-        className="text-base font-bold tabular-nums truncate"
+        className="mt-0.5 text-sm sm:text-[15px] font-bold tabular-nums leading-tight break-words"
         style={{ color }}
       >
         {value}
