@@ -28,6 +28,22 @@ Mejoras a la sección Admin de inventario/analítica, en 5 bloques aprobados por
 5. **Solo la sesión principal aplica migraciones a prod** (`mcp apply_migration`) y verifica con SQL — verificaciones AGRUPADAS en 1-2 queries.
 6. El subagente NUNCA: aplica a prod, hace git, ni decide diseño de dinero.
 
+**Por qué ahorra:** el costo dominante NO es Sonnet (~96k tokens el Bloque A) sino el
+contexto de la sesión principal repitiéndose en cada turno — una conversación larga
+re-procesa TODO el historial cada mensaje. Sesión nueva + este doc (~2 páginas) =
+mismo contexto útil, fracción del costo. Y el prompt a Sonnet a nivel de requisitos
+evita pagar el mismo código 3 veces (spec → archivo → relectura).
+
+**Qué NO se recorta (aquí vive la calidad — no negociable):**
+
+- La sesión principal revisa línea a línea TODA migración que toque dinero, stock o
+  permisos ANTES de aplicarla. Delegar esa revisión a otro Sonnet = Sonnet revisando
+  a Sonnet, se pierde justo lo que se paga.
+- Aplicar a prod y verificar con datos reales lo hace SIEMPRE la sesión principal
+  (la única BD es producción).
+- El preview con el usuario antes de cada bloque se mantiene siempre.
+- `npm run build` verde antes de cada commit.
+
 ## 3. Entorno y reglas del repo (resumen operativo)
 
 - Rama actual: **`fix/correcciones-3`**. Push SIEMPRE a los 2 remotes: `origin` y `cdv-cali`. Merge a `main` solo cuando el usuario lo pida (fast-forward habitual).
@@ -73,3 +89,17 @@ La dueña reporta por WhatsApp con lenguaje enredado; pide explicaciones simples
 3. Tras OK: delegar implementación a Sonnet (spec de requisitos), revisar diff, aplicar migración, verificar con SQL agrupado, `npm run build`, commit y push a ambos remotes.
 
 Datos útiles para C (ya medidos): ~2.517 SKUs con stock; 323 contados alguna vez (~13% cobertura); clases reales 71 A / 110 B / 1.797 C; mejores prácticas: A cada 4-6 semanas, B trimestral, C semestral; conteo ciego = best practice (hoy el modal muestra el stock del sistema — hacerlo opcional/configurable).
+
+## 9. Prompt de continuación (copiar y pegar en la sesión nueva)
+
+```
+Lee docs/superpowers/plans/2026-07-05-HANDOFF-continuar.md y luego
+docs/superpowers/plans/2026-07-05-admin-inventario-mejoras.md.
+Estamos en la rama fix/correcciones-3. Continúa con el Bloque C
+(plan de conteo cíclico) siguiendo el protocolo del handoff:
+preséntame el preview del bloque y espera mi OK antes de implementar.
+```
+
+Al terminar cada bloque: actualizar la tabla de estado de este doc (sección 1), la
+memoria `proyecto-mejoras-admin-inventario`, cambiar "Bloque C" por el siguiente en
+este prompt, commit + push a ambos remotes. Así el ciclo se repite hasta el Bloque E.
