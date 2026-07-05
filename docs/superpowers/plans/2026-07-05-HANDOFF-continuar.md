@@ -15,8 +15,8 @@ Mejoras a la sección Admin de inventario/analítica, en 5 bloques aprobados por
 | ------ | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **A**  | ABC real (incluye OT) + cron mensual + Reorden confiable                                                                     | ✅ **HECHO** (commit `0ba7d40`, aplicado en prod, verificado: 71 A / 110 B / 1.797 C; cron `abc-mensual` activo; Reorden pasó de 518 filas ruido a 71 reales)                                                                                                                                                  |
 | **C**  | Plan de conteo cíclico programado ("los N de hoy", horizonte elegible 1/3 meses, cobertura del ciclo, opcional conteo ciego) | ✅ **HECHO** (commit `619f335`, migración `20260705000003` aplicada en prod y verificada end-to-end en L3: 30d=410 ítems balanceados 4 sem; 90d=451 ítems, 41 A ×2 una vez por mitad; trigger marca ítem al contar; datos de prueba limpiados — sin plan activo aún: el Admin lo genera desde la pestaña Plan) |
-| **B**  | Min/Max asistidos (sugerencia por demanda 90d ventas+OT, aprobación en lote)                                                 | ⬅️ **SIGUIENTE**                                                                                                                                                                                                                                                                                               |
-| **D**  | Ubicaciones + slotting + mapita SVG (layout BODEGA en memoria `bodega-layout-slotting`)                                      | Pendiente                                                                                                                                                                                                                                                                                                      |
+| **B**  | Min/Max asistidos (sugerencia por demanda 90d ventas+OT, aprobación en lote)                                                 | ✅ **HECHO** (commit `9150194`, migraciones `20260705000004` + fix `minmax_fix_demanda_signo` en prod; verificado: 389 sugerencias, matemática validada a mano, aplicar/revertir OK, Vendedor rechazado. OJO: en `movimientos` las salidas tienen cantidad NEGATIVA — la demanda usa `abs()`)                  |
+| **D**  | Ubicaciones + slotting + mapita SVG (layout BODEGA en memoria `bodega-layout-slotting`)                                      | ⬅️ **SIGUIENTE**                                                                                                                                                                                                                                                                                               |
 | **E**  | KPIs de inventario en Dashboard (rotación, días inv., stockouts, exactitud, merma)                                           | Pendiente                                                                                                                                                                                                                                                                                                      |
 
 ## 2. Protocolo de trabajo (ACORDADO con el usuario — costo bajo, misma calidad)
@@ -61,7 +61,8 @@ evita pagar el mismo código 3 veces (spec → archivo → relectura).
 4. `20260705000001_venta_ot_metodo_abonos.sql` — ventas de OT ya no dicen **"Varios"** sino **"Abonos OT"** (11 backfilled). El cierre las excluye por `origen='ot'`, no por método → cero impacto en dinero.
 5. `Cierres.jsx` — KPIs ya no se truncan con "..." (fuente responsiva + break-words en `Stat` y `Kpi`).
 6. `20260705000002_abc_ot_cron_reorden.sql` — **Bloque A completo** (ver tabla arriba).
-7. `20260705000003_plan_conteo_ciclico.sql` — **Bloque C completo**: tablas `plan_conteo`/`plan_conteo_items` (un plan activo por sede, historial conservado), `fn_generar_plan_conteo` (solo Admin; A ×2 en 90d, divergencias históricas en la primera mitad de su rango, round-robin), `fn_cola_conteo_hoy` (Bodeguero forzado a su sede), trigger `trg_conteo_avanza_plan` (cualquier conteo marca el ítem), `fn_progreso_plan` (cobertura/semana/atrasados/precisión). Frontend: pestaña "Plan" en `Conteo.jsx` + modal con prefill y modo conteo ciego. OJO: el plan real aún NO se generó — lo genera el Admin desde la UI cuando quiera arrancar.
+7. `20260705000003_plan_conteo_ciclico.sql` — **Bloque C completo**: tablas `plan_conteo`/`plan_conteo_items` (un plan activo por sede, historial conservado), `fn_generar_plan_conteo` (solo Admin; A ×2 en 90d, divergencias históricas en la primera mitad de su rango, round-robin), `fn_cola_conteo_hoy` (Bodeguero forzado a su sede), trigger `trg_conteo_avanza_plan` (cualquier conteo marca el ítem), `fn_progreso_plan` (cobertura/semana/atrasados/precisión). Frontend: pestaña "Plan" en `Conteo.jsx` + modal con prefill y modo conteo ciego. OJO: el plan real aún NO se generó — lo genera el Admin desde la UI cuando quiera arrancar. El conteo manual sigue funcionando igual sin plan (requisito del usuario).
+8. `20260705000004_minmax_asistidos.sql` — **Bloque B completo**: tabla `parametros` (lead time 7 / factor seguridad 1.5 / factor max 3, editable solo Admin), `fn_sugerir_minmax(p_dias)` (demanda desde `movimientos` tipos venta+orden_consumo+ensamble_consumo con `abs()` — las salidas son NEGATIVAS), `fn_aplicar_minmax(jsonb)` batch. Modal "Sugerir min/max" en `Reorden.jsx` (solo Admin): parámetros editables + recalcular, toggle "solo sin configurar" (protege valores manuales, default ON), aplicar con confirmación. Fix aplicado en prod como migración extra `minmax_fix_demanda_signo` (mismo contenido que el archivo corregido).
 
 ## 5. Conocimiento de negocio ganado (NO perder)
 
@@ -83,21 +84,21 @@ evita pagar el mismo código 3 veces (spec → archivo → relectura).
 
 La dueña reporta por WhatsApp con lenguaje enredado; pide explicaciones simples. Patrón que funciona: verificar SIEMPRE contra datos reales de prod antes de responder, explicarle con sus propios números (cuaderno vs app), y mensajes listos para reenviar con emojis moderados. Los empleados: vendedoras registran; Yesid = tercero que hace embobinadas.
 
-## 8. Qué hacer al arrancar sesión nueva (Bloque B)
+## 8. Qué hacer al arrancar sesión nueva (Bloque D — el más grande)
 
-1. Leer este doc + `2026-07-05-admin-inventario-mejoras.md` (spec del Bloque B) + memoria.
-2. Diseñar el detalle fino del Bloque B (RPC `fn_sugerir_minmax` por demanda 90d ventas directas + OT + consumos insumo; `fn_aplicar_minmax` batch solo Admin; tabla `parametros` para lead time/factores; UI en Reorden con actual vs sugerido y checkboxes) y **presentar preview al usuario** → esperar OK.
-3. Tras OK: delegar implementación a Sonnet (spec de requisitos), revisar diff, aplicar migración, verificar con SQL agrupado, `npm run build`, commit y push a ambos remotes.
+1. Leer este doc + `2026-07-05-admin-inventario-mejoras.md` (spec del Bloque D) + memoria `bodega-layout-slotting` (layout físico REAL de BODEGA: U de 9 stands + stand piso central, 4 posiciones de altura; CV/CHV/L3 solo zonas ENTRADA/MEDIO/FONDO).
+2. Diseñar el detalle fino del Bloque D: seed de `ubicaciones` (ST1..ST9 × P1..P4 + PISO para BODEGA; 3 zonas para las otras sedes) con `prioridad_picking`; UI de asignación en Inventario; chip 📍 en TODAS las UIs de selección de producto (ProductPicker, VentaNueva, cotizaciones, OT, Picking, Traspasos, Conteo, Ensambles); componente `<MapaBodega highlight />` SVG con tokens; vista `v_slotting_sugerencias` + página admin Slotting. **Presentar preview al usuario** → esperar OK. Por su tamaño, considerar partirlo en D1 (datos+asignación+chip) y D2 (mapita+slotting) con preview conjunto pero commits separados.
+3. Tras OK: delegar a Sonnet (posiblemente 2 agentes secuenciales por tamaño), revisar diff, aplicar migración, verificar, `npm run build`, commit y push a ambos remotes.
 
-Datos útiles para B (ya medidos): solo 26/1.978 productos tienen min/max configurados; SKUs con stock por sede: BODEGA 751, CV 785, CHV 553, L3 410; clases con stock 58 A / 98 B / 1.214 C; no tocar min/max ya configurados a mano salvo que el Admin los marque. El banner de Reorden ("N agotadas sin mínimo") apunta justo al hueco que B llena.
+Datos útiles para D: tabla `ubicaciones` + `inventario.ubicacion_id` YA EXISTEN (0 uso) — revisar su esquema real antes de seedear; demanda por producto ya calculable con el patrón de `fn_sugerir_minmax` (movimientos con `abs()`).
 
 ## 9. Prompt de continuación (copiar y pegar en la sesión nueva)
 
 ```
 Lee docs/superpowers/plans/2026-07-05-HANDOFF-continuar.md y luego
 docs/superpowers/plans/2026-07-05-admin-inventario-mejoras.md.
-Estamos en la rama fix/correcciones-3. Continúa con el Bloque B
-(min/max asistidos) siguiendo el protocolo del handoff:
+Estamos en la rama fix/correcciones-3. Continúa con el Bloque D
+(ubicaciones + slotting + mapita) siguiendo el protocolo del handoff:
 preséntame el preview del bloque y espera mi OK antes de implementar.
 ```
 

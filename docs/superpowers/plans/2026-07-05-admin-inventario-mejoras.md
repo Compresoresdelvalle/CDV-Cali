@@ -102,7 +102,15 @@ semanas; registrar un conteo desde "los de hoy" marca el ítem (`contado_en`,
 genera/regenera plan; conteo ciego oculta stock hasta registrar; `npm run build` verde.
 Datos base: ~2.517 SKUs con stock; clases 71 A / 110 B / 1.797 C.
 
-## BLOQUE B — Min/Max asistidos
+## BLOQUE B — Min/Max asistidos (✅ HECHO 2026-07-05, commit 9150194)
+
+> Migración `20260705000004_minmax_asistidos.sql` (+ fix `minmax_fix_demanda_signo`:
+> las salidas en `movimientos` tienen cantidad NEGATIVA, la demanda usa `abs()`)
+> aplicada en prod y verificada: 389 sugerencias con demanda >0 en 90d; matemática
+> validada a mano (C2X10: 3.950 uds → min 461 / max 1.383 con lead 7 × 1.5 × 3);
+> aplicar/revertir OK sobre producto PRUEBA; Vendedor rechazado en ambos RPCs.
+> La demanda sale de `movimientos` (venta + orden_consumo + ensamble_consumo),
+> una sola fuente auditada, en vez de sumar ventas+OT+insumos por separado.
 
 - RPC `fn_sugerir_minmax(p_dias default 90)`: demanda diaria = (ventas directas + OT +
   consumos insumo) / días; `min = ceil(demanda_diaria × lead_time_dias × 1.5)`;
