@@ -52,6 +52,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import Cierres from "./pages/admin/Cierres";
 import Alertas from "./pages/admin/Alertas";
 import Reorden from "./pages/admin/Reorden";
+import Slotting from "./pages/admin/Slotting";
 import Top10 from "./pages/admin/Top10";
 import Configuracion from "./pages/admin/Configuracion";
 import AnalisisABC from "./pages/admin/AnalisisABC";
@@ -437,6 +438,7 @@ export default function App() {
           <Route path="conteo" element={<Conteo />} />
           <Route path="abc" element={<AnalisisABC />} />
           <Route path="reorden" element={<Reorden />} />
+          <Route path="slotting" element={<Slotting />} />
           <Route path="auditoria" element={<Auditoria />} />
           <Route path="usuarios" element={<Usuarios />} />
           <Route path="top10" element={<Top10 />} />

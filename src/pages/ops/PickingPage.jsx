@@ -252,7 +252,7 @@ export default function PickingPage() {
         {item && (
           <span className="pk-loc hidden items-center gap-1.5 sm:inline-flex">
             {ubicCode}
-            <UbicacionChip codigo={item.ubicacion_id} />
+            <UbicacionChip codigo={item.ubicacion_id} conMapa />
           </span>
         )}
       </header>
@@ -372,7 +372,7 @@ export default function PickingPage() {
 
               <p className="pk-loc-inline flex items-center gap-1.5">
                 Ubicación:<span className="code">{ubicCode}</span>
-                <UbicacionChip codigo={item.ubicacion_id} />
+                <UbicacionChip codigo={item.ubicacion_id} conMapa />
               </p>
               {estadoItem.picking_completado && (
                 <span className="pill pill-success">

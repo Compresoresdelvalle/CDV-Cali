@@ -542,6 +542,7 @@ export default function ProductoDetalle() {
                             <UbicacionChip
                               codigo={inv.ubicacion_id}
                               className="mt-1.5"
+                              conMapa
                             />
                           )}
                         </td>

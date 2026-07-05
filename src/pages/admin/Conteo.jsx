@@ -20,6 +20,7 @@ import { SEDES } from "../../lib/constants";
 import { SEDE_LABELS } from "../../lib/traspasos-ui";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import UbicacionChip from "../../components/ui/UbicacionChip";
+import MapaBodega from "../../components/inventario/MapaBodega";
 import {
   diferenciaToken,
   clasePillStyle,
@@ -1238,7 +1239,7 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
                               {item.nombre}
                             </p>
                             <ClasePill clase={item.clasificacion} />
-                            <UbicacionChip codigo={item.ubicacion_id} />
+                            <UbicacionChip codigo={item.ubicacion_id} conMapa />
                           </div>
                           <p
                             className="font-mono text-[11px]"
@@ -1299,7 +1300,7 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
                             {item.nombre}
                           </p>
                           <ClasePill clase={item.clasificacion} />
-                          <UbicacionChip codigo={item.ubicacion_id} />
+                          <UbicacionChip codigo={item.ubicacion_id} conMapa />
                         </div>
                         <p
                           className="font-mono text-xs"
@@ -1831,7 +1832,7 @@ function ModalNuevoConteo({
                 style={{ color: "hsl(var(--foreground))" }}
               >
                 {productoSel.nombre}
-                <UbicacionChip codigo={productoSel.ubicacion_id} />
+                <UbicacionChip codigo={productoSel.ubicacion_id} conMapa />
               </p>
               <p
                 className="font-mono text-xs"
@@ -1869,6 +1870,12 @@ function ModalNuevoConteo({
                   ))}
                 </select>
               </Field>
+            )}
+
+            {productoSel.ubicacion_id && (
+              <div className="flex justify-center py-1">
+                <MapaBodega ubicacionId={productoSel.ubicacion_id} compact />
+              </div>
             )}
 
             {ciego && (
