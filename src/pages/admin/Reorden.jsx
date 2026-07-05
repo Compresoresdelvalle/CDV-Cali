@@ -67,18 +67,26 @@ export default function Reorden() {
 
   const cargarAgotadosSinConfig = async () => {
     try {
-      const { count, error } = await supabase
-        .from("inventario")
-        .select("id, producto:producto_id!inner(id)", {
-          count: "exact",
-          head: true,
-        })
-        .lte("cantidad", 0)
-        .eq("producto.activo", true)
-        .eq("producto.stock_minimo", 0);
+      // El stock de un vendible vive en `cantidad`; el de un insumo en
+      // `cantidad_insumo` — contar solo `cantidad` marcaría como agotados
+      // insumos con existencias.
+      const base = () =>
+        supabase
+          .from("inventario")
+          .select("id, producto:producto_id!inner(id)", {
+            count: "exact",
+            head: true,
+          })
+          .eq("producto.activo", true)
+          .eq("producto.stock_minimo", 0);
+      const [vendibles, insumos] = await Promise.all([
+        base().eq("producto.vendible", true).lte("cantidad", 0),
+        base().eq("producto.vendible", false).lte("cantidad_insumo", 0),
+      ]);
       if (!mountedRef.current) return;
-      if (error) throw error;
-      setAgotadosSinConfig(count ?? 0);
+      if (vendibles.error) throw vendibles.error;
+      if (insumos.error) throw insumos.error;
+      setAgotadosSinConfig((vendibles.count ?? 0) + (insumos.count ?? 0));
     } catch {
       // Silencioso: es un dato informativo adicional, no crítico para la página.
       if (mountedRef.current) setAgotadosSinConfig(null);
@@ -685,17 +693,29 @@ function ModalMinMax({ onClose, onAplicado }) {
   }, []);
 
   const recalcular = async () => {
+    // Validar los 3 valores ANTES de escribir: la tabla `parametros` es
+    // global (compartida por todas las sesiones) y el update va clave por
+    // clave — un valor inválido a mitad de camino la dejaría mixta.
+    const valores = {};
+    for (const clave of Object.keys(parametros)) {
+      const n = Number(parametros[clave]);
+      if (parametros[clave] === "" || !Number.isFinite(n) || n <= 0) {
+        setErrorMsg("Los tres parámetros deben ser números mayores que 0");
+        return;
+      }
+      valores[clave] = n;
+    }
     setRecalculando(true);
     setErrorMsg("");
     setOkMsg("");
     try {
       // Guarda los 3 parámetros (update por clave, ya existen por la semilla
       // de la migración) y vuelve a llamar al RPC con los valores nuevos.
-      for (const clave of Object.keys(parametros)) {
+      for (const clave of Object.keys(valores)) {
         const { error } = await supabase
           .from("parametros")
           .update({
-            valor: parametros[clave],
+            valor: valores[clave],
             updated_at: new Date().toISOString(),
           })
           .eq("clave", clave);
@@ -738,7 +758,9 @@ function ModalMinMax({ onClose, onAplicado }) {
       return next;
     });
 
-  const seleccionados = sugerencias.filter((i) => seleccion.has(i.producto_id));
+  // Solo se aplican los seleccionados VISIBLES: un ítem marcado que el
+  // filtro "Solo sin configurar" oculte no debe aplicarse a ciegas.
+  const seleccionados = visibles.filter((i) => seleccion.has(i.producto_id));
 
   const aplicar = async () => {
     if (seleccionados.length === 0) return;
