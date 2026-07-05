@@ -33,6 +33,7 @@ import {
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { construirHistorialOT } from "../../lib/ordenes-ui";
 import ClientePicker from "../../components/forms/ClientePicker";
+import UbicacionChip from "../../components/ui/UbicacionChip";
 import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
 import OrdenStepper from "../../components/ot/OrdenStepper";
 import { generarOrdenPDF } from "../../lib/pdf/ordenPDF";
@@ -1112,7 +1113,7 @@ function PasoCotizacion({
         if (ids.length) {
           const { data: inv } = await supabase
             .from("inventario")
-            .select("producto_id, cantidad, cantidad_insumo")
+            .select("producto_id, cantidad, cantidad_insumo, ubicacion_id")
             .in("producto_id", ids)
             .eq("sede_id", orden.sede_id);
           (inv ?? []).forEach((r) => stockMap.set(r.producto_id, r));
@@ -1122,6 +1123,7 @@ function PasoCotizacion({
             ...p,
             venta: stockMap.get(p.id)?.cantidad ?? 0,
             insumo: stockMap.get(p.id)?.cantidad_insumo ?? 0,
+            ubicacion_id: stockMap.get(p.id)?.ubicacion_id ?? null,
           })),
         );
       } catch (err) {
@@ -1236,10 +1238,11 @@ function PasoCotizacion({
               >
                 <div className="min-w-0 flex-1">
                   <p
-                    className="truncate text-sm font-medium"
+                    className="flex items-center gap-1.5 truncate text-sm font-medium"
                     style={{ color: "hsl(var(--foreground))" }}
                   >
                     {p.nombre}
+                    <UbicacionChip codigo={p.ubicacion_id} />
                   </p>
                   <p
                     className="font-mono text-xs"

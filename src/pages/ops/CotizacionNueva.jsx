@@ -21,6 +21,7 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import QRScanner from "../../components/forms/QRScanner";
 import ClientePicker from "../../components/forms/ClientePicker";
+import UbicacionChip from "../../components/ui/UbicacionChip";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { upsertCliente } from "../../lib/clientes";
 import { getParametroInt } from "../../hooks/useParametro";
@@ -146,31 +147,55 @@ export default function CotizacionNueva() {
   }, [otIdParam]);
 
   /* ── Búsqueda de productos (debounce 400ms server-side) ─────────────── */
-  const buscarProductos = useCallback(async (q) => {
-    if (!q || q.trim().length < 2) {
-      setResultados([]);
-      return;
-    }
-    setBuscando(true);
-    try {
-      const safe = sanitizeSearch(q.trim());
-      const { data, error: err } = await supabase
-        .from("productos")
-        .select(
-          "id, nombre, referencia, precio_venta, unidad_medida, categoria, marca",
-        )
-        .eq("activo", true)
-        .eq("vendible", true) // Bloque 2: los insumos no se cotizan/venden
-        .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
-        .limit(1000);
-      if (err) throw err;
-      setResultados(data ?? []);
-    } catch {
-      setResultados([]);
-    } finally {
-      setBuscando(false);
-    }
-  }, []);
+  const buscarProductos = useCallback(
+    async (q) => {
+      if (!q || q.trim().length < 2) {
+        setResultados([]);
+        return;
+      }
+      setBuscando(true);
+      try {
+        const safe = sanitizeSearch(q.trim());
+        const { data, error: err } = await supabase
+          .from("productos")
+          .select(
+            "id, nombre, referencia, precio_venta, unidad_medida, categoria, marca",
+          )
+          .eq("activo", true)
+          .eq("vendible", true) // Bloque 2: los insumos no se cotizan/venden
+          .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
+          .limit(1000);
+        if (err) throw err;
+        // Ubicación física en la sede del vendedor (solo referencia visual,
+        // la cotización no valida stock).
+        let ubicMap = {};
+        if (data?.length && perfil?.sede_id) {
+          const { data: inv } = await supabase
+            .from("inventario")
+            .select("producto_id, ubicacion_id")
+            .eq("sede_id", perfil.sede_id)
+            .in(
+              "producto_id",
+              data.map((p) => p.id),
+            );
+          ubicMap = Object.fromEntries(
+            (inv ?? []).map((i) => [i.producto_id, i.ubicacion_id]),
+          );
+        }
+        setResultados(
+          (data ?? []).map((p) => ({
+            ...p,
+            ubicacion_id: ubicMap[p.id] ?? null,
+          })),
+        );
+      } catch {
+        setResultados([]);
+      } finally {
+        setBuscando(false);
+      }
+    },
+    [perfil?.sede_id],
+  );
 
   const buscarDebounced = useDebouncedCallback(buscarProductos, 400);
 
@@ -1036,6 +1061,7 @@ function PasoProductos({
                       {p.nombre}
                     </p>
                     {badge && <CatBadge cls={badge.cls} label={badge.label} />}
+                    <UbicacionChip codigo={p.ubicacion_id} />
                   </div>
                   <p
                     className="font-mono text-[11px]"

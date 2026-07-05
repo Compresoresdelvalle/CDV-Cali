@@ -15,6 +15,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { sanitizeSearch, safeError } from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
+import UbicacionChip from "../../components/ui/UbicacionChip";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -39,28 +40,51 @@ export default function DevolucionNueva() {
   const [exito, setExito] = useState(null);
   const guardandoRef = useRef(false);
 
-  const buscarProductos = useCallback(async (q) => {
-    if (!q || q.trim().length < 2) {
-      setResultados([]);
-      return;
-    }
-    setBuscando(true);
-    try {
-      const safe = sanitizeSearch(q.trim());
-      const { data, error: e } = await supabase
-        .from("productos")
-        .select("id, nombre, referencia, unidad_medida")
-        .eq("activo", true)
-        .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
-        .limit(1000);
-      if (e) throw e;
-      setResultados(data ?? []);
-    } catch {
-      setResultados([]);
-    } finally {
-      setBuscando(false);
-    }
-  }, []);
+  const buscarProductos = useCallback(
+    async (q) => {
+      if (!q || q.trim().length < 2) {
+        setResultados([]);
+        return;
+      }
+      setBuscando(true);
+      try {
+        const safe = sanitizeSearch(q.trim());
+        const { data, error: e } = await supabase
+          .from("productos")
+          .select("id, nombre, referencia, unidad_medida")
+          .eq("activo", true)
+          .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
+          .limit(1000);
+        if (e) throw e;
+        // Ubicación física en la sede del usuario (solo referencia visual).
+        let ubicMap = {};
+        if (data?.length && perfil?.sede_id) {
+          const { data: inv } = await supabase
+            .from("inventario")
+            .select("producto_id, ubicacion_id")
+            .eq("sede_id", perfil.sede_id)
+            .in(
+              "producto_id",
+              data.map((p) => p.id),
+            );
+          ubicMap = Object.fromEntries(
+            (inv ?? []).map((i) => [i.producto_id, i.ubicacion_id]),
+          );
+        }
+        setResultados(
+          (data ?? []).map((p) => ({
+            ...p,
+            ubicacion_id: ubicMap[p.id] ?? null,
+          })),
+        );
+      } catch {
+        setResultados([]);
+      } finally {
+        setBuscando(false);
+      }
+    },
+    [perfil?.sede_id],
+  );
 
   const buscarDebounced = useDebouncedCallback(buscarProductos, 400);
 
@@ -314,10 +338,11 @@ export default function DevolucionNueva() {
                     >
                       <div>
                         <p
-                          className="text-sm font-medium"
+                          className="flex items-center gap-1.5 text-sm font-medium"
                           style={{ color: "var(--n-950)" }}
                         >
                           {r.nombre}
+                          <UbicacionChip codigo={r.ubicacion_id} />
                         </p>
                         <p
                           className="font-mono text-[11px]"

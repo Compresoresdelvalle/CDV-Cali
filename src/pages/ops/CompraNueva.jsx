@@ -12,6 +12,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
+import UbicacionChip from "../../components/ui/UbicacionChip";
 
 const IVA_DEFAULT = 19;
 const IVA_PRESETS = [0, 19];
@@ -57,30 +58,54 @@ export default function CompraNueva() {
   const [error, setError] = useState(null);
   const guardandoRef = useRef(false);
 
-  const buscarProductos = useCallback(async (q) => {
-    if (!q || q.trim().length < 2) {
-      setResultados([]);
-      return;
-    }
-    setBuscando(true);
-    try {
-      const safe = sanitizeSearch(q.trim());
-      const { data, error: e } = await supabase
-        .from("productos")
-        .select(
-          "id, nombre, referencia, costo_promedio, unidad_medida, vendible",
-        )
-        .eq("activo", true)
-        .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
-        .limit(1000);
-      if (e) throw e;
-      setResultados(data ?? []);
-    } catch {
-      setResultados([]);
-    } finally {
-      setBuscando(false);
-    }
-  }, []);
+  const buscarProductos = useCallback(
+    async (q) => {
+      if (!q || q.trim().length < 2) {
+        setResultados([]);
+        return;
+      }
+      setBuscando(true);
+      try {
+        const safe = sanitizeSearch(q.trim());
+        const { data, error: e } = await supabase
+          .from("productos")
+          .select(
+            "id, nombre, referencia, costo_promedio, unidad_medida, vendible",
+          )
+          .eq("activo", true)
+          .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
+          .limit(1000);
+        if (e) throw e;
+        // Ubicación física en la sede que recibe la compra (solo referencia
+        // visual; no afecta la lógica de recepción).
+        let ubicMap = {};
+        if (data?.length && perfil?.sede_id) {
+          const { data: inv } = await supabase
+            .from("inventario")
+            .select("producto_id, ubicacion_id")
+            .eq("sede_id", perfil.sede_id)
+            .in(
+              "producto_id",
+              data.map((p) => p.id),
+            );
+          ubicMap = Object.fromEntries(
+            (inv ?? []).map((i) => [i.producto_id, i.ubicacion_id]),
+          );
+        }
+        setResultados(
+          (data ?? []).map((p) => ({
+            ...p,
+            ubicacion_id: ubicMap[p.id] ?? null,
+          })),
+        );
+      } catch {
+        setResultados([]);
+      } finally {
+        setBuscando(false);
+      }
+    },
+    [perfil?.sede_id],
+  );
 
   const buscarDebounced = useDebouncedCallback(buscarProductos, 400);
 
@@ -453,10 +478,11 @@ export default function CompraNueva() {
                     >
                       <div>
                         <p
-                          className="text-sm font-medium"
+                          className="flex items-center gap-1.5 text-sm font-medium"
                           style={{ color: "var(--n-950)" }}
                         >
                           {r.nombre}
+                          <UbicacionChip codigo={r.ubicacion_id} />
                         </p>
                         <p
                           className="font-mono text-[11px]"

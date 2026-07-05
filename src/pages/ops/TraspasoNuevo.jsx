@@ -8,6 +8,7 @@ import { applyKeywordSearch } from "../../lib/search";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { sedeLabel } from "../../lib/traspasos-ui";
 import { useSedes } from "../../hooks/useSedes";
+import UbicacionChip from "../../components/ui/UbicacionChip";
 
 const TIPOS = [
   { v: "normal", label: "Normal" },
@@ -67,7 +68,7 @@ export default function TraspasoNuevo() {
 
         const { data: inv } = await supabase
           .from("inventario")
-          .select("producto_id, cantidad")
+          .select("producto_id, cantidad, ubicacion_id")
           .eq("sede_id", sedeOrigen)
           .gt("cantidad", 0)
           .in("producto_id", ids);
@@ -75,11 +76,18 @@ export default function TraspasoNuevo() {
         const stockMap = Object.fromEntries(
           (inv ?? []).map((i) => [i.producto_id, i.cantidad]),
         );
+        const ubicMap = Object.fromEntries(
+          (inv ?? []).map((i) => [i.producto_id, i.ubicacion_id]),
+        );
 
         setResultados(
           (prods ?? [])
             .filter((p) => stockMap[p.id] !== undefined)
-            .map((p) => ({ ...p, stock: stockMap[p.id] })),
+            .map((p) => ({
+              ...p,
+              stock: stockMap[p.id],
+              ubicacion_id: ubicMap[p.id] ?? null,
+            })),
         );
       } catch {
         setResultados([]);
@@ -332,10 +340,11 @@ export default function TraspasoNuevo() {
                       >
                         <div>
                           <p
-                            className="text-sm font-medium"
+                            className="flex items-center gap-1.5 text-sm font-medium"
                             style={{ color: "var(--n-950)" }}
                           >
                             {p.nombre}
+                            <UbicacionChip codigo={p.ubicacion_id} />
                           </p>
                           <p
                             className="font-mono text-[11px]"

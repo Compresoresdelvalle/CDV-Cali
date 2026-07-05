@@ -16,6 +16,7 @@ import {
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import QRScanner from "../../components/forms/QRScanner";
+import UbicacionChip from "../../components/ui/UbicacionChip";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import SelectorCuentasBancarias from "../../components/cotizaciones/SelectorCuentasBancarias";
 import {
@@ -38,6 +39,8 @@ export default function CotizacionEditar() {
   const [loading, setLoading] = useState(true);
   const [numero, setNumero] = useState(null);
   const [noEditable, setNoEditable] = useState(null);
+  // Sede de la cotización (para mostrar la ubicación física del producto).
+  const [sedeId, setSedeId] = useState(null);
   const guardandoRef = useRef(false);
 
   const [busqueda, setBusqueda] = useState("");
@@ -99,6 +102,7 @@ export default function CotizacionEditar() {
         if (itemsErr) throw itemsErr;
 
         setNumero(cot.numero);
+        setSedeId(cot.sede_id ?? null);
         // Solo editable en borrador y si no fue convertida (B9-6: editar una
         // enviada/rechazada fallaba luego con "Transición ilegal a borrador").
         if (cot.venta_id) {
@@ -173,30 +177,54 @@ export default function CotizacionEditar() {
   }, [id]);
 
   /* ── Búsqueda de productos (debounce 400ms server-side) ────────────── */
-  const buscarProductos = useCallback(async (q) => {
-    if (!q || q.trim().length < 2) {
-      setResultados([]);
-      return;
-    }
-    setBuscando(true);
-    try {
-      const safe = sanitizeSearch(q.trim());
-      const { data, error: err } = await supabase
-        .from("productos")
-        .select(
-          "id, nombre, referencia, precio_venta, unidad_medida, categoria, marca",
-        )
-        .eq("activo", true)
-        .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
-        .limit(1000);
-      if (err) throw err;
-      setResultados(data ?? []);
-    } catch {
-      setResultados([]);
-    } finally {
-      setBuscando(false);
-    }
-  }, []);
+  const buscarProductos = useCallback(
+    async (q) => {
+      if (!q || q.trim().length < 2) {
+        setResultados([]);
+        return;
+      }
+      setBuscando(true);
+      try {
+        const safe = sanitizeSearch(q.trim());
+        const { data, error: err } = await supabase
+          .from("productos")
+          .select(
+            "id, nombre, referencia, precio_venta, unidad_medida, categoria, marca",
+          )
+          .eq("activo", true)
+          .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
+          .limit(1000);
+        if (err) throw err;
+        // Ubicación física en la sede de esta cotización (solo referencia
+        // visual; no afecta stock ni validaciones).
+        let ubicMap = {};
+        if (data?.length && sedeId) {
+          const { data: inv } = await supabase
+            .from("inventario")
+            .select("producto_id, ubicacion_id")
+            .eq("sede_id", sedeId)
+            .in(
+              "producto_id",
+              data.map((p) => p.id),
+            );
+          ubicMap = Object.fromEntries(
+            (inv ?? []).map((i) => [i.producto_id, i.ubicacion_id]),
+          );
+        }
+        setResultados(
+          (data ?? []).map((p) => ({
+            ...p,
+            ubicacion_id: ubicMap[p.id] ?? null,
+          })),
+        );
+      } catch {
+        setResultados([]);
+      } finally {
+        setBuscando(false);
+      }
+    },
+    [sedeId],
+  );
 
   const buscarDebounced = useDebouncedCallback(buscarProductos, 400);
 
@@ -621,6 +649,7 @@ export default function CotizacionEditar() {
                           {badge && (
                             <CatBadge cls={badge.cls} label={badge.label} />
                           )}
+                          <UbicacionChip codigo={p.ubicacion_id} />
                         </div>
                         <p
                           className="font-mono text-[11px]"

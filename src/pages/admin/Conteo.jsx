@@ -19,6 +19,7 @@ import { applyKeywordSearch } from "../../lib/search";
 import { SEDES } from "../../lib/constants";
 import { SEDE_LABELS } from "../../lib/traspasos-ui";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
+import UbicacionChip from "../../components/ui/UbicacionChip";
 import {
   diferenciaToken,
   clasePillStyle,
@@ -1036,6 +1037,7 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
         nombre: item.nombre,
         vendible: item.vendible,
         stock_sistema: item.stock_sistema,
+        ubicacion_id: item.ubicacion_id,
       },
       sede,
       ciego: !!progreso?.conteo_ciego,
@@ -1236,6 +1238,7 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
                               {item.nombre}
                             </p>
                             <ClasePill clase={item.clasificacion} />
+                            <UbicacionChip codigo={item.ubicacion_id} />
                           </div>
                           <p
                             className="font-mono text-[11px]"
@@ -1296,6 +1299,7 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
                             {item.nombre}
                           </p>
                           <ClasePill clase={item.clasificacion} />
+                          <UbicacionChip codigo={item.ubicacion_id} />
                         </div>
                         <p
                           className="font-mono text-xs"
@@ -1540,6 +1544,43 @@ function ModalNuevoConteo({
   const [observaciones, setObservaciones] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Bloque D1: asignar ubicación física desde el modal de conteo (opcional,
+  // no bloquea el registro del conteo). Solo Admin/Bodeguero.
+  const puedeAsignarUbicacion =
+    perfil?.rol === "Admin" || perfil?.rol === "Bodeguero";
+  const [ubicacionesSede, setUbicacionesSede] = useState([]);
+  const [asignandoUbicacion, setAsignandoUbicacion] = useState(false);
+  useEffect(() => {
+    if (!puedeAsignarUbicacion) return;
+    supabase
+      .from("ubicaciones")
+      .select("id, descripcion, prioridad_picking")
+      .eq("sede_id", sedeConteo)
+      .eq("activa", true)
+      .order("prioridad_picking", { ascending: true, nullsFirst: false })
+      .then(({ data }) => setUbicacionesSede(data ?? []));
+  }, [sedeConteo, puedeAsignarUbicacion]);
+
+  const asignarUbicacion = async (ubicacionId) => {
+    if (!productoSel) return;
+    setAsignandoUbicacion(true);
+    try {
+      const { error: err } = await supabase.rpc("fn_asignar_ubicacion", {
+        p_producto_id: productoSel.id,
+        p_sede_id: sedeConteo,
+        p_ubicacion_id: ubicacionId || null,
+      });
+      if (err) throw err;
+      setProductoSel((prev) => ({
+        ...prev,
+        ubicacion_id: ubicacionId || null,
+      }));
+    } catch (err) {
+      setError(safeError(err, "No se pudo asignar la ubicación"));
+    } finally {
+      setAsignandoUbicacion(false);
+    }
+  };
 
   // Cambiar la sede reinicia la selección: el stock del sistema es por sede,
   // así que un conteo a medias dejaría de ser válido al cambiarla.
@@ -1566,7 +1607,7 @@ function ModalNuevoConteo({
         let pq = supabase
           .from("productos")
           .select(
-            `id, referencia, nombre, vendible, inventario:inventario(id, cantidad, cantidad_insumo, sede_id)`,
+            `id, referencia, nombre, vendible, inventario:inventario(id, cantidad, cantidad_insumo, sede_id, ubicacion_id)`,
           )
           .eq("activo", true);
         pq = applyKeywordSearch(pq, search, ["referencia", "nombre"]);
@@ -1592,13 +1633,23 @@ function ModalNuevoConteo({
     if (!inv) {
       // La sede aún no tiene el producto: no bloqueamos. El RPC inicializa la
       // fila en 0 al guardar (empresa de toderos). Lo avisamos en el modal.
-      setProductoSel({ ...p, inventario_id: null, sinInventario: true });
+      setProductoSel({
+        ...p,
+        inventario_id: null,
+        sinInventario: true,
+        ubicacion_id: null,
+      });
       setStockSistema(0);
       setSearch("");
       setResultados([]);
       return;
     }
-    setProductoSel({ ...p, inventario_id: inv.id, sinInventario: false });
+    setProductoSel({
+      ...p,
+      inventario_id: inv.id,
+      sinInventario: false,
+      ubicacion_id: inv.ubicacion_id ?? null,
+    });
     // Conteo consciente del pool: los productos insumo (vendible=false) cuentan
     // contra cantidad_insumo, no contra el stock vendible (LEDGER-01).
     setStockSistema(
@@ -1776,10 +1827,11 @@ function ModalNuevoConteo({
               }}
             >
               <p
-                className="text-sm font-semibold"
+                className="flex items-center gap-1.5 text-sm font-semibold"
                 style={{ color: "hsl(var(--foreground))" }}
               >
                 {productoSel.nombre}
+                <UbicacionChip codigo={productoSel.ubicacion_id} />
               </p>
               <p
                 className="font-mono text-xs"
@@ -1797,6 +1849,27 @@ function ModalNuevoConteo({
                 </button>
               )}
             </div>
+
+            {/* Bloque D1: sin bloquear el conteo, Admin/Bodeguero pueden
+                asignar la ubicación física si el producto aún no tiene. */}
+            {puedeAsignarUbicacion && !productoSel.sinInventario && (
+              <Field label="Asignar ubicación (opcional)">
+                <select
+                  value={productoSel.ubicacion_id ?? ""}
+                  onChange={(e) => asignarUbicacion(e.target.value)}
+                  disabled={asignandoUbicacion}
+                  className="h-12 w-full rounded-lg border px-3 text-sm disabled:opacity-60"
+                  style={surfaceInputStyle}
+                >
+                  <option value="">Sin ubicación</option>
+                  {ubicacionesSede.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.id} — {u.descripcion}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
 
             {ciego && (
               <p
