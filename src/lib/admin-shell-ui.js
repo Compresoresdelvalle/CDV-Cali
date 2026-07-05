@@ -18,6 +18,7 @@ import {
   Users,
   CreditCard,
   HandCoins,
+  Map,
 } from "lucide-react";
 
 /**
@@ -54,6 +55,12 @@ export const SECCIONES_ADMIN = [
         label: "Reorden",
         href: "/admin/reorden",
         icon: RefreshCw,
+      },
+      {
+        id: "slotting",
+        label: "Slotting",
+        href: "/admin/slotting",
+        icon: Map,
       },
       {
         id: "auditoria",

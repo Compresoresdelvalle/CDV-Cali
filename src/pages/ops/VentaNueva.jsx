@@ -793,7 +793,7 @@ export default function VentaNueva() {
                       style={{ color: "var(--n-950)" }}
                     >
                       {r.nombre}
-                      <UbicacionChip codigo={r.ubicacion_id} />
+                      <UbicacionChip codigo={r.ubicacion_id} conMapa />
                     </p>
                     <p
                       className="font-mono text-[11px]"
