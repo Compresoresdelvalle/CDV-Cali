@@ -19,6 +19,7 @@ import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { applyKeywordSearch } from "../../lib/search";
 import QRScanner from "../../components/forms/QRScanner";
 import ClientePicker from "../../components/forms/ClientePicker";
+import UbicacionChip from "../../components/ui/UbicacionChip";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { metodoPagoClass } from "../../lib/ventas-ui";
 import { SEDE_LABELS, sedeLabel } from "../../lib/traspasos-ui";
@@ -125,7 +126,7 @@ export default function VentaNueva() {
         // mostramos TODOS (los sin stock con su badge).
         const { data: inv, error: e2 } = await supabase
           .from("inventario")
-          .select("producto_id, cantidad")
+          .select("producto_id, cantidad, ubicacion_id")
           .eq("sede_id", sedeConsulta)
           .in("producto_id", ids);
         if (e2) throw e2;
@@ -133,9 +134,13 @@ export default function VentaNueva() {
         const stockMap = Object.fromEntries(
           (inv ?? []).map((i) => [i.producto_id, i.cantidad]),
         );
+        const ubicMap = Object.fromEntries(
+          (inv ?? []).map((i) => [i.producto_id, i.ubicacion_id]),
+        );
         const merged = prods.map((p) => ({
           ...p,
           stock_disponible: stockMap[p.id] ?? 0,
+          ubicacion_id: ubicMap[p.id] ?? null,
         }));
 
         setResultados(merged.slice(0, 8));
@@ -784,10 +789,11 @@ export default function VentaNueva() {
                 >
                   <div>
                     <p
-                      className="text-sm font-medium"
+                      className="flex items-center gap-1.5 text-sm font-medium"
                       style={{ color: "var(--n-950)" }}
                     >
                       {r.nombre}
+                      <UbicacionChip codigo={r.ubicacion_id} />
                     </p>
                     <p
                       className="font-mono text-[11px]"

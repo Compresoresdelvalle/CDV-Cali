@@ -13,6 +13,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
+import UbicacionChip from "../../components/ui/UbicacionChip";
 
 /**
  * Nuevo ensamble (rediseño Parte 2 — receta al vuelo, sin BOM).
@@ -138,7 +139,7 @@ export default function EnsambleNuevo() {
         const ids = prods.map((p) => p.id);
         const { data: inv, error: e2 } = await supabase
           .from("inventario")
-          .select("producto_id, cantidad, cantidad_insumo")
+          .select("producto_id, cantidad, cantidad_insumo, ubicacion_id")
           .in("producto_id", ids)
           .eq("sede_id", sede);
         if (ac.signal.aborted) return;
@@ -149,6 +150,7 @@ export default function EnsambleNuevo() {
           ...p,
           insumo: byProd.get(p.id)?.cantidad_insumo ?? 0,
           venta: byProd.get(p.id)?.cantidad ?? 0,
+          ubicacion_id: byProd.get(p.id)?.ubicacion_id ?? null,
         }));
         // "Solo insumos": designados (vendible=false) o con stock de insumo.
         const visibles = modoGlobal
@@ -651,10 +653,11 @@ export default function EnsambleNuevo() {
                       >
                         <div className="min-w-0 flex-1">
                           <p
-                            className="truncate text-sm font-medium"
+                            className="flex items-center gap-1.5 truncate text-sm font-medium"
                             style={{ color: "var(--n-950)" }}
                           >
                             {p.nombre}
+                            <UbicacionChip codigo={p.ubicacion_id} />
                           </p>
                           <p
                             className="font-mono text-xs"

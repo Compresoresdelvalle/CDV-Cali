@@ -4,6 +4,7 @@ import { X, Check, SkipForward } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
+import UbicacionChip from "../../components/ui/UbicacionChip";
 
 /**
  * Picking · Modo tarea pantalla completa (diseño Lovable `pk-*`).
@@ -46,7 +47,7 @@ export default function PickingPage() {
             supabase
               .from("detalle_traspaso")
               .select(
-                `id, cantidad_solicitada, cantidad_enviada, picking_completado,
+                `id, producto_id, cantidad_solicitada, cantidad_enviada, picking_completado,
                  producto:producto_id(nombre, referencia, unidad_medida),
                  ubicacion:ubicacion_origen_id(pasillo, estante, nivel, prioridad_picking)`,
               )
@@ -68,12 +69,46 @@ export default function PickingPage() {
           return;
         }
 
-        // Ordenar por prioridad_picking ASC, nulls last
-        const sorted = [...(d ?? [])].sort((a, b) => {
-          const pa = a.ubicacion?.prioridad_picking ?? 9999;
-          const pb = b.ubicacion?.prioridad_picking ?? 9999;
-          return pa - pb;
+        // Bloque D1: la ubicación física real hoy vive en inventario.ubicacion_id
+        // (ubicacion_origen_id de detalle_traspaso aún no se puebla en ningún
+        // flujo). La resolvemos por producto en la sede origen y la usamos
+        // tanto para el chip 📍 como para reforzar el orden de recorrido.
+        let ubicPorProducto = {};
+        let prioridadPorUbicacion = {};
+        const productoIds = (d ?? []).map((i) => i.producto_id).filter(Boolean);
+        if (productoIds.length) {
+          const [{ data: inv }, { data: ubics }] = await Promise.all([
+            supabase
+              .from("inventario")
+              .select("producto_id, ubicacion_id")
+              .eq("sede_id", t.sede_origen_id)
+              .in("producto_id", productoIds),
+            supabase
+              .from("ubicaciones")
+              .select("id, prioridad_picking")
+              .eq("sede_id", t.sede_origen_id),
+          ]);
+          ubicPorProducto = Object.fromEntries(
+            (inv ?? []).map((r) => [r.producto_id, r.ubicacion_id]),
+          );
+          prioridadPorUbicacion = Object.fromEntries(
+            (ubics ?? []).map((u) => [u.id, u.prioridad_picking]),
+          );
+        }
+
+        const conUbicacion = (d ?? []).map((item) => {
+          const ubicacion_id = ubicPorProducto[item.producto_id] ?? null;
+          const prioridad =
+            prioridadPorUbicacion[ubicacion_id] ??
+            item.ubicacion?.prioridad_picking ??
+            9999;
+          return { ...item, ubicacion_id, prioridad_picking: prioridad };
         });
+
+        // Ordenar por prioridad_picking ASC, nulls last
+        const sorted = [...conUbicacion].sort(
+          (a, b) => a.prioridad_picking - b.prioridad_picking,
+        );
 
         setTraspaso(t);
         setItems(sorted);
@@ -214,7 +249,12 @@ export default function PickingPage() {
         <span className="pk-ctx">
           Picking · Traspaso #{traspaso?.numero ?? "—"}
         </span>
-        {item && <span className="pk-loc hidden sm:inline">{ubicCode}</span>}
+        {item && (
+          <span className="pk-loc hidden items-center gap-1.5 sm:inline-flex">
+            {ubicCode}
+            <UbicacionChip codigo={item.ubicacion_id} />
+          </span>
+        )}
       </header>
 
       {/* Barra de progreso */}
@@ -330,8 +370,9 @@ export default function PickingPage() {
                 </span>
               </div>
 
-              <p className="pk-loc-inline">
+              <p className="pk-loc-inline flex items-center gap-1.5">
                 Ubicación:<span className="code">{ubicCode}</span>
+                <UbicacionChip codigo={item.ubicacion_id} />
               </p>
               {estadoItem.picking_completado && (
                 <span className="pill pill-success">

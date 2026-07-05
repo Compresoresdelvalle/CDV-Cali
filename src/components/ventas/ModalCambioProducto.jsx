@@ -3,6 +3,7 @@ import { Search, Check, ArrowRightLeft, X } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError, sanitizeSearch } from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
+import UbicacionChip from "../ui/UbicacionChip";
 
 /**
  * Modal de CAMBIO de producto (Reporte clienta).
@@ -141,8 +142,29 @@ export default function ModalCambioProducto({
       .eq("activo", true)
       .or(`nombre.ilike.%${term}%,referencia.ilike.%${term}%`)
       .limit(1000);
+    let ubicMap = {};
+    if (!e && data?.length && sedeId) {
+      const { data: inv } = await supabase
+        .from("inventario")
+        .select("producto_id, ubicacion_id")
+        .eq("sede_id", sedeId)
+        .in(
+          "producto_id",
+          data.map((p) => p.id),
+        );
+      ubicMap = Object.fromEntries(
+        (inv ?? []).map((i) => [i.producto_id, i.ubicacion_id]),
+      );
+    }
     if (mountedRef.current) {
-      setResultados(e ? [] : (data ?? []));
+      setResultados(
+        e
+          ? []
+          : (data ?? []).map((p) => ({
+              ...p,
+              ubicacion_id: ubicMap[p.id] ?? null,
+            })),
+      );
       setBuscando(false);
     }
   };
@@ -398,10 +420,11 @@ export default function ModalCambioProducto({
                   >
                     <div className="min-w-0">
                       <p
-                        className="truncate text-sm font-medium"
+                        className="flex items-center gap-1.5 truncate text-sm font-medium"
                         style={{ color: "hsl(var(--foreground))" }}
                       >
                         {p.nombre}
+                        <UbicacionChip codigo={p.ubicacion_id} />
                       </p>
                       <p
                         className="font-mono text-[11px]"

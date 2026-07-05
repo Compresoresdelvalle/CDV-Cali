@@ -16,6 +16,7 @@ import QRGenerator from "../../components/qr/QRGenerator";
 import QRPrintLabel from "../../components/qr/QRPrintLabel";
 import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
+import UbicacionChip from "../../components/ui/UbicacionChip";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { ubicacionLabel } from "../../lib/inventario-ui";
 import { usuarioDisplayName } from "../../lib/user-display";
@@ -30,6 +31,13 @@ export default function ProductoDetalle() {
   const [producto, setProducto] = useState(null);
   const [inventario, setInventario] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
+  // Bloque D1: catálogo de ubicaciones activas (para el select de asignación)
+  // y estado de guardado por fila de inventario.
+  const [ubicacionesActivas, setUbicacionesActivas] = useState([]);
+  const [guardandoUbicacionId, setGuardandoUbicacionId] = useState(null);
+  const [errorUbicacion, setErrorUbicacion] = useState("");
+  const puedeAsignarUbicacion =
+    perfil?.rol === "Admin" || perfil?.rol === "Bodeguero";
   const [proveedores, setProveedores] = useState([]); // F12: historial proveedores
   const [historialPrecios, setHistorialPrecios] = useState([]); // auditoría costo/precio
   const [loading, setLoading] = useState(true);
@@ -94,6 +102,14 @@ export default function ProductoDetalle() {
           .order("fecha", { ascending: false })
           .limit(10);
 
+        // Bloque D1: catálogo de ubicaciones activas para el select de
+        // asignación (por sede). Tabla pequeña, se trae completa.
+        const { data: ubics } = await supabase
+          .from("ubicaciones")
+          .select("id, sede_id, descripcion, prioridad_picking")
+          .eq("activa", true)
+          .order("prioridad_picking", { ascending: true, nullsFirst: false });
+
         // F12: historial de proveedores (último primero)
         const { data: provs } = await supabase
           .from("productos_proveedores")
@@ -145,6 +161,7 @@ export default function ProductoDetalle() {
           setMovimientos(movs ?? []);
           setProveedores(provs ?? []);
           setHistorialPrecios(histRows);
+          setUbicacionesActivas(ubics ?? []);
           setLoading(false);
         }
       } catch (e) {
@@ -320,6 +337,33 @@ export default function ProductoDetalle() {
     }
   };
 
+  // Bloque D1 — asignar/quitar la ubicación física de un producto en una
+  // sede. No bloquea nada más de la pantalla; feedback inline por fila.
+  const asignarUbicacion = async (inv, nuevaUbicacionId) => {
+    if (!producto) return;
+    setErrorUbicacion("");
+    setGuardandoUbicacionId(inv.id);
+    try {
+      const { error: rpcErr } = await supabase.rpc("fn_asignar_ubicacion", {
+        p_producto_id: producto.id,
+        p_sede_id: inv.sede?.id,
+        p_ubicacion_id: nuevaUbicacionId || null,
+      });
+      if (rpcErr) throw rpcErr;
+      setInventario((rows) =>
+        rows.map((r) =>
+          r.id === inv.id
+            ? { ...r, ubicacion_id: nuevaUbicacionId || null }
+            : r,
+        ),
+      );
+    } catch (err) {
+      setErrorUbicacion(safeError(err, "No se pudo asignar la ubicación"));
+    } finally {
+      setGuardandoUbicacionId(null);
+    }
+  };
+
   if (loading) return <LoadingSkeleton />;
   if (error) return <ErrorState message={error} onBack={() => navigate(-1)} />;
   if (!producto) return null;
@@ -453,52 +497,99 @@ export default function ProductoDetalle() {
             <div className="overflow-x-auto">
               <table className="prod-tbl">
                 <tbody>
-                  {inventario.map((inv) => (
-                    <tr key={inv.id}>
-                      <td>
-                        <div className="p-nm">{inv.sede?.nombre}</div>
-                        <div className="p-meta">
-                          {inv.sede?.id === "BODEGA"
-                            ? ubicacionLabel(producto, "Sin ubicación")
-                            : (inv.ubicacion_id ?? "—")}
-                        </div>
-                      </td>
-                      <td style={{ width: 120 }}>
-                        <StatusBadge status={inv.estado_stock} />
-                      </td>
-                      <td className="p-sub" style={{ width: 110 }}>
-                        <div>Venta: {inv.cantidad}</div>
-                        <div style={{ color: "var(--n-500)" }}>
-                          Insumo: {inv.cantidad_insumo ?? 0}
-                        </div>
-                      </td>
-                      {esAdmin && (
-                        <td style={{ width: 110 }}>
-                          <div className="flex flex-col gap-1">
-                            <button
-                              onClick={() => abrirConversion(inv, "a_insumo")}
-                              disabled={inv.cantidad <= 0}
-                              className="cursor-pointer text-left text-xs font-medium disabled:cursor-default disabled:opacity-40"
-                              style={{ color: "var(--p-700)" }}
-                            >
-                              → a insumo
-                            </button>
-                            <button
-                              onClick={() => abrirConversion(inv, "a_venta")}
-                              disabled={(inv.cantidad_insumo ?? 0) <= 0}
-                              className="cursor-pointer text-left text-xs font-medium disabled:cursor-default disabled:opacity-40"
-                              style={{ color: "var(--n-500)" }}
-                            >
-                              → a venta
-                            </button>
+                  {inventario.map((inv) => {
+                    const opcionesSede = ubicacionesActivas.filter(
+                      (u) => u.sede_id === inv.sede?.id,
+                    );
+                    return (
+                      <tr key={inv.id}>
+                        <td>
+                          <div className="p-nm">{inv.sede?.nombre}</div>
+                          <div className="p-meta">
+                            {inv.sede?.id === "BODEGA"
+                              ? ubicacionLabel(producto, "Sin ubicación")
+                              : null}
+                          </div>
+                          {puedeAsignarUbicacion ? (
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              <select
+                                value={inv.ubicacion_id ?? ""}
+                                onChange={(e) =>
+                                  asignarUbicacion(inv, e.target.value)
+                                }
+                                disabled={guardandoUbicacionId === inv.id}
+                                className="h-8 rounded-md border bg-transparent px-1.5 text-[11.5px] outline-none disabled:opacity-60"
+                                style={{ borderColor: "var(--n-200)" }}
+                                aria-label={`Ubicación en ${inv.sede?.nombre ?? "sede"}`}
+                              >
+                                <option value="">Sin ubicación</option>
+                                {opcionesSede.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {u.id} — {u.descripcion}
+                                  </option>
+                                ))}
+                              </select>
+                              {guardandoUbicacionId === inv.id && (
+                                <span
+                                  className="text-[10.5px]"
+                                  style={{ color: "var(--n-500)" }}
+                                >
+                                  Guardando…
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <UbicacionChip
+                              codigo={inv.ubicacion_id}
+                              className="mt-1.5"
+                            />
+                          )}
+                        </td>
+                        <td style={{ width: 120 }}>
+                          <StatusBadge status={inv.estado_stock} />
+                        </td>
+                        <td className="p-sub" style={{ width: 110 }}>
+                          <div>Venta: {inv.cantidad}</div>
+                          <div style={{ color: "var(--n-500)" }}>
+                            Insumo: {inv.cantidad_insumo ?? 0}
                           </div>
                         </td>
-                      )}
-                    </tr>
-                  ))}
+                        {esAdmin && (
+                          <td style={{ width: 110 }}>
+                            <div className="flex flex-col gap-1">
+                              <button
+                                onClick={() => abrirConversion(inv, "a_insumo")}
+                                disabled={inv.cantidad <= 0}
+                                className="cursor-pointer text-left text-xs font-medium disabled:cursor-default disabled:opacity-40"
+                                style={{ color: "var(--p-700)" }}
+                              >
+                                → a insumo
+                              </button>
+                              <button
+                                onClick={() => abrirConversion(inv, "a_venta")}
+                                disabled={(inv.cantidad_insumo ?? 0) <= 0}
+                                className="cursor-pointer text-left text-xs font-medium disabled:cursor-default disabled:opacity-40"
+                                style={{ color: "var(--n-500)" }}
+                              >
+                                → a venta
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+          )}
+          {errorUbicacion && (
+            <p
+              className="px-4 pb-3 text-xs"
+              style={{ color: "var(--dang-700)" }}
+            >
+              {errorUbicacion}
+            </p>
           )}
         </div>
 
