@@ -119,7 +119,17 @@ Datos base: ~2.517 SKUs con stock; clases 71 A / 110 B / 1.797 C.
   checkboxes, botón "Aplicar seleccionados" (RPC `fn_aplicar_minmax` batch, solo Admin).
 - No tocar productos con min/max ya configurados a mano salvo que el Admin los marque.
 
-## BLOQUE D — Ubicaciones + Slotting + mapita ⭐
+## BLOQUE D — Ubicaciones + Slotting + mapita ⭐ (✅ HECHO 2026-07-05, commits 5efe923 + 42ce0b0)
+
+> D1 (`20260705000005`): seed 46 ubicaciones (golden zone ST1-P2/ST9-P2=11,
+> peor ST5-P4=54, PISO=60; zonas 1/2/3), `fn_asignar_ubicacion`, cola de conteo
+> por recorrido físico, `UbicacionChip` en ~12 UIs, asignación en ProductoDetalle
+> y modal de conteo. D2 (`20260705000006`): `MapaBodega` SVG (geometría de la U
+> real, tokens), popover `conMapa`, `fn_slotting_sugerencias` (verificada: PRUEBA
+> en ST5-P4 con demanda 6 → sugirió ST1-P2; regla BAJAR exige demanda 0; fix del
+> caso borde "toda la sede en demanda 0"), página /admin/slotting con Aplicar.
+> Todo aplicado en prod y verificado; Vendedor rechazado en RPCs. Legacy por
+> limpiar algún día: `productos.stand/posicion/en_piso`, `detalle_traspaso.ubicacion_origen_id`.
 
 **Layout real BODEGA** (dado por el usuario, ver memoria `bodega-layout-slotting`):
 rectángulo, entrada por lado corto; stands en **U**: derecha desde la puerta ST9→ST8→ST7→ST6,
