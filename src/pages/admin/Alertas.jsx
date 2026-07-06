@@ -67,7 +67,7 @@ export default function Alertas() {
             `id, cantidad, estado_stock, sede_id, sede:sede_id(nombre), producto:producto_id(referencia, nombre, stock_minimo)`,
           )
           .in("estado_stock", ["Bajo", "Agotado"])
-          .order("estado_stock", { ascending: false })
+          .order("cantidad", { ascending: true })
           .limit(200),
         supabase
           .from("herramientas_prestamo")
@@ -101,8 +101,16 @@ export default function Alertas() {
       if (ot30.error) throw ot30.error;
       if (rot.error) throw rot.error;
       const rotData = rot.data ?? [];
+      // Agotado siempre antes que Bajo — ordenar por texto daría 'Bajo' primero
+      // (alfabéticamente "B" > "A"), justo al revés de lo que se necesita.
+      const stockOrdenado = [...(s.data ?? [])].sort((a, b) => {
+        if (a.estado_stock !== b.estado_stock) {
+          return a.estado_stock === "Agotado" ? -1 : 1;
+        }
+        return a.cantidad - b.cantidad;
+      });
       setDatos({
-        stock: s.data ?? [],
+        stock: stockOrdenado,
         herramientas: h.data ?? [],
         ordenes: o.data ?? [],
         ot30dias: ot30.data ?? [],
@@ -421,9 +429,14 @@ function severidadDeFila(tab, r) {
     case "sobre_stock":
       return "--info";
     case "mayor_rotacion":
-      return "--success";
-    case "menor_rotacion":
+      // Badge visible dice "Alta" (ver RotacionRows más abajo) — el token
+      // tiene que mapear a esa misma etiqueta en severidadLabel(), si no el
+      // filtro de prioridad "Alta" no encuentra estas filas.
       return "--warning";
+    case "menor_rotacion":
+      // Badge visible dice "Baja" (no es ninguna de las 3 prioridades del
+      // filtro) — se bucketiza como "Media" para no chocar con "Alta".
+      return "--muted-foreground";
     default:
       return "--info";
   }

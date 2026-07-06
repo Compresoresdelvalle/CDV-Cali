@@ -34,6 +34,7 @@ export default function Reorden() {
   // Selección de SKUs para generar una orden de compra (estado de UI local).
   const [seleccion, setSeleccion] = useState(() => new Set());
   const [agotadosSinConfig, setAgotadosSinConfig] = useState(null);
+  const [totalReal, setTotalReal] = useState(0);
   // Bloque B — asistente de min/max sugeridos.
   const [modalMinMax, setModalMinMax] = useState(false);
   const mountedRef = useRef(true);
@@ -49,13 +50,17 @@ export default function Reorden() {
     setLoading(true);
     setErrorMsg("");
     try {
-      const { data, error } = await supabase
+      // Límite alto a propósito: con ~2.000-3.000 productos en catálogo, un
+      // tope bajo (antes 200) podía dejar SKUs realmente bajo el mínimo
+      // fuera de la lista y de los KPIs (conteos y valor total) sin avisar.
+      const { data, error, count } = await supabase
         .from("v_sugerencias_reorden")
-        .select("*")
-        .limit(200);
+        .select("*", { count: "exact" })
+        .limit(5000);
       if (!mountedRef.current) return;
       if (error) throw error;
       setItems(data ?? []);
+      setTotalReal(count ?? (data ?? []).length);
       setSeleccion(new Set());
     } catch (err) {
       if (!mountedRef.current) return;
@@ -245,6 +250,21 @@ export default function Reorden() {
           }}
         >
           {errorMsg}
+        </div>
+      )}
+
+      {!loading && totalReal > items.length && (
+        <div
+          className="rounded-lg border px-3 py-2 text-xs"
+          style={{
+            backgroundColor: "hsl(var(--warning) / 0.08)",
+            borderColor: "hsl(var(--warning) / 0.4)",
+            color: "hsl(var(--warning))",
+          }}
+        >
+          Mostrando {items.length} de {totalReal} SKUs bajo el mínimo — hay más
+          de los que caben en esta lista. Contacta soporte si necesitas verlos
+          todos.
         </div>
       )}
 
