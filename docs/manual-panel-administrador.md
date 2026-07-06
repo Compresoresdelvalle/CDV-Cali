@@ -58,7 +58,7 @@ Es la lista de los 5 productos más urgentes que están en **stock bajo** o **ag
 **Los tres bloques de "atención" (2x2, debajo de las alertas):**
 
 - **Productos en alerta** — muestra hasta 3 productos con stock bajo/agotado (con su sede, categoría, cuánto tiene vs. cuánto debería tener mínimo). Tiene un enlace directo a "Reorden" para decidir qué comprar.
-- **OTs en proceso** — muestra hasta 3 Órdenes de Trabajo (reparaciones) que están abiertas ahora mismo, con el técnico asignado y cuántos días lleva abierta esa orden (si lleva mucho tiempo, se resalta). Enlace directo a "Órdenes de Trabajo".
+- **OTs en proceso** — muestra hasta 3 Órdenes de Trabajo (reparaciones) que están abiertas ahora mismo, con el técnico asignado y cuántos días lleva abierta esa orden (si lleva mucho tiempo, se resalta). Enlace directo a "Órdenes de Trabajo". _Ojo:_ el número grande del contador ("9", por ejemplo) cuenta **todas** las OT que no están entregadas ni canceladas (incluye recién recibidas y ya terminadas esperando que el cliente las recoja), mientras que las 3 filas de detalle solo muestran las que están literalmente "en proceso" o "esperando repuesto" — por eso el contador puede ser más alto que lo que ves listado ahí abajo. Para el detalle completo de las terminadas sin recoger, usa la pestaña correspondiente en **Alertas**.
 - **Cotizaciones por vencer** — muestra hasta 3 cotizaciones que están por vencerse pronto (cada cotización tiene un número de días de vigencia). Enlace directo a "Cotizaciones".
 - **Actividad reciente** — un mini-historial de los últimos movimientos de inventario de toda la empresa: ventas, compras, traspasos entre sedes, ajustes de conteo, ensambles, etc., con quién lo hizo y a qué hora. Es un adelanto de lo que verás con más detalle en "Auditoría".
 
@@ -115,8 +115,10 @@ Arriba, un contador grande de cuántas alertas están activas en total. Debajo, 
 
 **Filtros arriba de la lista:**
 
-- **Filtro de sede** (solo aparece si hay datos de más de una sede en esa pestaña): te deja ver solo BODEGA, o solo CV, etc.
+- **Filtro de sede** (solo aparece si hay más de una sede con datos en el conjunto de alertas cargado — no depende solo de la pestaña que tengas abierta en ese momento): te deja ver solo BODEGA, o solo CV, etc.
 - **Filtro de prioridad**: Todas / Urgente / Alta / Media — para quedarte solo con lo más grave si la lista es larga.
+
+A la derecha de los filtros hay un contador con el formato "**N resultados · M urgentes**" que te dice, sin tener que contar manualmente, cuántas filas cumplen el filtro actual y cuántas de esas son urgentes.
 
 Cada fila trae un **punto de color y una etiqueta de prioridad** (Urgente = rojo, Alta = naranja, Media = azul claro) para que sepas de un vistazo qué atender primero.
 
@@ -153,7 +155,7 @@ Cada fila trae un **punto de color y una etiqueta de prioridad** (Urgente = rojo
 
 Es una foto de qué tan importante es cada producto para las ventas de la empresa. Imagina que ordenas todos tus productos de mayor a menor según cuánta plata han generado, y luego los agrupas en tres grupos: los que representan la mayoría del dinero (A), los que aportan una porción media (B), y una "cola larga" de productos que casi no mueven plata pero son muchos (C). Esta pantalla te muestra ese ordenamiento para que sepas dónde poner más atención (contratos con proveedores, control de stock más estricto) y dónde puedes relajarte o incluso liquidar inventario que no se vende.
 
-La clasificación A/B/C se recalcula sola una vez al mes (la noche del día 1), usando las ventas de los últimos 90 días (ventas directas y también repuestos usados en Órdenes de Trabajo). También hay un botón para forzar el recálculo en cualquier momento.
+La clasificación A/B/C se recalcula sola una vez al mes (a las 00:00 hora Colombia del día 1, es decir la madrugada de ese día), usando las ventas de los últimos 90 días (ventas directas y también repuestos usados en Órdenes de Trabajo). También hay un botón para forzar el recálculo en cualquier momento.
 
 ### Qué encuentra al entrar
 
@@ -299,8 +301,8 @@ Este es un modal (ventana emergente) que solo puede abrir el Admin, pulsando el 
 4. La tabla de sugerencias muestra por producto: su clase ABC, la demanda de 90 días, el mínimo/máximo actual (si tiene), el mínimo/máximo sugerido, y si ya está "Configurado".
 5. Por defecto, el sistema **preselecciona automáticamente solo los productos que NO tienen configuración todavía** — esto protege los valores que tú (o alguien) ya ajustó manualmente, para no sobrescribirlos sin querer. Puedes marcar/desmarcar productos individualmente, o usar la casilla del encabezado para marcar/desmarcar todos los que están visibles en ese momento.
 6. Cuando estés conforme con la selección, pulsa **"Aplicar seleccionados"** abajo. Aparece un cuadro de confirmación indicando a cuántos productos se les va a actualizar el mínimo y el máximo.
-7. Al confirmar, el sistema actualiza el mínimo y máximo de cada producto seleccionado con los valores sugeridos, y te avisa cuántos productos se actualizaron. La pantalla de Reorden se recarga automáticamente con los nuevos mínimos aplicados.
-8. Puedes cerrar el modal en cualquier momento con la "X" arriba a la derecha, sin aplicar nada.
+7. Al confirmar, el sistema actualiza el mínimo y máximo de cada producto seleccionado con los valores sugeridos, y te avisa cuántos productos se actualizaron (el mensaje se queda ahí en el modal — la pantalla de Reorden ya se refrescó detrás, pero el modal no se cierra solo).
+8. Cierra el modal con la "X" arriba a la derecha cuando quieras (antes o después de aplicar, sin perder nada).
 
 ### Cuándo usarla
 
@@ -322,44 +324,45 @@ Este es un modal (ventana emergente) que solo puede abrir el Admin, pulsando el 
 
 ### Qué es y para qué sirve
 
-Slotting es literalmente "acomodar el estante". Esta pantalla compara qué tanto rota cada producto (cuánto se vende o se consume en los últimos 90 días) contra dónde está físicamente ubicado en la bodega, y te sugiere reorganizar: los productos que más se mueven deberían estar cerca de la puerta (para caminar menos y despachar más rápido), y los que casi no se mueven deberían ir al fondo, liberando las posiciones más cómodas para lo que sí importa.
-
-Este análisis **solo funciona con productos que ya tienen una ubicación física asignada** en el sistema (un código de estante/posición). Como hoy casi ningún producto real tiene todavía esa ubicación cargada, es normal que esta pantalla muestre el mensaje de "sin sugerencias" la mayoría del tiempo — no es un error, es que aún falta el trabajo de asignar ubicaciones a los productos para que el sistema pueda comparar y sugerir movimientos. (Ver la explicación completa de por qué en la nota al final de esta sección.)
+Slotting es literalmente "acomodar el estante". Esta pantalla compara qué tanto rota cada producto (cuánto se vende o se consume en los últimos 90 días) contra dónde está físicamente ubicado en la bodega, y te sugiere tres cosas: **asignarle una ubicación inicial** al producto que todavía no tiene ninguna, **subir** cerca de la puerta lo que más se mueve, y **bajar** al fondo lo que casi no rota. No necesitas asignar ubicación manualmente a cada producto antes de usar esta pantalla — Slotting ya te dice dónde ponerlo la primera vez.
 
 ### Qué encuentra al entrar
 
 - Título "Slotting · Optimización de ubicaciones" con un contador de cuántas sugerencias hay, y una explicación corta de qué hace la pantalla.
 - Filtro por sede (si hay sugerencias en más de una sede).
+- Una casilla en el encabezado de la tabla para seleccionar todas las sugerencias visibles de una vez, y una casilla por fila para elegir sugerencias individuales.
+- Cuando marcas al menos una, aparece una **barra de selección** arriba de la tabla con el conteo de seleccionadas y el botón **"Aplicar seleccionadas"** — pensado para aplicar de un tirón docenas o cientos de sugerencias sin tener que entrar fila por fila (con ~3.000 productos en el catálogo, revisar uno por uno no es práctico).
 - La tabla de sugerencias, con columnas:
   - **Producto**: nombre y referencia.
   - **Sede**: en qué bodega/almacén.
   - **Demanda 90d**: cuánto se ha vendido/consumido en los últimos 90 días (el número que justifica la sugerencia).
-  - **Actual → Sugerida**: dos "chips" (etiquetas con el código de ubicación) mostrando dónde está hoy el producto y a dónde se sugiere moverlo, con una flecha entre ambos. El chip de la ubicación sugerida incluye un mapa visual de la bodega para ubicarte físicamente.
-  - **Motivo**: una etiqueta explicando por qué se sugiere el cambio (por ejemplo, que rota mucho y está lejos, o que rota poco y está en zona premium). Aparece en color naranja cuando la sugerencia es "subir" el producto a una mejor posición, y en gris cuando es "bajarlo".
-  - Botón **"Aplicar"** al final de cada fila (solo visible para Admin o Bodeguero).
-- En celular, la misma información en tarjetas, con el botón "Aplicar sugerencia" ocupando todo el ancho.
+  - **Actual → Sugerida**: si el producto ya tiene ubicación, un chip con el código actual; si todavía no tiene ninguna, el texto "Sin ubicación". Luego una flecha y el chip de la ubicación sugerida (con mapa visual de la bodega al tocarlo).
+  - **Acción**: una etiqueta que dice **Asignar ubicación** (naranja claro/azul — el producto no tenía ubicación y se le da una por primera vez), **Subir** (naranja — acercarlo a la puerta porque rota mucho) o **Bajar** (gris — alejarlo porque casi no rota).
+  - **Motivo**: el texto explicando la razón concreta de esa sugerencia.
+  - Botón **"Aplicar"** al final de cada fila, para aplicar esa sugerencia sola (solo visible para Admin o Bodeguero).
+- En celular, la misma información en tarjetas, con casilla de selección, las mismas etiquetas y el botón "Aplicar sugerencia" ocupando todo el ancho.
 
 ### Cómo se usa paso a paso
 
-1. Entra a la pantalla; el sistema calcula automáticamente las sugerencias comparando rotación real contra ubicación actual.
-2. Si no hay sugerencias, verás el mensaje "Sin sugerencias de reubicación por ahora. Los productos están bien ubicados según su rotación" — como se explicó arriba, hoy esto seguirá apareciendo hasta que se carguen ubicaciones para más productos.
-3. Si hay sugerencias, revisa cada fila: mira el producto, cuánto rota, y a dónde se sugiere moverlo.
-4. Si estás de acuerdo con el cambio, pulsa **"Aplicar"** en esa fila. Aparece un cuadro de confirmación indicando de qué ubicación a qué ubicación se moverá el producto, en qué sede.
-5. Al confirmar, el sistema actualiza la ubicación de ese producto y la fila desaparece de la lista (ya se resolvió esa sugerencia).
-6. Repite para cada sugerencia que quieras aplicar; puedes ignorar las que no tengan sentido para tu operación real (por ejemplo, si el espacio sugerido no es físicamente práctico por el tamaño del producto).
+1. Entra a la pantalla; el sistema calcula automáticamente las sugerencias: para productos sin ubicación con ventas/consumo reciente, sugiere dónde ponerlos por primera vez; para productos que ya tienen ubicación, sugiere si conviene moverlos.
+2. Si quieres aplicar sugerencias de a una, revísalas y pulsa **"Aplicar"** en la fila — te pide confirmar antes de mover/asignar.
+3. Si quieres aplicar muchas de una vez (lo normal al empezar, con cientos de productos sin ubicación), marca las casillas de las que quieras aplicar (o usa la casilla del encabezado para marcar todas las visibles) y pulsa **"Aplicar seleccionadas"** en la barra de arriba. Un solo cuadro de confirmación te dice a cuántos productos se les va a asignar/mover la ubicación.
+4. Al confirmar (individual o en lote), el sistema actualiza la ubicación de cada producto aplicado y esas filas desaparecen de la lista (ya se resolvieron).
+5. Puedes ignorar sin problema las sugerencias que no tengan sentido para tu operación real (por ejemplo, si el espacio sugerido no es físicamente práctico por el tamaño del producto) — no hay obligación de aplicar todo.
 
 ### Cuándo usarla
 
-- Cuando ya se haya avanzado en asignar ubicaciones físicas a los productos (tarea pendiente hoy) y quieras optimizar el acomodo de la bodega.
-- Periódicamente (por ejemplo cada trimestre), para reajustar la bodega si cambiaron los productos que más rotan (temporada, nuevos productos estrella, etc.).
+- **Al empezar a usar esta función por primera vez**: revisa por sede (empezando por la que más movimiento tenga) y aplica en lote las sugerencias de "Asignar ubicación" — así arrancas con la bodega organizada sin tener que ir producto por producto desde la ficha de cada uno.
+- Periódicamente (por ejemplo cada trimestre), para reajustar la bodega si cambiaron los productos que más rotan (temporada, nuevos productos estrella, etc.) — ahí sí verás sugerencias de "Subir"/"Bajar" entre productos que ya tienen ubicación.
 - Cuando estés reorganizando físicamente la bodega y quieras un criterio objetivo (basado en ventas reales) de qué debería estar más a mano.
 
 ### Cosas importantes a tener en cuenta
 
-- Esta pantalla depende 100% de que los productos tengan ubicación asignada. Si no ves sugerencias, no es que "no haya nada que mejorar" — es que faltan ubicaciones cargadas (hoy, de casi 3.000 productos, solo el producto de prueba tiene ubicación). Hay que ir asignando ubicaciones desde la ficha de cada producto (o durante el conteo cíclico) para que Slotting empiece a servir de verdad.
-- Solo **Admin y Bodeguero** pueden pulsar "Aplicar" y mover productos de ubicación; otros roles pueden ver la pantalla pero no ejecutar el cambio (el botón simplemente no aparece para ellos).
-- Al aplicar una sugerencia, el cambio de ubicación se hace de inmediato tras confirmar — no hay un paso intermedio de "revisar antes de guardar", así que confirma solo si de verdad vas a mover el producto físicamente en la bodega ese día (para que el sistema y la realidad coincidan).
-- El color naranja en "Motivo" resalta las sugerencias de "subir de categoría" (acercar a la puerta) porque suelen ser las de mayor impacto en eficiencia; las de "bajar" se muestran en gris, con menor urgencia visual.
+- Solo se sugiere ubicación inicial para productos que **sí tuvieron alguna venta o consumo en los últimos 90 días**. Un producto con cero movimiento en ese periodo no aparece aquí — no importa mucho dónde quede algo que no se mueve, así que a esos les puedes asignar ubicación manualmente desde su ficha si quieres, sin apuro.
+- Solo **Admin y Bodeguero** pueden seleccionar y aplicar sugerencias (una por una o en lote); otros roles pueden ver la pantalla pero no ejecutar cambios (no ven casillas ni botones de aplicar).
+- Al aplicar (individual o en lote), el cambio de ubicación se hace de inmediato tras confirmar — no hay un paso intermedio de "revisar antes de guardar", así que confirma solo si de verdad vas a mover/ubicar el producto físicamente ese día (para que el sistema y la realidad coincidan). En una aplicación en lote, si un producto del grupo falla por algún motivo, ninguno de los del lote se aplica — revisa el mensaje de error y vuelve a intentar.
+- Varios productos pueden compartir el mismo código de ubicación sugerida (por ejemplo, muchos productos de alta rotación pueden terminar sugeridos todos a "ST1-P2") — eso es normal: una posición de estante en esta bodega guarda varias referencias pequeñas, no es "un producto por casillero".
+- El color naranja resalta "Subir" y "Asignar ubicación" (acciones de mayor impacto en eficiencia); "Bajar" se muestra en gris, con menor urgencia visual.
 
 ---
 
@@ -423,7 +426,7 @@ Al fondo de la pantalla hay una nota fija que recuerda que el registro es de sol
 - Es normal que un mismo evento de negocio genere dos movimientos: por ejemplo, un traspaso entre sedes genera una "salida" en la sede de origen y una "entrada" en la de destino.
 - Un ajuste (tipo "ajuste" o "ajuste de conteo") en naranja no es necesariamente un error: puede ser una corrección legítima hecha por el bodeguero o el resultado de un conteo cíclico. Pero si aparecen muchos, vale la pena revisarlos uno por uno.
 - Esta pantalla es de **solo consulta**: no hay botón para editar, anular ni borrar ningún movimiento desde aquí, y tampoco existe manera de hacerlo por fuera de la app — la base de datos lo bloquea técnicamente. Si algo quedó mal registrado, la corrección se hace con un nuevo movimiento (por ejemplo un ajuste), nunca modificando el original.
-- La nota "Inmutabilidad garantizada..." al final del panel de detalle es literal: ni el equipo de soporte técnico puede alterar un movimiento ya guardado, solo se pueden agregar nuevos que lo corrijan hacia adelante.
+- La nota "Inmutabilidad garantizada..." al final del panel de detalle es literal: ni el equipo de soporte técnico puede alterar un movimiento ya guardado, solo se pueden agregar nuevos que lo corrijan hacia adelante. Esa misma nota aclara honestamente una limitación: **no se registra firma criptográfica ni la IP de origen** de quien hizo el movimiento — la trazabilidad es de usuario/sede/fecha, no forense a ese nivel.
 
 ---
 
@@ -433,7 +436,7 @@ Al fondo de la pantalla hay una nota fija que recuerda que el registro es de sol
 
 **Cierres** es la pantalla más delicada de toda la aplicación porque es la que trata directamente con el dinero. Sirve para que, al final de un día (o de un periodo más largo, como un mes), el dueño revise cuánto entró, cuánto salió, cuánto quedó de margen, y compare el efectivo que el sistema dice que debería haber en caja contra el efectivo real que hay físicamente (esto se llama "arqueo" o "cuadre de caja"). Una vez que se genera un cierre, queda sellado para siempre: no se puede editar ni borrar, así lo intente el Admin. Por eso la pantalla siempre muestra primero una "vista previa" para revisar todo con calma antes de sellar nada.
 
-Solo el rol **Admin** puede generar cierres. Otros roles con acceso a la pantalla (por ejemplo Bodega) pueden **consultarla en modo de solo lectura**: ven los mismos totales, el arqueo y el histórico, pero no ven el botón de "Generar cierre" — solo el dueño/administrador puede firmar un cierre.
+Solo el rol **Admin** puede generar cierres, y **solo Admin puede ver el histórico de cierres ya generados** (por diseño de seguridad de la base de datos, ni siquiera Bodega puede consultar cierres pasados). Bodega, desde su propia pantalla de cierre en Operación, solo puede **previsualizar** un cierre nuevo (ver los totales calculados y hacer el arqueo de su sede) — pero nunca genera el cierre definitivo ni ve el historial de cierres anteriores. Esa parte es exclusiva del Admin.
 
 ### Qué encuentra al entrar
 
@@ -447,7 +450,7 @@ Solo el rol **Admin** puede generar cierres. Otros roles con acceso a la pantall
 **Sección "Generar cierre" (o "Consultar cierre" en modo solo lectura), con cuatro campos:**
 
 - **Tipo de cierre**: Diario o Periodo. Si elige "Diario", el campo "Hasta" se bloquea y se iguala automáticamente a "Desde" (un cierre diario siempre es de un solo día).
-- **Desde** y **Hasta**: el rango de fechas a cerrar. No se pueden elegir fechas futuras, ni un "hasta" anterior al "desde".
+- **Desde** y **Hasta**: el rango de fechas a cerrar. El campo "Hasta" no permite una fecha anterior a "Desde"; una fecha futura sí se puede escribir en el calendario, pero el sistema la rechaza apenas pulsas "Previsualizar".
 - **Observaciones (opcional)**: una nota libre para dejar constancia de algo puntual de ese cierre (por ejemplo, "faltó el recibo de la compra de aceite").
 - Botón **"Previsualizar"**: calcula (sin guardar nada todavía) los totales de ese rango.
 
@@ -495,7 +498,7 @@ Una barra de progreso muestra qué porcentaje del checklist está completo. Al f
 - **Al final de mes** (o del periodo que la empresa maneje), para generar un cierre de tipo "Periodo" que resuma todo ese rango.
 - Cuando se necesita saber, con exactitud, cuánto se vendió, cuánto se gastó y cuánto quedó de margen en un rango específico de fechas (por ejemplo, para reportar al contador o para tomar decisiones).
 - Cuando hay que investigar si el efectivo físico en caja coincide con lo que el sistema dice que debería haber (arqueo).
-- Bodega/otros roles con acceso pueden entrar aquí solo para **consultar** cifras o el histórico, sin poder generar ni modificar nada.
+- Bodega puede entrar a su propia pantalla de cierre (en Operación) solo para **previsualizar** los totales de un rango y capturar su arqueo — no genera el cierre definitivo ni ve el historial de cierres pasados (eso es exclusivo del Admin, ver más abajo).
 
 ### Cosas importantes a tener en cuenta
 
@@ -507,7 +510,8 @@ Una barra de progreso muestra qué porcentaje del checklist está completo. Al f
 - **El "efectivo esperado" del arqueo ya descuenta los gastos en efectivo del día** (compras o caja menor pagadas en efectivo), no es solo lo que entró. Por eso, si hubo un gasto grande en efectivo, el esperado puede ser más bajo de lo que uno intuiría solo mirando las ventas.
 - **Una venta con método "Mixto"** (por ejemplo, parte en efectivo y parte en transferencia) se reparte automáticamente en cada pestaña (por sede, por cuenta, arqueo) según cómo se dividió el pago — no hay que hacer nada especial, el sistema ya la desglosa.
 - **El ingreso por producto en la pestaña "Productos" ya viene neto de descuento**: si una venta tuvo un descuento (incluyendo cuando un cliente cambia un producto por otro y el producto viejo se toma como parte de pago), la cifra mostrada refleja lo que realmente entró, no el precio de lista completo.
-- **Diferencia "Sobrante" vs "Faltante"** en el arqueo: sobrante (positivo) significa que había más efectivo físico del que el sistema esperaba; faltante (negativo, en rojo) significa que hay menos efectivo del que debería — ambos casos vale la pena investigarlos revisando la Auditoría de movimientos y el detalle de egresos de ese mismo cierre antes de asumir que fue un error de conteo.
+- **Diferencia "Sobrante" vs "Faltante"** en el arqueo: sobrante significa que había más efectivo físico del que el sistema esperaba; faltante significa que hay menos efectivo del que debería. **Las dos se muestran en rojo** (solo "Cuadra", diferencia cero, aparece en verde) — hay que fijarse en el signo o la palabra, no en el color, para saber cuál de las dos es. Ambos casos vale la pena investigarlos revisando la Auditoría de movimientos y el detalle de egresos de ese mismo cierre antes de asumir que fue un error de conteo.
+- **Falta el histórico completo para Bodega**: aunque Bodega puede previsualizar un cierre, la lista de "Cierres registrados" y el detalle de cierres pasados de esta pantalla solo los ve el Admin — es una restricción de la base de datos, no un botón oculto que se pueda activar.
 
 ---
 
@@ -563,7 +567,7 @@ Esta pantalla es el lugar donde se verifica que lo que dice el sistema que hay e
 - **Diferencia entre conteo normal y conteo ciego:** en el normal, la persona ve en pantalla cuánto dice el sistema mientras cuenta (puede sesgar el resultado, a favor o en contra, sin querer). En el ciego, esa cifra se oculta por completo — ni siquiera viaja al celular — así que el conteo es más confiable como verificación real, aunque toma el mismo tiempo registrar.
 - Si un producto nunca había tenido stock registrado en esa sede, el sistema no bloquea el conteo: simplemente arranca de 0 y registra la diferencia contra ese cero.
 - **El conteo manual (pestaña Registros) sigue funcionando exactamente igual exista o no un plan activo** — no son excluyentes. Puedes seguir contando productos sueltos aunque no hayas generado ningún plan, o aunque tengas uno activo en curso.
-- Solo Admin y Bodeguero ven y usan esta pantalla; cada Bodeguero solo ve la cola y el progreso de su propia sede, nunca la de otra.
+- **Hoy solo el Admin puede entrar a esta pantalla** (está dentro del Panel de Administrador, que es exclusivo de Admin). Por dentro, el sistema ya está preparado para que un Bodeguero use el conteo cíclico viendo solo la cola y el progreso de su propia sede — pero mientras esa puerta no se le abra desde el menú, el Bodeguero no puede llegar aquí. Si en el futuro se decide darle acceso directo a Bodega, no hace falta ningún cambio de fondo, solo habilitar la ruta.
 
 ---
 
@@ -637,7 +641,7 @@ Si una venta a crédito viene de una cotización que ya tenía abonos anteriores
 
 ## Configuración
 
-La pantalla de Configuración es el "cuarto de mandos" de la aplicación: aquí se ajustan los datos y reglas que usan todas las demás pantallas (cotizaciones, ventas, órdenes de trabajo, ensambles). Solo el Admin puede entrar aquí. Al abrir el módulo se ve una fila de pestañas en la parte superior: Cuentas bancarias, Servicios, Checklist OT, Equipos ensamblables y Parámetros del sistema. Cada pestaña muestra un contador (por ejemplo "4" o "24 ítems") que indica cuántos registros hay cargados. La URL recuerda en qué pestaña estabas, así que puedes compartir un enlace directo a una de ellas.
+La pantalla de Configuración es el "cuarto de mandos" de la aplicación: aquí se ajustan los datos y reglas que usan todas las demás pantallas (cotizaciones, ventas, órdenes de trabajo, ensambles). Solo el Admin puede entrar aquí. Al abrir el módulo se ve una fila de pestañas en la parte superior: Cuentas bancarias, Servicios, Checklist OT, Equipos ensamblables y Parámetros del sistema. Cuatro de esas cinco pestañas muestran un contador (por ejemplo "4" o "24 ítems") que indica cuántos registros hay cargados — la pestaña **Parámetros** es la única que no trae contador, porque no es una lista, son 5 valores fijos. La URL recuerda en qué pestaña estabas, así que puedes compartir un enlace directo a una de ellas.
 
 ### Parámetros
 
@@ -687,7 +691,7 @@ La pantalla de Configuración es el "cuarto de mandos" de la aplicación: aquí 
 
 **Qué encuentra al entrar.** Un aviso azul que explica justamente esto: se pueden agregar equipos con nombre provisional y renombrarlos luego; la "referencia" (código interno) se genera sola si se deja vacía; y el botón "Quitar" solo saca el equipo de esta lista de ensamblables, sin afectar su venta ni su inventario si ese mismo producto también se vende normalmente. Debajo, el contador de equipos y el botón "Nuevo equipo". La lista muestra: Equipo (nombre y, debajo, su referencia/código), Precio de venta, Estado (Activo/Inactivo) y botones de Editar y "Quitar de ensamblables". Al pie, el resumen de cuántos equipos hay y cuántos activos.
 
-**Cómo se usa paso a paso — agregar un equipo ensamblable nuevo.** 1) Clic en "Nuevo equipo". 2) Se abre una ventana con: Nombre (obligatorio; puede ser provisional, ej. "Equipo por definir" o "Compresor 100L"), Referencia (opcional — si la dejas vacía, el sistema genera un código único automáticamente, tipo "ENS-XXXXX") y Precio de venta en COP. 3) Clic en "Guardar". El nuevo equipo queda disponible de inmediato para elegirlo al crear un ensamble.
+**Cómo se usa paso a paso — agregar un equipo ensamblable nuevo.** 1) Clic en "Nuevo equipo". 2) Se abre una ventana con: Nombre (obligatorio; puede ser provisional, ej. "Equipo por definir" o "Compresor 100L"), Referencia (opcional — si la dejas vacía, el sistema genera un código único automáticamente que empieza con "ENS-") y Precio de venta en COP. 3) Clic en "Guardar". El nuevo equipo queda disponible de inmediato para elegirlo al crear un ensamble.
 
 **Cómo se usa paso a paso — renombrar un equipo (por ejemplo cuando ya se sabe el nombre definitivo) o cambiar su precio.** Clic en el lápiz, editar Nombre, Referencia o Precio, y Guardar. Si borras la referencia al editar, el sistema genera una nueva automáticamente (nunca queda vacía).
 
@@ -721,7 +725,7 @@ Es la pantalla donde el Admin administra quién puede entrar a la aplicación y 
 
 ### Qué encuentra al entrar
 
-Un encabezado con contadores: total de usuarios, cuántos están activos, y cuántos hay de cada rol (Admin, Vendedores, Bodegueros, Técnico). Un botón "Nuevo usuario" que aparece apagado (deshabilitado) — al pasar el mouse por encima explica que la creación de cuentas se hace en Supabase Auth. Justo debajo, un aviso azul que confirma esto: "Agrega primero la cuenta en Supabase (Dashboard → Authentication → Users). Aquí se gestiona rol, sede y estado activo", y aclara que existe una protección: **el único Admin activo no puede desactivar su propia cuenta ni cambiar su propio rol** (para evitar quedarse fuera del sistema sin ningún administrador).
+Un encabezado con contadores: total de usuarios, cuántos están activos, y cuántos hay de cada rol (Admin, Vendedores, Bodegueros, Técnico). Un botón "Nuevo usuario" que aparece apagado (deshabilitado) — al pasar el mouse por encima explica que la creación de cuentas se hace en Supabase Auth. Justo debajo, un aviso azul que confirma esto: "Agrega primero la cuenta en Supabase (Dashboard → Authentication → Users). Aquí se gestiona rol, sede y estado activo", y aclara que existe una protección: **ningún Admin puede desactivar su propia cuenta ni cambiar su propio rol o sede desde aquí**, sin importar si hay otros Admin activos o no — es una regla fija de "no te dispares en el pie", no una excepción solo para cuando eres el único.
 
 Hay una barra de búsqueda para filtrar usuarios por nombre, rol o sede (con una pequeña espera de 400 milisegundos mientras escribes, para no buscar en cada tecla). Luego la lista de usuarios (tabla en computador, tarjetas en celular) con: un avatar circular con las iniciales del nombre y un color según su rol, Nombre (con una etiqueta "gestionado en Auth" indicando que el correo/contraseña no se maneja aquí), Rol (con una etiqueta de color), Sede default (la sede a la que pertenece principalmente), Estado (Activo/Inactivo), Última conexión (hace cuánto tiempo entró por última vez, o "Nunca" si no ha ingresado), un resumen en texto de qué puede hacer ese rol en la aplicación, y botones de Editar y Activar/Desactivar. Al pie de la lista hay un resumen de cuántos usuarios hay por sede y cuándo fue la última actividad de cualquier usuario en todo el sistema.
 
@@ -743,7 +747,7 @@ Hay una barra de búsqueda para filtrar usuarios por nombre, rol o sede (con una
 
 ### Cosas importantes a tener en cuenta
 
-- La regla más importante de esta pantalla es la protección **anti-bloqueo**: si eres el único Admin activo, la aplicación no te deja desactivar tu propia cuenta ni cambiar tu propio rol, ni siquiera por error — así se evita que la empresa se quede sin ningún administrador.
+- La regla más importante de esta pantalla es la protección **anti-bloqueo**: **ningún Admin puede desactivar su propia cuenta ni cambiar su propio rol/sede, nunca — así tenga compañía de otros Admin activos o no.** No es una excepción solo para "el último administrador que queda"; es una regla fija pensada para que nadie se saque a sí mismo por error. Si de verdad hay que hacer ese cambio, tiene que hacerlo OTRO usuario con rol Admin.
 - **Nunca se borra un usuario de verdad: siempre se "desactiva"**, lo que conserva todo su historial de movimientos, ventas, órdenes de trabajo, etc., asociado a su nombre, pero le impide seguir entrando a la aplicación.
 - Si necesitas cambiar el correo o el PIN de acceso de alguien, eso se hace en Supabase Auth, no en esta pantalla — aquí solo se gestionan rol, sede y estado activo/inactivo.
-- Cada rol tiene permisos distintos y fijos en el sistema (no se pueden personalizar permiso por permiso desde aquí): **Admin** ve y hace todo; **Bodeguero** maneja Inventario, Compras, Traspasos, Picking, Ensambles, Devoluciones y Herramientas; **Vendedor** maneja Inventario de su sede, Ventas, Cotizaciones y Herramientas; **Técnico** maneja Órdenes de servicio, Ensambles y Herramientas — el cambio de rol cambia automáticamente todo ese conjunto de permisos.
+- Cada rol tiene permisos distintos y fijos en el sistema (no se pueden personalizar permiso por permiso desde aquí). El texto exacto que ves en la columna "Permisos resumen" de cada fila es: **Admin** — ve y hace todo; **Bodeguero** — Inventario · Compras · Traspasos · Devoluciones · Garantías · Herramientas; **Vendedor** — Inventario · Ventas · Cotizaciones · Recibos · Devoluciones · Garantías · Herramientas; **Técnico** — Inventario · OT · Ensambles · Herramientas. Es un resumen informativo para ubicarte rápido — el cambio de rol sí cambia automáticamente todos los permisos reales de fondo, aunque ese texto en pantalla sea solo una guía y no liste absolutamente cada pantalla a la que ese rol puede entrar.
