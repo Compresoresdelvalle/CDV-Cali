@@ -229,7 +229,6 @@ export default function Reorden() {
         <ModalMinMax
           onClose={() => setModalMinMax(false)}
           onAplicado={() => {
-            setModalMinMax(false);
             cargar();
             cargarAgotadosSinConfig();
           }}
