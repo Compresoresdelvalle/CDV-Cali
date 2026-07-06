@@ -92,8 +92,8 @@ export default function Dashboard() {
              producto:producto_id(referencia, nombre, stock_minimo, categoria)`,
           )
           .in("estado_stock", ["Agotado", "Bajo"])
-          .order("estado_stock", { ascending: false })
-          .limit(FILAS_BLOQUE),
+          .order("cantidad", { ascending: true })
+          .limit(50),
         supabase
           .from("ordenes_servicio")
           .select(
@@ -125,8 +125,19 @@ export default function Dashboard() {
         .sort((a, b) => a._dias - b._dias)
         .slice(0, FILAS_BLOQUE);
 
+      // Agotado siempre antes que Bajo — igual que en Alertas.jsx, ordenar
+      // por texto pondría 'Bajo' primero (alfabéticamente "B" > "A").
+      const alertasOrdenadas = [...(alertasRes.data ?? [])]
+        .sort((a, b) => {
+          if (a.estado_stock !== b.estado_stock) {
+            return a.estado_stock === "Agotado" ? -1 : 1;
+          }
+          return a.cantidad - b.cantidad;
+        })
+        .slice(0, FILAS_BLOQUE);
+
       setBloques({
-        alertas: alertasRes.error ? [] : (alertasRes.data ?? []),
+        alertas: alertasRes.error ? [] : alertasOrdenadas,
         ot: otRes.error ? [] : (otRes.data ?? []),
         cotz: cotzPorVencer,
       });

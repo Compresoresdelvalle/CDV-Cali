@@ -142,6 +142,8 @@ Cada fila trae un **punto de color y una etiqueta de prioridad** (Urgente = rojo
 
 - Alertas **no tiene botón para "marcar como resuelto" ni para ignorar** una alerta — desaparece sola de la lista en cuanto la causa raíz se soluciona (por ejemplo, en cuanto entra stock nuevo del producto, o en cuanto el cliente recoge la OT).
 - Los umbrales de qué cuenta como "stock bajo" (el mínimo configurado por producto) se ajustan desde **Configuración → Parámetros** o directamente en la ficha de cada producto — no desde esta pantalla.
+- La pestaña "OT > 30 días sin recoger" usa un número configurable (el parámetro "días para alerta de OT abandonada" en Configuración → Parámetros, 30 por defecto) — si alguien lo cambia, la pestaña sigue mostrando el texto fijo "OT > 30 días" aunque en realidad esté avisando con el nuevo número de días.
+- En las pestañas "Mayor rotación", "Menor rotación" y "Sobre-stock" verás etiquetas descriptivas propias ("Alta", "Baja", "Revisar") en vez de "Urgente/Alta/Media" — describen la fila, no necesariamente coinciden con el nombre exacto del filtro de prioridad que las agrupa por dentro.
 - "Sobre-stock" y "Menor/Mayor rotación" siempre miran los **últimos 30 días fijos** (no se puede cambiar el rango desde aquí).
 - Si una pestaña muestra el ícono/mensaje de vacío (ej. "✅ No hay stock bajo ni agotado"), es una buena noticia, no un error de carga.
 
@@ -244,6 +246,8 @@ Es un cuadro de honor: te muestra quiénes o qué son los "mejores" en cuatro ca
 - La variación porcentual ("Var. vs ant.") puede aparecer como "—" cuando no hay suficiente historial en el periodo anterior para comparar; esto no es un error, es que el sistema prefiere no inventar un número sin base real.
 - No hay forma de editar nada desde aquí ni de exportar; es un tablero de consulta.
 - Los nombres de clientes vacíos se agrupan bajo "Consumidor final", y los proveedores sin nombre bajo "Sin proveedor" — si ves mucho volumen ahí, vale la pena revisar que se esté registrando bien el nombre del cliente/proveedor al hacer la venta o la compra.
+- A diferencia del KPI "Ventas" del Dashboard (que excluye las ventas de Órdenes de Trabajo), **las cuatro pestañas de Top 10 sí incluyen las ventas hechas dentro de una OT** — no hay inconsistencia entre las cuatro, solo con el Dashboard.
+- En periodos largos ("Último año") con mucho volumen de ventas, el cálculo trae un límite interno de filas para no sobrecargar la consulta; en un negocio con miles de transacciones al año esto en teoría podría dejar alguna fuera del ranking, aunque es poco probable que afecte el Top 10 real en la práctica.
 
 ---
 
@@ -291,7 +295,7 @@ Esta es la pantalla que te dice "esto se está por acabar, hay que comprar más"
 
 Este es un modal (ventana emergente) que solo puede abrir el Admin, pulsando el botón "Sugerir min/max":
 
-1. Al abrirse, el sistema calcula automáticamente, para todos los productos, cuál debería ser su mínimo y máximo ideal, usando la demanda real de los últimos 90 días (ventas + consumo en Órdenes de Trabajo + consumo en Ensambles).
+1. Al abrirse, el sistema calcula automáticamente, para los productos que sí tuvieron demanda en los últimos 90 días (ventas + consumo en Órdenes de Trabajo + consumo en Ensambles), cuál debería ser su mínimo y máximo ideal. Un producto sin ningún movimiento en ese periodo no aparece en el asistente — si no hay ninguno con demanda, verás el aviso "Sin demanda registrada en el periodo".
 2. Arriba del modal ves tres parámetros que puedes ajustar, con sus valores por defecto:
    - **Lead time (días)**: cuántos días tarda en llegar un pedido (por defecto 7). Si tus proveedores se demoran más, sube este número para tener más colchón de stock mínimo.
    - **Factor de seguridad** (por defecto 1.5): un multiplicador extra de seguridad para cubrir imprevistos en la demanda.
@@ -317,6 +321,7 @@ Este es un modal (ventana emergente) que solo puede abrir el Admin, pulsando el 
 - Los productos **agotados que no tienen mínimo configurado en absoluto no aparecen en la lista principal de Reorden** — el aviso amarillo te dice cuántos son. Es fácil pensar que "todo está bien" cuando en realidad hay faltantes invisibles por falta de configuración. Usa el asistente de min/max para configurarlos y que empiecen a aparecer.
 - El color del **Stock** en la tabla (rojo = Agotado, naranja = Stock bajo) te dice de un vistazo la urgencia sin tener que leer el número.
 - "Generar OC" no crea la compra automáticamente: te lleva al formulario de Nueva compra con los productos precargados, pero tú debes revisar cantidades, proveedor y confirmar.
+- Si alguna vez el número de SKUs bajo el mínimo es tan grande que no caben todos en la lista, aparece un aviso amarillo arriba indicando cuántos se están mostrando de cuántos hay en total — así los KPIs de arriba nunca se ven completos sin que te avises.
 
 ---
 
@@ -337,7 +342,7 @@ Slotting es literalmente "acomodar el estante". Esta pantalla compara qué tanto
   - **Sede**: en qué bodega/almacén.
   - **Demanda 90d**: cuánto se ha vendido/consumido en los últimos 90 días (el número que justifica la sugerencia).
   - **Actual → Sugerida**: si el producto ya tiene ubicación, un chip con el código actual; si todavía no tiene ninguna, el texto "Sin ubicación". Luego una flecha y el chip de la ubicación sugerida (con mapa visual de la bodega al tocarlo).
-  - **Acción**: una etiqueta que dice **Asignar ubicación** (naranja claro/azul — el producto no tenía ubicación y se le da una por primera vez), **Subir** (naranja — acercarlo a la puerta porque rota mucho) o **Bajar** (gris — alejarlo porque casi no rota).
+  - **Acción**: una etiqueta que dice **Asignar ubicación** (azul — el producto no tenía ubicación y se le da una por primera vez), **Subir** (naranja — acercarlo a la puerta porque rota mucho) o **Bajar** (gris — alejarlo porque casi no rota).
   - **Motivo**: el texto explicando la razón concreta de esa sugerencia.
   - Botón **"Aplicar"** al final de cada fila, para aplicar esa sugerencia sola (solo visible para Admin o Bodeguero).
 - En celular, la misma información en tarjetas, con casilla de selección, las mismas etiquetas y el botón "Aplicar sugerencia" ocupando todo el ancho.
@@ -362,7 +367,11 @@ Slotting es literalmente "acomodar el estante". Esta pantalla compara qué tanto
 - Solo **Admin y Bodeguero** pueden seleccionar y aplicar sugerencias (una por una o en lote); otros roles pueden ver la pantalla pero no ejecutar cambios (no ven casillas ni botones de aplicar).
 - Al aplicar (individual o en lote), el cambio de ubicación se hace de inmediato tras confirmar — no hay un paso intermedio de "revisar antes de guardar", así que confirma solo si de verdad vas a mover/ubicar el producto físicamente ese día (para que el sistema y la realidad coincidan). En una aplicación en lote, si un producto del grupo falla por algún motivo, ninguno de los del lote se aplica — revisa el mensaje de error y vuelve a intentar.
 - Varios productos pueden compartir el mismo código de ubicación sugerida (por ejemplo, muchos productos de alta rotación pueden terminar sugeridos todos a "ST1-P2") — eso es normal: una posición de estante en esta bodega guarda varias referencias pequeñas, no es "un producto por casillero".
-- El color naranja resalta "Subir" y "Asignar ubicación" (acciones de mayor impacto en eficiencia); "Bajar" se muestra en gris, con menor urgencia visual.
+- Cada acción tiene su color: "Subir" en naranja (mover ahora, alta rotación lejos de la puerta), "Asignar ubicación" en azul (informativo — el producto no tenía ubicación), "Bajar" en gris (menor urgencia, casi no rota).
+- Si en algún momento la lista aparece vacía (sin ninguna sugerencia), significa que los productos ya están bien ubicados según su rotación actual — no es un error de carga.
+- Solo se consideran productos **activos** en el catálogo — un producto descontinuado no genera sugerencia aunque haya tenido demanda en el pasado.
+- Para que aparezca la sugerencia "Asignar ubicación", el producto necesita ya tener una fila de inventario en esa sede (aunque sea con `ubicacion_id` vacío). Si un producto nunca se ha registrado en el inventario de una sede, Slotting no lo va a sugerir ahí hasta que exista ese registro.
+- El contador de sugerencias del encabezado siempre cuenta el total de todas las sedes, aunque tengas el filtro de sede activo mostrando solo una — no te preocupes si el número de arriba no coincide con las filas que ves en la tabla filtrada.
 
 ---
 
@@ -511,7 +520,7 @@ Una barra de progreso muestra qué porcentaje del checklist está completo. Al f
 - **Una venta con método "Mixto"** (por ejemplo, parte en efectivo y parte en transferencia) se reparte automáticamente en cada pestaña (por sede, por cuenta, arqueo) según cómo se dividió el pago — no hay que hacer nada especial, el sistema ya la desglosa.
 - **El ingreso por producto en la pestaña "Productos" ya viene neto de descuento**: si una venta tuvo un descuento (incluyendo cuando un cliente cambia un producto por otro y el producto viejo se toma como parte de pago), la cifra mostrada refleja lo que realmente entró, no el precio de lista completo.
 - **Diferencia "Sobrante" vs "Faltante"** en el arqueo: sobrante significa que había más efectivo físico del que el sistema esperaba; faltante significa que hay menos efectivo del que debería. **Las dos se muestran en rojo** (solo "Cuadra", diferencia cero, aparece en verde) — hay que fijarse en el signo o la palabra, no en el color, para saber cuál de las dos es. Ambos casos vale la pena investigarlos revisando la Auditoría de movimientos y el detalle de egresos de ese mismo cierre antes de asumir que fue un error de conteo.
-- **Falta el histórico completo para Bodega**: aunque Bodega puede previsualizar un cierre, la lista de "Cierres registrados" y el detalle de cierres pasados de esta pantalla solo los ve el Admin — es una restricción de la base de datos, no un botón oculto que se pueda activar.
+- **Falta el histórico completo para Bodega**: aunque Bodega puede previsualizar un cierre, la lista de "Cierres registrados" y el detalle de cierres pasados de esta pantalla solo los ve el Admin — es una restricción de la base de datos, no un botón oculto que se pueda activar. Ojo: la pantalla de Bodega no muestra un aviso de "no autorizado" — simplemente ve los indicadores en cero ("Cierres registrados: 0", etc.) y el histórico vacío, como si nunca se hubiera generado ningún cierre. Si un Bodeguero pregunta por qué no ve cierres pasados que tú sí generaste, es por este permiso, no porque se hayan perdido.
 
 ---
 
@@ -747,7 +756,7 @@ Hay una barra de búsqueda para filtrar usuarios por nombre, rol o sede (con una
 
 ### Cosas importantes a tener en cuenta
 
-- La regla más importante de esta pantalla es la protección **anti-bloqueo**: **ningún Admin puede desactivar su propia cuenta ni cambiar su propio rol/sede, nunca — así tenga compañía de otros Admin activos o no.** No es una excepción solo para "el último administrador que queda"; es una regla fija pensada para que nadie se saque a sí mismo por error. Si de verdad hay que hacer ese cambio, tiene que hacerlo OTRO usuario con rol Admin.
+- La regla más importante de esta pantalla es la protección **anti-bloqueo**: **ningún Admin puede desactivar su propia cuenta, nunca — así tenga compañía de otros Admin activos o no.** El bloqueo real (en el servidor y en la pantalla) aplica siempre a cualquier Admin que se intente desactivar a sí mismo, no solo a "el último administrador que queda". Eso sí: el botón de encendido/apagado solo aparece visualmente "bloqueado" con el mensaje "Eres el único Admin activo" cuando de verdad eres el único Admin activo — si hay otros Admin activos, tu propio botón se ve habilitado, pero al pulsarlo igual te va a rechazar la acción con el mismo mensaje de anti-bloqueo. Si de verdad hay que desactivar o cambiar el rol de un Admin, tiene que hacerlo OTRO usuario con rol Admin.
 - **Nunca se borra un usuario de verdad: siempre se "desactiva"**, lo que conserva todo su historial de movimientos, ventas, órdenes de trabajo, etc., asociado a su nombre, pero le impide seguir entrando a la aplicación.
 - Si necesitas cambiar el correo o el PIN de acceso de alguien, eso se hace en Supabase Auth, no en esta pantalla — aquí solo se gestionan rol, sede y estado activo/inactivo.
-- Cada rol tiene permisos distintos y fijos en el sistema (no se pueden personalizar permiso por permiso desde aquí). El texto exacto que ves en la columna "Permisos resumen" de cada fila es: **Admin** — ve y hace todo; **Bodeguero** — Inventario · Compras · Traspasos · Devoluciones · Garantías · Herramientas; **Vendedor** — Inventario · Ventas · Cotizaciones · Recibos · Devoluciones · Garantías · Herramientas; **Técnico** — Inventario · OT · Ensambles · Herramientas. Es un resumen informativo para ubicarte rápido — el cambio de rol sí cambia automáticamente todos los permisos reales de fondo, aunque ese texto en pantalla sea solo una guía y no liste absolutamente cada pantalla a la que ese rol puede entrar.
+- Cada rol tiene permisos distintos y fijos en el sistema (no se pueden personalizar permiso por permiso desde aquí). El texto exacto que ves en la columna "Permisos resumen" de cada fila es: **Admin** — Acceso completo · /ops + /admin; **Bodeguero** — Inventario · Compras · Traspasos · Devoluciones · Garantías · Herramientas; **Vendedor** — Inventario · Ventas · Cotizaciones · Recibos · Devoluciones · Garantías · Herramientas; **Técnico** — Inventario · OT · Ensambles · Herramientas. Es un resumen informativo para ubicarte rápido — el cambio de rol sí cambia automáticamente todos los permisos reales de fondo, aunque ese texto en pantalla sea solo una guía y no liste absolutamente cada pantalla a la que ese rol puede entrar.
