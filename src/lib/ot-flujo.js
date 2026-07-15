@@ -227,19 +227,25 @@ export function gateCumplido(i, ctx) {
     case 1:
       return Boolean((orden.diagnostico || "").trim());
     case 2:
-      // Si no autoriza, basta el valor de revisión; si autoriza, repuesto
-      // (en borrador o ya descargado) o mano de obra.
-      return noAutoriza
-        ? (Number(orden.valor_revision) || 0) > 0
-        : (ctx.draft?.length ?? 0) > 0 ||
-            detalles.length > 0 ||
-            (Number(orden.costo_mano_obra) || 0) > 0;
+      // La cotización puede quedar VACÍA. Si el cliente no va a autorizar la
+      // reparación no hay repuestos ni mano de obra que cobrar, solo la
+      // revisión, que se define en el paso de Autorización. Por eso aquí se
+      // permite avanzar siempre (el diagnóstico ya se exigió en el paso 1); la
+      // exigencia de "algo que cobrar" se valida en Autorización según lo que
+      // decida el cliente. Espeja el backend (trg_orden_validar_transicion).
+      return true;
     case 3:
-      // El anticipo es OPCIONAL: basta con que el cliente decida. Si autoriza,
-      // se puede iniciar el trabajo con o sin abono (refleja el backend, que ya
-      // no exige anticipo > 0 para pasar a en_proceso).
-      if (noAutoriza) return true;
-      return orden.estado_autorizacion === "autorizado";
+      // Según la decisión del cliente: si NO autoriza, exige el valor de la
+      // revisión; si autoriza, exige algo cotizado (repuesto o mano de obra).
+      // Si aún no decide, no deja avanzar. El anticipo es opcional.
+      if (noAutoriza) return (Number(orden.valor_revision) || 0) > 0;
+      if (orden.estado_autorizacion === "autorizado")
+        return (
+          (ctx.draft?.length ?? 0) > 0 ||
+          detalles.length > 0 ||
+          (Number(orden.costo_mano_obra) || 0) > 0
+        );
+      return false;
     case 4:
       // Si no autoriza, no hay descarga; basta marcar terminado luego.
       // Si autoriza, no debe quedar ningún repuesto pendiente en el borrador.
@@ -261,10 +267,12 @@ export function mensajeGate(i, ctx) {
   const FALTA = {
     0: "Describe el equipo y marca cómo llegó en el checklist.",
     1: "Escribe el diagnóstico del técnico.",
-    2: noAutoriza
+    2: "Cotiza repuestos y mano de obra. Si el cliente no va a autorizar, continúa sin cotizar y cobra solo la revisión en el paso siguiente.",
+    3: noAutoriza
       ? "Indica el valor a cobrar por la revisión."
-      : "Agrega al menos un repuesto o define la mano de obra.",
-    3: "Marca si el cliente autoriza o no la reparación.",
+      : orden.estado_autorizacion === "autorizado"
+        ? "Agrega al menos un repuesto o define la mano de obra para la reparación."
+        : "Marca si el cliente autoriza o no la reparación.",
     4: "Descarga los repuestos del inventario.",
     5: "Describe el trabajo realizado en el equipo.",
     6: "Registra el pago del saldo pendiente.",
@@ -272,7 +280,7 @@ export function mensajeGate(i, ctx) {
   const OK = {
     0: "Recepción completa.",
     1: "Diagnóstico registrado.",
-    2: "Cotización lista.",
+    2: "Continúa a la autorización del cliente.",
     3: noAutoriza
       ? "Cliente no autoriza: se cobra la revisión."
       : "Autorizada. El anticipo es opcional.",
