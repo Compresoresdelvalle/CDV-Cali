@@ -23,7 +23,13 @@ const DIAS_DEFAULT = 7;
  * (1·herramienta seleccionada, 2·usuario, 3·fechas, 4·notas) conectado a la
  * lógica REAL de préstamo (mismo UPDATE con guards anti-race y RBAC por sede).
  */
-export function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
+export function ModalPrestar({
+  herramienta,
+  usuarios,
+  onClose,
+  onSaved,
+  onRefrescar,
+}) {
   const perfil = useAuthStore((s) => s.perfil);
   const savingRef = useRef(false);
   const [usuarioId, setUsuarioId] = useState("");
@@ -38,6 +44,10 @@ export function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
   // REQ7 — préstamo por lote: cuántas unidades disponibles de esta referencia.
   const [cantidad, setCantidad] = useState(1);
   const [disponibles, setDisponibles] = useState(1);
+  // Aviso persistente si el lote se prestó solo parcialmente (antes se
+  // mostraba y el modal se cerraba en el mismo instante, así que nunca se
+  // alcanzaba a leer).
+  const [parcial, setParcial] = useState("");
 
   const usuarioSel = usuarios.find((u) => u.id === usuarioId) ?? null;
   const pill = estadoPill(herramienta.estado);
@@ -107,9 +117,14 @@ export function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
         return;
       }
       if (prestadas < cant) {
-        setError(
-          `Solo había ${prestadas} unidad(es) disponible(s); se prestaron ${prestadas} de ${cant}.`,
+        // Éxito parcial: se deja el modal ABIERTO con el aviso (antes se
+        // cerraba de inmediato vía onSaved() y el mensaje nunca se veía).
+        // Se refresca la lista de fondo para reflejar el préstamo ya hecho.
+        setParcial(
+          `Solo había ${prestadas} unidad(es) disponible(s) en este momento; se prestaron ${prestadas} de ${cant} solicitadas.`,
         );
+        await onRefrescar?.();
+        return;
       }
       await onSaved();
     } catch (err) {
@@ -119,6 +134,51 @@ export function ModalPrestar({ herramienta, usuarios, onClose, onSaved }) {
       savingRef.current = false;
     }
   };
+
+  // Préstamo parcial: reemplaza el formulario por una confirmación explícita
+  // que el usuario debe cerrar a propósito, para que el aviso no se pierda.
+  if (parcial) {
+    return (
+      <ModalShell onClose={onClose} maxWidth={480}>
+        <div className="mb-1.5 flex items-center gap-2.5">
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-lg"
+            style={{
+              backgroundColor: "var(--warn-50)",
+              color: "var(--warn-700)",
+            }}
+          >
+            <Package className="h-5 w-5" strokeWidth={1.8} />
+          </div>
+          <h2
+            className="m-0 flex-1 text-[16px] font-semibold leading-[1.3]"
+            style={{ color: "var(--n-950)" }}
+          >
+            Préstamo parcial
+          </h2>
+        </div>
+        <p
+          className="mb-5 rounded-md px-3 py-2.5 text-[13px] leading-[1.5]"
+          style={{
+            backgroundColor: "var(--warn-50)",
+            color: "var(--warn-700)",
+          }}
+        >
+          {parcial}
+        </p>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn btn-pri"
+            style={{ height: 48 }}
+          >
+            Entendido
+          </button>
+        </div>
+      </ModalShell>
+    );
+  }
 
   return (
     <ModalShell onClose={onClose} maxWidth={640}>
@@ -370,9 +430,16 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
   const [loadingInsumos, setLoadingInsumos] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [productoSel, setProductoSel] = useState(null);
+  // Cuántas unidades crear de una vez (antes solo se podía crear 1 por vez,
+  // por lo que casi nunca había más de 1 unidad disponible para prestar).
+  const [cantidadCrear, setCantidadCrear] = useState(1);
   // Común
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const MAX_MANUAL_CREAR = 50;
+  const maxCantidadCrear =
+    modo === "insumo" ? Math.max(1, productoSel?.stock ?? 1) : MAX_MANUAL_CREAR;
 
   useEffect(() => {
     supabase
@@ -436,6 +503,7 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
       stock: r.cantidad_insumo,
     });
     setBusqueda("");
+    setCantidadCrear(1);
   };
 
   const guardar = async (e) => {
@@ -457,23 +525,30 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
     setSaving(true);
     setError("");
     try {
+      const cant = Math.max(1, Math.min(cantidadCrear || 1, maxCantidadCrear));
       if (modo === "insumo") {
-        // Inventariable: sale 1 del stock de insumo (RPC con FOR UPDATE).
+        // Inventariable: descuenta `cant` del stock de insumo, crea `cant`
+        // filas de una vez (RPC con FOR UPDATE, todo en una transacción).
         const { error: e2 } = await supabase.rpc(
           "fn_crear_herramienta_desde_insumo",
-          { p_producto_id: productoSel.producto_id, p_sede_id: sedeId },
+          {
+            p_producto_id: productoSel.producto_id,
+            p_sede_id: sedeId,
+            p_cantidad: cant,
+          },
         );
         if (e2) throw e2;
       } else {
-        // Manual: no inventariable, no toca stock.
+        // Manual: no inventariable, no toca stock. Crea `cant` filas iguales.
+        const filas = Array.from({ length: cant }, () => ({
+          herramienta_nombre: nombre.trim(),
+          herramienta_codigo: codigo.trim() || null,
+          sede_id: sedeId,
+          estado: "disponible",
+        }));
         const { error: e2 } = await supabase
           .from("herramientas_prestamo")
-          .insert({
-            herramienta_nombre: nombre.trim(),
-            herramienta_codigo: codigo.trim() || null,
-            sede_id: sedeId,
-            estado: "disponible",
-          });
+          .insert(filas);
         if (e2) throw e2;
       }
       await onSaved();
@@ -530,6 +605,7 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
               onClick={() => {
                 setModo(m.v);
                 setError("");
+                setCantidadCrear(1);
               }}
               className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border text-[13px] font-medium transition-colors"
               style={{
@@ -619,7 +695,16 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
                   Cambiar
                 </button>
               </div>
-            ) : (
+            ) : null}
+            {productoSel && (
+              <CantidadCrearField
+                cantidad={cantidadCrear}
+                setCantidad={setCantidadCrear}
+                max={maxCantidadCrear}
+                sub={`${productoSel.stock} disponible${productoSel.stock === 1 ? "" : "s"} en el stock de insumo`}
+              />
+            )}
+            {!productoSel && (
               <>
                 <div
                   className="flex h-11 items-center gap-2.5 rounded-md border px-3"
@@ -717,8 +802,8 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
                   className="mt-1.5 text-[11px] leading-[1.45]"
                   style={{ color: "var(--n-500)" }}
                 >
-                  Al crear se descuenta 1 del stock de insumo. Al marcar
-                  devuelta regresa al insumo.
+                  Al crear se descuenta la cantidad elegida del stock de insumo.
+                  Al marcar devuelta regresa al insumo.
                 </p>
               </>
             )}
@@ -747,6 +832,12 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
             <p className="text-[11px]" style={{ color: "var(--n-500)" }}>
               Herramienta no inventariable: no afecta el stock de insumos.
             </p>
+            <CantidadCrearField
+              cantidad={cantidadCrear}
+              setCantidad={setCantidadCrear}
+              max={maxCantidadCrear}
+              sub="Crea varias unidades iguales de una vez (para poder prestar más de una)."
+            />
           </>
         )}
 
@@ -772,7 +863,11 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
             className="btn btn-pri flex-1 justify-center disabled:opacity-50"
             style={{ height: 48 }}
           >
-            {saving ? "Guardando…" : "Crear"}
+            {saving
+              ? "Guardando…"
+              : cantidadCrear > 1
+                ? `Crear ${cantidadCrear} unidades`
+                : "Crear"}
           </button>
         </div>
       </form>
@@ -833,6 +928,54 @@ function FieldLabel({ children }) {
     >
       {children}
     </span>
+  );
+}
+
+/* Selector de cuántas unidades crear de una vez (ModalNueva). */
+function CantidadCrearField({ cantidad, setCantidad, max, sub }) {
+  return (
+    <div className="mt-2.5 flex items-center justify-between gap-3">
+      <div>
+        <FieldLabel>Cantidad a crear</FieldLabel>
+        {sub && (
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-500)" }}>
+            {sub}
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <QtyStep
+          onClick={() => setCantidad((c) => Math.max(1, c - 1))}
+          disabled={cantidad <= 1}
+        >
+          −
+        </QtyStep>
+        <input
+          type="number"
+          value={cantidad}
+          min={1}
+          max={max}
+          onChange={(e) => {
+            const n = parseInt(e.target.value, 10);
+            setCantidad(Number.isNaN(n) ? 1 : Math.max(1, Math.min(n, max)));
+          }}
+          className="rounded-md border text-center font-mono text-sm font-bold outline-none"
+          style={{
+            width: 56,
+            height: 40,
+            borderColor: "var(--n-150)",
+            backgroundColor: "var(--n-0)",
+            color: "var(--n-950)",
+          }}
+        />
+        <QtyStep
+          onClick={() => setCantidad((c) => Math.min(max, c + 1))}
+          disabled={cantidad >= max}
+        >
+          +
+        </QtyStep>
+      </div>
+    </div>
   );
 }
 
