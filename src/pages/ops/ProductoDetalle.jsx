@@ -56,6 +56,11 @@ export default function ProductoDetalle() {
   const [guardandoCosto, setGuardandoCosto] = useState(false);
   const [errorCosto, setErrorCosto] = useState("");
   const guardandoCostoRef = useRef(false);
+  // Costo unitario de materiales del último ensamble completado de este
+  // producto. El ensamble NO aplica el costo solo (es decisión del Admin),
+  // pero sí lo calcula y lo dejamos como valor sugerido para no escribir a
+  // ciegas cuando el costo promedio quedó en 0.
+  const [costoSugerido, setCostoSugerido] = useState(null);
 
   // ── Conversión venta <-> insumo (solo Admin) ─────────────────────────
   const [convInv, setConvInv] = useState(null); // fila de inventario en conversión
@@ -155,10 +160,31 @@ export default function ProductoDetalle() {
           }
         }
 
+        // Costo sugerido del último ensamble completado (solo Admin ve costos).
+        // Sirve para precargar el modal "Editar costo" cuando el promedio es 0.
+        let sugerido = null;
+        if (esAdmin) {
+          const { data: ens } = await supabase
+            .from("ensambles")
+            .select("costo_total, cantidad_producida, fecha")
+            .eq("producto_resultado_id", productoId)
+            .eq("completado", true)
+            .gt("costo_total", 0)
+            .order("fecha", { ascending: false })
+            .limit(1);
+          const row = ens?.[0];
+          if (row && Number(row.cantidad_producida) > 0) {
+            sugerido = Math.round(
+              Number(row.costo_total) / Number(row.cantidad_producida),
+            );
+          }
+        }
+
         if (!cancelled) {
           setProducto(prod);
           setInventario(inv ?? []);
           setMovimientos(movs ?? []);
+          setCostoSugerido(sugerido);
           setProveedores(provs ?? []);
           setHistorialPrecios(histRows);
           setUbicacionesActivas(ubics ?? []);
@@ -229,7 +255,14 @@ export default function ProductoDetalle() {
 
   const abrirEditarCosto = () => {
     if (!producto) return;
-    setNuevoCosto(String(producto.costo_promedio ?? ""));
+    // Si el costo promedio está en 0 y hay un costo sugerido del último
+    // ensamble, precargamos ese valor (el Admin solo confirma o ajusta).
+    const actual = Number(producto.costo_promedio ?? 0);
+    const inicial =
+      actual === 0 && costoSugerido != null
+        ? String(costoSugerido)
+        : String(producto.costo_promedio ?? "");
+    setNuevoCosto(inicial);
     setErrorCosto("");
     setEditandoCosto(true);
   };
@@ -977,6 +1010,32 @@ export default function ProductoDetalle() {
               Ajústalo al costo de la última compra para no distorsionar el
               promedio. No modifica ventas ni movimientos pasados.
             </p>
+            {costoSugerido != null && (
+              <div
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs"
+                style={{
+                  backgroundColor: "var(--info-50, #eff6ff)",
+                  borderColor: "var(--info-200, #bfdbfe)",
+                  color: "var(--info-700, #1d4ed8)",
+                }}
+              >
+                <span>
+                  Costo de materiales del último ensamble:{" "}
+                  <strong>{formatCOP(costoSugerido)}</strong> por unidad.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setNuevoCosto(String(costoSugerido))}
+                  className="rounded-md px-2 py-1 font-medium"
+                  style={{
+                    backgroundColor: "var(--info-600, #2563eb)",
+                    color: "#fff",
+                  }}
+                >
+                  Usar este valor
+                </button>
+              </div>
+            )}
             {errorCosto && (
               <div
                 role="alert"

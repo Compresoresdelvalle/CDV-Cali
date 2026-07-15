@@ -447,9 +447,20 @@ export default function EnsambleNuevo() {
             {search.trim().length >= 2 &&
               !buscando &&
               resultados.length === 0 && (
-                <p className="text-xs italic" style={{ color: "var(--n-500)" }}>
-                  Sin ensamblables que coincidan
-                </p>
+                <div
+                  className="rounded-lg border px-3 py-2.5 text-xs leading-relaxed"
+                  style={{
+                    borderColor: "var(--n-200)",
+                    backgroundColor: "var(--n-25)",
+                    color: "var(--n-600)",
+                  }}
+                >
+                  No aparece ningún equipo con ese nombre. Solo salen aquí los
+                  productos marcados como <b>ensamblables</b>. Si el equipo que
+                  buscas no aparece, pídele a un <b>Admin</b> que lo agregue en{" "}
+                  <b>Configuración › Equipos ensamblables</b> (puede elegirlo
+                  del inventario que ya existe, sin duplicarlo).
+                </div>
               )}
           </div>
         ) : (
