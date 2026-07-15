@@ -193,10 +193,10 @@ Estos son datos ya inconsistentes que un fix de código no corrige por sí solo;
 
 - **S2-07** (doble conteo entre cierres) se resuelve mejor en la **Sección 3 (Cierres)**, junto con S1-08.
 
-### Reportado por el usuario para la Sección 9 (Herramientas) — pendiente
+### Sección 9 (Herramientas) — H-1 y H-2 RESUELTOS (adelantados por prioridad del usuario, 2026-07-15)
 
-- **H-1:** "Devolver a insumo" en una herramienta no la devuelve (no revierte al stock de insumo).
-- **H-2:** Al crear una herramienta con cantidad > 1 se crean N tarjetas individuales; debería quedar una sola tarjeta con N unidades asociadas.
+- **H-1 — CORREGIDO (no era bug de backend):** la devolución no daba ningún aviso; una herramienta inventariable se devolvía al insumo y desaparecía de la lista (`activo=false`), y parecía que "no la devolvía". Diagnóstico: `fn_devolver_herramienta` viva SÍ suma 1 a `cantidad_insumo`; la herramienta del reporte (SET DE LLAVES ALEN, SA8P) es **manual** (`producto_id=null`), que por definición no tiene insumo. Fix (frontend, `Herramientas.jsx`): mensaje de éxito explícito en `devolver`/`consumir` diciendo qué pasó (a insumo con conteo / quedó disponible / dada de baja). No se tocó el backend.
+- **H-2 — CORREGIDO:** `fn_crear_herramienta_desde_insumo` inserta N filas (una por unidad) — correcto para el préstamo por unidad. Fix (frontend): el **catálogo agrupa** las unidades idénticas (mismo producto, o nombre+código, por sede) en una sola tarjeta con badge `×N` y desglose "X disponibles · Y prestadas". Sin cambios de BD; el préstamo por lote ya opera por grupo.
 
 ### Investigación de datos (2026-07-15, solo lectura) y decisiones del usuario
 

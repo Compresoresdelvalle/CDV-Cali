@@ -69,6 +69,7 @@ export default function Herramientas() {
   const [search, setSearch] = useState("");
   const [accionando, setAccionando] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [okMsg, setOkMsg] = useState(""); // #H-1: confirmación visible de acciones
 
   const [modalPrestar, setModalPrestar] = useState(null);
   const [modalNueva, setModalNueva] = useState(false);
@@ -162,12 +163,27 @@ export default function Herramientas() {
     accionandoRef.current = true;
     setAccionando(h.id);
     setErrorMsg("");
+    setOkMsg("");
     try {
-      const { error } = await supabase.rpc("fn_devolver_herramienta", {
+      const { data, error } = await supabase.rpc("fn_devolver_herramienta", {
         p_herramienta_id: h.id,
       });
       if (error) throw error;
       setDetalleId(null);
+      // #H-1: antes no había ninguna confirmación; una herramienta inventariable
+      // se devolvía al insumo y desaparecía de la lista (activo=false), y parecía
+      // que "no la devolvía". Ahora se dice explícitamente qué pasó.
+      if (data?.inventariable) {
+        setOkMsg(
+          `“${h.herramienta_nombre}” se devolvió al stock de insumo` +
+            (data.cantidad_insumo != null
+              ? ` (ahora hay ${data.cantidad_insumo} en ${sedeLabel(h.sede_id)})`
+              : "") +
+            ".",
+        );
+      } else {
+        setOkMsg(`“${h.herramienta_nombre}” quedó disponible de nuevo.`);
+      }
       await cargarHerramientas();
     } catch (err) {
       setErrorMsg(safeError(err, "Error al devolver herramienta"));
@@ -183,12 +199,16 @@ export default function Herramientas() {
     accionandoRef.current = true;
     setAccionando(h.id);
     setErrorMsg("");
+    setOkMsg("");
     try {
       const { error } = await supabase.rpc("fn_consumir_herramienta", {
         p_herramienta_id: h.id,
       });
       if (error) throw error;
       setDetalleId(null);
+      setOkMsg(
+        `“${h.herramienta_nombre}” se dio de baja (no regresa al insumo).`,
+      );
       await cargarHerramientas();
     } catch (err) {
       setErrorMsg(safeError(err, "Error al consumir herramienta"));
@@ -395,6 +415,28 @@ export default function Herramientas() {
             }}
           >
             {errorMsg}
+          </div>
+        )}
+
+        {/* #H-1: confirmación visible de devolución/consumo. */}
+        {okMsg && (
+          <div
+            role="status"
+            className="mb-4 flex items-start justify-between gap-3 rounded-[10px] border px-4 py-3 text-sm"
+            style={{
+              backgroundColor: "var(--success-50, var(--n-50))",
+              borderColor: "var(--success-border, var(--n-200))",
+              color: "var(--success-700, var(--n-900))",
+            }}
+          >
+            <span>{okMsg}</span>
+            <button
+              onClick={() => setOkMsg("")}
+              className="shrink-0 font-mono text-[11px] underline"
+              style={{ color: "var(--success-700, var(--n-700))" }}
+            >
+              Cerrar
+            </button>
           </div>
         )}
 
@@ -945,8 +987,13 @@ function TabCatalogo({
         />
       ) : (
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-          {tools.map((h) => (
-            <CatalogCard key={h.id} h={h} onOpen={() => onOpen(h.id)} />
+          {/* #H-2: las unidades idénticas se agrupan en una sola tarjeta. */}
+          {agruparHerramientas(tools).map((g) => (
+            <CatalogCard
+              key={g.key}
+              grupo={g}
+              onOpen={() => onOpen(g.rep.id)}
+            />
           ))}
         </div>
       )}
@@ -954,20 +1001,63 @@ function TabCatalogo({
   );
 }
 
-function CatalogCard({ h, onOpen }) {
-  const pill = estadoPill(h.estado);
+/* #H-2: agrupa unidades idénticas (mismo producto, o mismo nombre+código en las
+   manuales) dentro de una sede, para no llenar el catálogo de N tarjetas iguales.
+   El préstamo por lote ya opera por grupo, así que esto es solo presentación.
+   El representante se prefiere disponible (para poder prestar/agregar desde él). */
+function agruparHerramientas(tools) {
+  const map = new Map();
+  for (const h of tools) {
+    const key = h.producto_id
+      ? `p:${h.producto_id}:${h.sede_id}`
+      : `m:${(h.herramienta_nombre || "").trim().toLowerCase()}|${(
+          h.herramienta_codigo || ""
+        )
+          .trim()
+          .toLowerCase()}:${h.sede_id}`;
+    let g = map.get(key);
+    if (!g) {
+      g = { key, rep: h, unidades: [], counts: {} };
+      map.set(key, g);
+    }
+    g.unidades.push(h);
+    g.counts[h.estado] = (g.counts[h.estado] || 0) + 1;
+    if (h.estado === "disponible" && g.rep.estado !== "disponible") g.rep = h;
+  }
+  return [...map.values()];
+}
+
+function CatalogCard({ grupo, onOpen }) {
+  const { rep, unidades, counts } = grupo;
+  const total = unidades.length;
+  const disp = counts.disponible || 0;
+  const prest = counts.prestada || 0;
+  // La píldora principal refleja "hay disponibles" si las hay; si no, el estado
+  // del representante (p.ej. todas prestadas).
+  const pill = estadoPill(disp > 0 ? "disponible" : rep.estado);
   return (
     <button onClick={onOpen} className="hrm-cat-card text-left">
       <ToolIcon size="lg" />
       <div>
         <div
-          className="text-[14px] font-medium leading-tight"
+          className="flex items-center gap-1.5 text-[14px] font-medium leading-tight"
           style={{ color: "var(--n-950)" }}
         >
-          {h.herramienta_nombre}
+          <span className="min-w-0 truncate">{rep.herramienta_nombre}</span>
+          {total > 1 && (
+            <span
+              className="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[11px] font-semibold"
+              style={{
+                backgroundColor: "var(--p-50)",
+                color: "var(--p-700)",
+              }}
+            >
+              ×{total}
+            </span>
+          )}
         </div>
         <div className="mt-0.5 text-[11.5px]" style={{ color: "var(--n-500)" }}>
-          {sedeLabel(h.sede_id)}
+          {sedeLabel(rep.sede_id)}
         </div>
       </div>
       <div className="flex items-center justify-between gap-2">
@@ -975,7 +1065,7 @@ function CatalogCard({ h, onOpen }) {
           className="font-mono text-[11.5px] font-medium"
           style={{ color: "var(--n-700)" }}
         >
-          {h.herramienta_codigo || "Sin código"}
+          {rep.herramienta_codigo || "Sin código"}
         </span>
         <Pill cls={pill.cls} label={pill.label} small />
       </div>
@@ -984,9 +1074,12 @@ function CatalogCard({ h, onOpen }) {
         style={{ borderColor: "var(--n-100)" }}
       >
         <span className="text-[11px]" style={{ color: "var(--n-500)" }}>
-          {h.estado === "prestada" && h.usuario?.nombre
-            ? `Con ${h.usuario.nombre}`
-            : sedeLabel(h.sede_id)}
+          {total > 1
+            ? `${disp} disponible${disp === 1 ? "" : "s"}` +
+              (prest > 0 ? ` · ${prest} prestada${prest === 1 ? "" : "s"}` : "")
+            : rep.estado === "prestada" && rep.usuario?.nombre
+              ? `Con ${rep.usuario.nombre}`
+              : sedeLabel(rep.sede_id)}
         </span>
         <ChevronRight
           className="h-3.5 w-3.5"
