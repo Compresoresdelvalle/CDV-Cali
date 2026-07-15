@@ -148,7 +148,27 @@ export default function OrdenDetalle() {
   // Paso abierto en el acordeón (por defecto el activo).
   const [pasoAbierto, setPasoAbierto] = useState(null);
   const [checklistTocado, setChecklistTocado] = useState(false);
+  // #S2-13: si el checklist ya fue diligenciado en una sesión anterior, el paso
+  // de Recepción debe contar como cumplido al reabrir la OT (antes dependía solo
+  // de un flag de sesión y la orden quedaba trabada para otro usuario/pestaña).
+  const [checklistYaMarcado, setChecklistYaMarcado] = useState(false);
   const busyRef = useRef(false);
+
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    supabase
+      .from("ot_checklist")
+      .select("id", { count: "exact", head: true })
+      .eq("orden_id", id)
+      .eq("marcado", true)
+      .then(({ count }) => {
+        if (alive) setChecklistYaMarcado((count ?? 0) > 0);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id]);
 
   /* ── Carga ──────────────────────────────────────────────────────────── */
   const cargar = useCallback(async () => {
@@ -235,7 +255,20 @@ export default function OrdenDetalle() {
   // descargado: hay líneas reales y el draft quedó vacío.
   const descargado = detalles.length > 0 && draft.length === 0;
 
-  const ctx = { orden, detalles, montos, checklistTocado, descargado, draft };
+  // #S2-13: el paso de Recepción se considera cumplido si el checklist se tocó
+  // en esta sesión, o ya venía marcado de antes, o la OT ya avanzó de 'recepcion'.
+  const checklistListo =
+    checklistTocado ||
+    checklistYaMarcado ||
+    Boolean(orden?.estado && orden.estado !== "recepcion");
+  const ctx = {
+    orden,
+    detalles,
+    montos,
+    checklistTocado: checklistListo,
+    descargado,
+    draft,
+  };
 
   const historial = useMemo(
     () => (orden ? construirHistorialOT(orden, formatDate) : []),
@@ -531,10 +564,25 @@ function Header({
   const tieneAnticipos = montos.anticipos > 0;
 
   const anular = async () => {
-    const msg = tieneAnticipos
-      ? TX.anularConAnticipo + "\n\n¿Continuar de todos modos?"
-      : "¿Seguro que deseas anular esta OT? Se devolverán al inventario los repuestos consumidos.";
-    if (!window.confirm(msg)) return;
+    // #S2-01: si hay anticipos cobrados, NO se puede anular hasta registrar la
+    // devolución (el backend también lo bloquea). Antes el mensaje ofrecía un
+    // "¿Continuar de todos modos?" engañoso que igual dejaba el dinero huérfano.
+    if (tieneAnticipos) {
+      window.alert(
+        `No se puede anular esta OT: tiene anticipos cobrados por ${formatCOP(
+          montos.anticipos,
+        )}.\n\n` +
+          "Primero registra la devolución del dinero al cliente y luego cancela la OT.\n\n" +
+          "Así el dinero recibido no queda sin rastro en la caja.",
+      );
+      return;
+    }
+    if (
+      !window.confirm(
+        "¿Seguro que deseas anular esta OT? Se devolverán al inventario los repuestos consumidos.",
+      )
+    )
+      return;
     setAnulando(true);
     onError("");
     try {
@@ -2096,6 +2144,16 @@ function PasoEntrega({
 
   const convertirAVenta = async () => {
     if (ro || generando || !saldoCubierto) return;
+    // #S2-17: acción irreversible (genera la venta, cierra garantías y congela
+    // la OT). Confirmar explicando la consecuencia antes de ejecutar.
+    if (
+      !window.confirm(
+        `Vas a facturar y entregar la OT-${orden.numero} por ${formatCOP(
+          montos.total,
+        )}.\n\nEsto genera la venta y cierra la orden; no se puede deshacer. ¿Continuar?`,
+      )
+    )
+      return;
     setGenerando(true);
     setErrorMsg("");
     try {

@@ -190,9 +190,12 @@ export function calcularMontos(orden = {}, detalles = null, abonos = []) {
     ? Math.max(0, revision)
     : Math.max(0, mano + repuestos + revision - descuento);
   const iva = ivaPct ? base * (ivaPct / 100) : 0;
-  const total = Math.round((base + iva) * 100) / 100;
+  // #S2-03: redondeo a pesos ENTEROS (no centavos), igual que el backend
+  // (trg_orden_recalcular_total_mo usa round(...,0)). Con centavos la OT nunca
+  // se podía saldar ni entregar.
+  const total = Math.round(base + iva);
   const anticipos = abonos.reduce((s, a) => s + (Number(a.monto) || 0), 0);
-  const saldo = Math.max(0, Math.round((total - anticipos) * 100) / 100);
+  const saldo = Math.max(0, Math.round(total - anticipos));
 
   return {
     repuestos,

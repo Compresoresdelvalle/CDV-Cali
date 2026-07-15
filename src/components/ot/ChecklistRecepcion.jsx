@@ -176,7 +176,7 @@ export default function ChecklistRecepcion({
               disabled={saving || readOnly}
               aria-pressed={it.marcado}
               className={`ck-item ${it.marcado ? "on" : ""} disabled:opacity-60`}
-              style={{ minHeight: 44 }}
+              style={{ minHeight: 48 }}
             >
               <span className={`ck-cb ${it.marcado ? "on" : ""}`}>
                 {it.marcado && (

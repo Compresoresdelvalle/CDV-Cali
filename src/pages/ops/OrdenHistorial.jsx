@@ -164,8 +164,9 @@ export default function OrdenHistorial() {
         actions={
           <>
             <ViewToggle view={view} setView={setView} />
-            {/* Crear OT solo Ventas/Admin: los técnicos ven sus OT en solo-lectura. */}
-            {perfil?.rol !== "Tecnico" && (
+            {/* Crear OT solo Admin/Vendedor (igual que RoleGuard y la RLS os_insert);
+                Bodeguero y Técnico no pueden crear, así que no se les muestra. */}
+            {["Admin", "Vendedor"].includes(perfil?.rol) && (
               <button
                 onClick={() => navigate("/ops/ordenes/nueva")}
                 className="inline-flex items-center gap-2 rounded-lg px-4 text-sm font-semibold"
