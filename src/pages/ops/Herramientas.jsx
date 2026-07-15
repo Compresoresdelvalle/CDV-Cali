@@ -447,6 +447,7 @@ export default function Herramientas() {
           herramienta={modalPrestar}
           usuarios={usuarios}
           onClose={() => setModalPrestar(null)}
+          onRefrescar={cargarHerramientas}
           onSaved={async () => {
             setModalPrestar(null);
             await cargarHerramientas();
