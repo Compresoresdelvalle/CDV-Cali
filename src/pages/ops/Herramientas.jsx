@@ -37,6 +37,7 @@ import HerramientaDetalle from "../../components/herramientas/HerramientaDetalle
 import {
   ModalPrestar,
   ModalNueva,
+  ModalAgregarUnidades,
 } from "../../components/herramientas/HerramientaModales";
 
 /* Selección de columnas REAL — sin cambios respecto a la versión funcional. */
@@ -71,6 +72,7 @@ export default function Herramientas() {
 
   const [modalPrestar, setModalPrestar] = useState(null);
   const [modalNueva, setModalNueva] = useState(false);
+  const [modalAgregar, setModalAgregar] = useState(null); // herramienta a la que sumar unidades
   const [detalleId, setDetalleId] = useState(null);
 
   const mountedRef = useRef(true);
@@ -438,6 +440,14 @@ export default function Herramientas() {
             setDetalleId(null);
             setModalPrestar(detalle);
           }}
+          onAgregarUnidades={
+            puedeCrear
+              ? () => {
+                  setDetalleId(null);
+                  setModalAgregar(detalle);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -461,6 +471,18 @@ export default function Herramientas() {
           onSaved={async () => {
             setModalNueva(false);
             await cargarHerramientas();
+          }}
+        />
+      )}
+      {modalAgregar && (
+        <ModalAgregarUnidades
+          herramienta={modalAgregar}
+          onClose={() => setModalAgregar(null)}
+          onSaved={async (n) => {
+            setModalAgregar(null);
+            setErrorMsg("");
+            await cargarHerramientas();
+            void n;
           }}
         />
       )}

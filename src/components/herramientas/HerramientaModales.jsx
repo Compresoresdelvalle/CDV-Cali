@@ -30,7 +30,6 @@ export function ModalPrestar({
   onSaved,
   onRefrescar,
 }) {
-  const perfil = useAuthStore((s) => s.perfil);
   const savingRef = useRef(false);
   const [usuarioId, setUsuarioId] = useState("");
   const [fechaEsperada, setFechaEsperada] = useState(() => {
@@ -48,6 +47,19 @@ export function ModalPrestar({
   // mostraba y el modal se cerraba en el mismo instante, así que nunca se
   // alcanzaba a leer).
   const [parcial, setParcial] = useState("");
+  // Aviso animado cuando el usuario intenta prestar más de lo disponible: el
+  // botón "+" ya no queda mudo, explica por qué no deja y qué hacer.
+  const [avisoTope, setAvisoTope] = useState(false);
+  const topeTimerRef = useRef(null);
+
+  const mostrarTope = () => {
+    setAvisoTope(false);
+    // Reinicia la animación aunque ya estuviera visible.
+    if (topeTimerRef.current) clearTimeout(topeTimerRef.current);
+    requestAnimationFrame(() => setAvisoTope(true));
+    topeTimerRef.current = setTimeout(() => setAvisoTope(false), 6000);
+  };
+  useEffect(() => () => clearTimeout(topeTimerRef.current), []);
 
   const usuarioSel = usuarios.find((u) => u.id === usuarioId) ?? null;
   const pill = estadoPill(herramienta.estado);
@@ -267,9 +279,11 @@ export function ModalPrestar({
                 max={disponibles}
                 onChange={(e) => {
                   const n = parseInt(e.target.value, 10);
-                  setCantidad(
-                    Number.isNaN(n) ? 1 : Math.max(1, Math.min(n, disponibles)),
-                  );
+                  const clamped = Number.isNaN(n)
+                    ? 1
+                    : Math.max(1, Math.min(n, disponibles));
+                  if (!Number.isNaN(n) && n > disponibles) mostrarTope();
+                  setCantidad(clamped);
                 }}
                 className="rounded-md border text-center font-mono text-sm font-bold outline-none"
                 style={{
@@ -280,14 +294,56 @@ export function ModalPrestar({
                   color: "var(--n-950)",
                 }}
               />
+              {/* El "+" NO queda mudo al tope: si no hay más, explica por qué. */}
               <QtyStep
-                onClick={() => setCantidad((c) => Math.min(disponibles, c + 1))}
-                disabled={cantidad >= disponibles}
+                onClick={() => {
+                  if (cantidad >= disponibles) {
+                    mostrarTope();
+                    return;
+                  }
+                  setCantidad((c) => Math.min(disponibles, c + 1));
+                }}
+                atTope={cantidad >= disponibles}
               >
                 +
               </QtyStep>
             </div>
           </div>
+
+          {/* Explicación siempre visible cuando solo hay 1 unidad, para que el
+              usuario entienda por qué el contador no sube. */}
+          {disponibles === 1 && !avisoTope && (
+            <p
+              className="mt-2 text-[11px] leading-[1.5]"
+              style={{ color: "var(--n-500)" }}
+            >
+              Solo hay <b>1 unidad</b> registrada de esta herramienta, por eso
+              el contador no sube. Si de verdad tienes varias, agrégalas con el
+              botón <b>“Agregar unidades”</b> (ábrela desde la lista) y luego
+              podrás prestar más de una.
+            </p>
+          )}
+
+          {/* Aviso animado cuando intenta pasar del tope. */}
+          {avisoTope && (
+            <div
+              className="mt-2 flex items-start gap-2 rounded-md border px-3 py-2 text-[11.5px] leading-[1.5] animate-fade-in"
+              style={{
+                backgroundColor: "var(--warn-50)",
+                borderColor: "var(--warn-border)",
+                color: "var(--warn-700)",
+              }}
+            >
+              <span aria-hidden>⚠️</span>
+              <span>
+                No puedes prestar más de <b>{disponibles}</b>: es todo lo que
+                hay disponible de esta herramienta en la sede.
+                {disponibles === 1
+                  ? " Para prestar varias, primero agrégalas con “Agregar unidades”."
+                  : " Para prestar más, agrega unidades a esta herramienta o espera a que devuelvan las prestadas."}
+              </span>
+            </div>
+          )}
         </Section>
 
         {/* 2 · Usuario */}
@@ -875,6 +931,181 @@ export function ModalNueva({ sedeDefault, onClose, onSaved }) {
   );
 }
 
+/* ─────────────────── Modal: Agregar unidades a una herramienta ─────────── */
+
+/**
+ * Suma más unidades físicas de una herramienta que YA existe, para poder
+ * prestar varias. Cada unidad es una fila (mismo modelo 1 fila = 1 unidad).
+ *  · Inventariable (producto_id): cada unidad sale del stock de insumo
+ *    (fn_crear_herramienta_desde_insumo con cantidad).
+ *  · Manual: inserta N filas iguales (mismo nombre y código).
+ */
+export function ModalAgregarUnidades({ herramienta, onClose, onSaved }) {
+  const esInsumo = !!herramienta.producto_id;
+  const [cantidad, setCantidad] = useState(1);
+  const [max, setMax] = useState(esInsumo ? 1 : 50);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const savingRef = useRef(false);
+
+  // Para inventariables, el tope es el stock de insumo disponible en la sede.
+  useEffect(() => {
+    if (!esInsumo) return;
+    let cancel = false;
+    supabase
+      .from("inventario")
+      .select("cantidad_insumo")
+      .eq("producto_id", herramienta.producto_id)
+      .eq("sede_id", herramienta.sede_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancel) setMax(Math.max(1, data?.cantidad_insumo ?? 1));
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [esInsumo, herramienta.producto_id, herramienta.sede_id]);
+
+  const guardar = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      const n = Math.max(1, Math.min(cantidad || 1, max));
+      if (esInsumo) {
+        const { error: e } = await supabase.rpc(
+          "fn_crear_herramienta_desde_insumo",
+          {
+            p_producto_id: herramienta.producto_id,
+            p_sede_id: herramienta.sede_id,
+            p_cantidad: n,
+          },
+        );
+        if (e) throw e;
+      } else {
+        const filas = Array.from({ length: n }, () => ({
+          herramienta_nombre: herramienta.herramienta_nombre,
+          herramienta_codigo: herramienta.herramienta_codigo,
+          sede_id: herramienta.sede_id,
+          estado: "disponible",
+        }));
+        const { error: e } = await supabase
+          .from("herramientas_prestamo")
+          .insert(filas);
+        if (e) throw e;
+      }
+      await onSaved(n);
+    } catch (err) {
+      setError(safeError(err, "No se pudieron agregar las unidades"));
+    } finally {
+      setSaving(false);
+      savingRef.current = false;
+    }
+  };
+
+  return (
+    <ModalShell onClose={onClose} maxWidth={440}>
+      <div className="mb-1.5 flex items-center gap-2.5">
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-lg"
+          style={{ backgroundColor: "var(--p-50)", color: "var(--p-700)" }}
+        >
+          <Boxes className="h-5 w-5" strokeWidth={1.8} />
+        </div>
+        <h2
+          className="m-0 flex-1 text-[16px] font-semibold leading-[1.3]"
+          style={{ color: "var(--n-950)" }}
+        >
+          Agregar unidades
+        </h2>
+      </div>
+      <p
+        className="mb-4 text-[13px] leading-[1.5]"
+        style={{ color: "var(--n-500)" }}
+      >
+        <b style={{ color: "var(--n-900)" }}>
+          {herramienta.herramienta_nombre}
+        </b>
+        . Suma cuántas unidades más tienes de esta herramienta para poder
+        prestar varias a la vez.
+        {esInsumo
+          ? ` Cada unidad sale del stock de insumo (hay ${max} disponible${max === 1 ? "" : "s"}).`
+          : ""}
+      </p>
+
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <FieldLabel>Unidades a agregar</FieldLabel>
+        <div className="flex items-center gap-1.5">
+          <QtyStep
+            onClick={() => setCantidad((c) => Math.max(1, c - 1))}
+            disabled={cantidad <= 1}
+          >
+            −
+          </QtyStep>
+          <input
+            type="number"
+            value={cantidad}
+            min={1}
+            max={max}
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10);
+              setCantidad(Number.isNaN(n) ? 1 : Math.max(1, Math.min(n, max)));
+            }}
+            className="rounded-md border text-center font-mono text-sm font-bold outline-none"
+            style={{
+              width: 56,
+              height: 40,
+              borderColor: "var(--n-150)",
+              backgroundColor: "var(--n-0)",
+              color: "var(--n-950)",
+            }}
+          />
+          <QtyStep
+            onClick={() => setCantidad((c) => Math.min(max, c + 1))}
+            disabled={cantidad >= max}
+          >
+            +
+          </QtyStep>
+        </div>
+      </div>
+
+      {error && (
+        <p className="mb-2 text-xs" style={{ color: "var(--dang-700)" }}>
+          {error}
+        </p>
+      )}
+
+      <div
+        className="mt-2 flex justify-end gap-2 border-t pt-4"
+        style={{ borderColor: "var(--n-100)" }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={saving}
+          className="btn btn-out disabled:opacity-50"
+          style={{ height: 48 }}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={guardar}
+          disabled={saving}
+          className="btn btn-pri inline-flex items-center gap-1.5 disabled:opacity-50"
+          style={{ height: 48 }}
+        >
+          <Check className="h-3.5 w-3.5" strokeWidth={2} />
+          {saving
+            ? "Agregando…"
+            : `Agregar ${cantidad} unidad${cantidad === 1 ? "" : "es"}`}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
 /* ───────────────────────────── Helpers UI ─────────────────────────────── */
 
 function ModalShell({ children, onClose, maxWidth = 480 }) {
@@ -979,13 +1210,16 @@ function CantidadCrearField({ cantidad, setCantidad, max, sub }) {
   );
 }
 
-/* Botón +/- para el contador de cantidad (REQ7). */
-function QtyStep({ children, onClick, disabled }) {
+/* Botón +/- para el contador de cantidad (REQ7).
+   `atTope`: se ve tenue como si estuviera deshabilitado, pero SIGUE clickeable
+   para poder explicarle al usuario por qué no puede subir más (no queda mudo). */
+function QtyStep({ children, onClick, disabled, atTope }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-disabled={atTope || undefined}
       className="flex items-center justify-center rounded-md border font-bold disabled:opacity-40"
       style={{
         width: 40,
@@ -994,6 +1228,7 @@ function QtyStep({ children, onClick, disabled }) {
         borderColor: "var(--n-150)",
         backgroundColor: "var(--n-50)",
         color: "var(--n-700)",
+        opacity: atTope ? 0.4 : undefined,
       }}
     >
       {children}
