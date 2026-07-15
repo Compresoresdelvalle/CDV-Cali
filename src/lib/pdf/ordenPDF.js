@@ -21,12 +21,20 @@ import {
 import { METODO_PAGO_LABELS } from "../ordenes-ui";
 
 const ESTADO_LABEL = {
+  // Flujo nuevo (opción A)
+  recepcion: "Recepción",
+  diagnostico: "Diagnóstico",
+  cotizada: "Cotizada",
+  autorizada: "Autorizada",
+  terminada: "Terminada",
+  pendiente_recogida: "Pendiente de recogida",
+  entregada: "Entregada",
+  cancelada: "Cancelada",
+  // Flujo legacy (compatibilidad)
   abierta: "Abierta",
   en_proceso: "En proceso",
   esperando_repuesto: "Esperando repuesto",
   completada: "Completada",
-  pendiente_recogida: "Pendiente de recogida",
-  entregada: "Entregada",
 };
 
 /**
@@ -387,10 +395,10 @@ export function generarOrdenPDF({
     const manoObra = Number(orden.costo_mano_obra ?? 0);
     const costoRep = Number(orden.costo_repuestos ?? 0);
     const valorRev = Number(orden.valor_revision ?? 0);
-    // TOTAL autoconsistente con las líneas (mano obra + repuestos + valor de
-    // revisión). Equivale a orden.total (canónico en BD), pero se computa de los
-    // componentes para no caer en `orden.total ?? ...` cuando total = 0.
-    const total = manoObra + costoRep + valorRev;
+    // #S2-23: el TOTAL a pagar es el canónico de la BD (`orden.total`), que ya
+    // incluye IVA y descuento. Antes se sumaban solo los componentes sin IVA ni
+    // descuento, dando un total distinto al que realmente se le cobra al cliente.
+    const total = Number(orden.total ?? 0);
     const abonado = abonos.reduce((s, a) => s + (Number(a.monto) || 0), 0);
     const saldo = total - abonado;
 

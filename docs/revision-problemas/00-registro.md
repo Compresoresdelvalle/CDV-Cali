@@ -120,8 +120,117 @@ Migración: `supabase/migrations/20260715000004_s1_ventas_hardening.sql` (incluy
 
 Advisors: la única alerta nueva es `fn_upsert_cliente` como `SECURITY DEFINER` (esperada, mismo patrón que otras 83 funciones del proyecto); la exposición a `anon` se cerró con el `REVOKE`.
 
-### Notas de método
+### Notas de método (Sección 1)
 
 - Auditoría en solo lectura; ninguna escritura a producción durante la cacería.
 - Verificación adversarial aplicada a los 31 hallazgos técnicos; los 4 de UX puro se curaron por criterio.
 - Los identificadores S1-xx consolidan hallazgos que varios cazadores reportaron desde ángulos distintos (backend/frontend/contrato/negocio/ux).
+
+---
+
+## Sección 2 — Órdenes de Trabajo
+
+**Auditada:** 2026-07-15 · **Estado:** resultados entregados, pendiente de aprobación.
+**Alcance:** OrdenNueva, OrdenDetalle (stepper 7 pasos), OrdenHistorial, ot-flujo.js, ordenes-ui.js, ordenPDF.js, componentes ot/*; RPCs `fn_generar_venta_ot`, `fn_cancelar_orden`, `fn_convertir_a_insumo`, `fn_generar_producto_segunda_ot`, `fn_asociar_cotizacion_a_ot`, `fn_total_abonos_ot`, abonos; triggers `trg_orden_*`, `trg_garantia_venta_cerrar_por_ot`; tablas `ordenes_servicio`, `detalle_orden`, `ot_checklist`, `abonos`, `ventas(origen='ot')`.
+**Resultado:** 40 agentes. 31 confirmados (11 P0, 9 P1, 11 P2) + 4 UX → **27 problemas únicos (8 P0, 10 P1, 9 P2)**. Refutados: DATA-5, FE-4, UX-1, y UX-7 (refutado por verificación propia: `fn_cancelar_orden` NO valida abonos — su premisa era falsa).
+
+> **La auditoría halló datos reales problemáticos en producción, no solo bugs de código.** Varias OT ya están en estado inconsistente y su remediación (corrección de datos) debe consultarse aparte, por lo delicado de la base.
+
+### P0 — Crítico (dinero / inventario)
+
+| ID    | Título                                                                                                                                                     | Evidencia en producción                                         | Estado    |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | --------- |
+| S2-01 | `fn_cancelar_orden` no valida anticipos: cancela y deja el dinero huérfano (regresión — el bloqueo de la mig. 20260611000009 lo quitó 20260621000008)      | 2 OT canceladas con **$160.500** en abonos fuera de todo cierre | REPORTADO |
+| S2-02 | El total de la OT puede quedar **negativo** (triggers sin `greatest(0,…)`, sin CHECK en `descuento_valor` ni `total`)                                      | OT #76: total **−$51.000**                                      | REPORTADO |
+| S2-03 | IVA 19% genera centavos → la OT nunca se salda ni se entrega (redondeo a centavos vs. pesos enteros; `fn_generar_venta_ot` tolera 0.01)                    | OT #89 y #97 atascadas                                          | REPORTADO |
+| S2-04 | Repuesto agregado a una OT **no autorizada** se consume del inventario pero nunca se factura (fuga)                                                        | OT #42 (CV): repuesto $1.000 consumido, total $0                | REPORTADO |
+| S2-05 | 10 OT en 'entregada' **sin `venta_id`**: reparaciones entregadas nunca facturadas                                                                          | ~**$182.710** fuera de todo cierre                              | REPORTADO |
+| S2-06 | Abonos que superan el total vigente de la OT (el tope solo se valida al insertar; el total baja después)                                                   | 12 OT, hasta **$800.000** de más                                | REPORTADO |
+| S2-07 | Doble conteo entre cierres cuando el anticipo cae en un período y la venta-OT en otro ya cerrado (cruza con **Sección 3 Cierres**)                         | riesgo estructural                                              | REPORTADO |
+| S2-08 | `fn_asociar_cotizacion_a_ot` corrompe precio/costo al copiar a `detalle_orden` (mete precio con IVA en la columna equivocada; falla con ítems de servicio) | contrato roto                                                   | REPORTADO |
+
+### P1 — Funcional serio
+
+| ID    | Título                                                                                                                                                                   | Estado    |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
+| S2-09 | Seguridad: un `UPDATE` REST directo puede poner `estado='entregada'` sin pasar por `fn_generar_venta_ot` (causa probable de S2-05)                                       | REPORTADO |
+| S2-10 | Seguridad: `INSERT` directo en `ventas` con `origen='ot'` sin unicidad por `orden_id` (venta-OT falsa/duplicada)                                                         | REPORTADO |
+| S2-11 | Una OT **cancelada** sigue editable en campos financieros (RLS/triggers solo protegen 'entregada')                                                                       | REPORTADO |
+| S2-12 | `fn_asociar_cotizacion_a_ot` no excluye OT canceladas → consume stock en una orden cerrada                                                                               | REPORTADO |
+| S2-13 | El gate del paso Recepción depende de un flag de sesión (`checklistTocado`), no del checklist ya guardado → OT trabada al reabrir                                        | REPORTADO |
+| S2-14 | Error silenciado al cargar el checklist → la constancia legal se imprime con "0 componentes"                                                                             | REPORTADO |
+| S2-15 | `fn_generar_producto_segunda_ot` rechaza el estado 'terminada' del flujo nuevo (mensaje contradictorio)                                                                  | REPORTADO |
+| S2-16 | "Revisión servicio (COP)" al crear la OT se guarda en `costo_mano_obra` (columna equivocada) → puede cobrar la revisión como mano de obra                                | REPORTADO |
+| S2-17 | "Convertir a venta y entregar" (irreversible: genera venta, cierra garantía) no pide confirmación                                                                        | REPORTADO |
+| S2-18 | `AbonosPanel`, `AutorizacionPanel`, `CotizacionesAsociadasOT`, `SelectorCotizacionExistente` están terminados pero **nunca montados** en OrdenDetalle (funciones sin UI) | REPORTADO |
+
+### P2 — Robustez / seguridad de fondo / pulido
+
+| ID    | Título                                                                                                                   | Estado    |
+| ----- | ------------------------------------------------------------------------------------------------------------------------ | --------- |
+| S2-19 | Grants de `anon` sin revocar + policies con rol `{public}` en `ordenes_servicio`/`detalle_orden`/`abonos`/`ot_checklist` | REPORTADO |
+| S2-20 | Al anular una venta-OT no se reabre la garantía que la entrega había cerrado                                             | REPORTADO |
+| S2-21 | Coexisten dos máquinas de estado (nueva de 7 pasos vs. legacy) que saltan los gates de negocio                           | REPORTADO |
+| S2-22 | OT 'no_autorizado' conservan `costo_mano_obra`/`valor_repuestos` irreales (distorsiona reportes de costo/margen)         | REPORTADO |
+| S2-23 | El modo 'final' de `ordenPDF.js` calcula el total sin IVA ni descuento (hoy no usado)                                    | REPORTADO |
+| S2-24 | Ítems del checklist de recepción a 44px (< 48px del sistema de diseño)                                                   | REPORTADO |
+| S2-25 | Botón "Nueva OT" visible para Bodeguero; RoleGuard lo rebota al dashboard sin mensaje                                    | REPORTADO |
+| S2-26 | Repuesto sin `costo_promedio` se descuenta a $0 → margen inflado en la venta-OT                                          | REPORTADO |
+| S2-27 | La constancia impresa muestra el estado crudo ('recepcion') sin traducir (`ESTADO_LABEL` solo cubre estados legacy)      | REPORTADO |
+
+### Remediación de datos en producción (requiere decisión, no solo código)
+
+Estos son datos ya inconsistentes que un fix de código no corrige por sí solo; hay que decidir cómo tratarlos:
+
+- OT #42 — repuesto consumido sin facturar (¿facturar, revertir el consumo, o dejar?).
+- OT #76 — total −$51.000 (¿corregir a 0/valor real?).
+- OT #89, #97 — atascadas por centavos (¿redondear su total a pesos enteros?).
+- 10 OT entregadas sin `venta_id` (~$182.710) — ¿generar sus ventas retroactivas o registrarlas de otra forma?
+- 12 OT con abonos por encima del total (hasta $800.000) — ¿saldo a favor del cliente, devolución, o ajuste?
+- 2 OT canceladas con $160.500 en abonos huérfanos — ¿registrar devolución?
+
+### Cruces con otras secciones
+
+- **S2-07** (doble conteo entre cierres) se resuelve mejor en la **Sección 3 (Cierres)**, junto con S1-08.
+
+### Reportado por el usuario para la Sección 9 (Herramientas) — pendiente
+
+- **H-1:** "Devolver a insumo" en una herramienta no la devuelve (no revierte al stock de insumo).
+- **H-2:** Al crear una herramienta con cantidad > 1 se crean N tarjetas individuales; debería quedar una sola tarjeta con N unidades asociadas.
+
+### Investigación de datos (2026-07-15, solo lectura) y decisiones del usuario
+
+- **S2-05 (10 sin venta):** todas de inicio de junio, en su mayoría prueba/legacy; reales a cuadrar por fecha: #22 (William Losada $45.000), #33 (Ramiro Duran $35.000), #36 (Oscar Agredo $20.000). → remediación por fecha.
+- **S2-06 (exceso de abono):** 12 OT, casi todas de junio con `total=0` (nunca llegaron a un total real, no sobrecobro por precio). **"Saldo a favor" no existe en la empresa** → fix preventivo: no dejar que el total baje por debajo de lo abonado, sin crear crédito.
+- **S2-04:** el código vivo de `fn_generar_venta_ot` aún salta repuestos en `no_autorizado` → se blinda; OT #42 es legacy (16 jun).
+- **S2-03:** OT #89 y #97 son recientes (1–2 jul), atascadas por centavos → bug actual.
+- **S2-18:** los 4 componentes son "Fase 10" (pre-rediseño) → **DESCARTADO como feature; se eliminan como código muerto**.
+- **S2-14 (constancia 0 componentes):** el usuario decidió **dejarlo así** → DESCARTADO.
+- **S2-01:** al cancelar con anticipos → **bloquear con pop-up claro** que explique por qué y qué hacer.
+
+### Estado de implementación (Sección 2)
+
+**Base de datos (Opus) — aplicado a producción y probado con transacciones que revierten.** Migración: `supabase/migrations/20260715200000_s2_ot_hardening.sql` (definiciones originales comentadas para reversibilidad).
+
+- CORREGIDO **S2-01**: `fn_cancelar_orden` bloquea si hay abonos, con mensaje accionable.
+- CORREGIDO **S2-02**: total nunca negativo (clamp de descuento y `greatest(0,…)`) en `trg_orden_recalcular_total_mo` y `trg_orden_recalcular_totales`. La OT #76 (cancelada, −$51.000) se deja como está.
+- CORREGIDO **S2-03**: redondeo a pesos enteros (`round(...,0)`) + data-fix de las 2 OT atascadas: **#89 540500.38→540500, #97 3343.90→3344**.
+- CORREGIDO **S2-04 + S2-22**: marcar `no_autorizado` con repuestos cargados se bloquea; y en `no_autorizado` se ponen `costo_mano_obra`/`valor_repuestos` en 0.
+- CORREGIDO **S2-06**: el total no puede bajar por debajo de lo ya abonado (sin crear saldo a favor).
+- CORREGIDO **S2-08 + S2-12**: `fn_asociar_cotizacion_a_ot` copia `precio_unitario` correcto, deja el costo real, excluye servicios y rechaza OT cancelada/entregada.
+- CORREGIDO **S2-09**: entrega solo vía `fn_generar_venta_ot` (señal GUC `cdv.entregando_ot`); UPDATE directo a `entregada` bloqueado.
+- CORREGIDO **S2-11**: policy `os_update` excluye 'cancelada'; el trigger rechaza cambios en OT entregada/cancelada.
+- CORREGIDO **S2-15**: `fn_generar_producto_segunda_ot` acepta 'terminada'.
+- CORREGIDO **S2-19**: `REVOKE` de `anon` en las 4 tablas de OT; policies `{public}`→`authenticated`.
+- CORREGIDO **S2-20**: al anular la venta-OT se reabre la garantía cerrada por esa entrega.
+- CORREGIDO **S2-10**: índice único parcial `ux_ventas_orden_id_activa` (excluye anuladas; verificado que no hay OT con >1 venta activa).
+- NO-APLICA **S2-26**: repuesto sin `costo_promedio` es dato de catálogo faltante; requiere cargar costos, sin fix seguro en BD.
+
+**Frontend (Fable) — implementado, build en verde:**
+
+- CORREGIDO: S2-01 (aviso claro al anular con anticipos), S2-03 (redondeo a enteros en `calcularMontos`), S2-13 (gate de Recepción desde el checklist real, no un flag de sesión), S2-16 ("Revisión" a `valor_revision`), S2-17 (confirmación al convertir a venta), S2-18 (eliminados 4 componentes muertos), S2-23 (total del PDF canónico), S2-24 (checklist 48px), S2-25 (botón "Nueva OT" solo Admin/Vendedor), S2-27 (estados nuevos en el PDF).
+- DESCARTADO: **S2-14** (constancia con 0 componentes; decisión del usuario), **S2-18 como feature** (eran componentes del flujo viejo).
+
+**Diferido a la Sección 3 (Cierres):** **S2-07** (doble conteo entre cierres), junto con S1-08.
+
+**Remediación de datos pendiente (por consultar caso por caso):** las 10 OT entregadas sin venta (reales: #22, #33, #36), OT #42 (repuesto legacy), OT #76 (total negativo), y las OT con exceso de abono (casi todas datos viejos con total=0).

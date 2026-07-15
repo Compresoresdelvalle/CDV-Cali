@@ -109,7 +109,12 @@ export default function OrdenNueva() {
           creado_por: perfil?.id || null,
           sede_id: sedeOrden,
           estado: "recepcion",
-          costo_mano_obra: costo,
+          // #S2-16: el campo "Revisión servicio" va a valor_revision (el cobro de
+          // la revisión), NO a costo_mano_obra (que es la mano de obra que solo se
+          // cobra si el cliente autoriza). Antes se guardaba en la columna
+          // equivocada y podía cobrarse como mano de obra sin querer.
+          valor_revision: costo,
+          costo_mano_obra: 0,
           costo_repuestos: 0,
           total: costo,
           observaciones: observaciones.trim() || null,
