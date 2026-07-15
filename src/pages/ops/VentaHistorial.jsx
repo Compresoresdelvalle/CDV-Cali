@@ -53,8 +53,10 @@ export default function VentaHistorial() {
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (!esAdmin) query = query.eq("sede_id", perfil.sede_id);
+      // #S1-14: `ilike` (insensible a mayúsculas) para que variantes de casing
+      // heredadas ('efectivo' vs 'Efectivo') no dejen ventas invisibles al filtrar.
       if (filtroMetodo !== "Todos")
-        query = query.eq("metodo_pago", filtroMetodo);
+        query = query.ilike("metodo_pago", filtroMetodo);
       if (rangoFecha)
         query = query
           .gte("fecha", rangoFecha.desde)
@@ -104,12 +106,21 @@ export default function VentaHistorial() {
 
   // KPIs honestos derivados de lo cargado en vista (no inventados).
   const kpis = useMemo(() => {
-    const hoyStr = new Date().toDateString();
+    // #S1-17: "hoy" se calcula en America/Bogota explícito, no en la zona del
+    // dispositivo (tablets industriales sin sincronizar reloj daban conteos mal).
+    const diaBogota = (d) =>
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Bogota",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date(d));
+    const hoyStr = diaBogota(new Date());
     const facturado = ventas
       .filter((v) => !v.anulada)
       .reduce((s, v) => s + Number(v.total ?? 0), 0);
     const hoy = ventas.filter(
-      (v) => v.fecha && new Date(v.fecha).toDateString() === hoyStr,
+      (v) => v.fecha && diaBogota(v.fecha) === hoyStr,
     ).length;
     return { enVista: ventas.length, facturado, hoy };
   }, [ventas]);
@@ -251,7 +262,27 @@ export default function VentaHistorial() {
         {loading && ventas.length === 0 ? (
           <SkeletonList />
         ) : ventasFiltradas.length === 0 ? (
-          <EmptyState filtrando={busqueda.trim().length > 0} />
+          <>
+            <EmptyState
+              filtrando={busqueda.trim().length > 0}
+              hayMas={hasMore && !rangoFecha && busqueda.trim().length > 0}
+            />
+            {/* #S1-06: la búsqueda de texto es client-side sobre lo cargado; si
+                no hay coincidencias pero quedan páginas, dejar seguir cargando
+                para que el registro buscado no sea inalcanzable. */}
+            {hasMore && !rangoFecha && busqueda.trim() && (
+              <button
+                onClick={() => cargarVentas(false)}
+                disabled={loading}
+                className="btn btn-out mt-4 w-full justify-center disabled:opacity-50"
+                style={{ height: 48 }}
+              >
+                {loading
+                  ? "Cargando…"
+                  : "Cargar más ventas para seguir buscando"}
+              </button>
+            )}
+          </>
         ) : (
           <>
             {/* Móvil/Tablet: cards (< md) */}
@@ -331,8 +362,9 @@ export default function VentaHistorial() {
               </div>
             </div>
 
-            {/* Cargar más (también con filtro de fecha server-side) */}
-            {hasMore && (!busqueda.trim() || rangoFecha) && (
+            {/* Cargar más — visible también con búsqueda de texto activa
+                (#S1-06): así los registros de páginas no cargadas se alcanzan. */}
+            {hasMore && (
               <button
                 onClick={() => cargarVentas(false)}
                 disabled={loading}
@@ -558,7 +590,7 @@ function SkeletonList() {
   );
 }
 
-function EmptyState({ filtrando }) {
+function EmptyState({ filtrando, hayMas }) {
   return (
     <div className="flex flex-col items-center justify-center px-8 py-20 text-center">
       <div
@@ -571,9 +603,11 @@ function EmptyState({ filtrando }) {
         {filtrando ? "Sin ventas para la búsqueda" : "Sin ventas registradas"}
       </p>
       <p className="mt-1 text-sm" style={{ color: "var(--n-500)" }}>
-        {filtrando
-          ? "Prueba con otro número, cliente o producto"
-          : "Las ventas aparecerán aquí una vez creadas"}
+        {!filtrando
+          ? "Las ventas aparecerán aquí una vez creadas"
+          : hayMas
+            ? "Puede estar en ventas aún no cargadas — toca “Cargar más” abajo"
+            : "Prueba con otro número, cliente o producto"}
       </p>
     </div>
   );

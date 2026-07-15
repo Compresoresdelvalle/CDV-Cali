@@ -306,7 +306,7 @@ export default function ModalAbrirGarantiaVenta({
                   buscarDebounced(e.target.value);
                 }}
                 placeholder="Buscar producto (mín. 2 letras)..."
-                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[44px]"
+                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[48px]"
                 style={{
                   backgroundColor: "hsl(var(--background))",
                   borderColor: "hsl(var(--border))",
@@ -457,7 +457,7 @@ export default function ModalAbrirGarantiaVenta({
                   buscarDevDebounced(e.target.value);
                 }}
                 placeholder="Buscar producto devuelto (mín. 2 letras)..."
-                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[44px]"
+                className="w-full px-3 py-2 rounded-lg border text-sm min-h-[48px]"
                 style={{
                   backgroundColor: "hsl(var(--background))",
                   borderColor: "hsl(var(--border))",
@@ -553,7 +553,7 @@ export default function ModalAbrirGarantiaVenta({
           <button
             onClick={onClose}
             disabled={submitting}
-            className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[44px] disabled:opacity-50"
+            className="text-sm px-4 py-2 rounded-lg border cursor-pointer min-h-[48px] disabled:opacity-50"
             style={{
               borderColor: "hsl(var(--border))",
               color: "hsl(var(--muted-foreground))",
@@ -564,7 +564,7 @@ export default function ModalAbrirGarantiaVenta({
           <button
             onClick={submit}
             disabled={submitting}
-            className="text-sm px-5 py-2 rounded-lg cursor-pointer min-h-[44px] disabled:opacity-50"
+            className="text-sm px-5 py-2 rounded-lg cursor-pointer min-h-[48px] disabled:opacity-50"
             style={{
               backgroundColor: "hsl(var(--primary))",
               color: "hsl(var(--primary-foreground))",

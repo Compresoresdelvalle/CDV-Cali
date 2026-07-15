@@ -34,9 +34,11 @@ export default function VentaDetalle() {
 
   const [venta, setVenta] = useState(null);
   const [items, setItems] = useState([]);
+  const [pagos, setPagos] = useState([]);
   const [devoluciones, setDevoluciones] = useState([]);
   const [garantias, setGarantias] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cargaError, setCargaError] = useState(false);
   const [anulando, setAnulando] = useState(false);
   const [confirmAnular, setConfirmAnular] = useState(false);
   const [motivoAnular, setMotivoAnular] = useState("");
@@ -55,9 +57,10 @@ export default function VentaDetalle() {
     return generarVentaPOS({
       venta,
       items,
+      pagos,
       vendedor: venta.vendedor?.nombre ?? "—",
     });
-  }, [venta, items]);
+  }, [venta, items, pagos]);
 
   // URL del blob para el <iframe> de preview (se libera al cambiar/desmontar).
   useEffect(() => {
@@ -84,9 +87,10 @@ export default function VentaDetalle() {
   useEffect(() => {
     const cargar = async () => {
       setLoading(true);
+      setCargaError(false);
       try {
         // Datos primarios de la venta y su detalle.
-        const [{ data: v }, { data: d }] = await Promise.all([
+        const [vRes, dRes] = await Promise.all([
           supabase
             .from("ventas")
             .select(`*, vendedor:vendedor_id(nombre)`)
@@ -99,15 +103,34 @@ export default function VentaDetalle() {
             )
             .eq("venta_id", id),
         ]);
-        setVenta(v);
-        setItems(d ?? []);
+        // #S1-18: `.single()` devuelve PGRST116 cuando no existe la fila (eso SÍ
+        // es "no encontrada"). Cualquier otro error (red, permisos) es un fallo
+        // real de carga y debe distinguirse para no decir "no existe" por error.
+        if (vRes.error && vRes.error.code !== "PGRST116") throw vRes.error;
+        setVenta(vRes.data ?? null);
+        setItems(dRes.data ?? []);
       } catch {
-        // ignore
+        setCargaError(true);
       } finally {
         setLoading(false);
       }
     };
     cargar();
+  }, [id]);
+
+  // #S1-04: desglose real del pago (tabla pagos_venta) — necesario para ver
+  // cuánto entró en efectivo y cuánto por transferencia en un pago Mixto, y a
+  // qué cuenta. Solo lectura; falla en silencio si no hay permisos.
+  useEffect(() => {
+    const cargarPagos = async () => {
+      const { data } = await supabase
+        .from("pagos_venta")
+        .select("id, metodo_pago, monto, cuenta_bancaria")
+        .eq("venta_id", id)
+        .order("id", { ascending: true });
+      setPagos(data ?? []);
+    };
+    cargarPagos();
   }, [id]);
 
   // Vinculaciones del ciclo (lecturas READ-ONLY a tablas existentes que
@@ -203,11 +226,47 @@ export default function VentaDetalle() {
   }
 
   if (!venta) {
+    // #S1-18: un fallo de carga (red/permisos) NO es lo mismo que una venta
+    // inexistente; se comunica distinto y se ofrece reintentar.
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-sm" style={{ color: "var(--n-500)" }}>
-          Venta no encontrada
-        </p>
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-6 text-center">
+        {cargaError ? (
+          <>
+            <p
+              className="text-sm font-medium"
+              style={{ color: "var(--n-900)" }}
+            >
+              No pudimos cargar la venta
+            </p>
+            <p className="max-w-sm text-sm" style={{ color: "var(--n-500)" }}>
+              Puede ser un problema de conexión. Revisa tu internet e intenta de
+              nuevo.
+            </p>
+            <button
+              onClick={() => navigate(0)}
+              className="btn btn-out"
+              style={{ height: 48 }}
+            >
+              Reintentar
+            </button>
+          </>
+        ) : (
+          <>
+            <p
+              className="text-sm font-medium"
+              style={{ color: "var(--n-900)" }}
+            >
+              Venta no encontrada
+            </p>
+            <button
+              onClick={() => navigate("/ops/ventas")}
+              className="btn btn-out"
+              style={{ height: 48 }}
+            >
+              Volver a Ventas
+            </button>
+          </>
+        )}
       </div>
     );
   }
@@ -581,20 +640,44 @@ export default function VentaDetalle() {
                 <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
               </div>
               <div className="ib-title">Pago</div>
-              <div className="ib-aux">{venta.metodo_pago} · 1 movimiento</div>
+              <div className="ib-aux">
+                {venta.metodo_pago} ·{" "}
+                {pagos.length > 0
+                  ? `${pagos.length} movimiento${pagos.length > 1 ? "s" : ""}`
+                  : "1 movimiento"}
+              </div>
             </div>
-            <div className="pay-row">
-              <span className="pdate">{formatDate(venta.fecha)}</span>
-              <span
-                className={`pay-pill ${metodoPagoClass(venta.metodo_pago)}`}
-              >
-                <span className="dot" />
-                {venta.metodo_pago}
-              </span>
-              <span className="pamt">{formatCOP(totalCalc)}</span>
-            </div>
-            {/* Referencia/cuenta no se almacenan para ventas POS; se documenta
-                el pago con los datos reales disponibles. */}
+            {/* #S1-04: cuando hay desglose real (pago Mixto o electrónico) se
+                muestra una fila por forma de pago con su cuenta, para poder
+                cuadrar caja. Si no hay filas en pagos_venta, se cae al método
+                único de la venta. */}
+            {pagos.length > 0 ? (
+              pagos.map((p) => (
+                <div key={p.id} className="pay-row">
+                  <span className="pdate">{formatDate(venta.fecha)}</span>
+                  <span
+                    className={`pay-pill ${metodoPagoClass(p.metodo_pago)}`}
+                  >
+                    <span className="dot" />
+                    {p.metodo_pago}
+                    {p.cuenta_bancaria ? ` · ${p.cuenta_bancaria}` : ""}
+                  </span>
+                  <span className="pamt">{formatCOP(p.monto)}</span>
+                </div>
+              ))
+            ) : (
+              <div className="pay-row">
+                <span className="pdate">{formatDate(venta.fecha)}</span>
+                <span
+                  className={`pay-pill ${metodoPagoClass(venta.metodo_pago)}`}
+                >
+                  <span className="dot" />
+                  {venta.metodo_pago}
+                  {venta.cuenta_bancaria ? ` · ${venta.cuenta_bancaria}` : ""}
+                </span>
+                <span className="pamt">{formatCOP(totalCalc)}</span>
+              </div>
+            )}
             <div
               className="mt-2 font-mono text-[11px]"
               style={{ color: "var(--n-500)" }}

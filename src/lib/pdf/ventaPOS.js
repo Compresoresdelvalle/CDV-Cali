@@ -30,7 +30,12 @@ const CW = W - MX * 2; // ancho contenido
  *               precio_unitario, subtotal }]
  *   vendedor: string
  */
-export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
+export function generarVentaPOS({
+  venta,
+  items = [],
+  pagos = [],
+  vendedor = "—",
+}) {
   // Altura: medición real de los ítems (pass 1) para que nombres largos que
   // envuelven a varias líneas no desborden la tirilla.
   const probe = new jsPDF({ unit: "mm", format: [W, 1000] });
@@ -57,8 +62,15 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
     const cl = probe.splitTextToSize(`Cuenta: ${venta.cuenta_bancaria}`, CW);
     ctaAlto = cl.length * 3.4 + 1;
   }
-  // header ~58 + items + obs + cuenta + totales ~50 + footer ~25, mínimo 120
-  const altura = Math.max(58 + itemsAlto + obsAlto + ctaAlto + 50 + 25, 120);
+  // #S1-04: desglose de pago (una línea por forma de pago) — reservar su alto.
+  const pagosAlto = pagos.length > 0 ? pagos.length * 4 + 4 : 0;
+  // #S1-05: la marca de "ANULADA" agrega una línea de encabezado.
+  const anulAlto = venta.anulada ? 6 : 0;
+  // header ~58 + items + obs + cuenta + pagos + anulada + totales ~50 + footer ~25
+  const altura = Math.max(
+    58 + itemsAlto + obsAlto + ctaAlto + pagosAlto + anulAlto + 50 + 25,
+    120,
+  );
 
   const doc = new jsPDF({
     unit: "mm",
@@ -102,6 +114,17 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
     { align: "center" },
   );
   y += 5;
+
+  // #S1-05: sello visible cuando la venta está anulada (para que un recibo
+  // reimpreso de una venta anulada no pase por válido).
+  if (venta.anulada) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(200, 30, 30);
+    doc.text("*** ANULADA — NO VÁLIDA ***", center, y, { align: "center" });
+    doc.setTextColor(0, 0, 0);
+    y += 5;
+  }
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
@@ -205,15 +228,32 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
 
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
-  fila("Forma de pago:", String(venta.metodo_pago ?? "—"));
-
-  // B1 (ít 6): cuenta destino del pago, si se registró (puede envolver).
-  if (venta.cuenta_bancaria) {
-    doc.setFontSize(6.5);
-    const cta = doc.splitTextToSize(`Cuenta: ${venta.cuenta_bancaria}`, CW);
-    doc.text(cta, MX, y);
-    y += cta.length * 3.4 + 1;
+  // #S1-04: si hay desglose real (pago Mixto o electrónico), se imprime una
+  // línea por forma de pago con su cuenta; si no, el método único de la venta.
+  if (pagos.length > 0) {
+    fila("Forma de pago:", String(venta.metodo_pago ?? "Mixto"));
+    doc.setFontSize(6.8);
+    for (const p of pagos) {
+      const etiqueta = p.cuenta_bancaria
+        ? `  ${p.metodo_pago} · ${p.cuenta_bancaria}`
+        : `  ${p.metodo_pago}`;
+      const lbl = doc.splitTextToSize(etiqueta, CW - 20);
+      doc.text(lbl, MX, y);
+      doc.text(formatCOP(p.monto), W - MX, y, { align: "right" });
+      y += lbl.length * 3.4;
+    }
+    y += 1;
     doc.setFontSize(7);
+  } else {
+    fila("Forma de pago:", String(venta.metodo_pago ?? "—"));
+    // B1 (ít 6): cuenta destino del pago, si se registró (puede envolver).
+    if (venta.cuenta_bancaria) {
+      doc.setFontSize(6.5);
+      const cta = doc.splitTextToSize(`Cuenta: ${venta.cuenta_bancaria}`, CW);
+      doc.text(cta, MX, y);
+      y += cta.length * 3.4 + 1;
+      doc.setFontSize(7);
+    }
   }
 
   // #15: observación de la venta en el recibo (si existe).
@@ -241,6 +281,30 @@ export function generarVentaPOS({ venta, items = [], vendedor = "—" }) {
   doc.text("Este recibo no es una factura electrónica.", center, y, {
     align: "center",
   });
+
+  // #S1-05: marca de agua diagonal "ANULADA" superpuesta (además del sello del
+  // encabezado). Solo si el visor soporta opacidad; si no, se omite para no
+  // tapar el contenido con texto sólido.
+  if (venta.anulada) {
+    let okOpacidad = true;
+    doc.saveGraphicsState();
+    try {
+      doc.setGState(new doc.GState({ opacity: 0.18 }));
+    } catch {
+      okOpacidad = false;
+    }
+    if (okOpacidad) {
+      doc.setTextColor(200, 30, 30);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(30);
+      doc.text("ANULADA", center, altura / 2, {
+        align: "center",
+        angle: 35,
+      });
+      doc.setTextColor(0, 0, 0);
+    }
+    doc.restoreGraphicsState();
+  }
 
   // ── API ──────────────────────────────────────────────────────────────
   const blob = doc.output("blob");

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeftCircle,
@@ -53,6 +53,10 @@ export default function VentaNueva() {
   const [clienteTelefono, setClienteTelefono] = useState("");
   const [clienteEmail, setClienteEmail] = useState("");
   const [clienteDireccion, setClienteDireccion] = useState("");
+  // #S1-03: nombre del cliente realmente seleccionado del picker. Si el usuario
+  // luego edita el nombre a mano y deja de coincidir, se descartan sus datos de
+  // contacto ocultos para no atribuírselos a otro cliente distinto.
+  const [clienteSelNombre, setClienteSelNombre] = useState("");
   const [metodoPago, setMetodoPago] = useState("Efectivo");
   const [cuentaBancaria, setCuentaBancaria] = useState(""); // #13
   // Pago mixto (#2): montos por forma de pago sobre una sola factura.
@@ -92,19 +96,22 @@ export default function VentaNueva() {
     () => perfil?.sede_id || SEDES.BODEGA,
   );
   const [bloqueoSede, setBloqueoSede] = useState(false);
-  // #10 — cuántos ítems quedaron en negativo tras la venta (0 = ninguno).
-  const [negativoInfo, setNegativoInfo] = useState(0);
   // La venta SALE de: Admin → la sede elegida; Vendedor → siempre su sede.
   const sedeVenta = esVendedor ? perfil?.sede_id : sedeConsulta;
   // El vendedor está mirando una sede que NO es la suya (solo consulta).
   const consultandoOtraSede = esVendedor && sedeConsulta !== perfil?.sede_id;
 
+  // #S1-16: guardia anti-carrera — descarta respuestas de búsquedas viejas que
+  // resuelven después de una más reciente (evita pisar resultados correctos).
+  const buscarReqRef = useRef(0);
   const buscarProductos = useCallback(
     async (q) => {
       if (!q || q.trim().length < 2 || !sedeConsulta) {
+        buscarReqRef.current++;
         setResultados([]);
         return;
       }
+      const myReq = ++buscarReqRef.current;
       setBuscando(true);
       try {
         let pq = supabase
@@ -115,6 +122,7 @@ export default function VentaNueva() {
         // #32: búsqueda por palabras clave.
         pq = applyKeywordSearch(pq, q, ["nombre", "referencia"]);
         const { data: prods, error: e1 } = await pq.limit(1000);
+        if (myReq !== buscarReqRef.current) return;
         if (e1) throw e1;
         if (!prods?.length) {
           setResultados([]);
@@ -129,6 +137,7 @@ export default function VentaNueva() {
           .select("producto_id, cantidad, ubicacion_id")
           .eq("sede_id", sedeConsulta)
           .in("producto_id", ids);
+        if (myReq !== buscarReqRef.current) return;
         if (e2) throw e2;
 
         const stockMap = Object.fromEntries(
@@ -145,9 +154,9 @@ export default function VentaNueva() {
 
         setResultados(merged.slice(0, 8));
       } catch {
-        setResultados([]);
+        if (myReq === buscarReqRef.current) setResultados([]);
       } finally {
-        setBuscando(false);
+        if (myReq === buscarReqRef.current) setBuscando(false);
       }
     },
     [sedeConsulta],
@@ -213,10 +222,23 @@ export default function VentaNueva() {
         ]);
         // #12: aunque no haya stock se agrega (con aviso). Solo exigimos que el
         // producto exista y sea vendible.
-        if (!prod) return;
+        // #S1-19: si no es vendible/no existe, decirlo en vez de no hacer nada.
+        if (!prod) {
+          setError(
+            "Ese código no corresponde a un producto vendible (puede ser un insumo o estar inactivo).",
+          );
+          return;
+        }
+        setError(null);
         agregarAlCarrito({ ...prod, stock_disponible: inv?.cantidad ?? 0 });
-      } catch {
-        // silently ignore
+      } catch (e) {
+        // #S1-19: un error real (red/permisos) ya no se traga en silencio.
+        setError(
+          safeError(
+            e,
+            "No se pudo leer el producto escaneado. Revisa la conexión e intenta de nuevo.",
+          ),
+        );
       }
     },
     [sedeConsulta],
@@ -335,7 +357,15 @@ export default function VentaNueva() {
 
   // #11: cambiar la sede a consultar. Limpia la búsqueda; si el Admin cambia la
   // sede de la venta, vacía el carrito (la venta es de una sola sede).
+  // #S1-11: si ya hay productos agregados, confirmar antes de vaciarlos (un
+  // click accidental borraba todo el carrito sin aviso).
   const onChangeSede = (nuevaSede) => {
+    if (!esVendedor && carrito.length > 0) {
+      const ok = window.confirm(
+        `Cambiar de sede vaciará los ${carrito.length} producto(s) que ya agregaste a esta venta. ¿Continuar?`,
+      );
+      if (!ok) return; // el <select> vuelve solo a la sede anterior (controlado)
+    }
     setSedeConsulta(nuevaSede);
     setBusqueda("");
     setResultados([]);
@@ -398,6 +428,14 @@ export default function VentaNueva() {
         return;
       }
     }
+    // #S1-09: una venta a crédito necesita un cliente identificable; si no,
+    // queda una cuenta por cobrar sin dueño (no se sabe a quién cobrarle).
+    if (metodoPago === "Crédito" && !clienteNombre.trim()) {
+      setError(
+        "Una venta a crédito necesita el nombre del cliente para poder cobrarla.",
+      );
+      return;
+    }
     // B3: NO se permite vender sin stock. Bloquear si algún PRODUCTO excede lo
     // disponible (los servicios no tienen stock). Antes solo se avisaba después.
     const sinStock = carrito.filter(
@@ -413,8 +451,6 @@ export default function VentaNueva() {
     }
     setError(null);
     setConfirmando(true);
-    // Tras el bloqueo de arriba esto es 0; se conserva como red de seguridad.
-    const negativos = sinStock.length;
     try {
       const { error: rpcErr } = await supabase.rpc("fn_registrar_venta", {
         p_sede_id: sedeVenta,
@@ -475,13 +511,7 @@ export default function VentaNueva() {
           direccion: clienteDireccion,
         });
       }
-      // #10: si la venta dejó inventario negativo, avisar (urgente) antes de
-      // salir; el modal navega al cerrar. Si no, navegar directo.
-      if (negativos > 0) {
-        setNegativoInfo(negativos);
-      } else {
-        navigate("/ops/ventas");
-      }
+      navigate("/ops/ventas");
     } catch (e) {
       setError(safeError(e, "Error al registrar la venta"));
     } finally {
@@ -596,9 +626,18 @@ export default function VentaNueva() {
                 onChange={(v) => {
                   setClienteNombre(v);
                   buscarHistorialCliente(v);
+                  // #S1-03: al editar el nombre a mano, si deja de coincidir con
+                  // el cliente elegido, descartar sus datos de contacto ocultos.
+                  if (v.trim() !== clienteSelNombre.trim()) {
+                    setClienteTelefono("");
+                    setClienteEmail("");
+                    setClienteDireccion("");
+                    setClienteSelNombre("");
+                  }
                 }}
                 onSelect={(c) => {
                   setClienteNombre(c.nombre ?? "");
+                  setClienteSelNombre(c.nombre ?? "");
                   buscarHistorialCliente(c.nombre ?? "");
                   if (c.identificacion) setClienteNit(c.identificacion);
                   setClienteTelefono(c.telefono ?? "");
@@ -827,6 +866,20 @@ export default function VentaNueva() {
               ))}
             </div>
           )}
+
+          {/* #S1-24: sin resultados — antes la pantalla no decía nada y el
+              usuario no sabía si estaba buscando, escribió mal o no existe. */}
+          {!buscando &&
+            busqueda.trim().length >= 2 &&
+            resultados.length === 0 && (
+              <div
+                className="rounded-lg border border-dashed px-4 py-6 text-center text-sm"
+                style={{ borderColor: "var(--n-200)", color: "var(--n-500)" }}
+              >
+                No se encontraron productos para “{busqueda.trim()}”. Prueba con
+                otra palabra o la referencia.
+              </div>
+            )}
 
           {/* Tabla de productos del carrito (estilo Lovable prod-tbl) */}
           {carrito.length === 0 ? (
@@ -1264,6 +1317,17 @@ export default function VentaNueva() {
               </>
             )}
           </button>
+          {/* #S1-27: explicar junto al botón por qué está deshabilitado cuando
+              el pago mixto no cuadra (antes el aviso quedaba lejos, arriba). */}
+          {metodoPago === "Mixto" && !mixtoCuadra && carrito.length > 0 && (
+            <p
+              className="mt-2 text-center text-[12px]"
+              style={{ color: "var(--dang-700)" }}
+            >
+              Falta {formatCOP(Math.abs(totalRedondeado - sumaMixto))} para
+              completar el pago mixto.
+            </p>
+          )}
         </aside>
       </div>
 
@@ -1278,13 +1342,6 @@ export default function VentaNueva() {
         <SedeBloqueoModal
           sedePropia={sedeLabel(perfil?.sede_id)}
           onClose={() => setBloqueoSede(false)}
-        />
-      )}
-
-      {negativoInfo > 0 && (
-        <NegativoModal
-          count={negativoInfo}
-          onClose={() => navigate("/ops/ventas")}
         />
       )}
     </div>
@@ -1346,58 +1403,6 @@ function SedeBloqueoModal({ sedePropia, onClose }) {
         >
           Este producto no está en tu sede ({sedePropia}). Búscalo en tu sede;
           si no hay stock, pide un traspaso.
-        </p>
-        <button
-          onClick={onClose}
-          autoFocus
-          className="h-12 w-full rounded-lg text-sm font-medium"
-          style={{
-            backgroundColor: "hsl(var(--primary))",
-            color: "hsl(var(--primary-foreground))",
-          }}
-        >
-          Entendido
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// #10 — aviso urgente cuando la venta dejó inventario negativo.
-function NegativoModal({ count, onClose }) {
-  return (
-    <div
-      className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full rounded-t-2xl p-5 sm:max-w-md sm:rounded-2xl"
-        style={{ backgroundColor: "hsl(var(--card))" }}
-        role="alertdialog"
-        aria-labelledby="negativo-title"
-      >
-        <div className="mb-2 flex items-center gap-2">
-          <AlertTriangle
-            className="size-5 shrink-0"
-            style={{ color: "hsl(var(--warning, var(--destructive)))" }}
-          />
-          <h2
-            id="negativo-title"
-            className="text-lg font-semibold"
-            style={{ color: "hsl(var(--foreground))" }}
-          >
-            Venta registrada · inventario negativo
-          </h2>
-        </div>
-        <p
-          className="mb-4 text-sm"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          {count} producto{count !== 1 ? "s" : ""} quedó
-          {count !== 1 ? "ron" : ""} con stock negativo en esta sede.
-          Regularízalo cuanto antes con un <b>traspaso</b> o una <b>compra</b>.
         </p>
         <button
           onClick={onClose}

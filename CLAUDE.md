@@ -165,6 +165,11 @@ Font: `"IBM Plex Sans", system-ui, -apple-system, sans-serif`
 - Moneda en COP: `new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 })`
 - Fechas en zona Colombia: `America/Bogota`
 
+## Reglas de negocio (vigentes)
+
+- **Venta sin stock: BLOQUEADA.** La venta no puede dejar el inventario en negativo. El trigger `trg_venta_descontar_stock` y el `CHECK (cantidad >= 0)` lo impiden en el servidor, y el frontend valida antes de llamar al RPC. (La idea original de "permitir negativo con aviso" se revirtió el 2026-06-10 por sobreventa por concurrencia; no reintroducir el `NegativoModal`.)
+- **Precio y descuento:** no hay tope de descuento ni precio mínimo. Vender a $0 es una decisión del operador, permitida a propósito.
+
 ## Seguridad (reglas obligatorias)
 
 - RLS activo en TODAS las tablas
@@ -172,6 +177,7 @@ Font: `"IBM Plex Sans", system-ui, -apple-system, sans-serif`
 - Tabla `movimientos` es append-only (trigger impide UPDATE/DELETE)
 - Edge Functions solo para operaciones multi-tabla transaccionales
 - La `anon` key NUNCA se usa para escrituras — solo `authenticated` con JWT de usuario
+- Escritura directa por REST bloqueada en `ventas`/`detalle_venta`/`pagos_venta` (REVOKE a `authenticated`/`anon`); toda escritura pasa por RPCs `SECURITY DEFINER`
 
 ## UX para operarios industriales
 
