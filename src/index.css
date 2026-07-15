@@ -132,6 +132,9 @@
 }
 
 :root {
+  /* Hace que los controles nativos (popup de <select>, date pickers,
+     scrollbars) se pinten en tema claro por defecto. */
+  color-scheme: light;
   /* Neutros */
   --n-0: #ffffff;
   --n-25: #fbfbfc;
@@ -274,6 +277,11 @@
 }
 
 .dark {
+  /* Pinta los controles nativos en oscuro: el popup de <select>, date pickers
+     y scrollbars siguen el tema. Sin esto, el navegador abre la lista del
+     <select> en fondo blanco y el texto (color claro heredado) queda casi
+     invisible. Como `.dark` vive en <html>, esto aplica a TODOS los <select>. */
+  color-scheme: dark;
   /* Neutros invertidos */
   --n-0: #0f1626;
   --n-25: #131a2b;
@@ -3887,4 +3895,15 @@ body {
 }
 .pulse-dot {
   animation: hrmPulse 1.6s ease-in-out infinite;
+}
+
+/* ── <select> en modo oscuro ─────────────────────────────────────────────
+ * Refuerzo del popup de opciones. `color-scheme: dark` (en .dark) ya hace que
+ * el navegador pinte la lista en oscuro; esto fija color/fondo explícitos por
+ * si algún navegador no lo respeta del todo, para que las opciones NO
+ * seleccionadas nunca queden con texto claro sobre fondo blanco. */
+.dark select option,
+.dark select optgroup {
+  background-color: var(--n-25);
+  color: var(--n-900);
 }
