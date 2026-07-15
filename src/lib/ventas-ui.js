@@ -124,12 +124,12 @@ export function devolucionEstadoLabel(estado) {
 
 /**
  * Estado de una garantía de venta → etiqueta legible.
- * Real (garantias_venta.estado): 'abierta' | 'cerrada'.
+ * Real (garantias_venta.estado): 'abierta' | 'cerrada' | 'anulada'.
  * @param {string|null|undefined} estado
  * @returns {string}
  */
 export function garantiaVentaEstadoLabel(estado) {
-  const labels = { abierta: "Abierta", cerrada: "Cerrada" };
+  const labels = { abierta: "Abierta", cerrada: "Cerrada", anulada: "Anulada" };
   return labels[estado] ?? estado ?? "—";
 }
 

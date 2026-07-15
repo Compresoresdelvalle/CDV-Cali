@@ -165,73 +165,91 @@ export default function ClientePicker({
         )}
       </div>
 
-      {abierto && (buscando || resultados.length > 0) && (
-        <div
-          className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 max-h-72 overflow-y-auto overflow-hidden rounded-lg border shadow-lg"
-          style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
-          role="listbox"
-        >
-          {buscando && resultados.length === 0 ? (
-            <p className="px-4 py-3 text-xs" style={{ color: "var(--n-500)" }}>
-              Buscando…
-            </p>
-          ) : (
-            resultados.map((c, idx) => (
-              <button
-                key={c.id}
-                type="button"
-                role="option"
-                aria-selected={idx === activo}
-                onMouseDown={(e) => {
-                  // mousedown (no click) para no perder el foco antes de seleccionar.
-                  e.preventDefault();
-                  seleccionar(c);
-                }}
-                onMouseEnter={(e) => {
-                  setActivo(idx);
-                  e.currentTarget.style.backgroundColor = "var(--n-50)";
-                }}
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.backgroundColor =
-                    idx === activo ? "var(--n-50)" : "var(--n-0)")
-                }
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
-                style={{
-                  borderTop: idx === 0 ? "none" : "1px solid var(--n-100)",
-                  backgroundColor:
-                    idx === activo ? "var(--n-50)" : "var(--n-0)",
-                }}
+      {abierto &&
+        (buscando ||
+          resultados.length > 0 ||
+          (value ?? "").trim().length >= 2) && (
+          <div
+            className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 max-h-72 overflow-y-auto overflow-hidden rounded-lg border shadow-lg"
+            style={{
+              borderColor: "var(--n-150)",
+              backgroundColor: "var(--n-0)",
+            }}
+            role="listbox"
+          >
+            {buscando && resultados.length === 0 ? (
+              <p
+                className="px-4 py-3 text-xs"
+                style={{ color: "var(--n-500)" }}
               >
-                <span
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
+                Buscando…
+              </p>
+            ) : resultados.length === 0 ? (
+              /* #S1-24: sin coincidencias — decirlo y aclarar que se puede crear. */
+              <p
+                className="px-4 py-3 text-xs"
+                style={{ color: "var(--n-500)" }}
+              >
+                No hay clientes con ese nombre. Puedes escribirlo tal cual y se
+                crea al guardar la venta.
+              </p>
+            ) : (
+              resultados.map((c, idx) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="option"
+                  aria-selected={idx === activo}
+                  onMouseDown={(e) => {
+                    // mousedown (no click) para no perder el foco antes de seleccionar.
+                    e.preventDefault();
+                    seleccionar(c);
+                  }}
+                  onMouseEnter={(e) => {
+                    setActivo(idx);
+                    e.currentTarget.style.backgroundColor = "var(--n-50)";
+                  }}
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.backgroundColor =
+                      idx === activo ? "var(--n-50)" : "var(--n-0)")
+                  }
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
                   style={{
-                    backgroundColor: "var(--p-50)",
-                    color: "var(--p-600)",
+                    borderTop: idx === 0 ? "none" : "1px solid var(--n-100)",
+                    backgroundColor:
+                      idx === activo ? "var(--n-50)" : "var(--n-0)",
                   }}
                 >
-                  <User className="h-4 w-4" strokeWidth={1.7} />
-                </span>
-                <span className="min-w-0 flex-1">
                   <span
-                    className="block truncate text-sm font-medium"
-                    style={{ color: "var(--n-950)" }}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
+                    style={{
+                      backgroundColor: "var(--p-50)",
+                      color: "var(--p-600)",
+                    }}
                   >
-                    {c.nombre}
+                    <User className="h-4 w-4" strokeWidth={1.7} />
                   </span>
-                  <span
-                    className="block truncate font-mono text-[11px]"
-                    style={{ color: "var(--n-500)" }}
-                  >
-                    {[c.identificacion, c.telefono]
-                      .filter(Boolean)
-                      .join(" · ") || "Sin identificación"}
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className="block truncate text-sm font-medium"
+                      style={{ color: "var(--n-950)" }}
+                    >
+                      {c.nombre}
+                    </span>
+                    <span
+                      className="block truncate font-mono text-[11px]"
+                      style={{ color: "var(--n-500)" }}
+                    >
+                      {[c.identificacion, c.telefono]
+                        .filter(Boolean)
+                        .join(" · ") || "Sin identificación"}
+                    </span>
                   </span>
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      )}
+                </button>
+              ))
+            )}
+          </div>
+        )}
     </div>
   );
 }

@@ -88,6 +88,11 @@ export default function ModalCambioProducto({
   const [cantNuevo, setCantNuevo] = useState(1);
 
   const [metodo, setMetodo] = useState("Efectivo");
+  // #S1-15: cuenta bancaria destino cuando la diferencia se cobra por transferencia
+  // (igual que en Nueva Venta; antes se enviaba siempre null y el ingreso quedaba
+  // sin cuenta identificable para el arqueo).
+  const [cuenta, setCuenta] = useState("");
+  const [cuentasBanco, setCuentasBanco] = useState([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const guardandoRef = useRef(false);
@@ -97,6 +102,15 @@ export default function ModalCambioProducto({
     return () => {
       mountedRef.current = false;
     };
+  }, []);
+
+  useEffect(() => {
+    supabase
+      .from("cuentas_bancarias")
+      .select("id, banco, tipo, numero, titular")
+      .eq("activo", true)
+      .order("banco")
+      .then(({ data }) => setCuentasBanco(data ?? []));
   }, []);
 
   // Carga lo ya devuelto de esta venta para topar correctamente la cantidad.
@@ -202,6 +216,8 @@ export default function ModalCambioProducto({
     !!nuevo &&
     cantNuevo >= 1 &&
     nuevo.id !== devSel.producto_id &&
+    // #S1-15: si se cobra por transferencia, la cuenta destino es obligatoria.
+    (accion !== "cobro" || metodo !== "Transferencia" || !!cuenta) &&
     !guardando;
 
   const registrar = async () => {
@@ -219,8 +235,15 @@ export default function ModalCambioProducto({
           p_producto_nuevo_id: nuevo.id,
           p_cant_nuevo: cantNuevo,
           p_sede_id: sedeId,
-          p_metodo: metodo,
-          p_cuenta_bancaria: null,
+          // El método/cuenta solo aplican cuando se COBRA la diferencia. En una
+          // devolución a favor del cliente o un cambio par, el egreso va en
+          // efectivo (como indica la UI), evitando un método obsoleto y el nuevo
+          // requisito de cuenta para transferencias en la venta interna.
+          p_metodo: accion === "cobro" ? metodo : "Efectivo",
+          p_cuenta_bancaria:
+            accion === "cobro" && metodo === "Transferencia"
+              ? cuenta || null
+              : null,
           p_motivo: `Cambio desde venta #${venta.numero}`,
         },
       );
@@ -275,7 +298,8 @@ export default function ModalCambioProducto({
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-1"
+            aria-label="Cerrar"
+            className="grid h-11 w-11 place-items-center rounded-md"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
             <X className="h-4 w-4" />
@@ -437,6 +461,19 @@ export default function ModalCambioProducto({
                 ))}
               </div>
             )}
+            {/* #S1-24: sin resultados — mensaje explícito en vez de nada. */}
+            {!buscando &&
+              busqueda.trim().length >= 2 &&
+              resultados.length === 0 &&
+              !nuevo && (
+                <p
+                  className="mt-1 text-xs"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                >
+                  No se encontraron productos para “{busqueda.trim()}”. Prueba
+                  con otra palabra o la referencia.
+                </p>
+              )}
             {nuevo && (
               <div className="mt-2 flex items-center gap-2">
                 <div
@@ -545,7 +582,7 @@ export default function ModalCambioProducto({
                       <button
                         key={m}
                         onClick={() => setMetodo(m)}
-                        className="flex-1 rounded-lg border py-2.5 text-sm font-medium"
+                        className="min-h-[48px] flex-1 rounded-lg border py-2.5 text-sm font-medium"
                         style={{
                           borderColor: on
                             ? "hsl(var(--primary))"
@@ -560,6 +597,43 @@ export default function ModalCambioProducto({
                       </button>
                     );
                   })}
+                </div>
+              )}
+              {/* #S1-15: cuenta destino obligatoria si el cobro es por transferencia. */}
+              {accion === "cobro" && metodo === "Transferencia" && (
+                <div className="mt-2">
+                  <select
+                    value={cuenta}
+                    onChange={(e) => setCuenta(e.target.value)}
+                    className="h-12 w-full rounded-lg border px-3 text-sm outline-none"
+                    style={{
+                      borderColor: "hsl(var(--border))",
+                      color: "hsl(var(--foreground))",
+                      backgroundColor: "hsl(var(--card))",
+                    }}
+                  >
+                    <option value="">¿A qué cuenta entró el pago?…</option>
+                    {cuentasBanco.map((c) => {
+                      // Mismo formato exacto que Nueva Venta para no fragmentar
+                      // el arqueo por cuenta en el cierre.
+                      const ref = `${c.banco} ${c.tipo} ${c.numero}${
+                        c.titular ? " · " + c.titular : ""
+                      }`;
+                      return (
+                        <option key={c.id} value={ref}>
+                          {ref}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {!cuenta && (
+                    <p
+                      className="mt-1 text-xs"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      Elige la cuenta bancaria para poder cuadrarla después.
+                    </p>
+                  )}
                 </div>
               )}
               {accion === "devolucion" && (
@@ -599,7 +673,7 @@ export default function ModalCambioProducto({
         >
           <button
             onClick={onClose}
-            className="rounded-lg border px-4 py-2.5 text-sm font-medium"
+            className="min-h-[48px] rounded-lg border px-4 py-2.5 text-sm font-medium"
             style={{
               borderColor: "hsl(var(--border))",
               color: "hsl(var(--foreground))",
@@ -610,7 +684,7 @@ export default function ModalCambioProducto({
           <button
             onClick={registrar}
             disabled={!puedeGuardar}
-            className="rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-40"
+            className="min-h-[48px] rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-40"
             style={{
               backgroundColor: "hsl(var(--primary))",
               color: "hsl(var(--primary-foreground))",
@@ -660,7 +734,8 @@ function Stepper({ value, min, max, onChange }) {
     <div className="flex items-center gap-1.5">
       <button
         onClick={() => set(value - 1)}
-        className="grid h-11 w-11 place-items-center rounded-lg border text-lg font-bold"
+        aria-label="Disminuir"
+        className="grid h-12 w-12 place-items-center rounded-lg border text-lg font-bold"
         style={{
           borderColor: "hsl(var(--border))",
           color: "hsl(var(--foreground))",
@@ -674,7 +749,7 @@ function Stepper({ value, min, max, onChange }) {
         min={min}
         max={max}
         onChange={(e) => set(parseInt(e.target.value, 10) || min)}
-        className="h-11 w-14 rounded-lg border text-center font-mono text-sm font-bold outline-none"
+        className="h-12 w-14 rounded-lg border text-center font-mono text-sm font-bold outline-none"
         style={{
           borderColor: "hsl(var(--border))",
           color: "hsl(var(--foreground))",
@@ -683,7 +758,8 @@ function Stepper({ value, min, max, onChange }) {
       />
       <button
         onClick={() => set(value + 1)}
-        className="grid h-11 w-11 place-items-center rounded-lg border text-lg font-bold"
+        aria-label="Aumentar"
+        className="grid h-12 w-12 place-items-center rounded-lg border text-lg font-bold"
         style={{
           borderColor: "hsl(var(--border))",
           color: "hsl(var(--foreground))",
