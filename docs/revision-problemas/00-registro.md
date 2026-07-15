@@ -234,3 +234,40 @@ Estos son datos ya inconsistentes que un fix de código no corrige por sí solo;
 **Diferido a la Sección 3 (Cierres):** **S2-07** (doble conteo entre cierres), junto con S1-08.
 
 **Remediación de datos pendiente (por consultar caso por caso):** las 10 OT entregadas sin venta (reales: #22, #33, #36), OT #42 (repuesto legacy), OT #76 (total negativo), y las OT con exceso de abono (casi todas datos viejos con total=0).
+
+---
+
+## Sección 3 — Cierres y Cuentas
+
+**Auditada:** 2026-07-15 · **Estado:** resultados entregados, pendiente de aprobación.
+**Alcance:** Cierres.jsx, Cuentas.jsx, PagoCuentaModal.jsx, cuentas-ui.js; RPCs `_fn_cierre_totales`, `fn_preview_cierre`, `fn_generar_cierre`, `fn_registrar_pago_cuenta`, `fn_eliminar_pago_cuenta`; trigger `trg_no_modify_cierre`; tablas `cierres`, `pagos_cuenta`.
+**Resultado:** 33 agentes. 25 confirmados (2 P0, 9 P1, 14 P2) + 5 UX → **~18 problemas únicos**. 1 marcado CÓDIGO_VIEJO (la regla nueva funcionó), 1 refutado (que resultó confirmado por otra vía). Confirmó con datos reales el doble conteo (S2-07) y la anulación post-cierre (S1-08).
+
+### P0 — Crítico (dinero)
+
+- **S3-01 — Cerrar el día "en caliente" deja ventas/cobros posteriores fuera de TODO cierre, para siempre.** [forense/CIE-01 + negocio/CIERRE-01] Si se genera el cierre del día antes de que el día termine, las ventas posteriores caen en un rango ya cerrado e inmutable, y el `EXCLUDE` de solapamiento impide un segundo cierre del mismo rango → ese dinero nunca entra a ningún cierre. Fix propuesto: avisar/bloquear al cerrar un día que aún no ha terminado (o permitir un cierre complementario). **Requiere decisión de política.**
+
+### P1 — Funcional serio
+
+- **S3-02 — Escritura directa por REST a `cierres` sin bloquear** (seguridad): un Admin puede `insert` un cierre fabricado con montos arbitrarios, saltándose `fn_generar_cierre`, y queda inmutable. Mismo patrón que S1-01. Fix: REVOKE INSERT/UPDATE/DELETE a authenticated/anon. [CIERRE-01]
+- **S3-03 — Anular una venta tras un cierre generado no deja ningún ajuste** (S1-08): el cierre queda inflado y el reembolso es invisible. Confirmado con datos reales. [negocio/CIERRE-02]
+- **S3-04 — Doble conteo / desalineación OT entre cierres** (S2-07): el detalle `por_producto` usa la fecha de la venta-OT (entrega) mientras el total de OT usa la fecha del abono (cobro); anticipo en un periodo + entrega en otro descuadra el detalle vs el total. Confirmado con dato real (abono $400.000 sobre OT de $2.000). [CIERRE-02 + forense/CIE-02 + CIE-04 + ux/CIE-01]
+- **S3-05 — Los anticipos de cotización (`abonos_cotizacion`) son invisibles para Cierres** y al convertir se etiqueta mal el método de pago. [negocio/CIERRE-03]
+- **S3-06 — `safeError()` no reconoce los mensajes de negocio de Cierres/Cuentas** y los reemplaza por un genérico inútil. [frontend/F1]
+- **S3-07 — `PagoCuentaModal` ignora el `error` de sus consultas** (pagos_cuenta/cuentas_bancarias) → puede mostrar un saldo incorrecto sin ningún aviso. [frontend/F2]
+
+### P2 — Robustez / seguridad de fondo / pulido
+
+- **S3-08 — `fn_eliminar_pago_cuenta` tiene dos firmas activas**: la vieja de 1 argumento hace **DELETE físico sin auditoría** y sigue otorgada. (Marcado CÓDIGO_VIEJO: hoy inerte por el trigger, pero contrato peligroso.) Fix: eliminar el overload legacy. [CIE-03/F3/contrato-F1/CIERRE-04]
+- **S3-09 — El `EXCLUDE` de no-solapamiento de cierres no incluye `sede_id`**, contradiciendo la lógica per-sede. [CIERRE-03]
+- **S3-10 — Grants sobrantes** de anon/authenticated (DELETE/UPDATE/TRUNCATE) en cierres/pagos_cuenta. [CIERRE-05]
+- **S3-11 — Botón "Anular" de pago no se deshabilita durante la petición** → doble clic. [F4]
+- **S3-12 — KPIs de Cuentas por cobrar/pagar se calculan solo sobre los primeros 300 registros** → subestimación silenciosa si crecen. [F5/contrato-F2]
+- **S3-13 — Histórico de cierres se carga sin límite/paginación.** [F6]
+- **S3-14 — `_fn_cierre_totales` calcula `por_metodo_pago` pero ningún componente lo lee.** [contrato-F3]
+- **S3-15 — Arqueo: "Efectivo contado" admite negativos**, grabados en un registro inmutable. [ux/CIE-07]
+- **S3-16 — Etiqueta "Sin cuenta / efectivo"** se aplica también a pagos electrónicos con `cuenta_bancaria` NULL por dato faltante. [ux/CIE-08]
+- **UX (P2):** monto confirmado vs guardado puede diferir (F7/CIE-09); el checklist marca "pendiente" un periodo sin movimientos (CIE-04); "Sobra/Falta/Cuadra" del arqueo solo en tooltip, invisible en touch (CIE-05); la tabla histórica de arqueo no colorea sobra/falta (CIE-06).
+
+### Cruces confirmados
+- **S1-08** (anular post-cierre) → S3-03. **S2-07** (doble conteo OT entre cierres) → S3-04. Ambos **confirmados con datos reales** en esta sección; su corrección de fondo vive aquí.
