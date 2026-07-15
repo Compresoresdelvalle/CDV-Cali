@@ -1458,6 +1458,14 @@ function PasoCotizacion({
       {/* Resumen */}
       <ResumenMini montos={montos} />
 
+      {/* Cotizar es opcional: si el cliente no va a autorizar, se continúa sin
+          repuestos/mano de obra y solo se cobra la revisión en el paso siguiente. */}
+      <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+        ¿El cliente no va a autorizar la reparación? Puedes continuar sin
+        cotizar: en el paso siguiente marcas “No autoriza” y cobras solo la
+        revisión.
+      </p>
+
       <ContinuarBtn paso={PASOS[2]} ctx={ctx} ro={ro} continuar={continuar} />
     </div>
   );
