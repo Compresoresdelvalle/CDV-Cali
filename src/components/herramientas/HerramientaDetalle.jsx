@@ -44,6 +44,7 @@ export default function HerramientaDetalle({
   onDevolver,
   onConsumir,
   onPrestar,
+  onAgregarUnidades,
 }) {
   const h = herramienta;
   const pill = estadoPill(h.estado);
@@ -198,6 +199,18 @@ export default function HerramientaDetalle({
             >
               <Boxes className="h-3.5 w-3.5" strokeWidth={2} />
               {accionando ? "Procesando…" : "Regresar a insumo"}
+            </button>
+          )}
+          {/* Agregar más unidades físicas de esta misma herramienta (para poder
+              prestar varias). Solo Admin/Bodega; el padre pasa el handler. */}
+          {onAgregarUnidades && (
+            <button
+              onClick={onAgregarUnidades}
+              className="btn btn-out inline-flex items-center gap-1.5"
+              style={{ height: 48 }}
+              title="Suma más unidades de esta herramienta para poder prestar varias"
+            >
+              <Boxes className="h-3.5 w-3.5" strokeWidth={2} /> Agregar unidades
             </button>
           )}
           {/* Acciones del diseño Lovable sin backend (reportar daño / enviar a
