@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import AplicarNotaCreditoModal from "../../components/compras/AplicarNotaCreditoModal";
 
 /**
  * Listado de notas crédito de proveedor — F13.
@@ -20,31 +21,34 @@ export default function NotasCredito() {
   const [filtroSoloActivas, setFiltroSoloActivas] = useState(true);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [aplicarNota, setAplicarNota] = useState(null); // S6: nota a aplicar
+
+  const cargar = async () => {
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      let q = supabase
+        .from("notas_credito_proveedor")
+        .select(
+          `id, numero, proveedor, monto, saldo_restante, fecha, observaciones,
+             garantia_compra_id`,
+        )
+        .order("fecha", { ascending: false })
+        .limit(200);
+      if (filtroSoloActivas) q = q.gt("saldo_restante", 0);
+      const { data, error } = await q;
+      if (error) throw error;
+      setNotas(data ?? []);
+    } catch (err) {
+      setErrorMsg(safeError(err, "Error al cargar notas crédito"));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const cargar = async () => {
-      setLoading(true);
-      setErrorMsg("");
-      try {
-        let q = supabase
-          .from("notas_credito_proveedor")
-          .select(
-            `id, numero, proveedor, monto, saldo_restante, fecha, observaciones,
-             garantia_compra_id`,
-          )
-          .order("fecha", { ascending: false })
-          .limit(200);
-        if (filtroSoloActivas) q = q.gt("saldo_restante", 0);
-        const { data, error } = await q;
-        if (error) throw error;
-        setNotas(data ?? []);
-      } catch (err) {
-        setErrorMsg(safeError(err, "Error al cargar notas crédito"));
-      } finally {
-        setLoading(false);
-      }
-    };
     cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroSoloActivas]);
 
   const totalSaldo = notas.reduce(
@@ -236,23 +240,37 @@ export default function NotasCredito() {
                         {formatCOP(n.saldo_restante)}
                       </td>
                       <td className="px-3 py-3 text-right">
-                        {n.garantia_compra_id && (
-                          <button
-                            onClick={() =>
-                              navigate(
-                                `/ops/garantias/compra/${n.garantia_compra_id}`,
-                              )
-                            }
-                            className="inline-flex items-center gap-1 text-[12px] font-medium cursor-pointer hover:underline"
-                            style={{ color: "hsl(var(--primary))" }}
-                          >
-                            Garantía
-                            <ExternalLink
-                              className="h-3 w-3"
-                              strokeWidth={1.5}
-                            />
-                          </button>
-                        )}
+                        <div className="inline-flex items-center gap-3">
+                          {tieneSaldo && (
+                            <button
+                              onClick={() => setAplicarNota(n)}
+                              className="inline-flex h-8 items-center rounded-md border px-2.5 text-[12px] font-medium cursor-pointer"
+                              style={{
+                                borderColor: "hsl(var(--primary))",
+                                color: "hsl(var(--primary))",
+                              }}
+                            >
+                              Aplicar
+                            </button>
+                          )}
+                          {n.garantia_compra_id && (
+                            <button
+                              onClick={() =>
+                                navigate(
+                                  `/ops/garantias/compra/${n.garantia_compra_id}`,
+                                )
+                              }
+                              className="inline-flex items-center gap-1 text-[12px] font-medium cursor-pointer hover:underline"
+                              style={{ color: "hsl(var(--primary))" }}
+                            >
+                              Garantía
+                              <ExternalLink
+                                className="h-3 w-3"
+                                strokeWidth={1.5}
+                              />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -319,23 +337,37 @@ export default function NotasCredito() {
                       {n.observaciones}
                     </p>
                   )}
-                  {n.garantia_compra_id && (
-                    <button
-                      onClick={() =>
-                        navigate(
-                          `/ops/garantias/compra/${n.garantia_compra_id}`,
-                        )
-                      }
-                      className="mt-2 inline-flex h-11 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium cursor-pointer"
-                      style={{
-                        borderColor: "hsl(var(--border))",
-                        color: "hsl(var(--primary))",
-                      }}
-                    >
-                      Ver garantía origen
-                      <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
-                    </button>
-                  )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {tieneSaldo && (
+                      <button
+                        onClick={() => setAplicarNota(n)}
+                        className="inline-flex h-11 items-center rounded-lg px-3 text-xs font-medium cursor-pointer"
+                        style={{
+                          backgroundColor: "hsl(var(--primary))",
+                          color: "hsl(var(--primary-foreground))",
+                        }}
+                      >
+                        Aplicar a una compra
+                      </button>
+                    )}
+                    {n.garantia_compra_id && (
+                      <button
+                        onClick={() =>
+                          navigate(
+                            `/ops/garantias/compra/${n.garantia_compra_id}`,
+                          )
+                        }
+                        className="inline-flex h-11 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium cursor-pointer"
+                        style={{
+                          borderColor: "hsl(var(--border))",
+                          color: "hsl(var(--primary))",
+                        }}
+                      >
+                        Ver garantía origen
+                        <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+                      </button>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -355,6 +387,17 @@ export default function NotasCredito() {
             </span>
           </footer>
         </section>
+      )}
+
+      {aplicarNota && (
+        <AplicarNotaCreditoModal
+          nota={aplicarNota}
+          onClose={() => setAplicarNota(null)}
+          onDone={() => {
+            setAplicarNota(null);
+            cargar();
+          }}
+        />
       )}
     </div>
   );

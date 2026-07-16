@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftCircle,
@@ -22,6 +22,7 @@ import {
   construirTimelineCompra,
 } from "../../lib/compras-ui";
 import ModalAbrirGarantiaCompra from "../../components/garantias/ModalAbrirGarantiaCompra";
+import RecibirCompraModal from "../../components/compras/RecibirCompraModal";
 
 /**
  * Detalle de una compra.
@@ -42,7 +43,8 @@ export default function CompraDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
-  const puedeRecibir = perfil?.rol === "Admin" || perfil?.rol === "Bodeguero";
+  // Vendedor "todero": también recibe mercancía (decisión del dueño).
+  const puedeRecibir = ["Admin", "Bodeguero", "Vendedor"].includes(perfil?.rol);
   const esAdmin = perfil?.rol === "Admin";
 
   const [compra, setCompra] = useState(null);
@@ -51,9 +53,8 @@ export default function CompraDetalle() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalAbrir, setModalAbrir] = useState(false);
-  const [recibiendo, setRecibiendo] = useState(false);
+  const [modalRecibir, setModalRecibir] = useState(false); // S6: recepción parcial
   const [cancelando, setCancelando] = useState(false); // B1: cancelar compra (Admin)
-  const recibiendoRef = useRef(false);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -101,34 +102,6 @@ export default function CompraDetalle() {
   useEffect(() => {
     cargar();
   }, [cargar]);
-
-  // ── Acción: confirmar recepción (total) ──────────────────────────
-  // UPDATE condicional `.eq("recibida", false)`: si otra pestaña/usuario ya
-  // la recibió, el segundo UPDATE no afecta filas ni re-dispara el trigger.
-  const confirmarRecepcion = async () => {
-    if (recibiendoRef.current) return;
-    recibiendoRef.current = true;
-    setError(null);
-    setRecibiendo(true);
-    try {
-      const { data, error: e } = await supabase
-        .from("compras")
-        .update({ recibida: true, fecha_recepcion: new Date().toISOString() })
-        .eq("id", id)
-        .eq("recibida", false)
-        .select("id");
-      if (e) throw e;
-      if (!data || data.length === 0) {
-        setError("Esa compra ya estaba recibida.");
-      }
-      await cargar();
-    } catch (e) {
-      setError(safeError(e, "No se pudo confirmar la recepción"));
-    } finally {
-      setRecibiendo(false);
-      recibiendoRef.current = false;
-    }
-  };
 
   // B1 — Cancelar la compra (solo Admin). Si ya estaba recibida, la RPC revierte
   // del inventario el stock que había ingresado (bloquea si ya no alcanza).
@@ -288,8 +261,8 @@ export default function CompraDetalle() {
         <PanelRecepcion
           items={items}
           puedeRecibir={puedeRecibir}
-          recibiendo={recibiendo}
-          onConfirmar={confirmarRecepcion}
+          recibiendo={false}
+          onConfirmar={() => setModalRecibir(true)}
         />
       )}
 
@@ -566,6 +539,18 @@ export default function CompraDetalle() {
             // esta vista (evita setState sobre componente desmontado).
             setModalAbrir(false);
             navigate(`/ops/garantias/compra/${garantiaId}`);
+          }}
+        />
+      )}
+
+      {modalRecibir && (
+        <RecibirCompraModal
+          compra={compra}
+          items={items}
+          onClose={() => setModalRecibir(false)}
+          onDone={() => {
+            setModalRecibir(false);
+            cargar();
           }}
         />
       )}
