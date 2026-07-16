@@ -91,10 +91,15 @@ export default function Herramientas() {
     setLoading(true);
     setErrorMsg("");
     try {
+      // NO se filtra `activo` aquí: esta consulta alimenta los 3 tabs, y forzar
+      // activo=true escondía el HISTORIAL de toda herramienta regresada a
+      // insumo. Medido en producción: 171 devoluciones reales, solo 3 visibles
+      // — se perdían 168. El recorte por `activo` va por tab (ver más abajo):
+      // Catálogo y Préstamos activos sí lo exigen; el Historial no, porque una
+      // devolución ocurrió aunque la herramienta ya no esté en el catálogo.
       let query = supabase
         .from("herramientas_prestamo")
         .select(SELECT_COLS)
-        .eq("activo", true) // las regresadas a insumo (activo=false) se ocultan
         .order("herramienta_nombre", { ascending: true });
 
       if (perfil?.rol !== "Admin" && perfil?.sede_id)
@@ -219,22 +224,33 @@ export default function Herramientas() {
   };
 
   /* ── Derivaciones de presentación (todas sobre datos reales) ─────────── */
-  const prestadas = useMemo(
-    () => herramientas.filter((h) => h.estado === "prestada"),
+
+  // Herramientas vigentes en el catálogo. Las regresadas a insumo (activo=false)
+  // ya no son herramientas, así que no cuentan para el Catálogo ni para los
+  // préstamos — pero SÍ para el Historial: la devolución ocurrió igual.
+  const activas = useMemo(
+    () => herramientas.filter((h) => h.activo !== false),
     [herramientas],
+  );
+
+  const prestadas = useMemo(
+    () => activas.filter((h) => h.estado === "prestada"),
+    [activas],
   );
   const atrasadas = useMemo(
-    () => herramientas.filter((h) => prestamoVencido(h)),
-    [herramientas],
+    () => activas.filter((h) => prestamoVencido(h)),
+    [activas],
   );
   const disponibles = useMemo(
-    () => herramientas.filter((h) => h.estado === "disponible"),
-    [herramientas],
+    () => activas.filter((h) => h.estado === "disponible"),
+    [activas],
   );
   const enMantenimiento = useMemo(
-    () => herramientas.filter((h) => h.estado === "en_mantenimiento"),
-    [herramientas],
+    () => activas.filter((h) => h.estado === "en_mantenimiento"),
+    [activas],
   );
+  // Historial: sobre TODAS, incluidas las regresadas a insumo. Antes se apoyaba
+  // en la consulta filtrada por activo=true y mostraba 3 de 171 devoluciones.
   const devueltas = useMemo(
     () =>
       herramientas
@@ -250,20 +266,20 @@ export default function Herramientas() {
   );
 
   const catalogoFiltrado = useMemo(() => {
-    if (filtroEstado === "todas") return herramientas;
-    return herramientas.filter((h) => h.estado === filtroEstado);
-  }, [herramientas, filtroEstado]);
+    if (filtroEstado === "todas") return activas;
+    return activas.filter((h) => h.estado === filtroEstado);
+  }, [activas, filtroEstado]);
 
   const conteoEstado = useMemo(() => {
     const c = {
-      todas: herramientas.length,
+      todas: activas.length,
       disponible: disponibles.length,
       prestada: prestadas.length,
       en_mantenimiento: enMantenimiento.length,
-      extraviada: herramientas.filter((h) => h.estado === "extraviada").length,
+      extraviada: activas.filter((h) => h.estado === "extraviada").length,
     };
     return c;
-  }, [herramientas, disponibles, prestadas, enMantenimiento]);
+  }, [activas, disponibles, prestadas, enMantenimiento]);
 
   const detalle = detalleId
     ? herramientas.find((h) => h.id === detalleId)
@@ -440,6 +456,12 @@ export default function Herramientas() {
           </div>
         )}
 
+        {/* El buscador vive FUERA de los tabs: antes estaba dentro del Catálogo
+            y era invisible en Préstamos activos e Historial, justo donde el
+            operario necesita encontrar una herramienta concreta. La consulta es
+            server-side, así que busca sobre todo, no sobre lo que se ve. */}
+        <BuscadorHerramientas search={search} setSearch={setSearch} />
+
         {loading && herramientas.length === 0 ? (
           <SkeletonGrid />
         ) : tab === "activos" ? (
@@ -456,8 +478,6 @@ export default function Herramientas() {
         ) : tab === "catalogo" ? (
           <TabCatalogo
             tools={catalogoFiltrado}
-            search={search}
-            setSearch={setSearch}
             filtroEstado={filtroEstado}
             setFiltroEstado={setFiltroEstado}
             conteoEstado={conteoEstado}
@@ -924,10 +944,32 @@ function LoanCard({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
 
 /* ────────────────────────────── TAB · Catálogo ─────────────────────────── */
 
+/** Buscador compartido por los 3 tabs (ver comentario en el render). */
+function BuscadorHerramientas({ search, setSearch }) {
+  return (
+    <div
+      className="mb-4 flex h-12 max-w-[360px] items-center gap-2.5 rounded-lg border px-3.5"
+      style={{ borderColor: "var(--n-200)", backgroundColor: "var(--n-0)" }}
+    >
+      <Search
+        className="h-4 w-4 shrink-0"
+        strokeWidth={1.5}
+        style={{ color: "var(--n-500)" }}
+      />
+      <input
+        type="search"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Buscar por nombre o código…"
+        className="flex-1 border-none bg-transparent text-[14px] outline-none"
+        style={{ color: "var(--n-950)" }}
+      />
+    </div>
+  );
+}
+
 function TabCatalogo({
   tools,
-  search,
-  setSearch,
   filtroEstado,
   setFiltroEstado,
   conteoEstado,
@@ -936,24 +978,6 @@ function TabCatalogo({
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
-        <div
-          className="flex h-12 max-w-[360px] flex-1 items-center gap-2.5 rounded-lg border px-3.5"
-          style={{ borderColor: "var(--n-200)", backgroundColor: "var(--n-0)" }}
-        >
-          <Search
-            className="h-4 w-4 shrink-0"
-            strokeWidth={1.5}
-            style={{ color: "var(--n-500)" }}
-          />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre o código…"
-            className="flex-1 border-none bg-transparent text-[14px] outline-none"
-            style={{ color: "var(--n-950)" }}
-          />
-        </div>
         <div className="flex flex-wrap gap-1.5">
           {STATUS_FILTERS.map((f) => {
             const active = filtroEstado === f.id;
@@ -1143,10 +1167,18 @@ function TabHistorial({ devueltas, onOpen }) {
                 style={{ color: "var(--n-500)" }}
               >
                 {h.herramienta_codigo || "Sin código"} · {sedeLabel(h.sede_id)}
+                {/* La herramienta ya no está en el catálogo porque volvió a ser
+                    insumo. Se dice explícitamente: si no, el operario la ve en
+                    el historial, la busca en el catálogo y no la encuentra. */}
+                {h.activo === false && " · Regresada a insumo"}
               </div>
             </div>
             <div className="text-right">
-              <Pill cls="pill-success" label="Devuelta" small />
+              <Pill
+                cls={h.activo === false ? "pill-neutral" : "pill-success"}
+                label={h.activo === false ? "A insumo" : "Devuelta"}
+                small
+              />
               <div
                 className="mt-1 font-mono text-[11px]"
                 style={{ color: "var(--n-500)" }}

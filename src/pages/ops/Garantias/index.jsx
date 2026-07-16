@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
+import { useFiltros } from "../../../hooks/useFiltros";
+import BarraFiltros from "../../../components/filtros/BarraFiltros";
 import { useNavigate } from "react-router-dom";
 import { Search, ShieldCheck, ShieldAlert, X } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
@@ -18,57 +20,115 @@ import {
  * Dos tabs: Compras (al proveedor) y Ventas (cliente reclama).
  * Lógica de datos intacta: queries server-authoritative + RLS por sede.
  */
+// Valores REALES de los enums (verificados en producción). OJO: la resolución
+// NO comparte enum entre tabs — son dos tipos distintos, así que el filtro se
+// arma por tab o se ofrecerían opciones que la consulta rechaza.
+const RESOLUCION_OPCIONES = {
+  compra: [
+    { v: "nota_credito", l: "Nota crédito" },
+    { v: "reposicion_fisica", l: "Reposición física" },
+    { v: "pendiente", l: "Pendiente" },
+  ],
+  venta: [
+    { v: "cambiar_pieza", l: "Cambiar pieza" },
+    { v: "devolver_dinero", l: "Devolver dinero" },
+    { v: "arreglar_producto", l: "Arreglar producto" },
+  ],
+};
+
+/**
+ * Listado de garantías — F13 (re-vestido con diseño Lovable).
+ * Dos tabs: Compras (al proveedor) y Ventas (cliente reclama).
+ * Lógica de datos intacta: queries server-authoritative + RLS por sede.
+ */
 export default function GarantiasIndex() {
   const navigate = useNavigate();
   const [tab, setTab] = useState("compra"); // compra | venta
   const [filtroEstado, setFiltroEstado] = useState("");
-  const [busqueda, setBusqueda] = useState("");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Filtros reales y cruzables (fecha + resolución + texto a la vez).
+  const campos = useMemo(
+    () => [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        // A propósito SIN `columnas`/`numericoA`: el texto se resuelve en
+        // memoria (ver `filtrados`). El nombre del proveedor/cliente vive en un
+        // join, así que no se puede cruzar server-side con un simple ilike; y
+        // si el servidor filtrara por `motivo` mientras el cliente filtra por
+        // nombre, los dos se cruzarían con AND y se perderían filas que el
+        // servidor devolvió bien. Con 0 garantías de compra y 9 de venta, el
+        // tope de 200 no se alcanza y la búsqueda en memoria no miente.
+        // Si esta tabla crece, hay que pasarla a un filtro embebido de
+        // PostgREST o a una RPC.
+        debounce: 400,
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "resolucion",
+        tipo: "opciones",
+        label: "Resolución",
+        columna: "resolucion",
+        opciones: RESOLUCION_OPCIONES[tab],
+      },
+    ],
+    [tab],
+  );
+
+  const f = useFiltros({ clave: `garantias-${tab}`, campos });
+  const busqueda = f.valoresAplicados.q ?? "";
+
   useEffect(() => {
     const cargar = async () => {
+      const myReq = f.nuevoReqId();
       setLoading(true);
       setErrorMsg("");
       try {
-        if (tab === "compra") {
-          let q = supabase
-            .from("garantias_compra")
-            .select(
-              `id, numero, fecha, resolucion, estado, motivo,
-               compra:compra_id(numero, proveedor)`,
-            )
-            .order("fecha", { ascending: false })
-            .limit(200);
-          if (filtroEstado) q = q.eq("estado", filtroEstado);
-          const { data, error } = await q;
-          if (error) throw error;
-          setItems(data ?? []);
-        } else {
-          let q = supabase
-            .from("garantias_venta")
-            .select(
-              `id, numero, fecha, resolucion, estado, motivo, monto_devuelto,
+        const tabla = tab === "compra" ? "garantias_compra" : "garantias_venta";
+        const cols =
+          tab === "compra"
+            ? `id, numero, fecha, resolucion, estado, motivo,
+               compra:compra_id(numero, proveedor)`
+            : `id, numero, fecha, resolucion, estado, motivo, monto_devuelto,
                venta:venta_id(numero, cliente_nombre),
                orden:orden_servicio_id(numero, cliente_nombre),
-               ot_reparacion:ot_reparacion_id(numero)`,
-            )
-            .order("fecha", { ascending: false })
-            .limit(200);
-          if (filtroEstado) q = q.eq("estado", filtroEstado);
-          const { data, error } = await q;
-          if (error) throw error;
-          setItems(data ?? []);
-        }
+               ot_reparacion:ot_reparacion_id(numero)`;
+
+        let q = supabase.from(tabla).select(cols);
+        if (filtroEstado) q = q.eq("estado", filtroEstado);
+        // Fecha, resolución y #número/motivo se resuelven en el SERVIDOR.
+        q = f.aplicar(q);
+        q = q
+          // Desempate: sin él, dos garantías de la misma fecha pueden
+          // reordenarse entre cargas.
+          .order("fecha", { ascending: false })
+          .order("numero", { ascending: false })
+          .limit(200);
+
+        const { data, error } = await q;
+        if (!f.esReqVigente(myReq)) return; // respuesta obsoleta
+        if (error) throw error;
+        setItems(data ?? []);
       } catch (err) {
-        setErrorMsg(safeError(err, "Error al cargar garantías"));
+        if (f.esReqVigente(myReq))
+          setErrorMsg(safeError(err, "Error al cargar garantías"));
       } finally {
-        setLoading(false);
+        if (f.esReqVigente(myReq)) setLoading(false);
       }
     };
     cargar();
-  }, [tab, filtroEstado]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, filtroEstado, f.valoresAplicados]);
 
   // Búsqueda client-side sobre las filas cargadas (presentación, sin tocar
   // la query server-authoritative). El listado se acota a 200 registros.
@@ -178,39 +238,16 @@ export default function GarantiasIndex() {
         ))}
       </div>
 
-      {/* ── Búsqueda ────────────────────────────────────────────────── */}
-      <div
-        className="flex h-12 max-w-[560px] items-center gap-2.5 rounded-lg border px-3.5"
-        style={{ borderColor: "var(--n-200)", backgroundColor: "var(--n-0)" }}
-      >
-        <Search
-          className="h-4 w-4 shrink-0"
-          strokeWidth={1.5}
-          style={{ color: "var(--n-500)" }}
-        />
-        <input
-          type="search"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          placeholder={
-            tab === "compra"
-              ? "Buscar por número, proveedor o resolución…"
-              : "Buscar por número, cliente o resolución…"
-          }
-          className="min-w-0 flex-1 border-none bg-transparent text-[14px] outline-none"
-          style={{ color: "var(--n-950)" }}
-        />
-        {busqueda && (
-          <button
-            onClick={() => setBusqueda("")}
-            aria-label="Limpiar búsqueda"
-            className="grid h-6 w-6 place-items-center rounded"
-            style={{ color: "var(--n-500)" }}
-          >
-            <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-          </button>
-        )}
-      </div>
+      {/* ── Filtros reales (fecha y resolución en el servidor) ──────── */}
+      <BarraFiltros
+        filtros={f}
+        legacy
+        placeholder={
+          tab === "compra"
+            ? "Buscar por número, proveedor o resolución…"
+            : "Buscar por número, cliente o resolución…"
+        }
+      />
 
       {errorMsg && (
         <div
