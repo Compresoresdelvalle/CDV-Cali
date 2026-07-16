@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { formatCOP, formatDate } from "../../lib/utils";
 import { parseRangoFecha } from "../../lib/busquedaFecha";
 import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
 import {
@@ -22,6 +22,7 @@ import {
   cotizacionVigencia,
   resumenProductosCotizacion,
 } from "../../lib/cotizaciones-ui";
+import ConvertirCotizacionModal from "../../components/cotizaciones/ConvertirCotizacionModal";
 
 /** Carga datos completos de una cotización y dispara descarga PDF */
 async function generarPDFDirecto(cotizacionId) {
@@ -65,12 +66,12 @@ export default function CotizacionHistorial() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
-  const [convirtiendo, setConvirtiendo] = useState(null);
-  const [errorConversion, setErrorConversion] = useState(null);
+  const [convirtiendo] = useState(null);
+  const [errorConversion] = useState(null);
+  const [modalConvertir, setModalConvertir] = useState(null); // cotización a convertir
   const [errorMsg, setErrorMsg] = useState(null);
   // Token de secuencia: descarta respuestas obsoletas al cambiar de filtro.
   const reqIdRef = useRef(0);
-  const convirtiendoRef = useRef(false);
 
   // Fecha escrita en la barra → filtro server-side por rango.
   const rangoFecha = useMemo(() => parseRangoFecha(busqueda), [busqueda]);
@@ -127,28 +128,12 @@ export default function CotizacionHistorial() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroEstado, rangoFecha?.desde, rangoFecha?.hasta]);
 
-  const convertirEnVenta = async (e, cotizacionId) => {
+  // S3-05 / COT-D-E: la conversión captura el pago del saldo en un modal
+  // dedicado (la venta nace a Crédito; el dinero cuenta el día que entra).
+  const convertirEnVenta = (e, cotizacionId) => {
     e.stopPropagation();
-    if (convirtiendoRef.current) return; // guard síncrono anti doble-click
-    convirtiendoRef.current = true;
-    setConvirtiendo(cotizacionId);
-    setErrorConversion(null);
-    try {
-      const { data, error: rpcErr } = await supabase.rpc(
-        "fn_convertir_cotizacion",
-        { p_cotizacion_id: cotizacionId },
-      );
-      if (rpcErr) throw new Error(rpcErr.message);
-      navigate(`/ops/ventas/${data.venta_id}`);
-    } catch (e) {
-      setErrorConversion({
-        id: cotizacionId,
-        msg: safeError(e, "Error al convertir"),
-      });
-    } finally {
-      setConvirtiendo(null);
-      convirtiendoRef.current = false;
-    }
+    const c = cotizaciones.find((x) => x.id === cotizacionId);
+    if (c) setModalConvertir(c);
   };
 
   // Búsqueda client-side sobre lo ya cargado (número, cliente, productos).
@@ -435,6 +420,13 @@ export default function CotizacionHistorial() {
           </>
         )}
       </div>
+      {modalConvertir && (
+        <ConvertirCotizacionModal
+          cotizacion={modalConvertir}
+          onClose={() => setModalConvertir(null)}
+          onDone={(ventaId) => navigate(`/ops/ventas/${ventaId}`)}
+        />
+      )}
     </div>
   );
 }
