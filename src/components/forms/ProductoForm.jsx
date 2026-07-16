@@ -64,13 +64,25 @@ export default function ProductoForm({
       setValidationError("El precio de venta no puede ser negativo");
       return;
     }
+    // S4-21: si ambos umbrales están definidos y >0, el máximo debe superar al
+    // mínimo (si no, ningún nivel de stock cae en 'OK'). Máximo 0 = sin techo.
+    const minN = form.stock_minimo === "" ? 0 : Number(form.stock_minimo);
+    const maxN = form.stock_maximo === "" ? 0 : Number(form.stock_maximo);
+    if (maxN > 0 && maxN <= minN) {
+      setValidationError(
+        "El stock máximo debe ser mayor que el mínimo (o dejarlo en 0 para 'sin tope').",
+      );
+      return;
+    }
     const payload = {
       ...form,
       precio_venta: form.precio_venta === "" ? 0 : Number(form.precio_venta),
       costo_promedio:
         form.costo_promedio === "" ? 0 : Number(form.costo_promedio),
-      stock_minimo: form.stock_minimo === "" ? 0 : Number(form.stock_minimo),
-      stock_maximo: form.stock_maximo === "" ? null : Number(form.stock_maximo),
+      stock_minimo: minN,
+      // S4-16: la columna es NOT NULL (0 = sin tope). La ruta de edición hace
+      // un UPDATE directo sin COALESCE, así que enviar null rompía el guardado.
+      stock_maximo: maxN,
       vendible: !!form.vendible,
       ensamblable: !!form.ensamblable,
       // En piso: zona central, sin stand/posición.
@@ -157,7 +169,16 @@ export default function ProductoForm({
           <Field label="Tipo *">
             <select
               value={form.tipo}
-              onChange={set("tipo")}
+              onChange={(e) =>
+                // S4-05: 'chatarra' es no vendible por definición → forzar
+                // vendible=false al elegirlo, para que no queden desincronizados.
+                setForm({
+                  ...form,
+                  tipo: e.target.value,
+                  vendible:
+                    e.target.value === "chatarra" ? false : form.vendible,
+                })
+              }
               className="finput sans"
             >
               <option value="nuevo">Nuevo</option>
@@ -245,6 +266,32 @@ export default function ProductoForm({
             </Field>
           )}
         </Row>
+        {/* S4 (margen): aviso no bloqueante si el precio queda por debajo del
+            costo. El precio libre está permitido, pero un margen negativo suele
+            ser un error de tecleo que antes pasaba inadvertido. */}
+        {puedeEditarCosto &&
+          form.precio_venta !== "" &&
+          form.costo_promedio !== "" &&
+          Number(form.precio_venta) > 0 &&
+          Number(form.costo_promedio) > 0 &&
+          (() => {
+            const p = Number(form.precio_venta);
+            const c = Number(form.costo_promedio);
+            const margen = ((p - c) / p) * 100;
+            const negativo = margen < 0;
+            return (
+              <p
+                className="text-xs"
+                style={{
+                  color: negativo ? "var(--warn-700)" : "var(--n-500)",
+                }}
+              >
+                {negativo ? "⚠ " : ""}
+                Margen: {margen.toFixed(1)}%
+                {negativo ? " — el precio está por debajo del costo" : ""}
+              </p>
+            );
+          })()}
         <Row cols={3}>
           <Field label="Unidad de medida">
             <input
@@ -266,7 +313,7 @@ export default function ProductoForm({
               className="finput"
             />
           </Field>
-          <Field label="Stock máximo">
+          <Field label="Stock máximo (0 = sin tope)">
             <input
               type="number"
               min="0"
@@ -289,9 +336,13 @@ export default function ProductoForm({
               type="checkbox"
               checked={form.vendible}
               onChange={(e) => setForm({ ...form, vendible: e.target.checked })}
-              className="h-4 w-4"
+              // S4-05: la chatarra nunca es vendible; el checkbox se bloquea.
+              disabled={form.tipo === "chatarra"}
+              className="h-4 w-4 disabled:opacity-50"
             />
-            Vendible (desmárcalo si es un insumo que no se vende)
+            {form.tipo === "chatarra"
+              ? "La chatarra no es vendible"
+              : "Vendible (desmárcalo si es un insumo que no se vende)"}
           </label>
         </Field>
         <Field label="¿Es ensamblable?">

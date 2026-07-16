@@ -9,10 +9,10 @@
 
 /**
  * Estado de stock real → clase de pill / dot del diseño.
- * Real: 'OK' | 'Bajo' | 'Agotado' (estado_stock de la tabla inventario).
- * Diseño: s (success) | w (warning) | d (danger) | n (neutral).
+ * Real: 'OK' | 'Bajo' | 'Agotado' | 'Sobrestock' (estado_stock de inventario).
+ * Diseño: s (success) | w (warning) | d (danger) | i (info) | n (neutral).
  * @param {string|null|undefined} estado
- * @returns {'s'|'w'|'d'|'n'}
+ * @returns {'s'|'w'|'d'|'i'|'n'}
  */
 export function estadoStockClass(estado) {
   switch (estado) {
@@ -22,6 +22,8 @@ export function estadoStockClass(estado) {
       return "w";
     case "Agotado":
       return "d";
+    case "Sobrestock":
+      return "i";
     default:
       return "n";
   }
@@ -36,11 +38,50 @@ export function estadoStockClass(estado) {
  */
 export function categoriaClass(categoria) {
   const c = (categoria ?? "").toLowerCase();
-  if (c.includes("compres")) return "cmp";
-  if (c.includes("herramient")) return "hrm";
-  if (c.includes("lubric") || c.includes("aceite") || c.includes("grasa"))
+  // cmp — compresores y sus partes mayores.
+  if (
+    c.includes("compres") ||
+    c.includes("motor") ||
+    c.includes("cabezote") ||
+    c.includes("piston") ||
+    c.includes("polea") ||
+    c.includes("correa") ||
+    c.includes("capacitor") ||
+    c.includes("tanque")
+  )
+    return "cmp";
+  // hrm — herramientas (incluye neumáticas de taller).
+  if (
+    c.includes("herramient") ||
+    c.includes("pistol") ||
+    c.includes("llave") ||
+    c.includes("taladro") ||
+    c.includes("esmeril")
+  )
+    return "hrm";
+  // lbr — lubricantes y químicos.
+  if (
+    c.includes("lubric") ||
+    c.includes("aceite") ||
+    c.includes("grasa") ||
+    c.includes("silicona") ||
+    c.includes("teflon")
+  )
     return "lbr";
-  if (c.includes("accesor")) return "acc";
+  // acc — accesorios y conexiones.
+  if (
+    c.includes("accesor") ||
+    c.includes("racor") ||
+    c.includes("acople") ||
+    c.includes("manguera") ||
+    c.includes("empaque") ||
+    c.includes("reten") ||
+    c.includes("valvula") ||
+    c.includes("filtro") ||
+    c.includes("oring") ||
+    c.includes("o-ring")
+  )
+    return "acc";
   return "rpt";
 }
 

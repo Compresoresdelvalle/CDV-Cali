@@ -66,15 +66,19 @@ export default function QRScanner({ onFound, onClose }) {
       setStatus("found");
       detener(scanner);
 
+      // No filtramos por activo aquí para poder distinguir "no existe" de
+      // "existe pero está desactivado" y dar un mensaje claro al operador.
       const { data } = await supabase
         .from("productos")
-        .select("id")
+        .select("id, activo")
         .eq("referencia", decodedText.trim())
-        .eq("activo", true)
         .maybeSingle();
 
-      if (data?.id) {
+      if (data?.id && data.activo) {
         onFound(data.id);
+      } else if (data?.id && !data.activo) {
+        setStatus("error");
+        setErrorMsg(`Este producto está desactivado: ${decodedText}`);
       } else {
         setStatus("error");
         setErrorMsg(`Referencia no encontrada: ${decodedText}`);

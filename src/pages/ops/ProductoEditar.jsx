@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeftCircle } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { safeError } from "../../lib/utils";
+import { safeError, formatCOP } from "../../lib/utils";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 import ProductoForm from "../../components/forms/ProductoForm";
 
 /**
@@ -17,6 +18,7 @@ export default function ProductoEditar() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => {
     let alive = true;
@@ -38,6 +40,21 @@ export default function ProductoEditar() {
   }, [productoId]);
 
   const onSubmit = async (payload) => {
+    // INV-04/07 (ux): este form completo puede cambiar el precio con un UPDATE
+    // directo, sin el modal que sí exige el flujo dedicado "Editar precio".
+    // Pedimos la misma confirmación cuando el precio realmente cambió.
+    const precioViejo = Number(producto.precio_venta ?? 0);
+    const precioNuevo = Number(payload.precio_venta ?? 0);
+    if (precioNuevo !== precioViejo) {
+      const ok = await confirm({
+        titulo: "Cambiar precio de venta",
+        mensaje: `El precio pasará de ${formatCOP(precioViejo)} a ${formatCOP(
+          precioNuevo,
+        )}. Aplicará a cotizaciones y ventas futuras. ¿Confirmar?`,
+        confirmLabel: "Guardar cambios",
+      });
+      if (!ok) return;
+    }
     setSubmitting(true);
     setErrorMsg("");
     try {
@@ -90,6 +107,7 @@ export default function ProductoEditar() {
         submitting={submitting}
         errorMsg={errorMsg}
       />
+      <ConfirmDialog />
     </div>
   );
 }

@@ -19,6 +19,7 @@ const ESTADOS = [
   { v: "OK", label: "Disponible", dot: "s" },
   { v: "Bajo", label: "Stock bajo", dot: "w" },
   { v: "Agotado", label: "Agotado", dot: "d" },
+  { v: "Sobrestock", label: "Sobrestock", dot: "i" },
 ];
 
 const TIPOS = [
@@ -486,7 +487,7 @@ function FilterRow({ on, onClick, children }) {
     <button
       onClick={onClick}
       className={
-        "relative flex items-center justify-between gap-1.5 rounded-[5px] px-2 py-1.5 text-left text-[12.5px] leading-tight transition-colors " +
+        "relative flex min-h-[44px] items-center justify-between gap-1.5 rounded-[5px] px-2 py-2.5 text-left text-[12.5px] leading-tight transition-colors lg:min-h-0 lg:py-1.5 " +
         (on
           ? "font-medium before:absolute before:left-[-8px] before:top-1 before:bottom-1 before:w-[2.5px] before:rounded-[1px]"
           : "")
@@ -598,7 +599,8 @@ function InventarioFila({ item, onClick }) {
           className="whitespace-nowrap font-mono text-[11.5px]"
           style={{ color: "var(--n-700)" }}
         >
-          {ubicacionLabel(p)}
+          {/* Stand/posición solo existe físicamente en BODEGA (S4-07). */}
+          {item.sede?.id === "BODEGA" ? ubicacionLabel(p) : "—"}
         </span>
       </Td>
       <Td>
@@ -665,7 +667,8 @@ function InventarioCard({ item, onClick }) {
             <span className="text-[11px]" style={{ color: "var(--n-500)" }}>
               {item.sede?.nombre}
             </span>
-            {ubicacionLabel(p, "") && (
+            {/* Stand/posición solo aplica a BODEGA (S4-07). */}
+            {item.sede?.id === "BODEGA" && ubicacionLabel(p, "") && (
               <span
                 className="font-mono text-[11px]"
                 style={{ color: "var(--n-500)" }}
