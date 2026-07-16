@@ -270,4 +270,10 @@ Estos son datos ya inconsistentes que un fix de código no corrige por sí solo;
 - **UX (P2):** monto confirmado vs guardado puede diferir (F7/CIE-09); el checklist marca "pendiente" un periodo sin movimientos (CIE-04); "Sobra/Falta/Cuadra" del arqueo solo en tooltip, invisible en touch (CIE-05); la tabla histórica de arqueo no colorea sobra/falta (CIE-06).
 
 ### Cruces confirmados
+
 - **S1-08** (anular post-cierre) → S3-03. **S2-07** (doble conteo OT entre cierres) → S3-04. Ambos **confirmados con datos reales** en esta sección; su corrección de fondo vive aquí.
+
+### Estado de implementación Sección 3 (en curso, 2026-07-15)
+- **Frontend batch 1 — CORREGIDO:** S3-06 (`safeError` muestra mensajes de negocio P0001), S3-07 (`PagoCuentaModal` maneja error de consulta, no muestra saldo falso), S3-11 (botón Anular deshabilitado durante la petición), S3-12 (KPIs de cartera sobre el universo completo, no solo 300), S3-13 (histórico de cierres con cota de 200).
+- **Backend (agente Opus, en curso):** S3-01 cierre complementario (delta, soporta negativo → cubre S1-08), S3-02/S3-10 (REVOKE escritura directa a cierres/pagos_cuenta), S3-04 (por_producto alineado, S2-07), S3-05 (abonos_cotizacion visibles), S3-08 (drop overload legacy DELETE), S3-09 (EXCLUDE per-sede), S3-15 (arqueo no negativo).
+- **Pendiente frontend:** UI del cierre complementario (botón/aviso en Cierres.jsx, S3-01) — se integra cuando aterrice la RPC `fn_generar_cierre_complementario`; y pulido P2 UX (CIE-04/05/06 arqueo, F7).

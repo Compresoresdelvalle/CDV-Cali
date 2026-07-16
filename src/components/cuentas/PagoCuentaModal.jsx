@@ -27,6 +27,8 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
   const [pagos, setPagos] = useState([]);
   const [cuentasBanco, setCuentasBanco] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false); // #S3-07
+  const [anulando, setAnulando] = useState(false); // #S3-11
 
   const [monto, setMonto] = useState("");
   const [metodo, setMetodo] = useState("Efectivo");
@@ -38,13 +40,21 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
   const [motivoAnular, setMotivoAnular] = useState("");
 
   const cargar = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("pagos_cuenta")
       .select("id, fecha, monto, metodo_pago, cuenta_bancaria, observaciones")
       .eq(refKey, cuenta.refId)
       .eq("tipo", cuenta.tipo)
       .eq("anulado", false)
       .order("fecha", { ascending: true });
+    // #S3-07: si falla la consulta NO mostrar un saldo posiblemente incorrecto
+    // (mostrarlo como total sin abonos podría llevar a cobrar/pagar de más).
+    if (error) {
+      setLoadError(true);
+      setLoading(false);
+      return;
+    }
+    setLoadError(false);
     setPagos(data ?? []);
     setLoading(false);
   }, [refKey, cuenta.refId, cuenta.tipo]);
@@ -111,7 +121,9 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
   };
 
   const eliminar = async (id, motivo) => {
+    if (anulando) return; // #S3-11: evita doble clic / doble anulación
     setErr("");
+    setAnulando(true);
     try {
       const { error } = await supabase.rpc("fn_eliminar_pago_cuenta", {
         p_id: id,
@@ -124,6 +136,8 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
       onChanged?.();
     } catch (e) {
       setErr(safeError(e, "No se pudo anular el movimiento"));
+    } finally {
+      setAnulando(false);
     }
   };
 
@@ -193,288 +207,363 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
           className="overflow-y-auto px-4 py-4"
           style={{ maxHeight: "70vh" }}
         >
-          {/* Resumen de saldo */}
-          <div
-            className="mb-4 grid grid-cols-3 gap-2 rounded-lg border p-3 text-center"
-            style={{ borderColor: "hsl(var(--border))" }}
-          >
-            <Resumen label="Total" value={formatCOP(total)} />
-            <Resumen
-              label={esCobro ? "Abonado" : "Pagado"}
-              value={formatCOP(abonosCotiz + pagado)}
-              token="--success"
-            />
-            <Resumen
-              label="Saldo"
-              value={formatCOP(saldo)}
-              token={saldo > 0 ? "--destructive" : "--success"}
-            />
-          </div>
-
-          {esCobro && abonosCotiz > 0 && (
-            <p
-              className="mb-3 rounded-lg border px-3 py-2 text-[12px]"
+          {loadError ? (
+            <div
+              className="rounded-lg border px-4 py-4 text-[13px]"
               style={{
-                backgroundColor: "hsl(var(--info) / 0.08)",
-                borderColor: "hsl(var(--info) / 0.35)",
-                color: "hsl(var(--info))",
+                borderColor: "hsl(var(--destructive) / 0.4)",
+                backgroundColor: "hsl(var(--destructive) / 0.06)",
+                color: "hsl(var(--destructive))",
               }}
             >
-              Incluye {formatCOP(abonosCotiz)} de abonos de la cotización de
-              origen.
-            </p>
-          )}
+              <p className="font-semibold">
+                No se pudo cargar el historial de pagos.
+              </p>
+              <p className="mt-1">
+                Por seguridad no mostramos el saldo, porque podría estar
+                incorrecto. Revisa tu conexión e intenta de nuevo.
+              </p>
+              <button
+                onClick={() => {
+                  setLoading(true);
+                  cargar();
+                }}
+                className="mt-3 h-10 rounded-md border px-4 text-[13px] font-medium cursor-pointer"
+                style={{
+                  borderColor: "hsl(var(--destructive) / 0.5)",
+                  color: "hsl(var(--destructive))",
+                }}
+              >
+                Reintentar
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Resumen de saldo */}
+              <div
+                className="mb-4 grid grid-cols-3 gap-2 rounded-lg border p-3 text-center"
+                style={{ borderColor: "hsl(var(--border))" }}
+              >
+                <Resumen label="Total" value={formatCOP(total)} />
+                <Resumen
+                  label={esCobro ? "Abonado" : "Pagado"}
+                  value={formatCOP(abonosCotiz + pagado)}
+                  token="--success"
+                />
+                <Resumen
+                  label="Saldo"
+                  value={formatCOP(saldo)}
+                  token={saldo > 0 ? "--destructive" : "--success"}
+                />
+              </div>
 
-          {/* Historial de pagos */}
-          {loading ? (
-            <p
-              className="py-2 text-xs"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Cargando…
-            </p>
-          ) : pagos.length > 0 ? (
-            <ul className="mb-4 space-y-1.5" role="list">
-              {pagos.map((p) => (
-                <li
-                  key={p.id}
-                  className="rounded-lg border px-3 py-2"
+              {esCobro && abonosCotiz > 0 && (
+                <p
+                  className="mb-3 rounded-lg border px-3 py-2 text-[12px]"
+                  style={{
+                    backgroundColor: "hsl(var(--info) / 0.08)",
+                    borderColor: "hsl(var(--info) / 0.35)",
+                    color: "hsl(var(--info))",
+                  }}
+                >
+                  Incluye {formatCOP(abonosCotiz)} de abonos de la cotización de
+                  origen.
+                </p>
+              )}
+
+              {/* Historial de pagos */}
+              {loading ? (
+                <p
+                  className="py-2 text-xs"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                >
+                  Cargando…
+                </p>
+              ) : pagos.length > 0 ? (
+                <ul className="mb-4 space-y-1.5" role="list">
+                  {pagos.map((p) => (
+                    <li
+                      key={p.id}
+                      className="rounded-lg border px-3 py-2"
+                      style={{ borderColor: "hsl(var(--border))" }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="font-mono text-[11px]"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
+                          {formatDate(p.fecha)}
+                        </span>
+                        <span
+                          className="font-mono text-[13px] font-semibold tabular-nums"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
+                          {formatCOP(p.monto)}
+                        </span>
+                        <span
+                          className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                          style={{
+                            backgroundColor: "hsl(var(--muted) / 0.5)",
+                            color: "hsl(var(--muted-foreground))",
+                          }}
+                        >
+                          {p.metodo_pago}
+                        </span>
+                        <span
+                          className="min-w-0 flex-1 truncate text-[11px] italic"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
+                          {p.cuenta_bancaria || p.observaciones || ""}
+                        </span>
+                        {anularId !== p.id && (
+                          <button
+                            onClick={() => {
+                              setAnularId(p.id);
+                              setMotivoAnular("");
+                              setErr("");
+                            }}
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-md cursor-pointer"
+                            style={{ color: "hsl(var(--destructive))" }}
+                            aria-label="Anular movimiento"
+                            title="Anular"
+                          >
+                            <Trash2
+                              className="h-3.5 w-3.5"
+                              strokeWidth={1.75}
+                            />
+                          </button>
+                        )}
+                      </div>
+
+                      {anularId === p.id && (
+                        <div
+                          className="mt-2 flex flex-col gap-2 rounded-md border p-2"
+                          style={{
+                            borderColor: "hsl(var(--destructive) / 0.4)",
+                            backgroundColor: "hsl(var(--destructive) / 0.06)",
+                          }}
+                        >
+                          <p
+                            className="text-[12px] font-medium"
+                            style={{ color: "hsl(var(--destructive))" }}
+                          >
+                            ¿Anular este {esCobro ? "cobro" : "pago"} de{" "}
+                            {formatCOP(p.monto)}? Queda registrado en la
+                            auditoría.
+                          </p>
+                          <input
+                            type="text"
+                            value={motivoAnular}
+                            onChange={(e) => setMotivoAnular(e.target.value)}
+                            placeholder="Motivo (opcional)"
+                            className="h-10 w-full rounded-md border bg-transparent px-2 text-[13px] outline-none"
+                            style={{
+                              borderColor: "hsl(var(--border))",
+                              color: "hsl(var(--foreground))",
+                            }}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setAnularId(null);
+                                setMotivoAnular("");
+                              }}
+                              className="h-10 flex-1 rounded-md border text-[13px] font-medium cursor-pointer"
+                              style={{
+                                borderColor: "hsl(var(--border))",
+                                color: "hsl(var(--muted-foreground))",
+                              }}
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={() => eliminar(p.id, motivoAnular)}
+                              disabled={anulando}
+                              className="h-10 flex-1 rounded-md text-[13px] font-semibold cursor-pointer disabled:opacity-50"
+                              style={{
+                                backgroundColor: "hsl(var(--destructive))",
+                                color: "hsl(var(--primary-foreground))",
+                              }}
+                            >
+                              {anulando ? "Anulando…" : "Anular"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p
+                  className="mb-4 text-xs"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                >
+                  Sin {esCobro ? "cobros" : "pagos"} registrados.
+                </p>
+              )}
+
+              {/* Form registrar */}
+              {saldo > 0 ? (
+                <div
+                  className="border-t pt-3"
                   style={{ borderColor: "hsl(var(--border))" }}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="mb-2 flex items-center justify-between">
                     <span
-                      className="font-mono text-[11px]"
+                      className="font-mono text-[10.5px] uppercase tracking-[0.08em]"
                       style={{ color: "hsl(var(--muted-foreground))" }}
                     >
-                      {formatDate(p.fecha)}
+                      Registrar {esCobro ? "cobro" : "pago"}
                     </span>
-                    <span
-                      className="font-mono text-[13px] font-semibold tabular-nums"
-                      style={{ color: "hsl(var(--foreground))" }}
+                    <button
+                      onClick={saldarTodo}
+                      className="text-[11.5px] font-semibold cursor-pointer hover:underline"
+                      style={{ color: "hsl(var(--primary))" }}
                     >
-                      {formatCOP(p.monto)}
-                    </span>
-                    <span
-                      className="rounded px-1.5 py-0.5 text-[10px] font-medium"
-                      style={{
-                        backgroundColor: "hsl(var(--muted) / 0.5)",
-                        color: "hsl(var(--muted-foreground))",
-                      }}
-                    >
-                      {p.metodo_pago}
-                    </span>
-                    <span
-                      className="min-w-0 flex-1 truncate text-[11px] italic"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {p.cuenta_bancaria || p.observaciones || ""}
-                    </span>
-                    {anularId !== p.id && (
-                      <button
-                        onClick={() => {
-                          setAnularId(p.id);
-                          setMotivoAnular("");
-                          setErr("");
-                        }}
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md cursor-pointer"
-                        style={{ color: "hsl(var(--destructive))" }}
-                        aria-label="Anular movimiento"
-                        title="Anular"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      </button>
-                    )}
+                      Saldar todo ({formatCOP(saldo)})
+                    </button>
                   </div>
 
-                  {anularId === p.id && (
-                    <div
-                      className="mt-2 flex flex-col gap-2 rounded-md border p-2"
-                      style={{
-                        borderColor: "hsl(var(--destructive) / 0.4)",
-                        backgroundColor: "hsl(var(--destructive) / 0.06)",
-                      }}
-                    >
-                      <p
-                        className="text-[12px] font-medium"
-                        style={{ color: "hsl(var(--destructive))" }}
+                  <div className="flex items-end gap-2">
+                    <label className="flex flex-col gap-1">
+                      <span
+                        className="text-[11px]"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
                       >
-                        ¿Anular este {esCobro ? "cobro" : "pago"} de{" "}
-                        {formatCOP(p.monto)}? Queda registrado en la auditoría.
-                      </p>
+                        Monto $
+                      </span>
                       <input
                         type="text"
-                        value={motivoAnular}
-                        onChange={(e) => setMotivoAnular(e.target.value)}
-                        placeholder="Motivo (opcional)"
-                        className="h-10 w-full rounded-md border bg-transparent px-2 text-[13px] outline-none"
+                        inputMode="numeric"
+                        value={monto}
+                        onChange={(e) => setMonto(e.target.value)}
+                        placeholder="0"
+                        className="h-11 rounded-[10px] border bg-transparent px-3 text-right text-[14px] font-semibold outline-none"
                         style={{
+                          width: 130,
                           borderColor: "hsl(var(--border))",
                           color: "hsl(var(--foreground))",
                         }}
                       />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            setAnularId(null);
-                            setMotivoAnular("");
-                          }}
-                          className="h-10 flex-1 rounded-md border text-[13px] font-medium cursor-pointer"
-                          style={{
-                            borderColor: "hsl(var(--border))",
-                            color: "hsl(var(--muted-foreground))",
-                          }}
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          onClick={() => eliminar(p.id, motivoAnular)}
-                          className="h-10 flex-1 rounded-md text-[13px] font-semibold cursor-pointer"
-                          style={{
-                            backgroundColor: "hsl(var(--destructive))",
-                            color: "hsl(var(--primary-foreground))",
-                          }}
-                        >
-                          Anular
-                        </button>
+                    </label>
+                    <div className="flex flex-1 flex-col gap-1">
+                      <span
+                        className="text-[11px]"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        Método
+                      </span>
+                      <div className="flex gap-1.5">
+                        {METODOS_PAGO_CUENTA.map((m) => {
+                          const active = metodo === m;
+                          return (
+                            <button
+                              key={m}
+                              onClick={() => elegirMetodo(m)}
+                              className="h-11 flex-1 rounded-[10px] border px-2 text-[12px] font-medium transition-colors cursor-pointer"
+                              style={{
+                                backgroundColor: active
+                                  ? "hsl(var(--primary))"
+                                  : "hsl(var(--card))",
+                                color: active
+                                  ? "hsl(var(--primary-foreground))"
+                                  : "hsl(var(--muted-foreground))",
+                                borderColor: active
+                                  ? "hsl(var(--primary))"
+                                  : "hsl(var(--border))",
+                              }}
+                            >
+                              {m}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
+                  </div>
+
+                  {esElectronico && (
+                    <label className="mt-2 flex flex-col gap-1">
+                      <span
+                        className="text-[11px]"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        Cuenta bancaria
+                      </span>
+                      <select
+                        value={cuentaBancaria}
+                        onChange={(e) => setCuentaBancaria(e.target.value)}
+                        className="h-11 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] outline-none"
+                        style={{
+                          borderColor: cuentaBancaria
+                            ? "hsl(var(--border))"
+                            : "hsl(var(--destructive) / 0.6)",
+                          color: "hsl(var(--foreground))",
+                        }}
+                      >
+                        <option value="">Selecciona…</option>
+                        {cuentasBanco.map((c) => {
+                          const ref = cuentaBancariaLabel(c);
+                          return (
+                            <option key={c.id} value={ref}>
+                              {ref}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </label>
                   )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p
-              className="mb-4 text-xs"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Sin {esCobro ? "cobros" : "pagos"} registrados.
-            </p>
-          )}
 
-          {/* Form registrar */}
-          {saldo > 0 ? (
-            <div
-              className="border-t pt-3"
-              style={{ borderColor: "hsl(var(--border))" }}
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <span
-                  className="font-mono text-[10.5px] uppercase tracking-[0.08em]"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  Registrar {esCobro ? "cobro" : "pago"}
-                </span>
-                <button
-                  onClick={saldarTodo}
-                  className="text-[11.5px] font-semibold cursor-pointer hover:underline"
-                  style={{ color: "hsl(var(--primary))" }}
-                >
-                  Saldar todo ({formatCOP(saldo)})
-                </button>
-              </div>
-
-              <div className="flex items-end gap-2">
-                <label className="flex flex-col gap-1">
-                  <span
-                    className="text-[11px]"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    Monto $
-                  </span>
                   <input
                     type="text"
-                    inputMode="numeric"
-                    value={monto}
-                    onChange={(e) => setMonto(e.target.value)}
-                    placeholder="0"
-                    className="h-11 rounded-[10px] border bg-transparent px-3 text-right text-[14px] font-semibold outline-none"
+                    value={obs}
+                    onChange={(e) => setObs(e.target.value)}
+                    placeholder="Nota / referencia (opcional)"
+                    className="mt-2 h-11 w-full rounded-[10px] border bg-transparent px-3 text-[13px] outline-none"
                     style={{
-                      width: 130,
                       borderColor: "hsl(var(--border))",
                       color: "hsl(var(--foreground))",
                     }}
                   />
-                </label>
-                <div className="flex flex-1 flex-col gap-1">
-                  <span
-                    className="text-[11px]"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    Método
-                  </span>
-                  <div className="flex gap-1.5">
-                    {METODOS_PAGO_CUENTA.map((m) => {
-                      const active = metodo === m;
-                      return (
-                        <button
-                          key={m}
-                          onClick={() => elegirMetodo(m)}
-                          className="h-11 flex-1 rounded-[10px] border px-2 text-[12px] font-medium transition-colors cursor-pointer"
-                          style={{
-                            backgroundColor: active
-                              ? "hsl(var(--primary))"
-                              : "hsl(var(--card))",
-                            color: active
-                              ? "hsl(var(--primary-foreground))"
-                              : "hsl(var(--muted-foreground))",
-                            borderColor: active
-                              ? "hsl(var(--primary))"
-                              : "hsl(var(--border))",
-                          }}
-                        >
-                          {m}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
 
-              {esElectronico && (
-                <label className="mt-2 flex flex-col gap-1">
-                  <span
-                    className="text-[11px]"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    Cuenta bancaria
-                  </span>
-                  <select
-                    value={cuentaBancaria}
-                    onChange={(e) => setCuentaBancaria(e.target.value)}
-                    className="h-11 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] outline-none"
+                  {err && (
+                    <p
+                      className="mt-2 text-[12px]"
+                      style={{ color: "hsl(var(--destructive))" }}
+                    >
+                      {err}
+                    </p>
+                  )}
+
+                  <button
+                    onClick={registrar}
+                    disabled={guardando}
+                    className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-[10px] text-[14px] font-semibold transition-colors cursor-pointer disabled:opacity-40"
                     style={{
-                      borderColor: cuentaBancaria
-                        ? "hsl(var(--border))"
-                        : "hsl(var(--destructive) / 0.6)",
-                      color: "hsl(var(--foreground))",
+                      backgroundColor: "hsl(var(--primary))",
+                      color: "hsl(var(--primary-foreground))",
                     }}
                   >
-                    <option value="">Selecciona…</option>
-                    {cuentasBanco.map((c) => {
-                      const ref = cuentaBancariaLabel(c);
-                      return (
-                        <option key={c.id} value={ref}>
-                          {ref}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
+                    <CheckCircle2 className="h-4 w-4" strokeWidth={2} />
+                    {guardando
+                      ? "Guardando…"
+                      : `Registrar ${esCobro ? "cobro" : "pago"}`}
+                  </button>
+                </div>
+              ) : (
+                <div
+                  className="flex items-center justify-center gap-2 rounded-lg border py-3 text-[13px] font-semibold"
+                  style={{
+                    borderColor: "hsl(var(--success) / 0.4)",
+                    backgroundColor: "hsl(var(--success) / 0.08)",
+                    color: "hsl(var(--success))",
+                  }}
+                >
+                  <CheckCircle2 className="h-4 w-4" strokeWidth={2} />
+                  Cuenta saldada
+                </div>
               )}
 
-              <input
-                type="text"
-                value={obs}
-                onChange={(e) => setObs(e.target.value)}
-                placeholder="Nota / referencia (opcional)"
-                className="mt-2 h-11 w-full rounded-[10px] border bg-transparent px-3 text-[13px] outline-none"
-                style={{
-                  borderColor: "hsl(var(--border))",
-                  color: "hsl(var(--foreground))",
-                }}
-              />
-
-              {err && (
+              {err && saldo <= 0 && (
                 <p
                   className="mt-2 text-[12px]"
                   style={{ color: "hsl(var(--destructive))" }}
@@ -482,43 +571,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                   {err}
                 </p>
               )}
-
-              <button
-                onClick={registrar}
-                disabled={guardando}
-                className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-[10px] text-[14px] font-semibold transition-colors cursor-pointer disabled:opacity-40"
-                style={{
-                  backgroundColor: "hsl(var(--primary))",
-                  color: "hsl(var(--primary-foreground))",
-                }}
-              >
-                <CheckCircle2 className="h-4 w-4" strokeWidth={2} />
-                {guardando
-                  ? "Guardando…"
-                  : `Registrar ${esCobro ? "cobro" : "pago"}`}
-              </button>
-            </div>
-          ) : (
-            <div
-              className="flex items-center justify-center gap-2 rounded-lg border py-3 text-[13px] font-semibold"
-              style={{
-                borderColor: "hsl(var(--success) / 0.4)",
-                backgroundColor: "hsl(var(--success) / 0.08)",
-                color: "hsl(var(--success))",
-              }}
-            >
-              <CheckCircle2 className="h-4 w-4" strokeWidth={2} />
-              Cuenta saldada
-            </div>
-          )}
-
-          {err && saldo <= 0 && (
-            <p
-              className="mt-2 text-[12px]"
-              style={{ color: "hsl(var(--destructive))" }}
-            >
-              {err}
-            </p>
+            </>
           )}
         </div>
       </div>

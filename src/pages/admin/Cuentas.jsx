@@ -19,6 +19,9 @@ import PagoCuentaModal from "../../components/cuentas/PagoCuentaModal";
 export default function Cuentas() {
   const [tab, setTab] = useState("cobrar"); // 'cobrar' | 'pagar'
   const [rows, setRows] = useState([]);
+  // #S3-12: los KPIs de cartera se calculan sobre TODOS los documentos, no solo
+  // sobre las 300 filas que se muestran en la lista (antes subestimaban en silencio).
+  const [kpi, setKpi] = useState({ saldo: 0, total: 0, conSaldo: 0 });
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [soloPendientes, setSoloPendientes] = useState(true);
@@ -40,6 +43,18 @@ export default function Cuentas() {
       const { data, error } = await q;
       if (error) throw error;
       setRows(data ?? []);
+
+      // #S3-12: KPIs sobre el universo completo (solo columnas saldo/total, ligero).
+      let kq = supabase.from(vista).select("saldo, total");
+      if (soloPendientes) kq = kq.gt("saldo", 0);
+      const { data: kdata, error: kerr } = await kq.limit(10000);
+      if (!kerr && kdata) {
+        setKpi({
+          saldo: kdata.reduce((s, r) => s + Number(r.saldo ?? 0), 0),
+          total: kdata.reduce((s, r) => s + Number(r.total ?? 0), 0),
+          conSaldo: kdata.filter((r) => Number(r.saldo) > 0).length,
+        });
+      }
     } catch (err) {
       setErrorMsg(safeError(err, "Error al cargar cuentas"));
     } finally {
@@ -51,9 +66,10 @@ export default function Cuentas() {
     cargar();
   }, [cargar]);
 
-  const totalSaldo = rows.reduce((s, r) => s + Number(r.saldo ?? 0), 0);
-  const totalDoc = rows.reduce((s, r) => s + Number(r.total ?? 0), 0);
-  const conSaldo = rows.filter((r) => Number(r.saldo) > 0).length;
+  // #S3-12: KPIs desde el agregado completo (no desde las 300 filas mostradas).
+  const totalSaldo = kpi.saldo;
+  const totalDoc = kpi.total;
+  const conSaldo = kpi.conSaldo;
 
   const abrirModal = (r) => {
     setModalCuenta({
