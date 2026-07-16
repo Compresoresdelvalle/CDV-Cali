@@ -88,5 +88,9 @@ export const safeError = (err, fallback = "Ocurrió un error inesperado") => {
     return "Referencia inválida — el registro no existe";
   if (m.includes("network") || m.includes("fetch"))
     return "Sin conexión — revisa tu internet";
+  // #S3-06: los mensajes de regla de negocio vienen de RAISE EXCEPTION (SQLSTATE
+  // P0001) y están redactados en español para el usuario (Cierres, Cuentas, OT,
+  // etc.). Antes caían al genérico y se perdía el "por qué". Se muestran tal cual.
+  if (code === "P0001" && err.message) return err.message;
   return fallback;
 };

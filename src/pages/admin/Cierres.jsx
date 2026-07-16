@@ -85,7 +85,8 @@ export default function Cierres() {
       const { data, error } = await supabase
         .from("cierres")
         .select("*, cerrado_por:usuarios(nombre)")
-        .order("numero", { ascending: false });
+        .order("numero", { ascending: false })
+        .limit(200); // #S3-13: cota para no cargar todo el histórico sin fin
       if (!mountedRef.current) return;
       if (error) throw error;
       setHistorial(data ?? []);
