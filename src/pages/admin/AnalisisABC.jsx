@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { RefreshCw, Package, TrendingUp } from "lucide-react";
+import { RefreshCw, Package, TrendingUp, Search } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
@@ -20,6 +20,48 @@ const SUGERENCIA_CLASE = {
   C: "Cola larga · control simple · candidato a liquidar",
 };
 
+// Tamaño de página del barrido. Coincide con el tope por defecto de PostgREST
+// ("Max rows" del proyecto): pedir más en una sola llamada no traería más.
+const PAGINA_PRODUCTOS = 1000;
+// Guarda anti-bucle: con ~2.000 productos activos esto no se acerca nunca. Si
+// algún día se alcanza, es una señal de que algo va mal, no un límite de negocio.
+const MAX_PAGINAS = 50;
+
+/**
+ * Trae TODOS los productos activos, paginando.
+ *
+ * El ABC clasifica el catálogo entero: los conteos por clase y el reparto de
+ * ingresos se calculan sobre esta lista. Una sola consulta sin `.range()` queda
+ * a merced del tope de filas de PostgREST y trunca EN SILENCIO. Como el orden
+ * es por clasificación (A, B, C), el corte se come la cola: con 1.990 productos
+ * activos (A=71, B=110, C=1.809) un tope de 1.000 mostraría la clase C con 819
+ * en vez de 1.809, y los porcentajes por clase saldrían mal sin avisar.
+ *
+ * Se ordena además por `id` porque `nombre` no es único: sin desempate, dos
+ * páginas consecutivas pueden repetir o saltarse filas.
+ */
+async function traerTodosLosProductosActivos() {
+  const filas = [];
+  for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
+    const desde = pagina * PAGINA_PRODUCTOS;
+    const { data, error } = await supabase
+      .from("productos")
+      .select(
+        "id, referencia, nombre, categoria, clasificacion, precio_venta, costo_promedio",
+      )
+      .eq("activo", true)
+      .order("clasificacion", { ascending: true })
+      .order("nombre", { ascending: true })
+      .order("id", { ascending: true })
+      .range(desde, desde + PAGINA_PRODUCTOS - 1);
+    if (error) return { data: null, error };
+    const lote = data ?? [];
+    filas.push(...lote);
+    if (lote.length < PAGINA_PRODUCTOS) break;
+  }
+  return { data: filas, error: null };
+}
+
 /* ── Análisis ABC (datos reales: productos + fn_top_productos + RPC) ───── */
 export default function AnalisisABC() {
   const [productos, setProductos] = useState([]);
@@ -31,6 +73,7 @@ export default function AnalisisABC() {
   const [okMsg, setOkMsg] = useState("");
   const [filtro, setFiltro] = useState("Todos");
   const [periodo, setPeriodo] = useState(90);
+  const [busqueda, setBusqueda] = useState("");
   const mountedRef = useRef(true);
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -46,14 +89,7 @@ export default function AnalisisABC() {
     setErrorMsg("");
     try {
       const [prodRes, topRes] = await Promise.all([
-        supabase
-          .from("productos")
-          .select(
-            "id, referencia, nombre, categoria, clasificacion, precio_venta, costo_promedio",
-          )
-          .eq("activo", true)
-          .order("clasificacion", { ascending: true })
-          .order("nombre", { ascending: true }),
+        traerTodosLosProductosActivos(),
         // Ventas reales del periodo para enriquecer la clasificación.
         supabase.rpc("fn_top_productos", { p_dias: dias, p_limit: 3000 }),
       ]);
@@ -137,10 +173,24 @@ export default function AnalisisABC() {
     });
   }, [productos, ventasMap]);
 
-  const filtrados =
-    filtro === "Todos"
-      ? filas
-      : filas.filter((p) => p.clasificacion === filtro);
+  // Búsqueda EN MEMORIA a propósito, y aquí sí es correcta: `filas` contiene el
+  // catálogo activo COMPLETO (se pagina al cargar), así que el filtro no puede
+  // esconder un producto que exista. La clasificación ABC necesita todo el
+  // conjunto para calcularse, así que ya está cargado: no hay nada que ganar
+  // yendo al servidor.
+  const filtrados = useMemo(() => {
+    const porClase =
+      filtro === "Todos"
+        ? filas
+        : filas.filter((p) => p.clasificacion === filtro);
+    const needle = busqueda.trim().toLowerCase();
+    if (!needle) return porClase;
+    return porClase.filter((p) =>
+      [p.referencia, p.nombre, p.categoria]
+        .filter(Boolean)
+        .some((c) => String(c).toLowerCase().includes(needle)),
+    );
+  }, [filas, filtro, busqueda]);
 
   const counts = {
     A: productos.filter((p) => p.clasificacion === "A").length,
@@ -249,6 +299,26 @@ export default function AnalisisABC() {
           value={pctVentas(ventasPorClase.C)}
           token="--destructive"
           sub={`${counts.C} SKUs · candidatos a liquidar`}
+        />
+      </div>
+
+      {/* Búsqueda — sobre el catálogo completo ya cargado (ver `filtrados`). */}
+      <div className="relative max-w-[420px]">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        />
+        <input
+          type="search"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          placeholder="Buscar por referencia, nombre o categoría…"
+          className="h-12 w-full rounded-lg border pl-9 pr-3 text-sm outline-none"
+          style={{
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+            color: "hsl(var(--foreground))",
+          }}
         />
       </div>
 

@@ -629,6 +629,32 @@ export default function Cuentas() {
 }
 
 /* ── Subcomponentes ───────────────────────────────────────────────────── */
+
+/**
+ * Botón de paginación (Anterior / Siguiente).
+ *
+ * Se usaba sin estar definido: la pantalla reventaba al aparecer la segunda
+ * página. Ni ESLint ni el build lo detectan (un componente JSX sin definir solo
+ * falla en tiempo de ejecución), así que el error solo se veía usando la app.
+ */
+function PagerBtn({ onClick, disabled, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex h-12 min-w-[48px] items-center rounded-lg border px-3 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40"
+      style={{
+        backgroundColor: "hsl(var(--card))",
+        borderColor: "hsl(var(--border))",
+        color: "hsl(var(--foreground))",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function EstadoBadge({ est }) {
   return (
     <span
