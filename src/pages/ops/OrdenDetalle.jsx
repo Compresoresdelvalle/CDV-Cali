@@ -32,6 +32,7 @@ import {
 } from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { construirHistorialOT } from "../../lib/ordenes-ui";
+import { cuentaBancariaLabel } from "../../lib/cuentas-ui";
 import ClientePicker from "../../components/forms/ClientePicker";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
@@ -128,6 +129,50 @@ function Field({ label, children, htmlFor }) {
       </span>
       {children}
     </label>
+  );
+}
+
+/** ¿El método de pago mueve dinero por banco (y por tanto tiene cuenta)? */
+const esPagoElectronico = (m) => m === "transferencia" || m === "tarjeta";
+
+/**
+ * Selector de cuenta bancaria del abono. Solo aparece en pagos electrónicos:
+ * sin la cuenta, el Cierre agrupa el abono bajo "sin cuenta" y el desglose por
+ * cuenta queda incompleto. Compartido por el anticipo (Autorización) y el pago
+ * final (Entrega), que antes duplicaban el formulario.
+ */
+function CuentaAbonoField({ metodo, cuenta, setCuenta, disabled }) {
+  const [cuentas, setCuentas] = useState([]);
+
+  useEffect(() => {
+    if (!esPagoElectronico(metodo)) return;
+    supabase
+      .from("cuentas_bancarias")
+      .select("id, banco, tipo, numero, titular")
+      .eq("activo", true)
+      .order("banco")
+      .then(({ data }) => setCuentas(data ?? []));
+  }, [metodo]);
+
+  if (!esPagoElectronico(metodo)) return null;
+
+  return (
+    <Field label="Cuenta bancaria *">
+      <select
+        value={cuenta}
+        onChange={(e) => setCuenta(e.target.value)}
+        disabled={disabled}
+        className="h-12 rounded-lg border px-3 text-sm outline-none disabled:opacity-60"
+        style={inputStyle}
+      >
+        <option value="">Selecciona la cuenta…</option>
+        {cuentas.map((c) => (
+          <option key={c.id} value={cuentaBancariaLabel(c)}>
+            {cuentaBancariaLabel(c)}
+          </option>
+        ))}
+      </select>
+    </Field>
   );
 }
 
@@ -1536,6 +1581,7 @@ function PasoAutorizacion({
   const [valorRev, setValorRev] = useState(String(orden.valor_revision ?? 0));
   const [monto, setMonto] = useState("");
   const [metodo, setMetodo] = useState("efectivo");
+  const [cuenta, setCuenta] = useState("");
   const [guardando, setGuardando] = useState(false);
 
   const autoriza = orden.estado_autorizacion === "autorizado";
@@ -1568,6 +1614,12 @@ function PasoAutorizacion({
       setErrorMsg("Ingresa un monto de anticipo válido");
       return;
     }
+    if (esPagoElectronico(metodo) && !cuenta) {
+      setErrorMsg(
+        "Selecciona la cuenta bancaria a la que entró el dinero. Sin esto, el cierre de caja no puede desglosar el anticipo por cuenta.",
+      );
+      return;
+    }
     setGuardando(true);
     setErrorMsg("");
     try {
@@ -1575,10 +1627,12 @@ function PasoAutorizacion({
         orden_id: id,
         monto: m,
         metodo_pago: metodo,
+        cuenta_bancaria: esPagoElectronico(metodo) ? cuenta : null,
         registrado_por: perfil.id,
       });
       if (error) throw error;
       setMonto("");
+      setCuenta("");
       await cargar();
     } catch (err) {
       setErrorMsg(safeError(err, "No se pudo registrar el anticipo"));
@@ -1703,6 +1757,12 @@ function PasoAutorizacion({
                   ))}
                 </select>
               </Field>
+              <CuentaAbonoField
+                metodo={metodo}
+                cuenta={cuenta}
+                setCuenta={setCuenta}
+                disabled={ro || guardando}
+              />
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <OutlineButton
@@ -2110,6 +2170,7 @@ function PasoEntrega({
 }) {
   const [monto, setMonto] = useState("");
   const [metodo, setMetodo] = useState("efectivo");
+  const [cuenta, setCuenta] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [generando, setGenerando] = useState(false);
 
@@ -2123,6 +2184,12 @@ function PasoEntrega({
       setErrorMsg("Ingresa un monto válido");
       return;
     }
+    if (esPagoElectronico(metodo) && !cuenta) {
+      setErrorMsg(
+        "Selecciona la cuenta bancaria a la que entró el dinero. Sin esto, el cierre de caja no puede desglosar el pago por cuenta.",
+      );
+      return;
+    }
     setGuardando(true);
     setErrorMsg("");
     try {
@@ -2130,10 +2197,12 @@ function PasoEntrega({
         orden_id: id,
         monto: m,
         metodo_pago: metodo,
+        cuenta_bancaria: esPagoElectronico(metodo) ? cuenta : null,
         registrado_por: perfil.id,
       });
       if (error) throw error;
       setMonto("");
+      setCuenta("");
       await cargar();
     } catch (err) {
       setErrorMsg(safeError(err, "No se pudo registrar el pago"));
@@ -2258,6 +2327,12 @@ function PasoEntrega({
                   ))}
                 </select>
               </Field>
+              <CuentaAbonoField
+                metodo={metodo}
+                cuenta={cuenta}
+                setCuenta={setCuenta}
+                disabled={ro || guardando}
+              />
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <OutlineButton

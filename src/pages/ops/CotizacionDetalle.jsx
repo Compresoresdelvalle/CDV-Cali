@@ -20,6 +20,7 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
 import { MARCA } from "../../lib/pdf/pdfStyles";
+import { cuentaBancariaLabel } from "../../lib/cuentas-ui";
 import EstadoCotizacionPanel from "../../components/cotizaciones/EstadoCotizacionPanel";
 import ConvertirCotizacionModal from "../../components/cotizaciones/ConvertirCotizacionModal";
 import { useAuthStore } from "../../stores/authStore";
@@ -1010,6 +1011,10 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
   const [abonos, setAbonos] = useState([]);
   const [monto, setMonto] = useState("");
   const [metodo, setMetodo] = useState("efectivo");
+  // Cuenta bancaria del abono: sin esto el Cierre agrupaba todos los abonos
+  // electrónicos bajo "sin cuenta" y el desglose por cuenta quedaba incompleto.
+  const [cuentasBanco, setCuentasBanco] = useState([]);
+  const [cuentaBancaria, setCuentaBancaria] = useState("");
   const [obs, setObs] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState(null);
@@ -1030,7 +1035,7 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
   const cargar = useCallback(async () => {
     const { data } = await supabase
       .from("abonos_cotizacion")
-      .select("id, fecha, monto, metodo_pago, observaciones")
+      .select("id, fecha, monto, metodo_pago, observaciones, cuenta_bancaria")
       .eq("cotizacion_id", cotizacion.id)
       .order("fecha", { ascending: true });
     setAbonos(data ?? []);
@@ -1040,9 +1045,19 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
     cargar();
   }, [cargar]);
 
+  useEffect(() => {
+    supabase
+      .from("cuentas_bancarias")
+      .select("id, banco, tipo, numero, titular")
+      .eq("activo", true)
+      .order("banco")
+      .then(({ data }) => setCuentasBanco(data ?? []));
+  }, []);
+
   const abonado = abonos.reduce((s, a) => s + Number(a.monto ?? 0), 0);
   const total = Number(cotizacion.total ?? 0);
   const saldo = Math.max(0, total - abonado);
+  const esElectronico = metodo === "transferencia" || metodo === "tarjeta";
 
   const registrar = async () => {
     const n = Number(String(monto).replace(/[^\d]/g, ""));
@@ -1052,6 +1067,12 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
     }
     if (n > saldo) {
       setErr(`El abono supera el saldo pendiente (${formatCOP(saldo)}).`);
+      return;
+    }
+    if (esElectronico && !cuentaBancaria) {
+      setErr(
+        "Selecciona la cuenta bancaria a la que entró el dinero. Sin esto, el cierre de caja no puede desglosar el abono por cuenta.",
+      );
       return;
     }
     if (registrandoRef.current) return;
@@ -1064,9 +1085,11 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
         p_monto: n,
         p_metodo_pago: metodo,
         p_observaciones: obs || null,
+        p_cuenta_bancaria: esElectronico ? cuentaBancaria : null,
       });
       if (e) throw new Error(e.message);
       setMonto("");
+      setCuentaBancaria("");
       setObs("");
       await cargar();
     } catch (e2) {
@@ -1224,6 +1247,28 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
                 ))}
               </select>
             </label>
+            {/* La cuenta solo aplica a pagos electrónicos; en efectivo no hay
+                cuenta que desglosar. */}
+            {esElectronico && (
+              <label className="flex min-w-[180px] flex-col gap-1">
+                <span className="text-[11px]" style={{ color: "var(--n-500)" }}>
+                  Cuenta bancaria *
+                </span>
+                <select
+                  value={cuentaBancaria}
+                  onChange={(e) => setCuentaBancaria(e.target.value)}
+                  className="h-10 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] outline-none"
+                  style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
+                >
+                  <option value="">Selecciona la cuenta…</option>
+                  {cuentasBanco.map((c) => (
+                    <option key={c.id} value={cuentaBancariaLabel(c)}>
+                      {cuentaBancariaLabel(c)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="flex min-w-[160px] flex-1 flex-col gap-1">
               <span className="text-[11px]" style={{ color: "var(--n-500)" }}>
                 Nota (opcional)
