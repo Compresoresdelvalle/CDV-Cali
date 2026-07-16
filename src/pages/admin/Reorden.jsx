@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
   X,
   RefreshCw,
+  Search,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
@@ -31,6 +32,8 @@ export default function Reorden() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [sedeFiltro, setSedeFiltro] = useState(TODAS_SEDES);
+  const [claseFiltro, setClaseFiltro] = useState("Todas");
+  const [busqueda, setBusqueda] = useState("");
   // Selección de SKUs para generar una orden de compra (estado de UI local).
   const [seleccion, setSeleccion] = useState(() => new Set());
   const [agotadosSinConfig, setAgotadosSinConfig] = useState(null);
@@ -111,13 +114,27 @@ export default function Reorden() {
     return [TODAS_SEDES, ...[...set.keys()]];
   }, [items]);
 
-  const filtrados = useMemo(
-    () =>
+  // Filtros cruzables: sede + clase ABC + texto, todos a la vez.
+  // El match es EN MEMORIA y aquí sí es honesto: `items` trae la vista completa
+  // (69 sugerencias hoy, tope de 5.000) y los KPIs de abajo se calculan sobre
+  // `filtrados`, así que lo que se cuenta es exactamente lo que se ve.
+  const filtrados = useMemo(() => {
+    let out =
       sedeFiltro === TODAS_SEDES
         ? items
-        : items.filter((i) => i.sede_id === sedeFiltro),
-    [items, sedeFiltro],
-  );
+        : items.filter((i) => i.sede_id === sedeFiltro);
+    if (claseFiltro !== "Todas")
+      out = out.filter((i) => i.clasificacion === claseFiltro);
+    const needle = busqueda.trim().toLowerCase();
+    if (needle) {
+      out = out.filter((i) =>
+        [i.referencia, i.nombre, i.categoria]
+          .filter(Boolean)
+          .some((c) => String(c).toLowerCase().includes(needle)),
+      );
+    }
+    return out;
+  }, [items, sedeFiltro, claseFiltro, busqueda]);
 
   const totalCompra = filtrados.reduce(
     (s, i) => s + Number(i.costo_estimado_compra || 0),
@@ -343,6 +360,43 @@ export default function Reorden() {
                 ? "Todas"
                 : (items.find((i) => i.sede_id === s)?.sede_nombre ?? s)
             }
+          />
+        </div>
+      )}
+
+      {/* Búsqueda + clase ABC. Se cruzan con el filtro de sede de arriba, así
+          que se puede pedir "los clase A agotados de CV que digan 'filtro'". */}
+      {!loading && items.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 -mt-1">
+          <div className="relative min-w-[220px] flex-1 max-w-[360px]">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            />
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por referencia, nombre o categoría…"
+              className="h-12 w-full rounded-lg border pl-9 pr-3 text-sm outline-none"
+              style={{
+                backgroundColor: "hsl(var(--card))",
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--foreground))",
+              }}
+            />
+          </div>
+          <span
+            className="font-mono text-[10.5px] uppercase tracking-[0.06em]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Clase
+          </span>
+          <Seg
+            options={["Todas", "A", "B", "C"]}
+            value={claseFiltro}
+            onChange={setClaseFiltro}
+            labelOf={(c) => c}
           />
         </div>
       )}
