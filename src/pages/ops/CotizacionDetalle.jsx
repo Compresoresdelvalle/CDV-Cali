@@ -1019,8 +1019,12 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
   const eliminandoRef = useRef(false);
 
   const convertida = Boolean(cotizacion.venta_id);
+  // P1: una cotización ligada a una OT nunca se convierte en venta, así que su
+  // abono no se reconciliaría nunca y además se contaría doble en el cierre si
+  // el mismo dinero se registra en la OT. El anticipo va en la OT.
+  const esDeOT = Boolean(cotizacion.ot_id);
   const puedeRegistrar =
-    !convertida && ["Admin", "Vendedor"].includes(rolUsuario);
+    !convertida && !esDeOT && ["Admin", "Vendedor"].includes(rolUsuario);
   const esAdmin = rolUsuario === "Admin";
 
   const cargar = useCallback(async () => {
@@ -1089,6 +1093,32 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
       eliminandoRef.current = false;
     }
   };
+
+  // P1: cotización de una OT — el anticipo va en la OT. En vez de esconder el
+  // panel sin más (el usuario quedaría sin saber por qué ni a dónde ir), se
+  // explica y se enlaza a la OT. Los abonos antiguos, si los hay, siguen abajo.
+  if (esDeOT && abonos.length === 0) {
+    return (
+      <section className="iblock">
+        <div className="ib-head">
+          <div className="ib-ico">
+            <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
+          </div>
+          <div className="ib-title">Abonos de la cotización</div>
+        </div>
+        <p className="text-[12.5px]" style={{ color: "var(--n-500)" }}>
+          Esta cotización pertenece a una orden de trabajo, así que el anticipo
+          se registra <b>en la OT</b> y no aquí. Si se registrara en los dos
+          lados, el mismo dinero se contaría dos veces en el cierre de caja.
+        </p>
+        {cotizacion.ot && (
+          <Link to={`/ops/ordenes/${cotizacion.ot.id}`} className="ib-sublink">
+            Registrar abono en la OT #{cotizacion.ot.numero}
+          </Link>
+        )}
+      </section>
+    );
+  }
 
   // Si no hay abonos y no se puede registrar (p.ej. ya convertida), no mostrar.
   if (abonos.length === 0 && !puedeRegistrar) return null;
