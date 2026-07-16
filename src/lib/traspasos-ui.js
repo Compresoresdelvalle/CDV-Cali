@@ -55,13 +55,20 @@ export function sedeDotVar(id) {
  * Pestañas de filtro de la lista de traspasos. El valor coincide con la
  * columna real `estado` (o "Todos" para no filtrar).
  */
+// Estados REALES del enum (verificado en producción): borrador, picking,
+// verificado, en_transito, recibido, con_diferencia, cancelado.
+// Faltaban 'cancelado' (14 traspasos reales, invisibles al filtrar) y
+// 'verificado' (estado válido del flujo), así que la pastilla los sabía pintar
+// pero no había forma de filtrarlos.
 export const TRASPASO_TABS = [
   { v: "Todos", label: "Todos" },
   { v: "borrador", label: "Pendiente" },
   { v: "picking", label: "En Picking" },
+  { v: "verificado", label: "Verificado" },
   { v: "en_transito", label: "En Tránsito" },
   { v: "recibido", label: "Recibido" },
   { v: "con_diferencia", label: "Con Diferencia" },
+  { v: "cancelado", label: "Cancelado" },
 ];
 
 /**

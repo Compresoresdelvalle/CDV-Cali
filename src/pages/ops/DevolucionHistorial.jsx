@@ -56,7 +56,10 @@ export default function DevolucionHistorial() {
            venta:venta_id(numero)`,
         )
         .eq("reingresa_stock", reingresa)
+        // Desempate obligatorio: sin él, el "Cargar más" puede repetir o
+        // saltar devoluciones que comparten la misma fecha.
         .order("fecha", { ascending: false })
+        .order("numero", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (perfil?.rol !== "Admin") query = query.eq("sede_id", perfil?.sede_id);
@@ -379,8 +382,12 @@ export default function DevolucionHistorial() {
               </div>
             </div>
 
-            {/* Cargar más */}
-            {hasMore && !busqueda.trim() && (
+            {/* Cargar más — antes se escondía al buscar (`!busqueda.trim()`),
+                justo cuando más se necesita: la búsqueda filtra en memoria
+                sobre lo ya cargado, así que sin este botón el operario no tenía
+                forma de traer las páginas donde sí está lo que busca, y la
+                pantalla le decía "no hay resultados" sobre datos existentes. */}
+            {hasMore && (
               <button
                 onClick={() => cargarDevoluciones(false)}
                 disabled={loading}

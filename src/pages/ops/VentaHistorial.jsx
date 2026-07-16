@@ -49,7 +49,11 @@ export default function VentaHistorial() {
            vendedor:vendedor_id(nombre),
            detalle_venta(producto:producto_id(nombre))`,
         )
+        // Desempate obligatorio: con solo `fecha`, dos ventas del mismo
+        // instante pueden reordenarse entre páginas y el "Cargar más" repite
+        // o salta filas.
         .order("fecha", { ascending: false })
+        .order("numero", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
       if (!esAdmin) query = query.eq("sede_id", perfil.sede_id);

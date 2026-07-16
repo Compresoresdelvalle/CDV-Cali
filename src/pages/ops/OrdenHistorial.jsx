@@ -84,8 +84,14 @@ export default function OrdenHistorial() {
         const [ordRes, aboRes] = await Promise.all([
           supabase
             .from("ordenes_servicio")
+            // `estado_autorizacion` es OBLIGATORIO aquí: calcularMontos lo usa
+            // para cobrar solo la revisión cuando el cliente no autorizó. Sin
+            // el campo llega undefined, la condición da falso y la lista suma
+            // mano de obra + repuestos que el cliente rechazó (22 OT mostraban
+            // $11.4M donde la factura real es $424k). El Detalle sí lo traía,
+            // así que la misma OT mostraba dos totales distintos.
             .select(
-              "id,numero,cliente_nombre,equipo_descripcion,equipo_serie,estado,sede_id,fecha,pendiente_recogida_at,total,costo_mano_obra,valor_repuestos,valor_revision,descuento_valor,iva_pct",
+              "id,numero,cliente_nombre,equipo_descripcion,equipo_serie,estado,estado_autorizacion,sede_id,fecha,pendiente_recogida_at,total,costo_mano_obra,valor_repuestos,valor_revision,descuento_valor,iva_pct",
             )
             .order("fecha", { ascending: false }),
           supabase.from("abonos").select("orden_id,monto"),
