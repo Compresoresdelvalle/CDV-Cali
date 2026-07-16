@@ -170,11 +170,18 @@ export default function Cierres() {
     // del botón aún no aplica — un doble-tap dispararía dos cierres.
     if (generandoRef.current) return;
     generandoRef.current = true;
+    // #S3-01: avisar si se cierra un día que aún no ha terminado — las ventas
+    // posteriores no quedarían en este cierre (habría que hacer uno complementario).
+    const cerrandoHoy = hasta >= hoy;
     const ok = await confirm({
       titulo: "Generar cierre",
-      mensaje: `Se generará un cierre ${tipo} del ${fmtFecha(desde)} al ${fmtFecha(
-        hasta,
-      )} por ${formatCOP(Number(preview.ingresos_total))}. Una vez guardado es inmutable y no podrá editarse ni borrarse.`,
+      mensaje:
+        `Se generará un cierre ${tipo} del ${fmtFecha(desde)} al ${fmtFecha(
+          hasta,
+        )} por ${formatCOP(Number(preview.ingresos_total))}. Una vez guardado es inmutable y no podrá editarse ni borrarse.` +
+        (cerrandoHoy
+          ? "\n\nOjo: el día de hoy aún no ha terminado. Las ventas o cobros que entren después NO quedarán en este cierre. Si eso pasa, luego podrás generar un “cierre complementario” para incluirlos."
+          : ""),
       confirmLabel: "Generar cierre",
     });
     if (!ok) {
@@ -210,6 +217,59 @@ export default function Cierres() {
     } catch (err) {
       if (mountedRef.current) {
         setErrorMsg(safeError(err, "Error al generar el cierre"));
+      }
+    } finally {
+      generandoRef.current = false;
+      if (mountedRef.current) setGenerating(false);
+    }
+  };
+
+  // #S3-01: cierre COMPLEMENTARIO — registra lo que entró (o se anuló) DESPUÉS de
+  // que un periodo ya fue cerrado, sin tocar el cierre inmutable. Captura el delta.
+  const generarComplementario = async () => {
+    if (!preview) return;
+    if (generandoRef.current) return;
+    generandoRef.current = true;
+    const ok = await confirm({
+      titulo: "Cierre complementario",
+      mensaje: `Se generará un cierre complementario del ${fmtFecha(
+        desde,
+      )} al ${fmtFecha(
+        hasta,
+      )} que registra SOLO los movimientos nuevos o anulados desde el cierre ya existente. También es inmutable.`,
+      confirmLabel: "Generar complementario",
+    });
+    if (!ok) {
+      generandoRef.current = false;
+      return;
+    }
+    setErrorMsg("");
+    setOkMsg("");
+    setGenerating(true);
+    try {
+      const { data, error } = await supabase.rpc(
+        "fn_generar_cierre_complementario",
+        {
+          p_desde: desde,
+          p_hasta: hasta,
+          p_sede: null,
+          p_observaciones: observaciones.trim() || null,
+        },
+      );
+      if (!mountedRef.current) return;
+      if (error) throw error;
+      setOkMsg(
+        `Cierre complementario${data?.numero ? ` #${data.numero}` : ""} generado correctamente`,
+      );
+      setPreview(null);
+      setArqueo({});
+      setObservaciones("");
+      await cargarHistorial();
+    } catch (err) {
+      if (mountedRef.current) {
+        setErrorMsg(
+          safeError(err, "Error al generar el cierre complementario"),
+        );
       }
     } finally {
       generandoRef.current = false;
@@ -385,14 +445,16 @@ export default function Cierres() {
                   role="alert"
                   className="rounded-lg border px-3 py-2 text-xs mb-3"
                   style={{
-                    backgroundColor: "hsl(var(--destructive) / 0.08)",
-                    borderColor: "hsl(var(--destructive) / 0.4)",
-                    color: "hsl(var(--destructive))",
+                    backgroundColor: "hsl(var(--warning) / 0.1)",
+                    borderColor: "hsl(var(--warning) / 0.4)",
+                    color: "hsl(var(--warning))",
                   }}
                 >
-                  Este rango solapa el/los cierre(s){" "}
+                  Este rango ya tiene el/los cierre(s){" "}
                   {(preview.solapamiento ?? []).map((n) => `#${n}`).join(", ")}.
-                  No puede generarse un cierre con fechas ya cubiertas.
+                  No se puede generar un cierre normal, pero si entraron ventas
+                  o cobros (o hubo anulaciones) después de cerrarlo, genera un{" "}
+                  <b>cierre complementario</b> para registrar esa diferencia.
                 </div>
               )}
 
@@ -442,17 +504,34 @@ export default function Cierres() {
 
               {!readOnly && (
                 <div className="flex justify-end pt-4">
-                  <button
-                    onClick={generar}
-                    disabled={generating || preview.ya_cubierto}
-                    className="h-12 px-5 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-50"
-                    style={{
-                      backgroundColor: "hsl(var(--primary))",
-                      color: "hsl(var(--primary-foreground))",
-                    }}
-                  >
-                    {generating ? "Generando…" : "Generar cierre"}
-                  </button>
+                  {preview.ya_cubierto ? (
+                    // #S3-01: rango ya cerrado → ofrecer el complementario.
+                    <button
+                      onClick={generarComplementario}
+                      disabled={generating}
+                      className="h-12 px-5 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-50"
+                      style={{
+                        backgroundColor: "hsl(var(--warning))",
+                        color: "hsl(var(--primary-foreground))",
+                      }}
+                    >
+                      {generating
+                        ? "Generando…"
+                        : "Generar cierre complementario"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={generar}
+                      disabled={generating}
+                      className="h-12 px-5 rounded-lg text-sm font-medium cursor-pointer disabled:opacity-50"
+                      style={{
+                        backgroundColor: "hsl(var(--primary))",
+                        color: "hsl(var(--primary-foreground))",
+                      }}
+                    >
+                      {generating ? "Generando…" : "Generar cierre"}
+                    </button>
+                  )}
                 </div>
               )}
             </SectionCard>
