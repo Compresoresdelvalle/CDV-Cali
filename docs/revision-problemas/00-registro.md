@@ -336,3 +336,5 @@ Auditoría multi-agente (34 agentes). 27 hallazgos confirmados (2 P0, 12 P1 dedu
 - **S4-D4 + S4-D6** APLICADO: costo reiniciado a 0 (TA1/4G, TA1/2G, UG3/8, ADAM32PP; C25AM ya en 0) + notificación `costo_revisar` al Admin para fijar costo y precio correctos.
 - **S4-D1** PENDIENTE: falta elegir enfoque (A: backfill filas en 0; B: refactor store LEFT JOIN).
 - **S4-01/03 backend**: por decisión del dueño se deja SOLO el cierre en frontend; no se toca la BD.
+
+- **S4-D1** APLICADO (opción A): se crearon filas de inventario en 0 (Agotado) para los 509 productos activos sin existencias, en las 4 sedes (2.036 filas nuevas). Verificado: 0 productos activos sin inventario. Sección 4 cerrada por completo.
