@@ -1572,7 +1572,7 @@ function MiniTable({ titulo, cols, rows, align }) {
 
 // Alineación de columna: usa `align` (array 'left'|'right') si se pasa; por
 // defecto la primera columna a la izquierda y el resto a la derecha (números).
-function alineacion(align, i, total) {
+function alineacion(align, i) {
   if (Array.isArray(align) && align[i]) return align[i];
   return i === 0 ? "left" : "right";
 }
