@@ -385,3 +385,39 @@ La deuda diferida en las Secciones 3 y 5 (anticipos de cotización invisibles pa
 ### Frontend (`ConvertirCotizacionModal.jsx`, lint + build OK)
 
 - Nuevo modal al convertir (Detalle e Historial): muestra total / ya abonado / saldo y pregunta cómo paga el cliente el saldo (Efectivo / Transferencia+cuenta / Tarjeta / Crédito). Si está 100% abonada lo indica. Reemplaza el confirm simple.
+
+---
+
+## Sección 6 — Compras (2026-07-16)
+
+Auditoría multi-agente (36 agentes). 29 hallazgos confirmados (deduplicados ~17), 1 código-viejo excluido (descuadre de $1 en compra #22, legado pre-redondeo). Decisiones del dueño: Vendedor es "todero" (mantiene todo su poder en Compras, incl. recibir mercancía y abrir garantías); toggle Venta/Insumo libre; caja menor sin tope. Todo lo demás se corrigió + 2 features nuevas.
+
+### Backend (8 migraciones `s6_compras_*`, probadas BEGIN/ROLLBACK)
+
+- **S6-A/S6-J** proteger `compras.estado`/`fecha`/`registrado_por` contra UPDATE directo (trigger + GUC `cdv.compra_admin` que abren las RPCs legítimas).
+- **S6-B/S6-07** REVOKE escritura directa: `anon` sin escritura en las 6 tablas; garantías/notas crédito solo por RPC.
+- **S6-C** garantía descuenta/devuelve del cajón correcto (venta vs insumo); nueva col `detalle_garantia_compra.destino`; reparto por destino mayoritario.
+- **Estado devolucion_garantia conectado**: abrir marca la compra; cerrar (reposición recibida) o anular la revierte a 'completada' si no quedan garantías en curso. La pestaña "Garantía" ya funciona.
+- **S6-E** `fn_registrar_caja_menor` con método/cuenta reales.
+- **S6-G/S6-10** cancelar compra anula sus `pagos_cuenta`, recalcula `productos_proveedores` y restaura saldo de notas crédito consumidas.
+- **S6-I** `fn_registrar_compra` exige cuenta bancaria en Transferencia/Tarjeta (espeja S1-10).
+- **S6-K** garantía sobre compra cancelada bloqueada.
+- **FEATURE `fn_recibir_compra`**: recepción total o parcial (ajusta línea + total antes de sumar stock; línea en 0 se elimina; Vendedor incluido).
+- **FEATURE `fn_aplicar_nota_credito`**: aplica nota crédito como pago (metodo 'Nota crédito') de una compra a crédito del mismo proveedor; no infla el arqueo de efectivo.
+
+### Frontend (lint + build OK)
+
+- Bugs: S6-F "Cargar más" (stale closure), COMP-06 anti-carrera búsqueda, S6-06 botón Recibir oculto en canceladas + error real, S6-09 label/stepper "pendiente", C-04 pill "Cancelada" rojo.
+- UX: C-05 escáner QR en CompraNueva, C-06 tap-targets del toggle.
+- RPC-dependiente: recepción por RPC con **modal de recepción parcial** (`RecibirCompraModal`) + confirmación (C-01); selector de método en caja menor; **UI para aplicar nota crédito** (`AplicarNotaCreditoModal` en NotasCredito).
+- CLAUDE.md: Vendedor "todero" con acceso a Compras documentado.
+
+### Pendiente de activar tras deploy del frontend
+
+- Bloquear el UPDATE directo de `compras.recibida` (extender el trigger + REVOKE UPDATE a authenticated) una vez que el frontend ya usa `fn_recibir_compra` en todos lados.
+
+### Verificación adversarial (workflow, 6 flujos independientes en vivo)
+
+- **OK end-to-end (BEGIN/ROLLBACK):** garantía cajón correcto venta/insumo + reparto mixto + reversa; ciclo de estado devolucion_garantia (abrir/cerrar/anular con 1 y 2 garantías); recepción parcial (ajusta línea/total/stock/CxP); nota crédito baja saldo nota+CxP y NO infla el arqueo de efectivo; cancelar compra anula pagos y recalcula proveedor; blindaje (UPDATE directo rechazado, cuenta obligatoria, Vendedor abre garantía, rechazo sobre cancelada).
+- **BUG P1 encontrado y CORREGIDO:** `productos_proveedores` conservaba `TRUNCATE` para `authenticated` (RLS no aplica a TRUNCATE) → cualquier usuario podía vaciar la tabla. Migración `s6_compras_revoke_truncate_productos_proveedores`. Verificado: 0 TRUNCATE para authenticated/anon en las 6 tablas.
+- **Falta de lógica CORREGIDA:** garantía resuelta por nota crédito dejaba la compra pegada en 'devolucion_garantia' para siempre (no hay cierre para ese caso) → se trata 'nota_credito_emitida' como estado terminal en el criterio de "garantías en curso" (migración `s6_compras_nota_credito_estado_terminal`).

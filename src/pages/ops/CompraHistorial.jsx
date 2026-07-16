@@ -3,8 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { Plus, PackageOpen, Search } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, formatDate, sanitizeSearch } from "../../lib/utils";
+import {
+  formatCOP,
+  formatDate,
+  sanitizeSearch,
+  safeError,
+} from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 import {
   COMPRAS_TABS,
   COMPRAS_TIPO_TABS,
@@ -18,8 +24,12 @@ const PAGE_SIZE = 20;
 export default function CompraHistorial() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
-  const puedeRecibirCompra =
-    perfil?.rol === "Admin" || perfil?.rol === "Bodeguero";
+  const { confirm, ConfirmDialog } = useConfirm();
+  // El Vendedor es "todero": también recibe mercancía (decisión del dueño;
+  // el RPC fn_recibir_compra lo permite para su sede).
+  const puedeRecibirCompra = ["Admin", "Bodeguero", "Vendedor"].includes(
+    perfil?.rol,
+  );
 
   const [compras, setCompras] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -91,9 +101,11 @@ export default function CompraHistorial() {
         if (myReq === reqIdRef.current) setLoading(false);
       }
     },
-    // page se lee dentro pero la recarga siempre es reset salvo "Cargar más".
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filtro, tipo, busquedaActiva, perfil?.rol, perfil?.sede_id],
+    // S6-F: `page` DEBE estar en las dependencias — sin ella, "Cargar más"
+    // usaba un closure congelado con page=0 y re-pedía siempre la primera
+    // página (filas duplicadas, nunca avanzaba). El useEffect de abajo depende
+    // de los filtros (no de esta función), así que no provoca re-fetchs.
+    [filtro, tipo, busquedaActiva, perfil?.rol, perfil?.sede_id, page],
   );
 
   useEffect(() => {
@@ -113,21 +125,25 @@ export default function CompraHistorial() {
   };
 
   const marcarRecibida = async (compraId) => {
+    // C-01: recibir ingresa stock al inventario y es difícil de revertir →
+    // confirmación explícita. La recepción parcial (por línea) se hace desde
+    // el detalle de la compra; aquí es recepción completa rápida.
+    const compra = compras.find((c) => c.id === compraId);
+    const ok = await confirm({
+      titulo: "Confirmar recepción",
+      mensaje: `Se recibirá la compra #${compra?.numero ?? "?"} completa e ingresará el stock al inventario. Si el proveedor entregó incompleto, usa el detalle de la compra para registrar una recepción parcial.`,
+      confirmLabel: "Sí, recibir",
+    });
+    if (!ok) return;
     setRecibiendoId(compraId);
     setErrorMsg(null);
     try {
-      // `.eq("recibida", false)`: si otra pestaña/usuario ya la recibió,
-      // el segundo UPDATE no afecta filas y no re-dispara el trigger.
-      const { data, error } = await supabase
-        .from("compras")
-        .update({ recibida: true, fecha_recepcion: new Date().toISOString() })
-        .eq("id", compraId)
-        .eq("recibida", false)
-        .select("id");
+      // S6-08/S6-A: toda recepción pasa por la RPC (ajusta stock, movimientos,
+      // costo y protege el estado). null = recibe todo tal cual.
+      const { error } = await supabase.rpc("fn_recibir_compra", {
+        p_compra_id: compraId,
+      });
       if (error) throw error;
-      if (!data || data.length === 0) {
-        setErrorMsg("Esa compra ya estaba recibida.");
-      }
       setCompras((prev) =>
         prev.map((c) =>
           c.id === compraId
@@ -139,8 +155,12 @@ export default function CompraHistorial() {
             : c,
         ),
       );
-    } catch {
-      setErrorMsg("No se pudo marcar la compra como recibida. Reintenta.");
+    } catch (err) {
+      // S6-06: mostrar el motivo real (p.ej. recibir una cancelada) en vez de
+      // un genérico que oculta qué pasó.
+      setErrorMsg(
+        safeError(err, "No se pudo marcar la compra como recibida. Reintenta."),
+      );
     } finally {
       setRecibiendoId(null);
     }
@@ -392,6 +412,7 @@ export default function CompraHistorial() {
           </>
         )}
       </div>
+      <ConfirmDialog />
     </div>
   );
 }
@@ -569,7 +590,9 @@ function CompraFila({
         </span>
       </Td>
       <Td>
-        {!c.recibida && puedeRecibir ? (
+        {/* S6-06: una compra cancelada no se puede recibir (el trigger lo
+            rechaza); el botón solo confundía. */}
+        {!c.recibida && c.estado !== "cancelada" && puedeRecibir ? (
           <RecibirButton
             compra={c}
             recibiendoId={recibiendoId}
@@ -644,7 +667,8 @@ function CompraCard({
           </p>
         </div>
       </div>
-      {!c.recibida && puedeRecibir && (
+      {/* S6-06: no ofrecer recibir una compra cancelada. */}
+      {!c.recibida && c.estado !== "cancelada" && puedeRecibir && (
         <div className="mt-3">
           <RecibirButton
             compra={c}

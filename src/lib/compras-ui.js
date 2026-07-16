@@ -41,7 +41,9 @@ export function compraTipoBadge(esCajaMenor) {
  */
 export function compraEstadoPill({ recibida, estado }) {
   if (estado === "cancelada") {
-    return { cls: "s-pill s-entregada", label: "Cancelada" };
+    // C-04: rojo de alto contraste (antes usaba el pill neutro s-entregada,
+    // indistinguible de una compra normal).
+    return { cls: "s-pill s-anul", label: "Cancelada" };
   }
   if (estado === "devolucion_garantia") {
     return { cls: "s-pill s-conv", label: "Dev. garantía" };

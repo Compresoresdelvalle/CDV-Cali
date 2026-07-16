@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Check,
   Search,
+  ScanLine,
   Trash2,
   Truck,
 } from "lucide-react";
@@ -13,6 +14,7 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../../components/ui/UbicacionChip";
+import QRScanner from "../../components/forms/QRScanner";
 
 const IVA_DEFAULT = 19;
 const IVA_PRESETS = [0, 19];
@@ -51,15 +53,20 @@ export default function CompraNueva() {
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState([]);
   const [buscando, setBuscando] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false); // C-05: escáner QR
 
   const [carrito, setCarrito] = useState([]);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
   const guardandoRef = useRef(false);
+  // COMP-06: token de secuencia — una respuesta lenta de una búsqueda vieja
+  // no debe pisar los resultados de una más nueva (mismo patrón del Historial).
+  const busquedaReqRef = useRef(0);
 
   const buscarProductos = useCallback(
     async (q) => {
+      const myReq = ++busquedaReqRef.current;
       if (!q || q.trim().length < 2) {
         setResultados([]);
         return;
@@ -92,6 +99,7 @@ export default function CompraNueva() {
             (inv ?? []).map((i) => [i.producto_id, i.ubicacion_id]),
           );
         }
+        if (myReq !== busquedaReqRef.current) return; // respuesta obsoleta
         setResultados(
           (data ?? []).map((p) => ({
             ...p,
@@ -99,9 +107,9 @@ export default function CompraNueva() {
           })),
         );
       } catch {
-        setResultados([]);
+        if (myReq === busquedaReqRef.current) setResultados([]);
       } finally {
-        setBuscando(false);
+        if (myReq === busquedaReqRef.current) setBuscando(false);
       }
     },
     [perfil?.sede_id],
@@ -114,6 +122,26 @@ export default function CompraNueva() {
     setBusqueda(val);
     buscarDebounced(val);
   };
+
+  // C-05: escaneo QR para agregar un producto al pedido (como en Ventas).
+  const handleQRFound = useCallback(async (productoId) => {
+    setScannerOpen(false);
+    try {
+      const { data, error: e } = await supabase
+        .from("productos")
+        .select(
+          "id, nombre, referencia, costo_promedio, unidad_medida, vendible",
+        )
+        .eq("id", productoId)
+        .eq("activo", true)
+        .single();
+      if (e || !data) return;
+      agregarAlCarrito(data);
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const agregarAlCarrito = (prod) => {
     setBusqueda("");
@@ -266,6 +294,12 @@ export default function CompraNueva() {
       setError("Ingresa un monto mayor a 0.");
       return;
     }
+    // S6-E: caja menor con método real (antes siempre quedaba 'Efectivo').
+    const esElectronico = ["Transferencia", "Tarjeta"].includes(metodoPago);
+    if (esElectronico && !cuentaBancaria) {
+      setError("Selecciona la cuenta bancaria para pagos electrónicos.");
+      return;
+    }
     if (guardandoRef.current) return;
     guardandoRef.current = true;
     setError(null);
@@ -277,6 +311,8 @@ export default function CompraNueva() {
         p_monto: m,
         p_proveedor: proveedor.trim() || null,
         p_observaciones: observaciones.trim() || null,
+        p_metodo_pago: metodoPago,
+        p_cuenta_bancaria: esElectronico ? cuentaBancaria : null,
       });
       if (rpcErr) throw new Error(rpcErr.message);
       navigate("/ops/compras");
@@ -338,7 +374,15 @@ export default function CompraNueva() {
             <button
               key={m.v}
               type="button"
-              onClick={() => setModo(m.v)}
+              onClick={() => {
+                setModo(m.v);
+                // Caja menor no admite 'Crédito' (se paga en el acto): si venía
+                // seleccionado de la compra normal, cae a Efectivo.
+                if (m.v === "caja_menor" && metodoPago === "Crédito") {
+                  setMetodoPago("Efectivo");
+                  setCuentaBancaria("");
+                }
+              }}
               className="rounded-lg border px-3.5 text-[13px] font-medium transition-colors"
               style={{
                 minHeight: 40,
@@ -446,6 +490,15 @@ export default function CompraNueva() {
                   className="flex-1 border-none bg-transparent text-[14px] outline-none"
                   style={{ color: "var(--n-700)" }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setScannerOpen(true)}
+                  aria-label="Escanear código QR"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                  style={{ color: "var(--p-700)" }}
+                >
+                  <ScanLine className="h-5 w-5" strokeWidth={1.8} />
+                </button>
               </div>
 
               {buscando && (
@@ -946,6 +999,76 @@ export default function CompraNueva() {
                   />
                 </Field>
               </div>
+
+              {/* S6-E: método de pago del gasto (antes siempre quedaba Efectivo). */}
+              <div>
+                <p
+                  className="mb-1.5 text-xs font-medium"
+                  style={{ color: "var(--n-500)" }}
+                >
+                  ¿Cómo se pagó?
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {["Efectivo", "Transferencia", "Tarjeta"].map((m) => {
+                    const on = metodoPago === m;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          setMetodoPago(m);
+                          if (m === "Efectivo") setCuentaBancaria("");
+                        }}
+                        className="rounded-md border px-3 text-[13px] font-medium transition-colors"
+                        style={{
+                          minHeight: 40,
+                          borderColor: on ? "var(--p-400)" : "var(--n-200)",
+                          backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
+                          color: on
+                            ? "var(--p-contrast, #fff)"
+                            : "var(--n-700)",
+                        }}
+                      >
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(metodoPago === "Transferencia" ||
+                  metodoPago === "Tarjeta") && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2.5">
+                    <label
+                      htmlFor="cm-cuenta"
+                      className="text-sm"
+                      style={{ color: "var(--n-500)" }}
+                    >
+                      Cuenta bancaria
+                      <span style={{ color: "var(--dang-700)" }}> *</span>
+                    </label>
+                    <select
+                      id="cm-cuenta"
+                      value={cuentaBancaria}
+                      onChange={(e) => setCuentaBancaria(e.target.value)}
+                      className="h-10 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+                      style={{
+                        borderColor: "var(--n-200)",
+                        color: "var(--n-950)",
+                      }}
+                    >
+                      <option value="">Sin especificar</option>
+                      {cuentasBanco.map((c) => {
+                        const ref = `${c.banco} ${c.tipo} ${c.numero}${c.titular ? " · " + c.titular : ""}`;
+                        return (
+                          <option key={c.id} value={ref}>
+                            {ref}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+              </div>
+
               <p className="text-xs" style={{ color: "var(--n-500)" }}>
                 La caja menor NO afecta el inventario. El monto es el total (sin
                 IVA).
@@ -1094,6 +1217,12 @@ export default function CompraNueva() {
           </button>
         </aside>
       </div>
+      {scannerOpen && (
+        <QRScanner
+          onFound={handleQRFound}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1165,10 +1294,11 @@ function DestinoToggle({ value, onChange }) {
             type="button"
             onClick={() => onChange(o.v)}
             aria-pressed={on}
-            className="px-2.5 py-1 text-[11px] font-semibold transition-colors"
+            // C-06: tap target táctil (>=40px) — antes py-1 quedaba en ~24px.
+            className="min-h-[40px] px-3 py-2 text-[11px] font-semibold transition-colors"
             style={{
               backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
-              color: on ? "#fff" : "var(--n-600)",
+              color: on ? "var(--p-contrast, #fff)" : "var(--n-600)",
             }}
           >
             {o.t}

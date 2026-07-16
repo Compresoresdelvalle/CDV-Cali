@@ -96,6 +96,9 @@ const RESOL_VENTA_LABELS = {
 const RESOL_COMPRA_LABELS = {
   nota_credito: "Nota crédito",
   reposicion_fisica: "Reposición física",
+  // S6-09: valor válido del enum ofrecido en el modal; sin etiqueta se
+  // mostraba el string crudo "pendiente".
+  pendiente: "Sin resolución definida",
 };
 
 /**
@@ -220,6 +223,24 @@ export function construirProcesoCompra(g, fmtDate = (d) => d) {
         label: "Nota crédito emitida",
         meta: resolucionLabel(g?.resolucion),
         state: emitida ? "done" : "active",
+      },
+      {
+        label: "Cerrada",
+        meta: g?.fecha_cierre ? fmtDate(g.fecha_cierre) : "—",
+        state: estado === "cerrada" ? "done" : "pending",
+      },
+    ];
+  }
+
+  // S6-09: resolución aún no decidida — stepper neutro propio en vez de
+  // enrutarla por la rama de reposición física (que mostraba pasos falsos).
+  if (g?.resolucion === "pendiente" || !g?.resolucion) {
+    return [
+      abierta,
+      {
+        label: "Resolución pendiente",
+        meta: "Por definir con el proveedor",
+        state: estado === "cerrada" ? "done" : "active",
       },
       {
         label: "Cerrada",

@@ -150,7 +150,7 @@ Font: `"IBM Plex Sans", system-ui, -apple-system, sans-serif`
 
 - **Admin (Carlos):** Ve y hace todo. Acceso a Panel Admin.
 - **Bodeguero (Pedro):** Inventario, Compras, Traspasos, Picking, Ensambles, Devoluciones, Herramientas.
-- **Vendedor (María, Juan, Ana):** Inventario (solo su sede), Ventas, Cotizaciones, Herramientas.
+- **Vendedor (María, Juan, Ana):** Inventario (solo su sede), Ventas, Cotizaciones, Herramientas, **Compras** (rol "todero": la operación real exige que el vendedor también registre compras, marque recepción y abra garantías de compra; se le ocultan los costos históricos pero conserva el resto de acciones). Decisión del dueño 2026-07-16.
 - **Técnico (Luis):** Órdenes de servicio, Ensambles, Herramientas.
 
 ## Convenciones de código
