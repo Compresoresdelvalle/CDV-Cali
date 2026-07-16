@@ -304,7 +304,9 @@ export function construirHistorialCotizacion(cot, fmt) {
       tipo: "succ",
       accion: `Convertida en venta #${cot.venta.numero}`,
       actor: vendedor,
-      fecha: cot.fecha_conversion ? fmt(cot.fecha_conversion) : "",
+      // COT-K: no existe cot.fecha_conversion; fn_convertir_cotizacion fija
+      // updated_at al convertir y luego la cotización ya no se edita.
+      fecha: cot.updated_at ? fmt(cot.updated_at) : "",
     });
   }
   return filas;

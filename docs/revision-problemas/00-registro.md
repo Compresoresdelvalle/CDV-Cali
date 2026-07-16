@@ -338,3 +338,31 @@ Auditoría multi-agente (34 agentes). 27 hallazgos confirmados (2 P0, 12 P1 dedu
 - **S4-01/03 backend**: por decisión del dueño se deja SOLO el cierre en frontend; no se toca la BD.
 
 - **S4-D1** APLICADO (opción A): se crearon filas de inventario en 0 (Agotado) para los 509 productos activos sin existencias, en las 4 sedes (2.036 filas nuevas). Verificado: 0 productos activos sin inventario. Sección 4 cerrada por completo.
+
+
+---
+
+## Sección 5 — Cotizaciones (2026-07-16)
+
+Auditoría multi-agente (36 agentes; primera corrida cortada por límite de sesión, reanudada desde caché). 29 hallazgos confirmados (mucha duplicación entre cazadores). Realidad del módulo: **casi no se usa** — 18 cotizaciones, 1 conversión histórica, **0 abonos**, 0 líneas no-vendibles. La mayoría de "P0" eran huecos latentes, no pérdidas reales.
+
+### Backend (8 migraciones `s5_cotizaciones_*` aplicadas y verificadas en prod)
+- **COT-A** `fn_anular_venta` ahora limpia `cotizaciones.venta_id` → la cotización se puede reconvertir. + fix del único caso real: cotización #7 (venta #51 anulada) liberada. Bloqueadas restantes = 0.
+- **COT-B** REVOKE INSERT/UPDATE/DELETE a authenticated/anon en cotizaciones/detalle_cotizacion/abonos_cotizacion/cotizacion_cuentas_bancarias (patrón S1-01/S3-02). Verificado: el frontend no escribe directo.
+- **COT-C** guarda de rol Admin/Vendedor en fn_registrar/editar/convertir/cambiar_estado_cotizacion (antes solo validaban sede → Bodeguero/Técnico podían operar).
+- **COT-F** `fn_registrar_abono_cotizacion` rechaza abonos sobre cotización rechazada/vencida.
+- **COT-G** `fn_editar_cotizacion` impide bajar el total por debajo de lo ya abonado.
+- **COT-L** cron `cotizaciones-vencidas-diario` (06:00 UTC = 01:00 Bogotá) para `fn_marcar_cotizaciones_vencidas` (solo borrador/enviada vencidas → 'vencida'; no toca aprobada/rechazada).
+
+### Frontend (aplicado, lint + build OK)
+- **COT-H** `CotizacionEditar` filtra `vendible=true` en búsqueda y QR (Nueva ya lo hacía).
+- **COT-I** guardas síncronas (ref) anti doble-submit en registrar/eliminar abono.
+- **COT-J** Historial: "Cargar más" ya no se oculta al escribir texto de búsqueda.
+- **COT-K** historial de cotización usa `updated_at` (no la columna inexistente `fecha_conversion`).
+- **UX** botón "Convertir en venta" oculto en cotizaciones vinculadas a OT (evita doble cobro).
+
+### Código viejo eliminado (autorizado, verificado muerto)
+- Flujo huérfano "Fase 10" `?ot_id=` en `CotizacionNueva.jsx`: ningún punto de la app navega con ese parámetro. Se borró el bloque (otIdParam/otIdValido/useEffect precarga/llamada a `fn_asociar_cotizacion_a_ot`/label). Backend: `DROP FUNCTION fn_asociar_cotizacion_a_ot` (0 referencias en BD). **NO se tocó** la columna `cotizaciones.ot_id` ni la visualización del enlace OT en Historial/Detalle (3 filas históricas).
+
+### DIFERIDO — decisión del dueño (riesgo actual = 0, abonos_cotizacion=0 filas)
+- **COT-D + COT-E**: los abonos de cotización no entran a `_fn_cierre_totales`, y al convertir el método de pago es binario (Efectivo/Crédito) ignorando el método real. El patrón de abonos de OT NO es trasladable directo (la venta de cotización es `origen='directa'` y SÍ se cuenta completa en el cierre → espejarlo duplicaría el conteo, el mismo problema de la Sección 3). Diseño correcto: **Opción 2** — que `fn_convertir_cotizacion` cree pagos con el método real y deje la venta que el cierre capte por la maquinaria de cobros (requiere frontend: capturar pago al convertir). Se relaciona con S3-05 (también diferido).

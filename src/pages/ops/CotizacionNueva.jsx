@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   ArrowLeftCircle,
   Search,
@@ -47,8 +47,6 @@ const PASOS = [
 
 export default function CotizacionNueva() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const otIdParam = searchParams.get("ot_id");
   const perfil = useAuthStore((s) => s.perfil);
 
   const [paso, setPaso] = useState(1);
@@ -112,39 +110,6 @@ export default function CotizacionNueva() {
       mounted = false;
     };
   }, []);
-
-  // Fase 10 §10.6: si llegamos con ?ot_id=xxx, pre-llenar datos del cliente.
-  // Si la pre-carga falla (RLS u OT inexistente), se invalida otIdParam para
-  // que NO se pase al RPC y no haya privilege escalation cross-sede.
-  const [otIdValido, setOtIdValido] = useState(null);
-  useEffect(() => {
-    if (!otIdParam) {
-      setOtIdValido(null);
-      return;
-    }
-    let mounted = true;
-    (async () => {
-      const { data, error: e } = await supabase
-        .from("ordenes_servicio")
-        .select("cliente_nombre, cliente_telefono, sede_id")
-        .eq("id", otIdParam)
-        .maybeSingle();
-      if (!mounted) return;
-      if (e || !data) {
-        setError(
-          "No se pudo cargar la OT vinculada — verifica que tienes acceso. Puedes continuar manualmente.",
-        );
-        setOtIdValido(null);
-        return;
-      }
-      setClienteNombre(data.cliente_nombre ?? "");
-      setClienteTelefono(data.cliente_telefono ?? "");
-      setOtIdValido(otIdParam);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [otIdParam]);
 
   /* ── Búsqueda de productos (debounce 400ms server-side) ─────────────── */
   const buscarProductos = useCallback(
@@ -403,41 +368,37 @@ export default function CotizacionNueva() {
     );
     setGuardando(true);
     try {
-      const { data: rpcData, error: rpcErr } = await supabase.rpc(
-        "fn_registrar_cotizacion",
-        {
-          p_sede_id: perfil.sede_id,
-          p_cliente_nombre: clienteNombre || null,
-          p_cliente_nit: clienteNit || null,
-          p_cliente_email: clienteEmail || null,
-          p_cliente_telefono: clienteTelefono || null,
-          // B4: descuento ahora en $ (el % legado se manda en 0).
-          p_descuento_pct: 0,
-          p_descuento_valor: descuento,
-          p_domicilio: Math.max(0, domicilio),
-          p_vigencia_dias: vigenciaDias,
-          p_iva_pct: ivaPct,
-          p_observaciones: observacionesFinal,
-          p_condiciones_pago: condicionesPago || null,
-          p_tiempo_entrega_nota: tiempoEntregaNota || null,
-          p_items: carrito.map((i) =>
-            i.tipo === "servicio"
-              ? {
-                  servicio_id: i.servicio_id,
-                  cantidad: i.cantidad,
-                  precio_unitario: i.precio_unitario,
-                }
-              : {
-                  producto_id: i.producto_id,
-                  cantidad: i.cantidad,
-                  precio_unitario: i.precio_unitario,
-                },
-          ),
-          p_cuentas_ids: cuentasLimpias,
-          // Solo pasar ot_id si la pre-carga validó (anti privilege escalation).
-          p_ot_id: otIdValido || null,
-        },
-      );
+      const { error: rpcErr } = await supabase.rpc("fn_registrar_cotizacion", {
+        p_sede_id: perfil.sede_id,
+        p_cliente_nombre: clienteNombre || null,
+        p_cliente_nit: clienteNit || null,
+        p_cliente_email: clienteEmail || null,
+        p_cliente_telefono: clienteTelefono || null,
+        // B4: descuento ahora en $ (el % legado se manda en 0).
+        p_descuento_pct: 0,
+        p_descuento_valor: descuento,
+        p_domicilio: Math.max(0, domicilio),
+        p_vigencia_dias: vigenciaDias,
+        p_iva_pct: ivaPct,
+        p_observaciones: observacionesFinal,
+        p_condiciones_pago: condicionesPago || null,
+        p_tiempo_entrega_nota: tiempoEntregaNota || null,
+        p_items: carrito.map((i) =>
+          i.tipo === "servicio"
+            ? {
+                servicio_id: i.servicio_id,
+                cantidad: i.cantidad,
+                precio_unitario: i.precio_unitario,
+              }
+            : {
+                producto_id: i.producto_id,
+                cantidad: i.cantidad,
+                precio_unitario: i.precio_unitario,
+              },
+        ),
+        p_cuentas_ids: cuentasLimpias,
+        p_ot_id: null,
+      });
       if (rpcErr) throw new Error(rpcErr.message);
 
       // Bloque 0 #2: guardar/reutilizar cliente para el autocompletado. NO toca
@@ -452,26 +413,6 @@ export default function CotizacionNueva() {
         });
       }
 
-      // Si está vinculada a una OT, COPIAR los ítems cotizados al detalle de la
-      // OT (los triggers descuentan stock y suman al total OT).
-      if (otIdValido && rpcData?.cotizacion_id) {
-        const { error: copyErr } = await supabase.rpc(
-          "fn_asociar_cotizacion_a_ot",
-          {
-            p_cotizacion_id: rpcData.cotizacion_id,
-            p_ot_id: otIdValido,
-          },
-        );
-        if (copyErr) {
-          console.warn("[CotizacionNueva] No se copiaron items a OT:", copyErr);
-          setError(
-            `Cotización creada (#${rpcData.numero}), pero no se pudieron copiar los repuestos a la OT: ${copyErr.message}`,
-          );
-          return;
-        }
-        navigate(`/ops/ordenes/${otIdValido}`);
-        return;
-      }
       navigate("/ops/cotizaciones");
     } catch (e) {
       setError(safeError(e, "Error al guardar la cotización"));
@@ -527,7 +468,6 @@ export default function CotizacionNueva() {
             >
               {perfil?.sede_id ?? "—"}
             </b>
-            {otIdValido ? " · vinculada a OT" : ""}
           </p>
         </div>
         <button
