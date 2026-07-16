@@ -10,6 +10,7 @@ import {
   garantiaEstadoLabel,
   garantiaEstadoPillClass,
   resolucionPillClass,
+  resolucionLabel,
 } from "../../../lib/garantias-ui";
 
 /**
@@ -80,11 +81,16 @@ export default function GarantiasIndex() {
         tab === "compra"
           ? (g.compra?.proveedor ?? "")
           : (g.venta?.cliente_nombre ?? g.orden?.cliente_nombre ?? "");
+      // Se busca contra la etiqueta visible ("Devolver dinero") y también
+      // contra el valor crudo ("devolver_dinero"): antes solo miraba el crudo,
+      // así que escribir lo que se ve en pantalla no encontraba nada.
       const reso = g.resolucion ?? "";
+      const resoLabel = resolucionLabel(g.resolucion);
       return (
         num.includes(needle) ||
         nombre.toLowerCase().includes(needle) ||
-        reso.toLowerCase().includes(needle)
+        reso.toLowerCase().includes(needle) ||
+        resoLabel.toLowerCase().includes(needle)
       );
     });
   }, [items, busqueda, tab]);
@@ -405,7 +411,7 @@ function GarantiaFila({ g, tab, onClick }) {
       <Td>
         <span className={resolucionPillClass(g.resolucion)}>
           <span className="dot" />
-          {g.resolucion ?? "—"}
+          {resolucionLabel(g.resolucion)}
         </span>
       </Td>
       {tab === "venta" && (
@@ -450,7 +456,8 @@ function GarantiaCard({ g, tab, onClick }) {
             {nombreOrigen(g, tab)}
           </p>
           <p className="mt-0.5 text-[11px]" style={{ color: "var(--n-500)" }}>
-            {origenPill(g, tab)} · {g.resolucion} · {formatDate(g.fecha)}
+            {origenPill(g, tab)} · {resolucionLabel(g.resolucion)} ·{" "}
+            {formatDate(g.fecha)}
           </p>
           {tab === "venta" && g.monto_devuelto != null && (
             <p

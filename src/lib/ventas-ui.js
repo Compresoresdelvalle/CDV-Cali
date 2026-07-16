@@ -7,12 +7,18 @@
  */
 
 /** Métodos de pago reales (columna ventas.metodo_pago). */
+// Valores REALES en `ventas.metodo_pago` (verificado en producción):
+// Efectivo, Transferencia, Abonos OT, Tarjeta, Mixto, Crédito.
+// 'Abonos OT' y 'Mixto' faltaban aquí, así que 39 ventas no se podían filtrar
+// por chip: solo aparecían dentro de "Todos".
 export const METODOS_PAGO_VENTA = [
   "Todos",
   "Efectivo",
   "Transferencia",
   "Tarjeta",
+  "Mixto",
   "Crédito",
+  "Abonos OT",
 ];
 
 /**

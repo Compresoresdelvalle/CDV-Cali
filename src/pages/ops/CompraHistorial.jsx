@@ -59,7 +59,10 @@ export default function CompraHistorial() {
              total, recibida, estado, es_caja_menor, concepto,
              registrador:registrado_por(nombre)`,
           )
+          // Desempate obligatorio: sin él, el "Cargar más" puede repetir o
+          // saltar compras que comparten la misma fecha.
           .order("fecha", { ascending: false })
+          .order("numero", { ascending: false })
           .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
         if (perfil?.rol !== "Admin")
