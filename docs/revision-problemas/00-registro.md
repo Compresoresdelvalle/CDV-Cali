@@ -339,7 +339,6 @@ Auditoría multi-agente (34 agentes). 27 hallazgos confirmados (2 P0, 12 P1 dedu
 
 - **S4-D1** APLICADO (opción A): se crearon filas de inventario en 0 (Agotado) para los 509 productos activos sin existencias, en las 4 sedes (2.036 filas nuevas). Verificado: 0 productos activos sin inventario. Sección 4 cerrada por completo.
 
-
 ---
 
 ## Sección 5 — Cotizaciones (2026-07-16)
@@ -347,6 +346,7 @@ Auditoría multi-agente (34 agentes). 27 hallazgos confirmados (2 P0, 12 P1 dedu
 Auditoría multi-agente (36 agentes; primera corrida cortada por límite de sesión, reanudada desde caché). 29 hallazgos confirmados (mucha duplicación entre cazadores). Realidad del módulo: **casi no se usa** — 18 cotizaciones, 1 conversión histórica, **0 abonos**, 0 líneas no-vendibles. La mayoría de "P0" eran huecos latentes, no pérdidas reales.
 
 ### Backend (8 migraciones `s5_cotizaciones_*` aplicadas y verificadas en prod)
+
 - **COT-A** `fn_anular_venta` ahora limpia `cotizaciones.venta_id` → la cotización se puede reconvertir. + fix del único caso real: cotización #7 (venta #51 anulada) liberada. Bloqueadas restantes = 0.
 - **COT-B** REVOKE INSERT/UPDATE/DELETE a authenticated/anon en cotizaciones/detalle_cotizacion/abonos_cotizacion/cotizacion_cuentas_bancarias (patrón S1-01/S3-02). Verificado: el frontend no escribe directo.
 - **COT-C** guarda de rol Admin/Vendedor en fn_registrar/editar/convertir/cambiar_estado_cotizacion (antes solo validaban sede → Bodeguero/Técnico podían operar).
@@ -355,6 +355,7 @@ Auditoría multi-agente (36 agentes; primera corrida cortada por límite de sesi
 - **COT-L** cron `cotizaciones-vencidas-diario` (06:00 UTC = 01:00 Bogotá) para `fn_marcar_cotizaciones_vencidas` (solo borrador/enviada vencidas → 'vencida'; no toca aprobada/rechazada).
 
 ### Frontend (aplicado, lint + build OK)
+
 - **COT-H** `CotizacionEditar` filtra `vendible=true` en búsqueda y QR (Nueva ya lo hacía).
 - **COT-I** guardas síncronas (ref) anti doble-submit en registrar/eliminar abono.
 - **COT-J** Historial: "Cargar más" ya no se oculta al escribir texto de búsqueda.
@@ -362,7 +363,25 @@ Auditoría multi-agente (36 agentes; primera corrida cortada por límite de sesi
 - **UX** botón "Convertir en venta" oculto en cotizaciones vinculadas a OT (evita doble cobro).
 
 ### Código viejo eliminado (autorizado, verificado muerto)
+
 - Flujo huérfano "Fase 10" `?ot_id=` en `CotizacionNueva.jsx`: ningún punto de la app navega con ese parámetro. Se borró el bloque (otIdParam/otIdValido/useEffect precarga/llamada a `fn_asociar_cotizacion_a_ot`/label). Backend: `DROP FUNCTION fn_asociar_cotizacion_a_ot` (0 referencias en BD). **NO se tocó** la columna `cotizaciones.ot_id` ni la visualización del enlace OT en Historial/Detalle (3 filas históricas).
 
 ### DIFERIDO — decisión del dueño (riesgo actual = 0, abonos_cotizacion=0 filas)
+
 - **COT-D + COT-E**: los abonos de cotización no entran a `_fn_cierre_totales`, y al convertir el método de pago es binario (Efectivo/Crédito) ignorando el método real. El patrón de abonos de OT NO es trasladable directo (la venta de cotización es `origen='directa'` y SÍ se cuenta completa en el cierre → espejarlo duplicaría el conteo, el mismo problema de la Sección 3). Diseño correcto: **Opción 2** — que `fn_convertir_cotizacion` cree pagos con el método real y deje la venta que el cierre capte por la maquinaria de cobros (requiere frontend: capturar pago al convertir). Se relaciona con S3-05 (también diferido).
+
+---
+
+## S3-05 / COT-D-E — RESUELTO (2026-07-16)
+
+La deuda diferida en las Secciones 3 y 5 (anticipos de cotización invisibles para el Cierre + método de pago binario al convertir) quedó resuelta con el diseño "el dinero cuenta el día que entra":
+
+### Backend (3 migraciones `s5_cot_de_s305_*`, probadas: regresión byte-idéntica en 4 rangos + 22/22 aserciones en 6 escenarios)
+
+- **`fn_convertir_cotizacion(p_cotizacion_id, p_pago_metodo=null, p_pago_cuenta_bancaria=null)`** (retrocompatible): la venta SIEMPRE nace a 'Crédito' (su total nunca entra al cierre el día de conversión); si el cliente paga el saldo en el acto, se registra el cobro real en `pagos_cuenta` con su método (cuenta bancaria obligatoria para electrónicos). Devuelve `abonado` y `saldo_pendiente`. Si está 100% abonada se ignora el pago.
+- **`_fn_cierre_totales`**: `abonos_cotizacion` visible en TODOS los bloques (ingresos_productos, por_sede, por_metodo_pago, por_sede_metodo, por_cuenta, arqueo_esperado), el día real del abono con su método real. Sin doble conteo (la venta convertida es Crédito). Sin filas anuladas que excluir (`fn_eliminar_abono_cotizacion` es DELETE físico).
+- Verificado sin cambios necesarios: `v_cuentas_por_cobrar` ya resta abonos_cotizacion + pagos_cuenta; `fn_anular_venta` (COT-A) ya anula pagos y libera la cotización.
+
+### Frontend (`ConvertirCotizacionModal.jsx`, lint + build OK)
+
+- Nuevo modal al convertir (Detalle e Historial): muestra total / ya abonado / saldo y pregunta cómo paga el cliente el saldo (Efectivo / Transferencia+cuenta / Tarjeta / Crédito). Si está 100% abonada lo indica. Reemplaza el confirm simple.

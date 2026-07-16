@@ -20,8 +20,8 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
 import { MARCA } from "../../lib/pdf/pdfStyles";
-import { useConfirm } from "../../components/ui/ConfirmDialog";
 import EstadoCotizacionPanel from "../../components/cotizaciones/EstadoCotizacionPanel";
+import ConvertirCotizacionModal from "../../components/cotizaciones/ConvertirCotizacionModal";
 import { useAuthStore } from "../../stores/authStore";
 import {
   cotizacionEstadoLabel,
@@ -36,7 +36,6 @@ export default function CotizacionDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const { confirm, ConfirmDialog } = useConfirm();
   const [cotizacion, setCotizacion] = useState(null);
   const [items, setItems] = useState([]);
   const [cuentasPDF, setCuentasPDF] = useState([]);
@@ -44,9 +43,9 @@ export default function CotizacionDetalle() {
   const [abonos, setAbonos] = useState([]);
   const [otrasCotizaciones, setOtrasCotizaciones] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [convirtiendo, setConvirtiendo] = useState(false);
+  const [convirtiendo] = useState(false);
+  const [modalConvertir, setModalConvertir] = useState(false);
   const [error, setError] = useState(null);
-  const convirtiendoRef = useRef(false);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -161,37 +160,9 @@ export default function CotizacionDetalle() {
     }
   };
 
-  const convertirEnVenta = async () => {
-    // Guard síncrono: el `await confirm` abre una ventana donde el `disabled`
-    // de React aún no aplica — un doble-tap dispararía dos conversiones.
-    if (convirtiendoRef.current) return;
-    convirtiendoRef.current = true;
-    const ok = await confirm({
-      titulo: "Convertir cotización en venta",
-      mensaje: `Se generará una venta a partir de la cotización #${cotizacion?.numero ?? "?"} por ${formatCOP(cotizacion?.total ?? 0)}. Esta acción descuenta stock del inventario y NO se puede deshacer fácilmente.`,
-      confirmLabel: "Sí, convertir",
-      danger: true,
-    });
-    if (!ok) {
-      convirtiendoRef.current = false;
-      return;
-    }
-    setConvirtiendo(true);
-    setError(null);
-    try {
-      const { data, error: rpcErr } = await supabase.rpc(
-        "fn_convertir_cotizacion",
-        { p_cotizacion_id: id },
-      );
-      if (rpcErr) throw new Error(rpcErr.message);
-      navigate(`/ops/ventas/${data.venta_id}`);
-    } catch (e) {
-      setError(safeError(e, "Error al convertir la cotización"));
-    } finally {
-      setConvirtiendo(false);
-      convirtiendoRef.current = false;
-    }
-  };
+  // S3-05 / COT-D-E: la conversión captura el pago del saldo en un modal
+  // dedicado (la venta nace a Crédito; el dinero cuenta el día que entra).
+  const convertirEnVenta = () => setModalConvertir(true);
 
   if (loading) {
     return (
@@ -244,7 +215,13 @@ export default function CotizacionDetalle() {
         onVolver={() => navigate("/ops/cotizaciones")}
         onRefrescar={cargar}
       />
-      <ConfirmDialog />
+      {modalConvertir && (
+        <ConvertirCotizacionModal
+          cotizacion={cotizacion}
+          onClose={() => setModalConvertir(false)}
+          onDone={(ventaId) => navigate(`/ops/ventas/${ventaId}`)}
+        />
+      )}
     </>
   );
 }
