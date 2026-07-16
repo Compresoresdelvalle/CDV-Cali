@@ -10,16 +10,19 @@
  */
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, List, LayoutGrid, X, Wrench, Lock } from "lucide-react";
+import { Plus, List, LayoutGrid, Wrench, Lock } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
-import { parseRangoFecha, coincideRangoFecha } from "../../lib/busquedaFecha";
+import { rangoBogota, esNumeroPuro } from "../../lib/filtros";
+import { useFiltros } from "../../hooks/useFiltros";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
 import PageHeader from "../../components/layout/PageHeader";
 import {
   estadoEstilo,
   ESTADO_LABEL,
   pasoActual,
+  otCerrada,
   calcularMontos,
   OT_DIAS_VENCIDA,
   SEDE_LABEL,
@@ -38,6 +41,12 @@ const ESTADOS_FLUJO = [
   "entregada",
 ];
 
+// `cancelada` comparte el paso 6 con `entregada`, pero NO es lo mismo: son OT
+// anuladas. Mezclarlas hacía que las anuladas (11 en producción) se leyeran
+// como entregadas en el filtro y en la columna "Entrega" del tablero.
+const GRUPO_ANULADA = "cancelada";
+const GRUPOS_TABLERO = [...ESTADOS_FLUJO, GRUPO_ANULADA];
+
 // Estado real (incl. legacy) → grupo del flujo, usando el índice de paso.
 const PASO_A_GRUPO = [
   "recepcion", // 0
@@ -50,8 +59,25 @@ const PASO_A_GRUPO = [
 ];
 
 function grupoDeEstado(estado) {
-  // cancelada → paso 6 pero la tratamos como "entregada"/cerrada en el filtro.
+  if (estado === "cancelada") return GRUPO_ANULADA;
   return PASO_A_GRUPO[pasoActual({ estado })] ?? "recepcion";
+}
+
+// Opciones de los filtros — valores REALES (enum estado_orden / sede_id).
+const ESTADO_OPCIONES = GRUPOS_TABLERO.map((v) => ({
+  v,
+  l: ESTADO_LABEL[v] ?? v,
+}));
+const SEDE_OPCIONES = Object.entries(SEDE_LABEL).map(([v, l]) => ({ v, l }));
+
+/** ¿La fecha (timestamptz de la fila) cae dentro del rango de Bogotá? */
+function dentroDeRango(fecha, rango) {
+  if (!rango) return true;
+  const t = Date.parse(fecha);
+  if (Number.isNaN(t)) return false;
+  if (rango.desde && t < Date.parse(rango.desde)) return false;
+  if (rango.hasta && t > Date.parse(rango.hasta)) return false;
+  return true;
 }
 
 // Días en taller: entero desde `fecha` hasta hoy.
@@ -72,8 +98,53 @@ export default function OrdenHistorial() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [view, setView] = useState("lista"); // 'lista' | 'kanban'
-  const [q, setQ] = useState("");
-  const [estado, setEstado] = useState("todos");
+
+  const esAdmin = perfil?.rol === "Admin";
+
+  // Filtros reales y cruzables (fecha + texto + estado + sede a la vez).
+  // OJO: el match es EN MEMORIA a propósito — esta pantalla carga todas las OT
+  // (~103) porque el Kanban necesita cada fila para contar sus columnas y
+  // total/saldo se calculan en el cliente con `calcularMontos`. Por eso no se
+  // usa `f.aplicar()`: `estado` filtra por GRUPO del flujo (p.ej. "terminada"
+  // cubre terminada + completada + pendiente_recogida legacy), que no es el
+  // valor crudo de la columna y no se puede mandar tal cual al servidor.
+  const campos = useMemo(
+    () => [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        columnas: ["cliente_nombre", "equipo_descripcion", "equipo_serie"],
+        numericoA: "numero",
+        debounce: 400,
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "estado",
+        tipo: "opciones",
+        label: "Estado",
+        opciones: ESTADO_OPCIONES,
+      },
+      {
+        id: "sede",
+        tipo: "opciones",
+        label: "Sede",
+        columna: "sede_id",
+        opciones: SEDE_OPCIONES,
+        visible: esAdmin,
+      },
+    ],
+    [esAdmin],
+  );
+
+  const f = useFiltros({ clave: "ot-historial", campos });
+  const fv = f.valoresAplicados;
 
   useEffect(() => {
     let activo = true;
@@ -125,7 +196,10 @@ export default function OrdenHistorial() {
       const { total, saldo } = calcularMontos(o, null, abonosPorOt[o.id] ?? []);
       const dias = diasEnTaller(o.fecha);
       const grupo = grupoDeEstado(o.estado);
-      const entregada = grupo === "entregada";
+      // Cerrada = entregada O anulada. Antes bastaba con `grupo === "entregada"`
+      // porque las anuladas caían en ese grupo; ahora que van aparte hay que
+      // preguntarlo explícito o una OT anulada se marcaría como "Vencida".
+      const cerrada = otCerrada(o);
       const propia = puedeManipular(perfil, o);
       return {
         ...o,
@@ -133,28 +207,39 @@ export default function OrdenHistorial() {
         _saldo: saldo,
         _dias: dias,
         _grupo: grupo,
-        _vencida: !entregada && dias > OT_DIAS_VENCIDA,
+        _vencida: !cerrada && dias > OT_DIAS_VENCIDA,
         _propia: propia,
       };
     });
   }, [ordenes, abonosPorOt, perfil]);
 
-  // Si lo escrito es una fecha (dd/mm/aaaa, mm/aaaa, dd/mm) se filtra por fecha;
-  // si no, por texto. Como aquí se cargan todas las OT, el match es en memoria.
-  const rangoFecha = useMemo(() => parseRangoFecha(q), [q]);
+  // La fecha ya no se teclea en el buscador: es su propio campo y se CRUZA con
+  // los demás. Antes escribir una fecha ignoraba el texto (era `return`, no
+  // `&&`), así que fecha + cliente nunca se pudieron combinar.
+  const rangoFecha = useMemo(
+    () => rangoBogota(fv.rango?.desdeDia, fv.rango?.hastaDia),
+    [fv.rango?.desdeDia, fv.rango?.hastaDia],
+  );
 
   const filtradas = useMemo(() => {
-    const needle = q.trim().toLowerCase();
+    const texto = (fv.q ?? "").trim();
+    const numero = esNumeroPuro(texto);
+    const needle = texto.toLowerCase();
     return enriquecidas.filter((o) => {
-      if (estado !== "todos" && o._grupo !== estado) return false;
-      if (rangoFecha) return coincideRangoFecha(o.fecha, rangoFecha);
-      if (!needle) return true;
+      // Todos los filtros son AND: se cruzan fecha + texto + estado + sede.
+      if (fv.estado && o._grupo !== fv.estado) return false;
+      if (fv.sede && o.sede_id !== fv.sede) return false;
+      if (!dentroDeRango(o.fecha, rangoFecha)) return false;
+      if (!texto) return true;
+      // "873" es ESA OT, no todo lo que contenga 873 — mismo criterio que
+      // `aplicarTexto` usa contra el servidor en las demás pantallas.
+      if (numero != null) return o.numero === numero;
       const hay = `${o.cliente_nombre ?? ""} ${o.equipo_descripcion ?? ""} ${
         o.equipo_serie ?? ""
       }`.toLowerCase();
       return hay.includes(needle);
     });
-  }, [enriquecidas, q, estado, rangoFecha]);
+  }, [enriquecidas, fv.q, fv.estado, fv.sede, rangoFecha]);
 
   const open = (id) => navigate(`/ops/ordenes/${id}`);
   const sedeLabel = SEDE_LABEL[perfil?.sede_id] ?? perfil?.sede_id ?? "tu sede";
@@ -204,63 +289,30 @@ export default function OrdenHistorial() {
         </div>
       )}
 
-      {/* Filtros: búsqueda + estado */}
-      <div className="flex flex-wrap items-center gap-2.5">
-        <div
-          className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-xl border px-3.5"
-          style={{
-            borderColor: "hsl(var(--border))",
-            backgroundColor: "hsl(var(--card))",
-          }}
+      {/* Filtros reales y cruzables: texto + fecha + estado + sede */}
+      <BarraFiltros
+        filtros={f}
+        placeholder="Buscar por N° de OT, cliente, equipo o serie…"
+      />
+
+      {/* Contador honesto: como aquí se cargan TODAS las OT, `filtradas.length`
+          ya es el total real del filtro, no "lo que alcanzó a cargar". */}
+      {!loading && (
+        <p
+          className="text-xs"
+          style={{ color: "hsl(var(--muted-foreground))" }}
         >
-          <Search
-            className="h-4 w-4 shrink-0"
-            strokeWidth={1.6}
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          />
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por cliente, equipo, serie o fecha (23/06/2026)…"
-            className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
-            style={{ color: "hsl(var(--foreground))" }}
-          />
-          {q && (
-            <button
-              onClick={() => setQ("")}
-              aria-label="Limpiar búsqueda"
-              className="grid h-6 w-6 place-items-center rounded"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              <X className="h-4 w-4" strokeWidth={1.8} />
-            </button>
-          )}
-        </div>
-        <select
-          value={estado}
-          onChange={(e) => setEstado(e.target.value)}
-          className="h-12 rounded-xl border px-3 text-sm font-medium outline-none"
-          style={{
-            borderColor: "hsl(var(--border))",
-            backgroundColor: "hsl(var(--card))",
-            color: "hsl(var(--foreground))",
-          }}
-        >
-          <option value="todos">Todos los estados</option>
-          {ESTADOS_FLUJO.map((e) => (
-            <option key={e} value={e}>
-              {ESTADO_LABEL[e] ?? e}
-            </option>
-          ))}
-        </select>
-      </div>
+          {f.hayFiltros
+            ? `${filtradas.length} de ${enriquecidas.length} ${enriquecidas.length === 1 ? "orden" : "órdenes"}`
+            : `${enriquecidas.length} ${enriquecidas.length === 1 ? "orden" : "órdenes"}`}
+        </p>
+      )}
 
       {/* Contenido */}
       {loading ? (
         <Skeleton view={view} />
       ) : filtradas.length === 0 ? (
-        <Empty filtro={q || estado !== "todos"} />
+        <Empty filtro={f.hayFiltros} />
       ) : view === "lista" ? (
         <ListView rows={filtradas} onOpen={open} />
       ) : (
@@ -282,12 +334,13 @@ function ViewToggle({ view, setView }) {
       className="flex items-center gap-0.5 rounded-xl p-1"
       style={{ backgroundColor: "hsl(var(--muted) / 0.5)" }}
     >
-      {opciones.map(({ v, label, Icon }) => {
-        const on = view === v;
+      {opciones.map((op) => {
+        const on = view === op.v;
+        const Icono = op.Icon;
         return (
           <button
-            key={v}
-            onClick={() => setView(v)}
+            key={op.v}
+            onClick={() => setView(op.v)}
             className="inline-flex items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors"
             style={{
               height: 40,
@@ -300,8 +353,8 @@ function ViewToggle({ view, setView }) {
                 : "none",
             }}
           >
-            <Icon className="h-4 w-4" />
-            <span className="hidden sm:inline">{label}</span>
+            <Icono className="h-4 w-4" />
+            <span className="hidden sm:inline">{op.label}</span>
           </button>
         );
       })}
@@ -614,9 +667,17 @@ function OrdenCard({ orden: o, onClick }) {
 /* ─────────────────────────── Vista kanban ─────────────────────────────── */
 
 function KanbanView({ rows, onOpen }) {
+  // Las anuladas no son parte del flujo de trabajo, así que su columna solo
+  // aparece cuando hay alguna que mostrar. Sin esto, filtrar por "Anulada"
+  // pintaba el tablero ENTERO vacío ("Sin OT" en las 7 columnas) mientras el
+  // contador decía 11: el filtro existía pero el tablero no tenía dónde
+  // ponerlas.
+  const columnas = rows.some((r) => r._grupo === GRUPO_ANULADA)
+    ? GRUPOS_TABLERO
+    : ESTADOS_FLUJO;
   return (
     <div className="flex gap-3.5 overflow-x-auto pb-2">
-      {ESTADOS_FLUJO.map((grupo) => {
+      {columnas.map((grupo) => {
         const items = rows.filter((r) => r._grupo === grupo);
         const s = estadoEstilo(grupo);
         return (

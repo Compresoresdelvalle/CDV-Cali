@@ -14,6 +14,42 @@ export const RECIBOS_TABS = [
 ];
 
 /**
+ * Tipos reales de recibo para el filtro del historial. No son una columna: se
+ * derivan de los vínculos (cotizacion_id / orden_id), igual que {@link reciboTipo}.
+ * `v: ""` = sin filtrar.
+ */
+export const RECIBOS_TIPOS = [
+  { v: "", label: "Todos" },
+  { v: "cot", label: "Por cotización" },
+  { v: "ot", label: "Vinculado a OT" },
+  { v: "manual", label: "Manual" },
+];
+
+/**
+ * Aplica el filtro de tipo a un query builder de supabase-js, SERVER-SIDE.
+ *
+ * El tipo no vive en una columna, así que se traduce a la misma condición que
+ * usa {@link reciboTipo} para leerlo: 'ot' exige orden sin cotización, porque un
+ * recibo con ambas se muestra como "Por cotización" y contarlo en los dos lados
+ * descuadraría el filtro.
+ *
+ * @template Q
+ * @param {Q} q Query builder.
+ * @param {""|"cot"|"ot"|"manual"} tipo
+ * @returns {Q}
+ */
+export function aplicarTipoRecibo(q, tipo) {
+  if (tipo === "cot") return q.not("cotizacion_id", "is", null);
+  if (tipo === "ot") {
+    return q.is("cotizacion_id", null).not("orden_id", "is", null);
+  }
+  if (tipo === "manual") {
+    return q.is("cotizacion_id", null).is("orden_id", null);
+  }
+  return q;
+}
+
+/**
  * Métodos de pago reales del recibo (columna recibos.metodo_pago) para el
  * <select> del formulario. Reales: 'efectivo' | 'transferencia' | 'tarjeta' |
  * 'otro'.

@@ -4,6 +4,10 @@ import { applyKeywordSearch } from "../lib/search";
 
 const PAGE_SIZE = 50;
 
+// Tope de la pre-query de texto (ver `fetchInventario`). Si el texto empata con
+// más productos que esto, el listado es un recorte: hay que decirlo, no callarlo.
+const PRE_QUERY_CAP = 500;
+
 // Token de versión global: cada fetch toma uno; los resultados de fetches
 // obsoletos (el usuario cambió filtros/búsqueda mientras una query iba lenta)
 // se descartan al volver.
@@ -16,6 +20,11 @@ export const useInventarioStore = create((set, get) => ({
   hasMore: true,
   page: 0,
   error: null,
+  // Total REAL del filtro en el servidor (count: 'exact'), no lo ya cargado.
+  total: null,
+  // true cuando la búsqueda de texto empató con más de PRE_QUERY_CAP productos
+  // y el listado quedó recortado: la UI debe avisar en vez de fingir totalidad.
+  truncado: false,
 
   // Filtros — #34: multi-selección. Arrays vacíos = sin filtro (todos).
   filtroSede: [], // string[] de IDs de sede
@@ -42,6 +51,8 @@ export const useInventarioStore = create((set, get) => ({
       page: 0,
       hasMore: true,
       error: null,
+      total: null,
+      truncado: false,
     })),
 
   // Solo actualiza el texto de búsqueda, sin resetear items
@@ -84,11 +95,14 @@ export const useInventarioStore = create((set, get) => ({
       const busquedaRaw = s.filtroBusqueda.trim();
       const necesitaPreFiltro = !!busquedaRaw;
       if (necesitaPreFiltro) {
+        // `count: 'exact'` devuelve cuántos productos empata el texto EN TOTAL,
+        // aunque `.limit()` solo traiga los primeros: así sabemos si el listado
+        // quedó recortado en vez de fingir que ya está todo (S4-02).
         let pq = supabase
           .from("productos")
-          .select("id")
+          .select("id", { count: "exact" })
           .eq("activo", true)
-          .limit(500);
+          .limit(PRE_QUERY_CAP);
         if (busquedaRaw) {
           // #32: cada palabra debe aparecer en alguna de estas columnas.
           pq = applyKeywordSearch(pq, busquedaRaw, [

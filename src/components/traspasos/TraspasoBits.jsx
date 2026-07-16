@@ -116,7 +116,7 @@ export function Pill({ kind, label }) {
 }
 
 /** Badge "Garantía" (tipo devolucion_garantia). */
-export function BadgeGarantia({ compact = false }) {
+export function BadgeGarantia() {
   return (
     <span
       className="ml-1 inline-flex items-center gap-1 rounded-[5px] border px-1.5 py-[1px] text-[10px] font-semibold uppercase tracking-[0.04em]"

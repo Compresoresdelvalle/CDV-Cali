@@ -1,9 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Undo2, ArrowLeftCircle } from "lucide-react";
+import { Plus, Undo2, ArrowLeftCircle } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate } from "../../lib/utils";
+import { useFiltros } from "../../hooks/useFiltros";
+import { useSedes } from "../../hooks/useSedes";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
+import { esNumeroPuro } from "../../lib/filtros";
+import { keywordTerms } from "../../lib/search";
 import {
   DEVOLUCIONES_SUBFILTROS,
   subfiltroToEstado,
@@ -16,6 +21,16 @@ import {
 
 const PAGE_SIZE = 20;
 
+const COLS = `id, numero, fecha, reingresa_stock, cantidad, motivo, estado, venta_id,
+   producto:producto_id(nombre, referencia),
+   registrador:registrado_por(nombre),
+   venta:venta_id(numero)`;
+
+// Tope de productos que se resuelven para la búsqueda por nombre/referencia.
+// Los ids viajan dentro de la URL del `or=(...)`, así que no puede ser enorme;
+// una búsqueda de producto que empate con más de 100 no está buscando nada.
+const PRODUCTOS_MATCH_MAX = 100;
+
 // Pestañas de tipo. El diseño Lovable usa tabs duales cliente/proveedor; aquí
 // se mapean directamente a la columna real `reingresa_stock` (true=cliente).
 const TIPO_TABS = [
@@ -26,96 +41,174 @@ const TIPO_TABS = [
 export default function DevolucionHistorial() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
+  const esAdmin = perfil?.rol === "Admin";
+
+  const { sedes } = useSedes();
 
   const [devoluciones, setDevoluciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("cliente");
   const [subfiltro, setSubfiltro] = useState("Todas");
-  const [busqueda, setBusqueda] = useState("");
   const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [pendientes, setPendientes] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
-  // Token de secuencia: descarta respuestas obsoletas (cambio de filtro
-  // mientras hay una carga en vuelo) para no mezclar resultados.
-  const reqIdRef = useRef(0);
+  const pendReqRef = useRef(0);
+  // Cache del último "texto → ids de producto": el listado y el contador de
+  // pendientes usan el mismo término y no tiene sentido resolverlo dos veces.
+  const idsCacheRef = useRef({ texto: null, ids: [] });
 
   const reingresa = tab === "cliente";
 
+  // Los campos se MEMOIZAN: `useFiltros` deriva `valoresAplicados` de ellos y,
+  // si el array se recreara en cada render, el efecto de carga entraría en bucle.
+  const campos = useMemo(
+    () => [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        // Sin `columnas`: el texto se aplica a mano (ver `aplicarTexto`), porque
+        // nombre y referencia del producto viven en otra tabla y hay que
+        // resolverlos a `producto_id` antes de poder cruzarlos con `motivo`.
+        debounce: 400,
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "sede",
+        tipo: "opciones",
+        label: "Sede",
+        columna: "sede_id",
+        // Solo Admin: a los demás la RLS ya los ata a su sede.
+        visible: esAdmin,
+        opciones: sedes.map((s) => ({ v: s.id, l: s.nombre })),
+      },
+    ],
+    [esAdmin, sedes],
+  );
+
+  const f = useFiltros({ clave: "devoluciones", campos });
+  const texto = (f.valoresAplicados.q ?? "").trim();
+
+  /** Ids de productos que empatan con el texto (todas las palabras). */
+  const buscarProductoIds = async (raw) => {
+    if (idsCacheRef.current.texto === raw) return idsCacheRef.current.ids;
+    let q = supabase.from("productos").select("id");
+    for (const term of keywordTerms(raw)) {
+      q = q.or(`nombre.ilike.%${term}%,referencia.ilike.%${term}%`);
+    }
+    const { data, error } = await q.limit(PRODUCTOS_MATCH_MAX);
+    const ids = error ? [] : (data ?? []).map((p) => p.id);
+    idsCacheRef.current = { texto: raw, ids };
+    return ids;
+  };
+
+  /**
+   * Búsqueda SERVER-SIDE. Antes filtraba en memoria sobre la página cargada, así
+   * que el operario veía "sin resultados" sobre devoluciones que sí existían.
+   *
+   * `numero` es integer: un ilike contra él revienta en Postgres, así que un
+   * término numérico puro busca ESA devolución. Para el resto, cada palabra debe
+   * aparecer en el motivo, en las observaciones o en el producto.
+   */
+  const aplicarTexto = async (query, raw) => {
+    if (!raw) return query;
+    const n = esNumeroPuro(raw);
+    if (n != null) return query.eq("numero", n);
+    const ids = await buscarProductoIds(raw);
+    let q = query;
+    for (const term of keywordTerms(raw)) {
+      const ors = [`motivo.ilike.%${term}%`, `observaciones.ilike.%${term}%`];
+      // Sin empates no se agrega la cláusula: `in.()` vacío es sintaxis inválida.
+      if (ids.length) ors.push(`producto_id.in.(${ids.join(",")})`);
+      q = q.or(ors.join(","));
+    }
+    return q;
+  };
+
+  /** Tipo + recorte por sede de los no-Admin + filtros de la barra. */
+  const aplicarBase = async (query) => {
+    let out = query.eq("reingresa_stock", reingresa);
+    if (!esAdmin) out = out.eq("sede_id", perfil?.sede_id);
+    out = f.aplicar(out);
+    return aplicarTexto(out, texto);
+  };
+
   const cargarDevoluciones = async (reset = false) => {
-    const myReq = ++reqIdRef.current;
+    const myReq = f.nuevoReqId();
     setLoading(true);
     setErrorMsg(null);
     const currentPage = reset ? 0 : page;
     try {
-      let query = supabase
-        .from("devoluciones")
-        .select(
-          `id, numero, fecha, reingresa_stock, cantidad, motivo, estado, venta_id,
-           producto:producto_id(nombre, referencia),
-           registrador:registrado_por(nombre),
-           venta:venta_id(numero)`,
-        )
-        .eq("reingresa_stock", reingresa)
+      let query = supabase.from("devoluciones").select(COLS, {
+        count: "exact",
+      });
+      query = await aplicarBase(query);
+      const estado = subfiltroToEstado(subfiltro);
+      if (estado) query = query.eq("estado", estado);
+      query = query
         // Desempate obligatorio: sin él, el "Cargar más" puede repetir o
         // saltar devoluciones que comparten la misma fecha.
         .order("fecha", { ascending: false })
         .order("numero", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
-      if (perfil?.rol !== "Admin") query = query.eq("sede_id", perfil?.sede_id);
-      const estado = subfiltroToEstado(subfiltro);
-      if (estado) query = query.eq("estado", estado);
-
-      const { data, error } = await query;
-      if (myReq !== reqIdRef.current) return; // respuesta obsoleta
+      const { data, error, count } = await query;
+      if (!f.esReqVigente(myReq)) return; // respuesta obsoleta
       if (error) throw error;
 
+      const filas = data ?? [];
       if (reset) {
-        setDevoluciones(data ?? []);
+        setDevoluciones(filas);
         setPage(1);
       } else {
-        setDevoluciones((prev) => [...prev, ...(data ?? [])]);
+        setDevoluciones((prev) => [...prev, ...filas]);
         setPage((p) => p + 1);
       }
-      setHasMore((data ?? []).length === PAGE_SIZE);
+      const totalReal = count ?? 0;
+      setTotal(totalReal);
+      setHasMore((currentPage + 1) * PAGE_SIZE < totalReal);
     } catch {
-      if (myReq === reqIdRef.current)
+      if (f.esReqVigente(myReq))
         setErrorMsg("No se pudieron cargar las devoluciones. Reintenta.");
     } finally {
-      if (myReq === reqIdRef.current) setLoading(false);
+      if (f.esReqVigente(myReq)) setLoading(false);
+    }
+  };
+
+  // El contador de pendientes se pregunta al servidor sobre TODO el filtro (sin
+  // el subfiltro de estado, que es justo lo que este número contesta): antes
+  // contaba solo las 20 filas cargadas y decía "0 pendientes" con la bodega llena.
+  const cargarPendientes = async () => {
+    const myReq = ++pendReqRef.current;
+    try {
+      let query = supabase
+        .from("devoluciones")
+        .select("id", { count: "exact", head: true });
+      query = await aplicarBase(query);
+      const { count, error } = await query.eq("estado", "pendiente");
+      if (myReq !== pendReqRef.current || error) return;
+      setPendientes(count ?? 0);
+    } catch {
+      // Un KPI que no carga no puede tumbar el listado.
     }
   };
 
   useEffect(() => {
     cargarDevoluciones(true);
+    cargarPendientes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subfiltro]);
+  }, [f.valoresAplicados, tab, subfiltro, esAdmin, perfil?.sede_id]);
 
-  // Búsqueda client-side sobre lo ya cargado (número, producto, motivo).
-  // Se añade sin tocar la paginación server-side ni los filtros de tipo/estado.
-  const filtradas = useMemo(() => {
-    const needle = busqueda.trim().toLowerCase();
-    if (!needle) return devoluciones;
-    return devoluciones.filter((d) => {
-      const num = `#${d.numero}`.toLowerCase();
-      const prod = (d.producto?.nombre ?? "").toLowerCase();
-      const ref = (d.producto?.referencia ?? "").toLowerCase();
-      const mot = (d.motivo ?? "").toLowerCase();
-      return (
-        num.includes(needle) ||
-        prod.includes(needle) ||
-        ref.includes(needle) ||
-        mot.includes(needle)
-      );
-    });
-  }, [devoluciones, busqueda]);
-
-  // Métricas honestas derivadas de lo cargado en vista (no inventadas).
   const enVista = devoluciones.length;
-  const pendientes = useMemo(
-    () => devoluciones.filter((d) => d.estado === "pendiente").length,
-    [devoluciones],
-  );
+  const filtrando = f.hayFiltros || subfiltro !== "Todas";
 
   return (
     <div className="flex h-full flex-col animate-fade-in">
@@ -145,14 +238,17 @@ export default function DevolucionHistorial() {
               "cargando…"
             ) : (
               <>
+                {/* El conteo es del FILTRO COMPLETO (count:'exact'), no de las
+                    filas cargadas: antes decía "en vista" y el operario lo leía
+                    como el total. */}
                 <b
                   className="font-mono font-medium"
                   style={{ color: "var(--n-700)" }}
                 >
-                  {enVista}
-                  {hasMore ? "+" : ""}
+                  {total}
                 </b>{" "}
-                {reingresa ? "de cliente" : "a proveedor"} en vista ·{" "}
+                {reingresa ? "de cliente" : "a proveedor"}
+                {filtrando ? " (filtro)" : ""} ·{" "}
                 <b className="font-medium" style={{ color: "var(--warn-700)" }}>
                   {pendientes} pendientes de validación
                 </b>
@@ -224,12 +320,14 @@ export default function DevolucionHistorial() {
         className="flex flex-wrap items-center gap-1.5 border-b px-4 py-3 sm:px-7"
         style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
       >
-        {DEVOLUCIONES_SUBFILTROS.map((f) => {
-          const active = subfiltro === f;
+        {/* `sf` y no `f`: el objeto de filtros ya se llama `f` en este scope y
+            reusar el nombre lo tapaba dentro del map. */}
+        {DEVOLUCIONES_SUBFILTROS.map((sf) => {
+          const active = subfiltro === sf;
           return (
             <button
-              key={f}
-              onClick={() => setSubfiltro(f)}
+              key={sf}
+              onClick={() => setSubfiltro(sf)}
               className="rounded-md border px-3 text-[12px] font-medium transition-colors"
               style={{
                 minHeight: 36,
@@ -246,47 +344,22 @@ export default function DevolucionHistorial() {
                   e.currentTarget.style.backgroundColor = "var(--n-0)";
               }}
             >
-              {f}
+              {sf}
             </button>
           );
         })}
       </div>
 
-      {/* ── Barra de búsqueda ───────────────────────────────────────── */}
+      {/* ── Barra de filtros ────────────────────────────────────────── */}
       <div
-        className="flex items-center gap-3 px-4 py-3 sm:px-7"
+        className="px-4 py-3 sm:px-7"
         style={{ backgroundColor: "var(--n-25)" }}
       >
-        <div
-          className="flex h-12 max-w-[560px] flex-1 items-center gap-2.5 rounded-lg border px-3.5"
-          style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
-        >
-          <Search
-            className="h-4 w-4 shrink-0"
-            strokeWidth={1.5}
-            style={{ color: "var(--n-500)" }}
-          />
-          <input
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por número, producto o motivo…"
-            className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
-            style={{ color: "var(--n-950)" }}
-          />
-        </div>
-        <span
-          className="ml-auto font-mono text-[11px] uppercase tracking-wider"
-          style={{ color: "var(--n-500)" }}
-        >
-          <b className="font-medium" style={{ color: "var(--n-700)" }}>
-            {filtradas.length}
-          </b>{" "}
-          de{" "}
-          <b className="font-medium" style={{ color: "var(--n-700)" }}>
-            {enVista}
-            {hasMore ? "+" : ""}
-          </b>
-        </span>
+        <BarraFiltros
+          filtros={f}
+          placeholder="Buscar por número, producto o motivo…"
+          legacy
+        />
       </div>
 
       {/* ── Contenido ───────────────────────────────────────────────── */}
@@ -307,16 +380,16 @@ export default function DevolucionHistorial() {
 
         {loading && enVista === 0 ? (
           <SkeletonList />
-        ) : filtradas.length === 0 ? (
+        ) : devoluciones.length === 0 ? (
           <EmptyState
-            filtrando={busqueda.trim().length > 0}
+            filtrando={filtrando}
             tipo={reingresa ? "de cliente" : "a proveedor"}
           />
         ) : (
           <>
             {/* Móvil/Tablet: cards (< md) */}
             <ul className="md:hidden space-y-2.5" role="list">
-              {filtradas.map((d) => (
+              {devoluciones.map((d) => (
                 <li key={d.id}>
                   <DevolucionCard devolucion={d} />
                 </li>
@@ -348,7 +421,7 @@ export default function DevolucionHistorial() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtradas.map((d) => (
+                    {devoluciones.map((d) => (
                       <DevolucionFila key={d.id} devolucion={d} />
                     ))}
                   </tbody>
@@ -365,12 +438,11 @@ export default function DevolucionHistorial() {
                 <span>
                   Mostrando{" "}
                   <b className="font-mono" style={{ color: "var(--n-700)" }}>
-                    {filtradas.length}
+                    {enVista}
                   </b>{" "}
                   de{" "}
                   <b className="font-mono" style={{ color: "var(--n-700)" }}>
-                    {enVista}
-                    {hasMore ? "+" : ""}
+                    {total}
                   </b>{" "}
                   devoluciones {reingresa ? "de cliente" : "a proveedor"}
                 </span>

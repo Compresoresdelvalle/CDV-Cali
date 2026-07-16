@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   LayoutGrid,
@@ -8,16 +8,15 @@ import {
   Clock,
   MoreHorizontal,
   RefreshCw,
-  Search,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate } from "../../lib/utils";
-import { parseRangoFecha } from "../../lib/busquedaFecha";
 import {
   estadoToKanban,
   traspasoBadge,
   KANBAN_COLS,
+  TRASPASO_TABS,
 } from "../../lib/traspasos-ui";
 import {
   WhChip,
@@ -26,8 +25,52 @@ import {
   TipoBadge,
 } from "../../components/traspasos/TraspasoBits";
 import { useSedes } from "../../hooks/useSedes";
+import { useFiltros } from "../../hooks/useFiltros";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
 
 const PAGE_SIZE = 60;
+
+const COLS = `id, numero, fecha, estado, tipo, sede_origen_id, sede_destino_id, bultos, observaciones,
+   solicitante:solicitado_por(nombre),
+   picker:picker_id(nombre),
+   verificador:verificado_por(nombre),
+   detalle_traspaso(cantidad_solicitada)`;
+
+/** Estados que cuentan como traspaso "activo" (aún no cerrado). */
+const ESTADOS_ACTIVOS = ["borrador", "picking", "verificado", "en_transito"];
+
+/* Opciones del select de estado: los valores REALES del enum ya verificados en
+   TRASPASO_TABS. "Todos" es el centinela de la barra, que ya trae su opción. */
+const ESTADO_OPCIONES = TRASPASO_TABS.filter((t) => t.v !== "Todos").map(
+  (t) => ({ v: t.v, l: t.label }),
+);
+
+/* Campos que no dependen de nada: viven fuera del componente para que su
+   identidad sea estable. Si se recrearan en cada render, `valoresAplicados`
+   cambiaría de identidad y el efecto de carga se dispararía en bucle. */
+const CAMPO_Q = {
+  id: "q",
+  tipo: "texto",
+  label: "Buscar",
+  columnas: ["observaciones"],
+  numericoA: "numero",
+  debounce: 400,
+};
+const CAMPO_RANGO = {
+  id: "rango",
+  tipo: "fecha",
+  label: "Fecha",
+  columna: "fecha",
+  presets: ["hoy", "semana", "mes", "mesPasado"],
+};
+const CAMPO_ESTADO = {
+  id: "estado",
+  tipo: "opciones",
+  label: "Estado",
+  columna: "estado",
+  opciones: ESTADO_OPCIONES,
+  comparador: "eq",
+};
 
 /* Estado real → {pillKind, label} de Lovable para el matiz dentro de la columna. */
 const ESTADO_PILL_KIND = {
@@ -37,6 +80,9 @@ const ESTADO_PILL_KIND = {
   en_transito: { kind: "warn", label: "En tránsito" },
   recibido: { kind: "succ", label: "Recibido" },
   con_diferencia: { kind: "dang", label: "Con diferencia" },
+  // Faltaba: un traspaso cancelado (14 reales) mostraba la pastilla gris con el
+  // texto crudo "cancelado".
+  cancelado: { kind: "dang", label: "Cancelado" },
 };
 
 function estadoPillKind(estado) {
@@ -74,81 +120,128 @@ export default function TraspasoHistorial() {
   const { sedes: SEDE_OPTS } = useSedes();
 
   const [vista, setVista] = useState("board");
-  const [sedeFiltro, setSedeFiltro] = useState("ALL");
-  const [busqueda, setBusqueda] = useState("");
   const [traspasos, setTraspasos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(false);
-  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [activos, setActivos] = useState(0);
   const [errorMsg, setErrorMsg] = useState(null);
-  const reqIdRef = useRef(0);
+  const pageRef = useRef(0);
 
-  // Fecha escrita en la barra → filtro server-side por rango.
-  const rangoFecha = useMemo(() => parseRangoFecha(busqueda), [busqueda]);
+  /* Filtros reales (server-side) — se pueden cruzar entre sí.
+     `campos` va memoizado a propósito: si cambiara de identidad en cada render,
+     `valoresAplicados` también, y el efecto de carga se dispararía en bucle. */
+  const sedeOpciones = useMemo(
+    () => SEDE_OPTS.map((s) => ({ v: s.id, l: s.nombre })),
+    [SEDE_OPTS],
+  );
+  const campos = useMemo(
+    () => [
+      CAMPO_Q,
+      CAMPO_RANGO,
+      CAMPO_ESTADO,
+      // Origen y destino son dos filtros distintos: un traspaso toca DOS sedes,
+      // así que "de dónde sale" y "a dónde llega" no son la misma pregunta.
+      // No se ocultan a los no-Admin: la RLS ya los ata a su sede, pero un
+      // traspaso los toca por origen O por destino, así que separarlos sigue
+      // respondiendo algo real ("lo que me llega" vs "lo que despacho").
+      {
+        id: "origen",
+        tipo: "opciones",
+        label: "Origen",
+        columna: "sede_origen_id",
+        opciones: sedeOpciones,
+      },
+      {
+        id: "destino",
+        tipo: "opciones",
+        label: "Destino",
+        columna: "sede_destino_id",
+        opciones: sedeOpciones,
+      },
+    ],
+    [sedeOpciones],
+  );
+  const f = useFiltros({ clave: "traspasos", campos });
+  const { aplicar, nuevoReqId, esReqVigente, valoresAplicados } = f;
+
+  /** Alcance de lectura del rol: los no-Admin solo ven lo que toca su sede. */
+  const aplicarAlcance = useCallback(
+    (q) =>
+      esAdmin
+        ? q
+        : q.or(
+            `sede_origen_id.eq.${perfil?.sede_id},sede_destino_id.eq.${perfil?.sede_id}`,
+          ),
+    [esAdmin, perfil?.sede_id],
+  );
 
   // `silent`: refresco en segundo plano (Realtime) sin parpadear el skeleton
   // ni mostrar error de un refresco de fondo.
-  const cargar = async (reset = false, silent = false) => {
-    const myReq = ++reqIdRef.current;
-    if (!silent) setLoading(true);
-    setErrorMsg(null);
-    const currentPage = reset ? 0 : page;
-    try {
-      let query = supabase
-        .from("traspasos")
-        .select(
-          `id, numero, fecha, estado, tipo, sede_origen_id, sede_destino_id, bultos, observaciones,
-           solicitante:solicitado_por(nombre),
-           picker:picker_id(nombre),
-           verificador:verificado_por(nombre),
-           detalle_traspaso(cantidad_solicitada)`,
-        )
-        .order("fecha", { ascending: false })
-        .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
+  const cargar = useCallback(
+    async (reset = false, silent = false) => {
+      const myReq = nuevoReqId();
+      if (!silent) setLoading(true);
+      setErrorMsg(null);
+      const currentPage = reset ? 0 : pageRef.current;
+      try {
+        let query = supabase.from("traspasos").select(COLS, { count: "exact" });
+        query = aplicarAlcance(aplicar(query))
+          .order("fecha", { ascending: false })
+          .order("numero", { ascending: false })
+          .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
-      if (!esAdmin) {
-        query = query.or(
-          `sede_origen_id.eq.${perfil?.sede_id},sede_destino_id.eq.${perfil?.sede_id}`,
+        // Conteo honesto de activos: se le pregunta al servidor sobre TODO el
+        // filtro, no sobre la página cargada.
+        let qActivos = supabase
+          .from("traspasos")
+          .select("id", { count: "exact", head: true });
+        qActivos = aplicarAlcance(aplicar(qActivos)).in(
+          "estado",
+          ESTADOS_ACTIVOS,
         );
+
+        const [res, resActivos] = await Promise.all([query, qActivos]);
+        if (!esReqVigente(myReq)) return;
+        if (res.error) throw res.error;
+
+        pageRef.current = currentPage + 1;
+        if (reset) setTraspasos(res.data ?? []);
+        else setTraspasos((prev) => [...prev, ...(res.data ?? [])]);
+        setTotal(res.count ?? 0);
+        if (!resActivos.error) setActivos(resActivos.count ?? 0);
+      } catch {
+        if (esReqVigente(myReq) && !silent)
+          setErrorMsg("No se pudieron cargar los traspasos. Reintenta.");
+      } finally {
+        if (esReqVigente(myReq)) setLoading(false);
       }
-      if (rangoFecha)
-        query = query
-          .gte("fecha", rangoFecha.desde)
-          .lte("fecha", rangoFecha.hasta);
+    },
+    [aplicar, aplicarAlcance, nuevoReqId, esReqVigente],
+  );
 
-      const { data, error } = await query;
-      if (myReq !== reqIdRef.current) return;
-      if (error) throw error;
-
-      if (reset) {
-        setTraspasos(data ?? []);
-        setPage(1);
-      } else {
-        setTraspasos((prev) => [...prev, ...(data ?? [])]);
-        setPage((p) => p + 1);
-      }
-      setHasMore((data ?? []).length === PAGE_SIZE);
-    } catch {
-      if (myReq === reqIdRef.current && !silent)
-        setErrorMsg("No se pudieron cargar los traspasos. Reintenta.");
-    } finally {
-      if (myReq === reqIdRef.current) setLoading(false);
-    }
-  };
-
+  // Cualquier cambio de filtro vuelve a la página 0: paginar con el filtro
+  // viejo mezclaría dos listados distintos.
   useEffect(() => {
     cargar(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangoFecha?.desde, rangoFecha?.hasta]);
+  }, [valoresAplicados, aplicarAlcance]);
 
   // Realtime: refresca la lista en vivo cuando cualquier traspaso cambia de
   // estado (la RLS de lectura sigue aplicando al re-cargar). Debounce para
   // agrupar ráfagas de eventos (p.ej. al actualizar varios ítems).
+  // El canal se suscribe una sola vez, así que la recarga va por ref: si
+  // llamara al `cargar` capturado al montar, el refresco en vivo repintaría la
+  // lista con los filtros viejos.
+  const cargarRef = useRef(cargar);
+  useEffect(() => {
+    cargarRef.current = cargar;
+  }, [cargar]);
+
   useEffect(() => {
     let t = null;
     const refrescar = () => {
       clearTimeout(t);
-      t = setTimeout(() => cargar(true, true), 400);
+      t = setTimeout(() => cargarRef.current(true, true), 400);
     };
     const channel = supabase
       .channel("traspasos-historial")
@@ -162,39 +255,29 @@ export default function TraspasoHistorial() {
       clearTimeout(t);
       supabase.removeChannel(channel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* Filtro por sede (cliente) + texto/fecha de la barra. */
-  const filtrados = useMemo(() => {
-    const needle = busqueda.trim().toLowerCase();
-    return traspasos.filter((t) => {
-      const okSede =
-        sedeFiltro === "ALL" ||
-        t.sede_origen_id === sedeFiltro ||
-        t.sede_destino_id === sedeFiltro;
-      if (!okSede) return false;
-      // Fecha ya filtrada server-side; el texto suelto busca por número.
-      if (rangoFecha || !needle) return true;
-      return `#${t.numero}`.toLowerCase().includes(needle);
-    });
-  }, [traspasos, sedeFiltro, busqueda, rangoFecha]);
+  // Ya no se filtra en memoria: la consulta trae exactamente lo que el filtro
+  // pide, así que `traspasos` ES el resultado. Filtrar de nuevo aquí era el bug
+  // de fondo — la pantalla decía "sin traspasos" sobre datos que sí existían,
+  // solo porque no estaban en la página cargada.
+  const hasMore = traspasos.length < total;
 
   /* Agrupación por columna Kanban. */
   const grupos = useMemo(() => {
     const g = { pendiente: [], transito: [], recibido: [] };
-    for (const t of filtrados) g[estadoToKanban(t.estado)].push(t);
+    for (const t of traspasos) g[estadoToKanban(t.estado)].push(t);
     return g;
-  }, [filtrados]);
+  }, [traspasos]);
 
-  /* KPIs del header — derivados de lo disponible (sin números inventados). */
-  const kpis = useMemo(() => {
-    const activos = filtrados.filter((t) =>
-      ["borrador", "picking", "verificado", "en_transito"].includes(t.estado),
-    ).length;
-    const unidades = filtrados.reduce((s, t) => s + conteo(t).unidades, 0);
-    return { activos, total: filtrados.length, unidades };
-  }, [filtrados]);
+  /* Unidades: solo se pueden sumar sobre lo cargado (el detalle viene en el
+     join, no hay agregado en el servidor). Por eso va rotulado "en vista" y no
+     se presenta como el total del filtro. `activos` y `total` sí son del
+     servidor sobre TODO el filtro. */
+  const unidadesEnVista = useMemo(
+    () => traspasos.reduce((s, t) => s + conteo(t).unidades, 0),
+    [traspasos],
+  );
 
   return (
     <div className="flex h-full flex-col animate-fade-in">
@@ -214,32 +297,34 @@ export default function TraspasoHistorial() {
             className="mt-1.5 text-[13px] leading-[1.5]"
             style={{ color: "var(--n-500)" }}
           >
-            {loading && filtrados.length === 0 ? (
+            {loading && traspasos.length === 0 ? (
               "cargando…"
             ) : (
               <>
+                {/* `activos` y `total` los cuenta el servidor sobre TODO el
+                    filtro. `unidades` solo puede sumarse sobre lo cargado, así
+                    que va rotulado "en vista" y no se disfraza de total. */}
                 <b
                   className="font-mono font-medium"
                   style={{ color: "var(--n-700)" }}
                 >
-                  {kpis.activos}
+                  {activos}
                 </b>{" "}
                 activos ·{" "}
                 <b
                   className="font-mono font-medium"
                   style={{ color: "var(--n-700)" }}
                 >
-                  {kpis.total}
-                  {hasMore ? "+" : ""}
+                  {total}
                 </b>{" "}
-                en vista ·{" "}
+                {f.hayFiltros ? "con el filtro" : "en total"} ·{" "}
                 <b
                   className="font-mono font-medium"
                   style={{ color: "var(--n-700)" }}
                 >
-                  {kpis.unidades}
+                  {unidadesEnVista}
                 </b>{" "}
-                unidades
+                unidades en vista
               </>
             )}
           </p>
@@ -265,49 +350,6 @@ export default function TraspasoHistorial() {
             />
           </div>
 
-          <div
-            className="flex items-center gap-2 rounded-lg border px-3"
-            style={{
-              height: 36,
-              borderColor: "var(--n-150)",
-              backgroundColor: "var(--n-0)",
-            }}
-          >
-            <Search
-              className="h-4 w-4 shrink-0"
-              strokeWidth={1.5}
-              style={{ color: "var(--n-500)" }}
-            />
-            <input
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="N° o fecha (23/06/2026)…"
-              className="min-w-0 border-none bg-transparent text-[13px] outline-none"
-              style={{ color: "var(--n-950)", width: 150 }}
-              aria-label="Buscar por número o fecha"
-            />
-          </div>
-
-          <select
-            value={sedeFiltro}
-            onChange={(e) => setSedeFiltro(e.target.value)}
-            className="rounded-lg border px-3 pr-8 text-[13px] outline-none"
-            style={{
-              height: 36,
-              borderColor: "var(--n-150)",
-              backgroundColor: "var(--n-0)",
-              color: "var(--n-700)",
-            }}
-            aria-label="Filtrar por sede"
-          >
-            <option value="ALL">Todas las sedes</option>
-            {SEDE_OPTS.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nombre}
-              </option>
-            ))}
-          </select>
-
           <button
             onClick={() => navigate("/ops/traspasos/nuevo")}
             className="btn btn-pri"
@@ -315,6 +357,16 @@ export default function TraspasoHistorial() {
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Nuevo traspaso
           </button>
+        </div>
+
+        {/* Filtros reales, cruzables y server-side. Ocupan su propia fila: son
+            cinco campos y no caben apretados junto al toggle de vista. */}
+        <div className="w-full">
+          <BarraFiltros
+            filtros={f}
+            placeholder="N° de traspaso u observación…"
+            legacy
+          />
         </div>
       </div>
 
@@ -334,9 +386,9 @@ export default function TraspasoHistorial() {
           </div>
         )}
 
-        {loading && filtrados.length === 0 ? (
+        {loading && traspasos.length === 0 ? (
           <SkeletonBoard />
-        ) : filtrados.length === 0 ? (
+        ) : traspasos.length === 0 ? (
           <EmptyState />
         ) : vista === "board" ? (
           <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:grid-cols-3">
@@ -351,7 +403,7 @@ export default function TraspasoHistorial() {
           </div>
         ) : (
           <ListaTabla
-            rows={filtrados}
+            rows={traspasos}
             onOpen={(id) => navigate(`/ops/traspasos/${id}`)}
           />
         )}

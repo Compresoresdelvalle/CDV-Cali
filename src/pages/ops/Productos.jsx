@@ -1,16 +1,32 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Plus, X, Package } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../stores/authStore";
 import { useDebounce } from "../../hooks/useDebounce";
+import { useFiltros } from "../../hooks/useFiltros";
 import StatusBadge from "../../components/ui/StatusBadge";
 import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
 import { formatCOP, safeError } from "../../lib/utils";
-import { applyKeywordSearch } from "../../lib/search";
 import { categoriaClass } from "../../lib/inventario-ui";
 
 const PAGE_SIZE = 30;
+
+// Valores REALES del enum `tipo_producto` en la base (verificados contra
+// pg_enum, no inventados): nuevo | segunda_mano | chatarra.
+const TIPOS = [
+  { v: "nuevo", l: "Nuevo" },
+  { v: "segunda_mano", l: "Segunda mano" },
+  { v: "chatarra", l: "Chatarra" },
+];
+
+/** '12000' -> 12000 · '' / basura -> null (no filtra). */
+function aNumero(raw) {
+  const t = (raw ?? "").trim();
+  if (!t) return null;
+  const n = Number(t.replace(/[^\d.-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
 
 // Columnas del producto maestro — mismas que consulta ProductoDetalle.jsx
 // (catálogo, sin stock por sede).
@@ -31,18 +47,64 @@ export default function Productos() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState(null);
-  const [busqueda, setBusqueda] = useState("");
+  const [total, setTotal] = useState(null);
   const [soloActivos, setSoloActivos] = useState(true);
 
-  const debouncedBusqueda = useDebounce(busqueda, 400);
+  // El precio va en estado local (no en useFiltros): el hook resuelve texto,
+  // fecha y opciones, y un rango numérico no es ninguno de los tres. Se aplica
+  // aquí abajo, explícito, sobre el mismo query.
+  const [precioMin, setPrecioMin] = useState("");
+  const [precioMax, setPrecioMax] = useState("");
+  const precioMinAplicado = useDebounce(precioMin, 400);
+  const precioMaxAplicado = useDebounce(precioMax, 400);
 
-  // Token de versión para descartar respuestas obsoletas (carrera de filtros).
-  const fetchTokenRef = useRef(0);
+  // `campos` DEBE memoizarse: useFiltros lo usa como dependencia, y un array
+  // nuevo en cada render regeneraría `aplicar` -> refetch -> render -> bucle.
+  const campos = useMemo(
+    () => [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        // #32: mismas columnas de siempre — nombre/referencia/códigos.
+        columnas: [
+          "nombre",
+          "referencia",
+          "codigo_interno",
+          "codigo_proveedor",
+        ],
+        debounce: 400,
+      },
+      {
+        id: "tipo",
+        tipo: "opciones",
+        label: "Tipo",
+        columna: "tipo",
+        opciones: TIPOS,
+      },
+      {
+        id: "vendible",
+        tipo: "opciones",
+        label: "Vendible",
+        columna: "vendible",
+        opciones: [
+          { v: "true", l: "Solo vendibles" },
+          { v: "false", l: "No vendibles" },
+        ],
+      },
+    ],
+    [],
+  );
+
+  const f = useFiltros({ clave: "productos", campos });
+  const { aplicar, nuevoReqId, esReqVigente, valoresAplicados } = f;
+  const busquedaAplicada = valoresAplicados.q ?? "";
+
   const pageRef = useRef(0);
 
   const fetchProductos = useCallback(
     async (append) => {
-      const token = ++fetchTokenRef.current;
+      const reqId = nuevoReqId();
       if (append) setLoadingMore(true);
       else {
         setLoading(true);
@@ -52,29 +114,30 @@ export default function Productos() {
 
       try {
         const offset = append ? pageRef.current * PAGE_SIZE : 0;
+        // count: 'exact' -> el total lo dice el servidor. Contar lo cargado es
+        // lo que hacía que la pantalla mintiera sobre cuántos productos hay.
         let q = supabase
           .from("productos")
-          .select(SELECT_COLS)
-          .order("nombre", { ascending: true })
-          .range(offset, offset + PAGE_SIZE - 1);
+          .select(SELECT_COLS, { count: "exact" });
+
+        q = aplicar(q); // texto + tipo + vendible, cruzables entre sí.
 
         if (soloActivos) q = q.eq("activo", true);
 
-        // #32: búsqueda por palabras clave en nombre/referencia/códigos.
-        if (debouncedBusqueda.trim()) {
-          q = applyKeywordSearch(q, debouncedBusqueda, [
-            "nombre",
-            "referencia",
-            "codigo_interno",
-            "codigo_proveedor",
-          ]);
-        }
+        const min = aNumero(precioMinAplicado);
+        const max = aNumero(precioMaxAplicado);
+        if (min != null) q = q.gte("precio_venta", min);
+        if (max != null) q = q.lte("precio_venta", max);
 
-        const { data, error: qErr } = await q;
+        q = q
+          .order("nombre", { ascending: true })
+          .range(offset, offset + PAGE_SIZE - 1);
+
+        const { data, count, error: qErr } = await q;
         if (qErr) throw qErr;
 
         // Descarta si llegó una respuesta más nueva mientras esperábamos.
-        if (token !== fetchTokenRef.current) return;
+        if (!esReqVigente(reqId)) return;
 
         const rows = data ?? [];
         if (append) {
@@ -84,26 +147,52 @@ export default function Productos() {
           setItems(rows);
           pageRef.current = 1;
         }
-        setHasMore(rows.length === PAGE_SIZE);
+        setTotal(count ?? null);
+        const cargados = offset + rows.length;
+        setHasMore(
+          count != null ? cargados < count : rows.length === PAGE_SIZE,
+        );
       } catch (err) {
-        if (token !== fetchTokenRef.current) return;
+        if (!esReqVigente(reqId)) return;
         setError(safeError(err, "No se pudo cargar el catálogo"));
-        if (!append) setItems([]);
+        if (!append) {
+          setItems([]);
+          setTotal(null);
+        }
         setHasMore(false);
       } finally {
-        if (token === fetchTokenRef.current) {
+        if (esReqVigente(reqId)) {
           setLoading(false);
           setLoadingMore(false);
         }
       }
     },
-    [debouncedBusqueda, soloActivos],
+    [
+      aplicar,
+      nuevoReqId,
+      esReqVigente,
+      soloActivos,
+      precioMinAplicado,
+      precioMaxAplicado,
+    ],
   );
 
-  // Re-fetch al cambiar búsqueda (debounced) o filtro de activos.
+  // Re-fetch al cambiar cualquier filtro. `fetchProductos(false)` reinicia la
+  // página a 0, así que cada cambio de filtro arranca desde el principio.
   useEffect(() => {
     fetchProductos(false);
   }, [fetchProductos]);
+
+  // Limpia TODO: los filtros del hook y el precio, que vive aparte.
+  const limpiarTodo = useCallback(() => {
+    f.limpiar();
+    setPrecioMin("");
+    setPrecioMax("");
+    setSoloActivos(true);
+  }, [f]);
+
+  const hayFiltros =
+    f.hayFiltros || precioMin !== "" || precioMax !== "" || !soloActivos;
 
   const loadMore = useCallback(() => {
     if (hasMore && !loadingMore && !loading) fetchProductos(true);
@@ -146,7 +235,7 @@ export default function Productos() {
             Operaciones · Catálogo maestro ·{" "}
             {loading
               ? "cargando…"
-              : `${items.length}${hasMore ? "+" : ""} productos`}{" "}
+              : `${total ?? items.length} producto${(total ?? items.length) === 1 ? "" : "s"}`}{" "}
             · {soloActivos ? "activos" : "todos"}
           </p>
           <h1
@@ -183,15 +272,15 @@ export default function Productos() {
           />
           <input
             type="search"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+            value={f.valores.q ?? ""}
+            onChange={(e) => f.setValor("q", e.target.value)}
             placeholder="Buscar por nombre o referencia…"
             className="flex-1 border-none bg-transparent text-[14px] outline-none"
             style={{ color: "var(--n-950)" }}
           />
-          {busqueda && (
+          {f.valores.q && (
             <button
-              onClick={() => setBusqueda("")}
+              onClick={() => f.setValor("q", "")}
               aria-label="Limpiar búsqueda"
               className="grid h-6 w-6 place-items-center rounded"
               style={{ color: "var(--n-500)" }}
@@ -230,6 +319,88 @@ export default function Productos() {
               </FilterRow>
             </div>
           </div>
+
+          {/* Tipo — valores reales del enum `tipo_producto`. Se cruzan con el
+              resto: tipo + vendible + precio + búsqueda actúan a la vez. */}
+          <GrupoFiltro titulo="Tipo">
+            <FilterRow
+              on={!f.valores.tipo}
+              onClick={() => f.setValor("tipo", "")}
+            >
+              <Check on={!f.valores.tipo} />
+              Todos
+            </FilterRow>
+            {TIPOS.map((t) => (
+              <FilterRow
+                key={t.v}
+                on={f.valores.tipo === t.v}
+                onClick={() => f.setValor("tipo", t.v)}
+              >
+                <Check on={f.valores.tipo === t.v} />
+                {t.l}
+              </FilterRow>
+            ))}
+          </GrupoFiltro>
+
+          <GrupoFiltro titulo="Vendible">
+            <FilterRow
+              on={!f.valores.vendible}
+              onClick={() => f.setValor("vendible", "")}
+            >
+              <Check on={!f.valores.vendible} />
+              Todos
+            </FilterRow>
+            <FilterRow
+              on={f.valores.vendible === "true"}
+              onClick={() => f.setValor("vendible", "true")}
+            >
+              <Check on={f.valores.vendible === "true"} />
+              Solo vendibles
+            </FilterRow>
+            <FilterRow
+              on={f.valores.vendible === "false"}
+              onClick={() => f.setValor("vendible", "false")}
+            >
+              <Check on={f.valores.vendible === "false"} />
+              No vendibles
+            </FilterRow>
+          </GrupoFiltro>
+
+          {/* Precio — se manda al servidor con gte/lte sobre precio_venta.
+              Dejar uno vacío es válido: "desde 50.000" o "hasta 200.000". */}
+          <GrupoFiltro titulo="Precio de venta">
+            <div className="flex items-center gap-1.5">
+              <PrecioInput
+                value={precioMin}
+                onChange={setPrecioMin}
+                placeholder="Mín"
+                aria-label="Precio mínimo"
+              />
+              <span className="text-[11px]" style={{ color: "var(--n-500)" }}>
+                a
+              </span>
+              <PrecioInput
+                value={precioMax}
+                onChange={setPrecioMax}
+                placeholder="Máx"
+                aria-label="Precio máximo"
+              />
+            </div>
+          </GrupoFiltro>
+
+          {hayFiltros && (
+            <button
+              onClick={limpiarTodo}
+              className="min-h-[44px] rounded-[5px] border text-[12.5px] font-medium transition-colors lg:min-h-[36px]"
+              style={{ borderColor: "var(--n-200)", color: "var(--n-700)" }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.backgroundColor = "var(--n-50)")
+              }
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
+            >
+              Limpiar filtros
+            </button>
+          )}
         </aside>
 
         {/* Contenido */}
@@ -257,7 +428,7 @@ export default function Productos() {
           {loading && <SkeletonList />}
 
           {!loading && items.length === 0 && !error && (
-            <EmptyState filtroBusqueda={debouncedBusqueda} />
+            <EmptyState filtroBusqueda={busquedaAplicada} />
           )}
 
           {!loading && items.length > 0 && (
@@ -286,15 +457,23 @@ export default function Productos() {
                   className="flex flex-wrap items-center gap-3 border-b px-4 py-3 text-[12.5px]"
                   style={{ borderColor: "var(--n-100)", color: "var(--n-500)" }}
                 >
+                  {/* El total lo dice el servidor (count: 'exact'), no lo
+                      cargado: "30+ productos" cuando hay 412 es la clase de
+                      dato que hace desconfiar de la pantalla entera. */}
                   <span>
                     <strong
                       className="font-mono font-semibold"
                       style={{ color: "var(--n-950)" }}
                     >
-                      {items.length}
-                      {hasMore ? "+" : ""}
+                      {total ?? items.length}
                     </strong>{" "}
-                    productos
+                    producto{(total ?? items.length) === 1 ? "" : "s"}
+                    {total != null && items.length < total && (
+                      <span style={{ color: "var(--n-300)" }}>
+                        {" "}
+                        · {items.length} en vista
+                      </span>
+                    )}
                   </span>
                   <span>·</span>
                   <span>{soloActivos ? "activos" : "todos"}</span>
@@ -382,6 +561,43 @@ function Td({ children, right }) {
     >
       {children}
     </td>
+  );
+}
+
+function GrupoFiltro({ titulo, children }) {
+  return (
+    <div>
+      <div
+        className="mb-2 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
+        style={{ color: "var(--n-500)" }}
+      >
+        {titulo}
+      </div>
+      <div className="flex flex-col gap-px">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Entrada de precio. `inputMode="numeric"` saca el teclado numérico en tablet
+ * (se usa con guantes); el saneo real de lo tecleado lo hace `aNumero`.
+ */
+function PrecioInput({ value, onChange, placeholder, ...rest }) {
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="h-11 w-full min-w-0 rounded-[5px] border px-2 font-mono text-[12px] outline-none"
+      style={{
+        borderColor: "var(--n-200)",
+        backgroundColor: "var(--n-0)",
+        color: "var(--n-950)",
+      }}
+      {...rest}
+    />
   );
 }
 
