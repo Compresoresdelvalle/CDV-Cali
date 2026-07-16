@@ -192,6 +192,9 @@ export default function CotizacionEditar() {
             "id, nombre, referencia, precio_venta, unidad_medida, categoria, marca",
           )
           .eq("activo", true)
+          // Bloque 2 / COT-H: los insumos no se cotizan/venden. CotizacionNueva
+          // ya filtraba vendible; al editar faltaba y dejaba colar insumos.
+          .eq("vendible", true)
           .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
           .limit(1000);
         if (err) throw err;
@@ -244,6 +247,8 @@ export default function CotizacionEditar() {
         )
         .eq("id", productoId)
         .eq("activo", true)
+        // COT-H: mismo filtro que en la búsqueda — no cotizar insumos.
+        .eq("vendible", true)
         .single();
       if (err || !data) return;
       agregarAlCarrito(data);

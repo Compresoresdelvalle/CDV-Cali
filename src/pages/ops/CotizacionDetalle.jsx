@@ -281,7 +281,10 @@ function DetalleContenido({
 
   const convertida = Boolean(cotizacion.venta_id);
   // F11.5: solo se puede convertir a venta desde estado APROBADA.
-  const puedeConvertir = cotizacion.estado === "aprobada" && !convertida;
+  // Una cotización ligada a una OT no se convierte en venta aparte (la OT ya
+  // absorbió esos ítems; convertirla duplicaría el cobro).
+  const puedeConvertir =
+    cotizacion.estado === "aprobada" && !convertida && !cotizacion.ot_id;
   // Editar solo en borrador (una vez enviada debe ser inmutable).
   const puedeEditar = cotizacion.estado === "borrador" && !convertida;
 
@@ -1033,6 +1036,10 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
   const [obs, setObs] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState(null);
+  // COT-I: guardas síncronas anti doble-clic (el estado de React se actualiza
+  // async; en táctil un doble-tap dispara dos RPC antes del re-render).
+  const registrandoRef = useRef(false);
+  const eliminandoRef = useRef(false);
 
   const convertida = Boolean(cotizacion.venta_id);
   const puedeRegistrar =
@@ -1066,6 +1073,8 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
       setErr(`El abono supera el saldo pendiente (${formatCOP(saldo)}).`);
       return;
     }
+    if (registrandoRef.current) return;
+    registrandoRef.current = true;
     setErr(null);
     setGuardando(true);
     try {
@@ -1083,10 +1092,13 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
       setErr(safeError(e2, "No se pudo registrar el abono"));
     } finally {
       setGuardando(false);
+      registrandoRef.current = false;
     }
   };
 
   const eliminar = async (abonoId) => {
+    if (eliminandoRef.current) return;
+    eliminandoRef.current = true;
     setErr(null);
     try {
       const { error: e } = await supabase.rpc("fn_eliminar_abono_cotizacion", {
@@ -1096,6 +1108,8 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
       await cargar();
     } catch (e2) {
       setErr(safeError(e2, "No se pudo eliminar el abono"));
+    } finally {
+      eliminandoRef.current = false;
     }
   };
 

@@ -418,8 +418,11 @@ export default function CotizacionHistorial() {
               </div>
             </div>
 
-            {/* Cargar más (también con filtro de fecha server-side) */}
-            {hasMore && (!busqueda.trim() || rangoFecha) && (
+            {/* Cargar más. COT-J: la búsqueda de texto (#/cliente/producto) es
+                client-side sobre lo cargado; antes se ocultaba este botón al
+                escribir, dejando al usuario atrapado sin poder traer más páginas
+                para buscar en ellas. Ahora se muestra siempre que haya más. */}
+            {hasMore && (
               <button
                 onClick={() => cargarCotizaciones(false)}
                 disabled={loading}
@@ -499,7 +502,8 @@ function CotizacionFila({
   onClick,
   onConvertir,
 }) {
-  const puedeConvertir = c.estado === "aprobada" && !c.venta_id;
+  // Ligada a OT → no convertir en venta aparte (evita doble cobro).
+  const puedeConvertir = c.estado === "aprobada" && !c.venta_id && !c.ot_id;
   const esteError = errorConversion?.id === c.id ? errorConversion.msg : null;
   const resumen = resumenProductosCotizacion(c.detalle_cotizacion);
   return (
@@ -623,7 +627,8 @@ function CotizacionCard({
   onConvertir,
 }) {
   const esteError = errorConversion?.id === c.id ? errorConversion.msg : null;
-  const puedeConvertir = c.estado === "aprobada" && !c.venta_id;
+  // Ligada a OT → no convertir en venta aparte (evita doble cobro).
+  const puedeConvertir = c.estado === "aprobada" && !c.venta_id && !c.ot_id;
   const resumen = resumenProductosCotizacion(c.detalle_cotizacion);
   const vig = cotizacionVigencia(c.fecha, c.vigencia_dias, c.estado);
   return (
