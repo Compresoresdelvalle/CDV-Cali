@@ -13,8 +13,20 @@
  *   lenguaje visual Lovable SIN inventar estados que el backend no soporta.
  */
 
-/** Pestañas de filtro por estado (mapeadas a la query de CompraHistorial). */
-export const COMPRAS_TABS = ["Todas", "Registrada", "Recibida", "Garantía"];
+/**
+ * Pestañas de filtro por estado (mapeadas a la query de CompraHistorial).
+ *
+ * "Cancelada" existe porque las compras canceladas SÍ se listan en "Todas" y SÍ
+ * suman al total del encabezado: sin pestaña propia no había forma de aislarlas
+ * ni de entender por qué el total no cuadraba con lo realmente comprado.
+ */
+export const COMPRAS_TABS = [
+  "Todas",
+  "Registrada",
+  "Recibida",
+  "Cancelada",
+  "Garantía",
+];
 
 /** Pestañas de filtro por tipo: orden de compra formal vs. gasto de caja menor. */
 export const COMPRAS_TIPO_TABS = ["Todos", "Órdenes de compra", "Caja menor"];

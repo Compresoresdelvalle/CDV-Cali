@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus,
-  Search,
   FileText,
   Download,
   Link as LinkIcon,
@@ -12,7 +11,9 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate } from "../../lib/utils";
-import { parseRangoFecha } from "../../lib/busquedaFecha";
+import { SEDES } from "../../lib/constants";
+import { useFiltros } from "../../hooks/useFiltros";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
 import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
 import {
   ESTADOS_COTIZACION,
@@ -54,6 +55,15 @@ async function generarPDFDirecto(cotizacionId) {
 
 const PAGE_SIZE = 20;
 
+// Join read-only a detalle_cotizacion para derivar el resumen de productos
+// (columna del diseño Lovable). NO altera escrituras.
+const SELECT_COLS = `id, numero, fecha, cliente_nombre, cliente_telefono, estado, total,
+   vigencia_dias, ot_id, venta_id,
+   vendedor:vendedor_id(nombre), ot:ot_id(numero),
+   detalle_cotizacion(producto:producto_id(nombre))`;
+
+const OPCIONES_SEDE = Object.values(SEDES).map((s) => ({ v: s, l: s }));
+
 export default function CotizacionHistorial() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
@@ -62,71 +72,114 @@ export default function CotizacionHistorial() {
   const [cotizaciones, setCotizaciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtroEstado, setFiltroEstado] = useState("Todos");
-  const [busqueda, setBusqueda] = useState("");
+  // Chip de trabajo real del vendedor: lo aprobado que todavía no factura.
+  const [soloAprobSinConv, setSoloAprobSinConv] = useState(false);
   const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [aprobadasTotal, setAprobadasTotal] = useState(0);
 
   const [convirtiendo] = useState(null);
   const [errorConversion] = useState(null);
   const [modalConvertir, setModalConvertir] = useState(null); // cotización a convertir
   const [errorMsg, setErrorMsg] = useState(null);
-  // Token de secuencia: descarta respuestas obsoletas al cambiar de filtro.
-  const reqIdRef = useRef(0);
 
-  // Fecha escrita en la barra → filtro server-side por rango.
-  const rangoFecha = useMemo(() => parseRangoFecha(busqueda), [busqueda]);
+  // `campos` DEBE ir memoizado: useFiltros deriva `valoresAplicados` de esta
+  // lista, y un array nuevo en cada render lo volvería inestable como
+  // dependencia del efecto de carga (bucle infinito de fetch).
+  const campos = useMemo(
+    () => [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        // El # va por `numericoA`: `numero` es integer y un ilike lo revienta.
+        columnas: ["cliente_nombre", "cliente_nit", "cliente_telefono"],
+        numericoA: "numero",
+        debounce: 400,
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "sede",
+        tipo: "opciones",
+        label: "Sede",
+        columna: "sede_id",
+        opciones: OPCIONES_SEDE,
+        comparador: "eq",
+        // Solo Admin: al resto la RLS ya lo ata a su sede.
+        visible: esAdmin,
+      },
+    ],
+    [esAdmin],
+  );
+
+  const f = useFiltros({ clave: "cotizaciones", campos });
 
   const cargarCotizaciones = async (reset = false) => {
-    const myReq = ++reqIdRef.current;
+    const reqId = f.nuevoReqId();
     setLoading(true);
     setErrorMsg(null);
     const currentPage = reset ? 0 : page;
 
+    // Los filtros se CRUZAN: texto + fecha + sede (del hook) y estado +
+    // "aprobadas sin convertir" (tabs/chip propios de esta pantalla).
+    const conFiltros = (q) => {
+      let out = f.aplicar(q);
+      if (!esAdmin) out = out.eq("sede_id", perfil?.sede_id);
+      if (soloAprobSinConv)
+        out = out.eq("estado", "aprobada").is("venta_id", null);
+      else if (filtroEstado !== "Todos") out = out.eq("estado", filtroEstado);
+      return out;
+    };
+
     try {
-      // Join read-only a detalle_cotizacion para derivar el resumen de
-      // productos (columna del diseño Lovable). NO altera escrituras.
-      let query = supabase
-        .from("cotizaciones")
-        .select(
-          `id, numero, fecha, cliente_nombre, cliente_telefono, estado, total,
-           vigencia_dias, ot_id, venta_id,
-           vendedor:vendedor_id(nombre), ot:ot_id(numero),
-           detalle_cotizacion(producto:producto_id(nombre))`,
-        )
+      const query = conFiltros(
+        supabase.from("cotizaciones").select(SELECT_COLS, { count: "exact" }),
+      )
         .order("fecha", { ascending: false })
+        .order("numero", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
-      if (!esAdmin) query = query.eq("sede_id", perfil?.sede_id);
-      if (filtroEstado !== "Todos") query = query.eq("estado", filtroEstado);
-      if (rangoFecha)
-        query = query
-          .gte("fecha", rangoFecha.desde)
-          .lte("fecha", rangoFecha.hasta);
+      // Conteo honesto de aprobadas bajo los MISMOS filtros (head: no trae filas).
+      const queryAprobadas = conFiltros(
+        supabase
+          .from("cotizaciones")
+          .select("id", { count: "exact", head: true }),
+      ).eq("estado", "aprobada");
 
-      const { data, error } = await query;
-      if (myReq !== reqIdRef.current) return; // respuesta obsoleta
-      if (error) throw error;
+      const [res, resAprob] = await Promise.all([query, queryAprobadas]);
+      if (!f.esReqVigente(reqId)) return; // respuesta obsoleta
+      if (res.error) throw res.error;
 
+      setTotal(res.count ?? 0);
+      setAprobadasTotal(resAprob.count ?? 0);
       if (reset) {
-        setCotizaciones(data ?? []);
+        setCotizaciones(res.data ?? []);
         setPage(1);
       } else {
-        setCotizaciones((prev) => [...prev, ...(data ?? [])]);
+        setCotizaciones((prev) => [...prev, ...(res.data ?? [])]);
         setPage((p) => p + 1);
       }
-      setHasMore((data ?? []).length === PAGE_SIZE);
     } catch {
-      if (myReq === reqIdRef.current)
+      if (f.esReqVigente(reqId))
         setErrorMsg("No se pudieron cargar las cotizaciones. Reintenta.");
     } finally {
-      if (myReq === reqIdRef.current) setLoading(false);
+      if (f.esReqVigente(reqId)) setLoading(false);
     }
   };
 
+  // Cada cambio de filtro recarga desde la página 0.
   useEffect(() => {
     cargarCotizaciones(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroEstado, rangoFecha?.desde, rangoFecha?.hasta]);
+  }, [f.valoresAplicados, filtroEstado, soloAprobSinConv]);
+
+  const hasMore = cotizaciones.length < total;
 
   // S3-05 / COT-D-E: la conversión captura el pago del saldo en un modal
   // dedicado (la venta nace a Crédito; el dinero cuenta el día que entra).
@@ -136,35 +189,17 @@ export default function CotizacionHistorial() {
     if (c) setModalConvertir(c);
   };
 
-  // Búsqueda client-side sobre lo ya cargado (número, cliente, productos).
-  const filtradas = useMemo(() => {
-    if (rangoFecha) return cotizaciones; // ya filtrado server-side por fecha
-    const needle = busqueda.trim().toLowerCase();
-    if (!needle) return cotizaciones;
-    return cotizaciones.filter((c) => {
-      const num = String(c.numero);
-      const cli = (c.cliente_nombre || "").toLowerCase();
-      const prods = (
-        resumenProductosCotizacion(c.detalle_cotizacion, 6) ?? ""
-      ).toLowerCase();
-      return (
-        num.includes(needle) || cli.includes(needle) || prods.includes(needle)
-      );
-    });
-  }, [cotizaciones, busqueda, rangoFecha]);
-
-  // KPIs honestos derivados de lo cargado en vista (no inventados).
-  const kpis = useMemo(() => {
-    const aprobadas = cotizaciones.filter(
-      (c) => c.estado === "aprobada",
-    ).length;
-    // "Pipeline": valor de cotizaciones abiertas (borrador/enviada/aprobada),
-    // sin contar rechazadas/vencidas/convertidas.
+  // "Pipeline": valor de cotizaciones abiertas (borrador/enviada/aprobada),
+  // sin contar rechazadas/vencidas/convertidas.
+  //
+  // Ojo: suma SOLO las filas cargadas — sumar el total real exigiría un
+  // agregado en el servidor que hoy no existe. Por eso se rotula "en vista" en
+  // el encabezado: un KPI de dinero que miente es peor que uno acotado.
+  const pipelineEnVista = useMemo(() => {
     const abiertas = ["borrador", "enviada", "aprobada"];
-    const pipeline = cotizaciones
+    return cotizaciones
       .filter((c) => abiertas.includes(c.estado))
       .reduce((s, c) => s + Number(c.total ?? 0), 0);
-    return { enVista: cotizaciones.length, aprobadas, pipeline };
   }, [cotizaciones]);
 
   return (
@@ -193,24 +228,23 @@ export default function CotizacionHistorial() {
                   className="font-mono font-medium"
                   style={{ color: "var(--n-700)" }}
                 >
-                  {kpis.enVista}
-                  {hasMore ? "+" : ""}
+                  {total}
                 </b>{" "}
-                en vista ·{" "}
+                cotizaciones ·{" "}
                 <b
                   className="font-mono font-medium"
                   style={{ color: "var(--n-700)" }}
                 >
-                  {kpis.aprobadas}
+                  {aprobadasTotal}
                 </b>{" "}
                 aprobadas ·{" "}
                 <b
                   className="font-mono font-medium"
                   style={{ color: "var(--n-700)" }}
                 >
-                  {formatCOP(kpis.pipeline)}
+                  {formatCOP(pipelineEnVista)}
                 </b>{" "}
-                en pipeline
+                en pipeline (en vista)
               </>
             )}
           </p>
@@ -234,11 +268,14 @@ export default function CotizacionHistorial() {
         style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
       >
         {ESTADOS_COTIZACION.map((e) => {
-          const active = filtroEstado === e;
+          const active = !soloAprobSinConv && filtroEstado === e;
           return (
             <button
               key={e}
-              onClick={() => setFiltroEstado(e)}
+              onClick={() => {
+                setFiltroEstado(e);
+                setSoloAprobSinConv(false);
+              }}
               className="rounded-md px-3 text-[12.5px] font-medium transition-colors"
               style={{
                 minHeight: 36,
@@ -260,42 +297,34 @@ export default function CotizacionHistorial() {
         })}
       </div>
 
-      {/* ── Barra de búsqueda ───────────────────────────────────────── */}
+      {/* ── Filtros reales (texto + fecha + sede, se CRUZAN) ────────── */}
       <div
-        className="flex items-center gap-3 px-4 py-3 sm:px-7"
+        className="px-4 py-3 sm:px-7"
         style={{ backgroundColor: "var(--n-25)" }}
       >
-        <div
-          className="flex h-12 max-w-[560px] flex-1 items-center gap-2.5 rounded-lg border px-3.5"
-          style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
+        <BarraFiltros
+          filtros={f}
+          placeholder="Buscar por #, cliente, NIT o teléfono…"
+          legacy
         >
-          <Search
-            className="h-4 w-4 shrink-0"
-            strokeWidth={1.5}
-            style={{ color: "var(--n-500)" }}
-          />
-          <input
-            type="search"
-            placeholder="Buscar por #, cliente, producto o fecha (23/06/2026)…"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
-            style={{ color: "var(--n-950)" }}
-          />
-        </div>
-        <span
-          className="ml-auto font-mono text-[11px] uppercase tracking-wider"
-          style={{ color: "var(--n-500)" }}
-        >
-          <b className="font-medium" style={{ color: "var(--n-700)" }}>
-            {filtradas.length}
-          </b>{" "}
-          de{" "}
-          <b className="font-medium" style={{ color: "var(--n-700)" }}>
-            {kpis.enVista}
-            {hasMore ? "+" : ""}
-          </b>
-        </span>
+          {/* Chip de trabajo real del vendedor: lo aprobado que aún no factura.
+              Vive aquí y no en useFiltros porque es una condición compuesta
+              (estado + venta_id IS NULL), no un campo suelto. */}
+          <button
+            type="button"
+            onClick={() => setSoloAprobSinConv((v) => !v)}
+            aria-pressed={soloAprobSinConv}
+            className="inline-flex h-12 shrink-0 items-center rounded-lg border px-3 text-[12.5px] font-medium"
+            style={{
+              backgroundColor: soloAprobSinConv ? "var(--p-50)" : "var(--n-0)",
+              borderColor: soloAprobSinConv ? "var(--p-600)" : "var(--n-200)",
+              color: soloAprobSinConv ? "var(--p-700)" : "var(--n-500)",
+            }}
+          >
+            <span className="hidden sm:inline">Aprobadas sin convertir</span>
+            <span className="sm:hidden">Aprob. sin conv.</span>
+          </button>
+        </BarraFiltros>
       </div>
 
       {/* ── Contenido ───────────────────────────────────────────────── */}
@@ -316,13 +345,17 @@ export default function CotizacionHistorial() {
 
         {loading && cotizaciones.length === 0 ? (
           <SkeletonList />
-        ) : filtradas.length === 0 ? (
-          <EmptyState busqueda={busqueda} filtroEstado={filtroEstado} />
+        ) : cotizaciones.length === 0 ? (
+          <EmptyState
+            busqueda={f.valores.q}
+            filtroEstado={filtroEstado}
+            hayFiltros={f.hayFiltros || soloAprobSinConv}
+          />
         ) : (
           <>
             {/* Móvil/Tablet: cards (< md) */}
             <ul className="md:hidden space-y-2.5" role="list">
-              {filtradas.map((c) => (
+              {cotizaciones.map((c) => (
                 <li key={c.id}>
                   <CotizacionCard
                     cot={c}
@@ -362,7 +395,7 @@ export default function CotizacionHistorial() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtradas.map((c) => (
+                    {cotizaciones.map((c) => (
                       <CotizacionFila
                         key={c.id}
                         cot={c}
@@ -383,15 +416,16 @@ export default function CotizacionHistorial() {
                   color: "var(--n-500)",
                 }}
               >
+                {/* Conteo honesto: `total` es el count('exact') del servidor
+                    bajo los filtros activos, no el de lo cargado. */}
                 <span>
                   Mostrando{" "}
                   <b className="font-mono" style={{ color: "var(--n-700)" }}>
-                    {filtradas.length}
+                    {cotizaciones.length}
                   </b>{" "}
                   de{" "}
                   <b className="font-mono" style={{ color: "var(--n-700)" }}>
-                    {kpis.enVista}
-                    {hasMore ? "+" : ""}
+                    {total}
                   </b>{" "}
                   cotizaciones
                 </span>
@@ -753,7 +787,11 @@ function SkeletonList() {
   );
 }
 
-function EmptyState({ busqueda, filtroEstado }) {
+function EmptyState({ busqueda, filtroEstado, hayFiltros }) {
+  // El vacío se explica por su causa REAL. Decir "crea la primera cotización"
+  // con un filtro puesto le hace creer al operario que no hay datos, cuando lo
+  // que pasa es que los está escondiendo un filtro que no ve.
+  const filtrado = hayFiltros || filtroEstado !== "Todos";
   return (
     <div className="flex flex-col items-center justify-center px-8 py-20 text-center">
       <div
@@ -770,7 +808,9 @@ function EmptyState({ busqueda, filtroEstado }) {
           ? `Sin resultados para "${busqueda}"`
           : filtroEstado !== "Todos"
             ? `No hay cotizaciones ${ESTADO_COTIZACION_LABELS[filtroEstado]?.toLowerCase()}`
-            : "Crea la primera cotización"}
+            : filtrado
+              ? "Ninguna cotización coincide con los filtros"
+              : "Crea la primera cotización"}
       </p>
     </div>
   );

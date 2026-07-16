@@ -421,3 +421,45 @@ Auditoría multi-agente (36 agentes). 29 hallazgos confirmados (deduplicados ~17
 - **OK end-to-end (BEGIN/ROLLBACK):** garantía cajón correcto venta/insumo + reparto mixto + reversa; ciclo de estado devolucion_garantia (abrir/cerrar/anular con 1 y 2 garantías); recepción parcial (ajusta línea/total/stock/CxP); nota crédito baja saldo nota+CxP y NO infla el arqueo de efectivo; cancelar compra anula pagos y recalcula proveedor; blindaje (UPDATE directo rechazado, cuenta obligatoria, Vendedor abre garantía, rechazo sobre cancelada).
 - **BUG P1 encontrado y CORREGIDO:** `productos_proveedores` conservaba `TRUNCATE` para `authenticated` (RLS no aplica a TRUNCATE) → cualquier usuario podía vaciar la tabla. Migración `s6_compras_revoke_truncate_productos_proveedores`. Verificado: 0 TRUNCATE para authenticated/anon en las 6 tablas.
 - **Falta de lógica CORREGIDA:** garantía resuelta por nota crédito dejaba la compra pegada en 'devolucion_garantia' para siempre (no hay cierre para ese caso) → se trata 'nota_credito_emitida' como estado terminal en el criterio de "garantías en curso" (migración `s6_compras_nota_credito_estado_terminal`).
+
+## Filtros reales — Paso 1: completar la migración de listados (2026-07-16)
+
+La base compartida (`useFiltros` + `BarraFiltros` + `lib/filtros.js`, commit `7cee861`)
+ya existía y las 14 pantallas de listado estaban migradas en el working tree, pero
+la migración quedó a medias: 7 pantallas no compilaban (referencias a variables
+viejas ya borradas) y un par de regresiones "listas que mienten" sin cerrar.
+
+Arreglado en este paso (frontend, lint 0 errores + build OK):
+
+- **VentaHistorial**: `ventasFiltradas`/`kpis` inexistentes -> pie de tabla usa
+  `ventas.length` (cargadas) sobre `total` (count real).
+- **TraspasoHistorial**: `filtrados` inexistente -> `traspasos` (ya filtrado en
+  el servidor). Quitado eslint-disable inútil.
+- **DevolucionHistorial**: `filtradas`/`busqueda` inexistentes -> `devoluciones`
+  - `total`; encabezado muestra el conteo real del filtro, no "en vista".
+- **Alertas** (la más grande, migración nunca ejecutada en el cuerpo): la pestaña
+  de stock traía `.limit(200)` y el badge decía "200" cuando en producción hay
+  **2.638 filas Bajo/Agotado** — alertas invisibles para el Admin. Ahora filtra
+  (sede/estado/ABC), cuenta y pagina contra el servidor con BarraFiltros;
+  `estado_stock` desc deja Agotado antes que Bajo sin reordenar en cliente. Las
+  demás pestañas (caben en memoria) conservan su filtro cliente.
+- **Cierres**: dos bugs vivos. (1) El KPI honesto (`kpis` con count:'exact') se
+  calculaba pero NO se mostraba: el strip usaba `historial.length`/`margenMes`/
+  `ultimoCierre` derivados del array paginado. Reconectados a `kpis`. (2) `hasMore`
+  se calculaba pero NO había botón "Cargar más" -> el histórico "terminaba" en la
+  primera página. Agregado. `historialFiltrado` (re-filtro cliente muerto:
+  comparaba `tabHist==='Diarios'` cuando el id es 'diario') simplificado a
+  `historial` (el servidor ya filtra por tab).
+- **ReciboHistorial**: `EmptyState` ahora distingue "sin recibos" de "el filtro
+  no encontró nada" (usaba `hayFiltros` sin leerlo).
+- Limpieza de código muerto: `recorteTexto` (inventarioStore), `compact`
+  (TraspasoBits), `Icon` destructurado (OrdenHistorial — la config de ESLint no
+  tiene `react/jsx-uses-vars`, así que un componente destructurado en minúscula
+  se marca sin usar; se saca del destructuring).
+
+Verificado: OrdenHistorial carga las 104 OT a propósito (Kanban + filtro por grupo
+en memoria), 104 << tope 1000, sin truncamiento. Las 14 pantallas muestran el
+conteo real del servidor como cifra principal y las filas cargadas como "en vista".
+
+PENDIENTE: verificación en navegador de las pantallas tras login (regla del
+proyecto: el login/E2E lo corre el usuario). Build + lint son la evidencia por ahora.

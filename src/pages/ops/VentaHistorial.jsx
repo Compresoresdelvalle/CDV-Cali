@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, ShoppingCart } from "lucide-react";
+import { Plus, ShoppingCart } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate } from "../../lib/utils";
-import { parseRangoFecha } from "../../lib/busquedaFecha";
+import { useFiltros } from "../../hooks/useFiltros";
+import { useSedes } from "../../hooks/useSedes";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
 import {
   METODOS_PAGO_VENTA,
   metodoPagoClass,
@@ -17,38 +19,160 @@ import {
 
 const PAGE_SIZE = 20;
 
+// Join read-only a detalle_venta para derivar el resumen de productos
+// (columna del diseño Lovable). NO modifica lógica de escritura.
+const COLS = `id, numero, fecha, cliente_nombre, metodo_pago, total, anulada, sede_id,
+   vendedor:vendedor_id(nombre),
+   detalle_venta(producto:producto_id(nombre))`;
+
+// Tope de filas que se traen para sumar los KPIs del encabezado. El conteo real
+// viene de `count: 'exact'`; si el filtro supera este tope, la suma se rotula
+// como aproximada en vez de mentir.
+const RESUMEN_MAX = 2000;
+
+// #S1-17: "hoy" se calcula en America/Bogota explícito, no en la zona del
+// dispositivo (tablets industriales sin sincronizar reloj daban conteos mal).
+const diaBogota = (d) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(d));
+
 export default function VentaHistorial() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
   const esAdmin = perfil?.rol === "Admin";
 
+  const { sedes } = useSedes();
+  const [vendedores, setVendedores] = useState([]);
+
   const [ventas, setVentas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtroMetodo, setFiltroMetodo] = useState("Todos");
-  const [busqueda, setBusqueda] = useState("");
   const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const reqIdRef = useRef(0);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [resumen, setResumen] = useState({
+    facturado: 0,
+    hoy: 0,
+    aprox: false,
+  });
+  const resumenReqRef = useRef(0);
 
-  // Si lo escrito en la barra es una fecha (dd/mm/aaaa, mm/aaaa, dd/mm), se
-  // filtra server-side por rango; si no, se mantiene la búsqueda de texto.
-  const rangoFecha = useMemo(() => parseRangoFecha(busqueda), [busqueda]);
+  // Vendedores reales para el filtro. Los técnicos/bodegueros no venden, así
+  // que el desplegable solo lista quienes pueden aparecer en `vendedor_id`.
+  useEffect(() => {
+    let vigente = true;
+    supabase
+      .from("usuarios")
+      .select("id, nombre")
+      .eq("activo", true)
+      .in("rol", ["Vendedor", "Admin"])
+      .order("nombre")
+      .then(({ data }) => {
+        if (vigente) setVendedores(data ?? []);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, []);
+
+  // Los campos se MEMOIZAN: `useFiltros` deriva `valoresAplicados` de ellos y,
+  // si el array se recreara en cada render, el efecto de carga se dispararía en
+  // bucle.
+  const campos = useMemo(
+    () => [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        // OJO: `cliente_id` solo está poblado en 38 de 837 ventas — el cliente
+        // se busca por el nombre denormalizado, que sí está en casi todas.
+        columnas: ["cliente_nombre", "cliente_nit"],
+        numericoA: "numero",
+        debounce: 400,
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "metodo",
+        tipo: "opciones",
+        label: "Método de pago",
+        columna: "metodo_pago",
+        // #S1-14: `ilike` exacto (insensible a mayúsculas) para que variantes de
+        // casing heredadas ('efectivo' vs 'Efectivo') no dejen ventas invisibles.
+        comparador: "ilike-exacto",
+        opciones: METODOS_PAGO_VENTA.filter((m) => m !== "Todos").map((m) => ({
+          v: m,
+          l: m,
+        })),
+      },
+      {
+        id: "estado",
+        tipo: "opciones",
+        label: "Estado",
+        columna: "anulada",
+        opciones: [
+          { v: "false", l: "Completadas" },
+          { v: "true", l: "Anuladas" },
+        ],
+      },
+      {
+        id: "origen",
+        tipo: "opciones",
+        label: "Origen",
+        columna: "origen",
+        opciones: [
+          { v: "directa", l: "Venta directa" },
+          { v: "ot", l: "Orden de trabajo" },
+        ],
+      },
+      {
+        id: "vendedor",
+        tipo: "opciones",
+        label: "Vendedor",
+        columna: "vendedor_id",
+        opciones: vendedores.map((v) => ({ v: v.id, l: v.nombre })),
+      },
+      {
+        id: "sede",
+        tipo: "opciones",
+        label: "Sede",
+        columna: "sede_id",
+        // Solo Admin: a los demás la RLS ya los ata a su sede.
+        visible: esAdmin,
+        opciones: sedes.map((s) => ({ v: s.id, l: s.nombre })),
+      },
+    ],
+    [esAdmin, sedes, vendedores],
+  );
+
+  const f = useFiltros({ clave: "ventas", campos });
+
+  const metodoActivo = f.valores.metodo || "Todos";
+
+  /** Filtros de la pantalla + el recorte por sede de los no-Admin. */
+  const aplicarBase = (q) => {
+    let out = q;
+    if (!esAdmin) out = out.eq("sede_id", perfil.sede_id);
+    return f.aplicar(out);
+  };
 
   const cargarVentas = async (reset = false) => {
-    const myReq = ++reqIdRef.current;
+    const myReq = f.nuevoReqId();
     setLoading(true);
     const currentPage = reset ? 0 : page;
 
     try {
-      // Join read-only a detalle_venta para derivar el resumen de productos
-      // (columna del diseño Lovable). NO modifica lógica de escritura.
-      let query = supabase
-        .from("ventas")
-        .select(
-          `id, numero, fecha, cliente_nombre, metodo_pago, total, anulada, sede_id,
-           vendedor:vendedor_id(nombre),
-           detalle_venta(producto:producto_id(nombre))`,
-        )
+      let query = supabase.from("ventas").select(COLS, { count: "exact" });
+      query = aplicarBase(query);
+      query = query
         // Desempate obligatorio: con solo `fecha`, dos ventas del mismo
         // instante pueden reordenarse entre páginas y el "Cargar más" repite
         // o salta filas.
@@ -56,78 +180,57 @@ export default function VentaHistorial() {
         .order("numero", { ascending: false })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
-      if (!esAdmin) query = query.eq("sede_id", perfil.sede_id);
-      // #S1-14: `ilike` (insensible a mayúsculas) para que variantes de casing
-      // heredadas ('efectivo' vs 'Efectivo') no dejen ventas invisibles al filtrar.
-      if (filtroMetodo !== "Todos")
-        query = query.ilike("metodo_pago", filtroMetodo);
-      if (rangoFecha)
-        query = query
-          .gte("fecha", rangoFecha.desde)
-          .lte("fecha", rangoFecha.hasta);
-
-      const { data, error } = await query;
-      if (myReq !== reqIdRef.current) return;
+      const { data, error, count } = await query;
+      if (!f.esReqVigente(myReq)) return;
       if (error) throw error;
 
+      const filas = data ?? [];
       if (reset) {
-        setVentas(data ?? []);
+        setVentas(filas);
         setPage(1);
       } else {
-        setVentas((prev) => [...prev, ...(data ?? [])]);
+        setVentas((prev) => [...prev, ...filas]);
         setPage((p) => p + 1);
       }
-      setHasMore((data ?? []).length === PAGE_SIZE);
+      const totalReal = count ?? 0;
+      setTotal(totalReal);
+      setHasMore((currentPage + 1) * PAGE_SIZE < totalReal);
     } catch {
       // ignore
     } finally {
-      if (myReq === reqIdRef.current) setLoading(false);
+      if (f.esReqVigente(myReq)) setLoading(false);
+    }
+  };
+
+  // KPIs sobre TODO el filtro, no sobre la página cargada: el encabezado decía
+  // "facturado" sumando 20 ventas de 837.
+  const cargarResumen = async () => {
+    const myReq = ++resumenReqRef.current;
+    try {
+      let query = supabase.from("ventas").select("total, anulada, fecha");
+      query = aplicarBase(query);
+      const { data, error } = await query.range(0, RESUMEN_MAX - 1);
+      if (myReq !== resumenReqRef.current || error) return;
+      const filas = data ?? [];
+      const hoyStr = diaBogota(new Date());
+      setResumen({
+        facturado: filas
+          .filter((v) => !v.anulada)
+          .reduce((s, v) => s + Number(v.total ?? 0), 0),
+        hoy: filas.filter((v) => v.fecha && diaBogota(v.fecha) === hoyStr)
+          .length,
+        aprox: filas.length === RESUMEN_MAX,
+      });
+    } catch {
+      // ignore
     }
   };
 
   useEffect(() => {
     cargarVentas(true);
+    cargarResumen();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroMetodo, rangoFecha?.desde, rangoFecha?.hasta]);
-
-  // Búsqueda client-side sobre lo ya cargado (número, cliente, productos).
-  // El listado original no tenía búsqueda; se añade sin tocar la paginación
-  // server-side ni el filtro por método de pago.
-  const ventasFiltradas = useMemo(() => {
-    // Cuando la barra es una fecha, el filtrado ya ocurrió server-side.
-    if (rangoFecha) return ventas;
-    const needle = busqueda.trim().toLowerCase();
-    if (!needle) return ventas;
-    return ventas.filter((v) => {
-      const num = `#${v.numero}`.toLowerCase();
-      const cli = (v.cliente_nombre || "Cliente mostrador").toLowerCase();
-      const prods = (resumenProductos(v.detalle_venta, 6) ?? "").toLowerCase();
-      return (
-        num.includes(needle) || cli.includes(needle) || prods.includes(needle)
-      );
-    });
-  }, [ventas, busqueda, rangoFecha]);
-
-  // KPIs honestos derivados de lo cargado en vista (no inventados).
-  const kpis = useMemo(() => {
-    // #S1-17: "hoy" se calcula en America/Bogota explícito, no en la zona del
-    // dispositivo (tablets industriales sin sincronizar reloj daban conteos mal).
-    const diaBogota = (d) =>
-      new Intl.DateTimeFormat("en-CA", {
-        timeZone: "America/Bogota",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(new Date(d));
-    const hoyStr = diaBogota(new Date());
-    const facturado = ventas
-      .filter((v) => !v.anulada)
-      .reduce((s, v) => s + Number(v.total ?? 0), 0);
-    const hoy = ventas.filter(
-      (v) => v.fecha && diaBogota(v.fecha) === hoyStr,
-    ).length;
-    return { enVista: ventas.length, facturado, hoy };
-  }, [ventas]);
+  }, [f.valoresAplicados, esAdmin, perfil?.sede_id]);
 
   return (
     <div className="flex h-full flex-col animate-fade-in">
@@ -151,26 +254,32 @@ export default function VentaHistorial() {
               "cargando…"
             ) : (
               <>
+                {/* Los tres números son del FILTRO COMPLETO, no de lo cargado:
+                    `total` viene de count:'exact' y el dinero de `cargarResumen`.
+                    Antes el encabezado sumaba las 20 filas en pantalla y lo
+                    llamaba "facturado". */}
                 <b
                   className="font-mono font-medium"
                   style={{ color: "var(--n-700)" }}
                 >
-                  {kpis.enVista}
-                  {hasMore ? "+" : ""}
+                  {total}
                 </b>{" "}
-                en vista ·{" "}
+                {total === 1 ? "venta" : "ventas"}
+                {f.hayFiltros ? " (filtro)" : ""} ·{" "}
                 <b
                   className="font-mono font-medium"
                   style={{ color: "var(--n-700)" }}
                 >
-                  {formatCOP(kpis.facturado)}
+                  {resumen.aprox ? "≈ " : ""}
+                  {formatCOP(resumen.facturado)}
                 </b>{" "}
-                facturado ·{" "}
+                facturado
+                {resumen.aprox ? ` (primeras ${RESUMEN_MAX})` : ""} ·{" "}
                 <b
                   className="font-mono font-medium"
                   style={{ color: "var(--n-700)" }}
                 >
-                  {kpis.hoy}
+                  {resumen.hoy}
                 </b>{" "}
                 hoy
               </>
@@ -195,11 +304,14 @@ export default function VentaHistorial() {
         style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
       >
         {METODOS_PAGO_VENTA.map((m) => {
-          const active = filtroMetodo === m;
+          const active = metodoActivo === m;
           return (
             <button
               key={m}
-              onClick={() => setFiltroMetodo(m)}
+              // Las tabs son el mismo campo `metodo` de useFiltros: se cruzan
+              // con el resto de filtros y quedan en el chip, en vez de ser un
+              // filtro paralelo de un solo uso.
+              onClick={() => f.setValor("metodo", m === "Todos" ? "" : m)}
               className="rounded-md px-3 text-[12.5px] font-medium transition-colors"
               style={{
                 minHeight: 36,
@@ -221,77 +333,38 @@ export default function VentaHistorial() {
         })}
       </div>
 
-      {/* ── Barra de búsqueda ───────────────────────────────────────── */}
+      {/* ── Filtros ─────────────────────────────────────────────────────
+          La búsqueda es SERVER-SIDE: antes filtraba en memoria sobre las 20
+          filas cargadas y le decía "sin resultados" al vendedor sobre ventas
+          que sí existían. La fecha dejó de competir con el texto: ahora son
+          campos distintos y se cruzan. */}
       <div
-        className="flex items-center gap-3 px-4 py-3 sm:px-7"
+        className="px-4 py-3 sm:px-7"
         style={{ backgroundColor: "var(--n-25)" }}
       >
-        <div
-          className="flex h-12 max-w-[560px] flex-1 items-center gap-2.5 rounded-lg border px-3.5"
-          style={{
-            borderColor: "var(--n-150)",
-            backgroundColor: "var(--n-0)",
-          }}
-        >
-          <Search
-            className="h-4 w-4 shrink-0"
-            strokeWidth={1.5}
-            style={{ color: "var(--n-500)" }}
-          />
-          <input
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por número, cliente, producto o fecha (23/06/2026)…"
-            className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
-            style={{ color: "var(--n-950)" }}
-          />
-        </div>
-        <span
-          className="ml-auto font-mono text-[11px] uppercase tracking-wider"
-          style={{ color: "var(--n-500)" }}
-        >
-          <b className="font-medium" style={{ color: "var(--n-700)" }}>
-            {ventasFiltradas.length}
-          </b>{" "}
-          de{" "}
-          <b className="font-medium" style={{ color: "var(--n-700)" }}>
-            {kpis.enVista}
-            {hasMore ? "+" : ""}
-          </b>
-        </span>
+        <BarraFiltros
+          filtros={f}
+          legacy
+          placeholder="Buscar por número de venta, cliente o NIT…"
+        />
       </div>
 
       {/* ── Contenido ───────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto px-4 pb-14 pt-3 sm:px-7">
         {loading && ventas.length === 0 ? (
           <SkeletonList />
-        ) : ventasFiltradas.length === 0 ? (
-          <>
-            <EmptyState
-              filtrando={busqueda.trim().length > 0}
-              hayMas={hasMore && !rangoFecha && busqueda.trim().length > 0}
-            />
-            {/* #S1-06: la búsqueda de texto es client-side sobre lo cargado; si
-                no hay coincidencias pero quedan páginas, dejar seguir cargando
-                para que el registro buscado no sea inalcanzable. */}
-            {hasMore && !rangoFecha && busqueda.trim() && (
-              <button
-                onClick={() => cargarVentas(false)}
-                disabled={loading}
-                className="btn btn-out mt-4 w-full justify-center disabled:opacity-50"
-                style={{ height: 48 }}
-              >
-                {loading
-                  ? "Cargando…"
-                  : "Cargar más ventas para seguir buscando"}
-              </button>
-            )}
-          </>
+        ) : ventas.length === 0 ? (
+          // Con la búsqueda en el servidor, "sin resultados" ya es la verdad
+          // sobre TODAS las ventas, no sobre las 20 cargadas. Por eso desapareció
+          // el botón "cargar más para seguir buscando" (#S1-06): existía solo
+          // porque el filtro era en memoria y el registro buscado podía estar en
+          // una página no cargada.
+          <EmptyState filtrando={f.hayFiltros} />
         ) : (
           <>
             {/* Móvil/Tablet: cards (< md) */}
             <ul className="md:hidden space-y-2.5" role="list">
-              {ventasFiltradas.map((v) => (
+              {ventas.map((v) => (
                 <li key={v.id}>
                   <VentaCard
                     venta={v}
@@ -328,7 +401,7 @@ export default function VentaHistorial() {
                     </tr>
                   </thead>
                   <tbody>
-                    {ventasFiltradas.map((v) => (
+                    {ventas.map((v) => (
                       <VentaFila
                         key={v.id}
                         venta={v}
@@ -349,12 +422,11 @@ export default function VentaHistorial() {
                 <span>
                   Mostrando{" "}
                   <b className="font-mono" style={{ color: "var(--n-700)" }}>
-                    {ventasFiltradas.length}
+                    {ventas.length}
                   </b>{" "}
                   de{" "}
                   <b className="font-mono" style={{ color: "var(--n-700)" }}>
-                    {kpis.enVista}
-                    {hasMore ? "+" : ""}
+                    {total}
                   </b>{" "}
                   ventas
                 </span>

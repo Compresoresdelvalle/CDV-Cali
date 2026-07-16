@@ -1,10 +1,16 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Search, Plus, X, Receipt } from "lucide-react";
+import { Plus, Receipt, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../../lib/utils";
+import { useFiltros } from "../../../hooks/useFiltros";
+import { useSedes } from "../../../hooks/useSedes";
+import { useAuthStore } from "../../../stores/authStore";
+import BarraFiltros from "../../../components/filtros/BarraFiltros";
 import {
   RECIBOS_TABS,
+  RECIBOS_TIPOS,
+  aplicarTipoRecibo,
   reciboEstadoLabel,
   reciboEstadoPillClass,
   reciboTipo,
@@ -13,39 +19,98 @@ import {
 } from "../../../lib/recibos-ui";
 
 /**
- * Historial de recibos de pago — Fase 14 (re-vestido con diseño Lovable, alta
- * fidelidad). Lógica de datos intacta: filtro por `anulado` server-side,
- * límite 200. Las columnas Tipo / Origen / Emitido por se derivan de columnas
- * REALES (cotizacion_id, orden_id, recibido_por) — sin inventar datos.
+ * Historial de recibos de pago — Fase 14 (diseño Lovable).
+ *
+ * Filtros reales: la búsqueda, el rango de fechas, el estado, el tipo y la sede
+ * viajan al servidor en la MISMA consulta, así que se cruzan entre sí. Antes la
+ * búsqueda filtraba en memoria sobre las 200 filas cargadas y le decía "no se
+ * encontraron recibos" al operario sobre recibos que sí existían.
+ *
+ * Las columnas Tipo / Origen / Emitido por se derivan de columnas REALES
+ * (cotizacion_id, orden_id, recibido_por) — sin inventar datos.
  */
+
+const POR_PAGINA = 50;
+
+const COLUMNAS = `id, numero, fecha, cliente_nombre, concepto, total, monto_pagado,
+   saldo, anulado, cotizacion_id, orden_id,
+   recibidor:recibido_por(nombre)`;
+
 export default function ReciboHistorial() {
   const navigate = useNavigate();
+  const perfil = useAuthStore((s) => s.perfil);
+  const esAdmin = perfil?.rol === "Admin";
+  const { sedes } = useSedes();
+
   const [recibos, setRecibos] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [pagina, setPagina] = useState(0);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [filtro, setFiltro] = useState("Todos"); // Todos | Vigentes | Anulados
-  const [busqueda, setBusqueda] = useState("");
+  const [tipo, setTipo] = useState(""); // "" | cot | ot | manual
+
+  const campos = useMemo(
+    () => [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        columnas: ["cliente_nombre", "cliente_nit", "concepto"],
+        numericoA: "numero",
+        debounce: 400,
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "sede",
+        tipo: "opciones",
+        label: "Sede",
+        columna: "sede_id",
+        opciones: sedes.map((s) => ({ v: s.id, l: s.nombre })),
+        // Solo Admin: al resto la RLS ya lo ata a su sede, un selector ahí
+        // solo ofrece filtrar por sedes que nunca va a ver.
+        visible: esAdmin,
+      },
+    ],
+    [sedes, esAdmin],
+  );
+
+  const f = useFiltros({ clave: "recibos", campos });
+  const { valoresAplicados, aplicar, nuevoReqId, esReqVigente } = f;
+
+  // Cualquier cambio de filtro devuelve el listado a la primera página: quedarse
+  // en la página 4 de un filtro nuevo se lee como "no hay nada".
+  useEffect(() => {
+    setPagina(0);
+  }, [valoresAplicados, filtro, tipo]);
 
   useEffect(() => {
     let cancelado = false;
     const cargar = async () => {
       setLoading(true);
       setErrorMsg("");
+      const reqId = nuevoReqId();
       try {
-        let q = supabase
-          .from("recibos")
-          .select(
-            `id, numero, fecha, cliente_nombre, concepto, total, monto_pagado,
-             saldo, anulado, cotizacion_id, orden_id,
-             recibidor:recibido_por(nombre)`,
-          )
-          .order("fecha", { ascending: false })
-          .limit(200);
+        let q = supabase.from("recibos").select(COLUMNAS, { count: "exact" });
+        q = aplicar(q);
         if (filtro === "Vigentes") q = q.eq("anulado", false);
         if (filtro === "Anulados") q = q.eq("anulado", true);
-        const { data, error } = await q;
+        q = aplicarTipoRecibo(q, tipo);
+        q = q
+          .order("fecha", { ascending: false })
+          .order("numero", { ascending: false })
+          .range(pagina * POR_PAGINA, pagina * POR_PAGINA + POR_PAGINA - 1);
+        const { data, count, error } = await q;
         if (error) throw error;
-        if (!cancelado) setRecibos(data ?? []);
+        if (cancelado || !esReqVigente(reqId)) return;
+        setRecibos(data ?? []);
+        setTotal(count ?? 0);
       } catch (err) {
         if (!cancelado) setErrorMsg(safeError(err, "Error al cargar recibos"));
       } finally {
@@ -56,29 +121,33 @@ export default function ReciboHistorial() {
     return () => {
       cancelado = true;
     };
-  }, [filtro]);
+  }, [
+    valoresAplicados,
+    filtro,
+    tipo,
+    pagina,
+    aplicar,
+    nuevoReqId,
+    esReqVigente,
+  ]);
 
-  // Búsqueda client-side sobre las filas cargadas (solo presentación).
-  const filtrados = useMemo(() => {
-    const needle = busqueda.trim().toLowerCase();
-    if (!needle) return recibos;
-    return recibos.filter(
-      (r) =>
-        String(r.numero ?? "").includes(needle) ||
-        (r.cliente_nombre ?? "").toLowerCase().includes(needle) ||
-        (r.concepto ?? "").toLowerCase().includes(needle),
-    );
-  }, [recibos, busqueda]);
+  // Dinero de la PÁGINA visible, no del filtro completo: sumar todo el filtro
+  // exigiría traerse las filas enteras. Por eso se rotula "en vista" y no se
+  // presenta como el total cobrado.
+  const cobradoEnVista = useMemo(
+    () =>
+      recibos
+        .filter((r) => !r.anulado)
+        .reduce((s, r) => s + (Number(r.monto_pagado) || 0), 0),
+    [recibos],
+  );
 
-  // Totales derivados de las filas cargadas (solo presentación, sin inventar).
-  const stats = useMemo(() => {
-    const vigentes = filtrados.filter((r) => !r.anulado);
-    const cobrado = vigentes.reduce(
-      (s, r) => s + (Number(r.monto_pagado) || 0),
-      0,
-    );
-    return { count: filtrados.length, cobrado };
-  }, [filtrados]);
+  const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  const desde = total === 0 ? 0 : pagina * POR_PAGINA + 1;
+  const hasta = Math.min(total, pagina * POR_PAGINA + recibos.length);
+  const busquedaActiva = String(valoresAplicados.q ?? "").trim();
+  const hayFiltroAlguno =
+    f.hayFiltros || filtro !== "Todos" || tipo !== "" || !!busquedaActiva;
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-[18px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
@@ -109,16 +178,17 @@ export default function ReciboHistorial() {
                   className="font-mono font-medium"
                   style={{ color: "var(--n-900)" }}
                 >
-                  {stats.count}
+                  {total}
                 </b>{" "}
-                recibos ·{" "}
+                {total === 1 ? "recibo" : "recibos"}
+                {hayFiltroAlguno ? " con estos filtros" : ""} ·{" "}
                 <b
                   className="font-mono font-medium"
                   style={{ color: "var(--n-900)" }}
                 >
-                  {formatCOP(stats.cobrado)}
+                  {formatCOP(cobradoEnVista)}
                 </b>{" "}
-                recibido (vigentes)
+                recibido (vigentes, en vista)
               </>
             )}
           </p>
@@ -159,35 +229,40 @@ export default function ReciboHistorial() {
         })}
       </div>
 
-      {/* ── Búsqueda ────────────────────────────────────────────────── */}
-      <div
-        className="flex h-12 max-w-[560px] items-center gap-2.5 rounded-lg border px-3.5"
-        style={{ borderColor: "var(--n-200)", backgroundColor: "var(--n-0)" }}
-      >
-        <Search
-          className="h-4 w-4 shrink-0"
-          strokeWidth={1.5}
-          style={{ color: "var(--n-500)" }}
-        />
-        <input
-          type="search"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar recibo por número, cliente o concepto…"
-          className="min-w-0 flex-1 border-none bg-transparent text-[14px] outline-none"
-          style={{ color: "var(--n-950)" }}
-        />
-        {busqueda && (
-          <button
-            onClick={() => setBusqueda("")}
-            aria-label="Limpiar búsqueda"
-            className="grid h-6 w-6 place-items-center rounded"
-            style={{ color: "var(--n-500)" }}
-          >
-            <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-          </button>
-        )}
+      {/* ── Tipo de recibo ──────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-1.5">
+        {RECIBOS_TIPOS.map((t) => {
+          const on = tipo === t.v;
+          return (
+            <button
+              key={t.v || "todos"}
+              onClick={() => setTipo(t.v)}
+              aria-pressed={on}
+              className="rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors"
+              style={{
+                borderColor: on ? "var(--p-200)" : "var(--n-200)",
+                backgroundColor: on ? "var(--p-50)" : "transparent",
+                color: on ? "var(--p-700)" : "var(--n-500)",
+              }}
+              onMouseEnter={(e) => {
+                if (!on) e.currentTarget.style.backgroundColor = "var(--n-50)";
+              }}
+              onMouseLeave={(e) => {
+                if (!on) e.currentTarget.style.backgroundColor = "transparent";
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </div>
+
+      {/* ── Búsqueda + filtros reales (server-side, se cruzan) ──────── */}
+      <BarraFiltros
+        filtros={f}
+        placeholder="Buscar por número, cliente, NIT o concepto…"
+        legacy
+      />
 
       {errorMsg && (
         <div
@@ -206,13 +281,13 @@ export default function ReciboHistorial() {
       {/* ── Contenido ───────────────────────────────────────────────── */}
       {loading ? (
         <SkeletonList />
-      ) : filtrados.length === 0 ? (
-        <EmptyState busqueda={busqueda} />
+      ) : recibos.length === 0 ? (
+        <EmptyState busqueda={busquedaActiva} hayFiltros={hayFiltroAlguno} />
       ) : (
         <>
           {/* Móvil/Tablet: cards (< md) */}
           <ul className="md:hidden space-y-2.5" role="list">
-            {filtrados.map((r) => (
+            {recibos.map((r) => (
               <li key={r.id}>
                 <ReciboCard
                   r={r}
@@ -247,7 +322,7 @@ export default function ReciboHistorial() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtrados.map((r) => (
+                  {recibos.map((r) => (
                     <ReciboFila
                       key={r.id}
                       r={r}
@@ -268,18 +343,23 @@ export default function ReciboHistorial() {
               <span>
                 Mostrando{" "}
                 <strong className="font-mono" style={{ color: "var(--n-950)" }}>
-                  {filtrados.length}
+                  {desde}–{hasta}
                 </strong>{" "}
-                recibos
+                de{" "}
+                <strong className="font-mono" style={{ color: "var(--n-950)" }}>
+                  {total}
+                </strong>
               </span>
               <span className="font-mono">
-                Recibido (vigentes) ·{" "}
+                Recibido (vigentes, en vista) ·{" "}
                 <strong style={{ color: "var(--n-950)" }}>
-                  {formatCOP(stats.cobrado)}
+                  {formatCOP(cobradoEnVista)}
                 </strong>
               </span>
             </div>
           </div>
+
+          <Paginador pagina={pagina} paginas={paginas} onCambiar={setPagina} />
         </>
       )}
     </div>
@@ -477,6 +557,49 @@ function ReciboCard({ r, onClick }) {
   );
 }
 
+/**
+ * Paginación real sobre el total del servidor. Antes el listado se truncaba en
+ * 200 filas sin decirlo: el recibo 201 simplemente no existía para el operario.
+ */
+function Paginador({ pagina, paginas, onCambiar }) {
+  if (paginas <= 1) return null;
+  const btn = {
+    borderColor: "var(--n-200)",
+    backgroundColor: "var(--n-0)",
+    color: "var(--n-700)",
+  };
+  return (
+    <div className="flex items-center justify-center gap-3">
+      <button
+        onClick={() => onCambiar(Math.max(0, pagina - 1))}
+        disabled={pagina === 0}
+        aria-label="Página anterior"
+        className="inline-flex items-center gap-1.5 rounded-[10px] border px-4 text-[13px] font-medium disabled:opacity-40"
+        style={{ ...btn, height: 48 }}
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+        Anterior
+      </button>
+      <span
+        className="font-mono text-[12.5px] tabular-nums"
+        style={{ color: "var(--n-500)" }}
+      >
+        {pagina + 1} / {paginas}
+      </span>
+      <button
+        onClick={() => onCambiar(Math.min(paginas - 1, pagina + 1))}
+        disabled={pagina >= paginas - 1}
+        aria-label="Página siguiente"
+        className="inline-flex items-center gap-1.5 rounded-[10px] border px-4 text-[13px] font-medium disabled:opacity-40"
+        style={{ ...btn, height: 48 }}
+      >
+        Siguiente
+        <ChevronRight className="h-4 w-4" strokeWidth={2} />
+      </button>
+    </div>
+  );
+}
+
 function SkeletonList() {
   return (
     <div className="flex flex-col gap-2.5">
@@ -491,7 +614,14 @@ function SkeletonList() {
   );
 }
 
-function EmptyState({ busqueda }) {
+function EmptyState({ busqueda, hayFiltros }) {
+  // Distinguir "no hay recibos" de "el filtro no encontró nada" evita que un
+  // filtro activo se lea como base de datos vacía.
+  const mensaje = busqueda
+    ? `No se encontraron recibos para "${busqueda}"`
+    : hayFiltros
+      ? "Ningún recibo coincide con los filtros activos"
+      : "Aún no hay recibos emitidos";
   return (
     <div className="flex flex-col items-center justify-center px-8 py-16 text-center">
       <div
@@ -504,9 +634,7 @@ function EmptyState({ busqueda }) {
         Sin recibos
       </p>
       <p className="mt-1 text-sm" style={{ color: "var(--n-500)" }}>
-        {busqueda
-          ? `No se encontraron recibos para "${busqueda}"`
-          : "Aún no hay recibos emitidos"}
+        {mensaje}
       </p>
     </div>
   );

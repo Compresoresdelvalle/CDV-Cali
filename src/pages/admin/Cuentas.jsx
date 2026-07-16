@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Wallet,
   HandCoins,
@@ -8,68 +8,219 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
-import { estadoCuenta, sedeLabelCuenta } from "../../lib/cuentas-ui";
+import {
+  estadoCuenta,
+  sedeLabelCuenta,
+  SEDE_LABELS_CUENTAS,
+} from "../../lib/cuentas-ui";
 import PagoCuentaModal from "../../components/cuentas/PagoCuentaModal";
+import { useFiltros } from "../../hooks/useFiltros";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
 
 /**
  * B10 — Cuentas por cobrar (ventas a crédito) y por pagar (compras a crédito).
  * Solo Admin. Lee las vistas `v_cuentas_por_cobrar` / `v_cuentas_por_pagar`
  * (saldo ya neto de abonos de cotización) y registra cobros/pagos por modal.
  */
+
+const PAGE_SIZE = 50;
+/** Tope del agregado de dinero. Si se alcanza, el KPI se rotula como parcial. */
+const KPI_CAP = 5000;
+
+const SEDES_OPCIONES = Object.entries(SEDE_LABELS_CUENTAS).map(([v, l]) => ({
+  v,
+  l,
+}));
+
+/**
+ * Estado de cuenta: NO es una columna, se deriva de saldo vs total. Como
+ * `saldo = total - abonado` en ambas vistas, "parcial" equivale a "abonado > 0",
+ * y eso sí se puede preguntar en el servidor sin comparar columna contra columna
+ * (PostgREST no sabe hacerlo). Mismos umbrales que `estadoCuenta()`.
+ */
+const ESTADOS_CUENTA = [
+  { v: "conSaldo", l: "Con saldo" },
+  { v: "pendiente", l: "Pendiente" },
+  { v: "parcial", l: "Parcial" },
+  { v: "saldada", l: "Saldada" },
+  { v: "todas", l: "Todas" },
+];
+
+function aplicarEstadoCuenta(q, estado, esCobrar) {
+  switch (estado) {
+    case "conSaldo":
+      return q.gt("saldo", 0);
+    case "saldada":
+      return q.lte("saldo", 0.01);
+    case "pendiente":
+      // Sin un solo peso abonado.
+      return esCobrar
+        ? q
+            .gt("saldo", 0.01)
+            .lte("abonos_cotizacion", 0.01)
+            .lte("pagos_directos", 0.01)
+        : q.gt("saldo", 0.01).lte("pagos", 0.01);
+    case "parcial":
+      // Algo abonado, pero todavía debe.
+      return esCobrar
+        ? q
+            .gt("saldo", 0.01)
+            .or("abonos_cotizacion.gt.0.01,pagos_directos.gt.0.01")
+        : q.gt("saldo", 0.01).gt("pagos", 0.01);
+    default:
+      return q; // 'todas'
+  }
+}
+
 export default function Cuentas() {
   const [tab, setTab] = useState("cobrar"); // 'cobrar' | 'pagar'
   const [rows, setRows] = useState([]);
-  // #S3-12: los KPIs de cartera se calculan sobre TODOS los documentos, no solo
-  // sobre las 300 filas que se muestran en la lista (antes subestimaban en silencio).
-  const [kpi, setKpi] = useState({ saldo: 0, total: 0, conSaldo: 0 });
+  const [total, setTotal] = useState(0); // count exacto del filtro
+  // #S3-12: los KPIs de cartera se calculan sobre TODOS los documentos del
+  // filtro, no solo sobre la página que se muestra (antes subestimaban en silencio).
+  const [kpi, setKpi] = useState({ saldo: 0, total: 0, parcial: false });
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [soloPendientes, setSoloPendientes] = useState(true);
+  const [estadoCta, setEstadoCta] = useState("conSaldo");
   const [modalCuenta, setModalCuenta] = useState(null);
+  const [page, setPage] = useState(0);
 
   const esCobrar = tab === "cobrar";
+
+  // Dos juegos de filtros: las vistas no son simétricas (cliente_nombre/sede_id
+  // contra proveedor/sede_destino_id), y así cada pestaña recuerda lo suyo.
+  const fCobrar = useFiltros({
+    clave: "cuentas-cobrar",
+    campos: [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        columnas: ["cliente_nombre"],
+        numericoA: "numero",
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "sede",
+        tipo: "opciones",
+        label: "Sede",
+        columna: "sede_id",
+        opciones: SEDES_OPCIONES,
+      },
+    ],
+  });
+
+  const fPagar = useFiltros({
+    clave: "cuentas-pagar",
+    campos: [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        columnas: ["proveedor"],
+        numericoA: "numero",
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "sede",
+        tipo: "opciones",
+        label: "Sede",
+        columna: "sede_destino_id",
+        opciones: SEDES_OPCIONES,
+      },
+    ],
+  });
+
+  const f = esCobrar ? fCobrar : fPagar;
+  const fOtra = esCobrar ? fPagar : fCobrar;
+
+  // Resetear la página en CADA cambio de filtro, pestaña o estado, sin disparar
+  // un fetch de más (patrón "ajustar estado durante el render" de React).
+  const filtroKey = useMemo(
+    () => JSON.stringify([tab, estadoCta, f.valoresAplicados]),
+    [tab, estadoCta, f.valoresAplicados],
+  );
+  const [filtroKeyPrev, setFiltroKeyPrev] = useState(filtroKey);
+  if (filtroKeyPrev !== filtroKey) {
+    setFiltroKeyPrev(filtroKey);
+    setPage(0);
+  }
 
   const cargar = useCallback(async () => {
     setLoading(true);
     setErrorMsg("");
+    const reqId = f.nuevoReqId();
+    // Cada pestaña tiene su propio token de secuencia, así que una respuesta en
+    // vuelo de la OTRA pestaña seguiría pasando su propio `esReqVigente` y
+    // pintaría filas del tab equivocado (con el id de la otra vista). Al cambiar
+    // de pestaña se invalida también lo que quedó en vuelo allá.
+    fOtra.nuevoReqId();
     try {
       const vista = esCobrar ? "v_cuentas_por_cobrar" : "v_cuentas_por_pagar";
-      let q = supabase
-        .from(vista)
-        .select("*")
-        .order("fecha", { ascending: false })
-        .limit(300);
-      if (soloPendientes) q = q.gt("saldo", 0);
-      const { data, error } = await q;
-      if (error) throw error;
-      setRows(data ?? []);
+      const desde = page * PAGE_SIZE;
 
-      // #S3-12: KPIs sobre el universo completo (solo columnas saldo/total, ligero).
+      let q = supabase.from(vista).select("*", { count: "exact" });
+      q = f.aplicar(q);
+      q = aplicarEstadoCuenta(q, estadoCta, esCobrar);
+      q = q
+        .order("fecha", { ascending: false })
+        .order("numero", { ascending: false })
+        .range(desde, desde + PAGE_SIZE - 1);
+      const { data, error, count } = await q;
+      if (error) throw error;
+      if (!f.esReqVigente(reqId)) return;
+      setRows(data ?? []);
+      setTotal(count ?? 0);
+
+      // KPIs sobre el universo del filtro (solo saldo/total, ligero).
       let kq = supabase.from(vista).select("saldo, total");
-      if (soloPendientes) kq = kq.gt("saldo", 0);
-      const { data: kdata, error: kerr } = await kq.limit(10000);
+      kq = f.aplicar(kq);
+      kq = aplicarEstadoCuenta(kq, estadoCta, esCobrar);
+      const { data: kdata, error: kerr } = await kq.limit(KPI_CAP);
+      if (!f.esReqVigente(reqId)) return;
       if (!kerr && kdata) {
         setKpi({
           saldo: kdata.reduce((s, r) => s + Number(r.saldo ?? 0), 0),
           total: kdata.reduce((s, r) => s + Number(r.total ?? 0), 0),
-          conSaldo: kdata.filter((r) => Number(r.saldo) > 0).length,
+          parcial: kdata.length >= KPI_CAP,
         });
       }
     } catch (err) {
+      if (!f.esReqVigente(reqId)) return;
       setErrorMsg(safeError(err, "Error al cargar cuentas"));
     } finally {
       setLoading(false);
     }
-  }, [esCobrar, soloPendientes]);
+    // `filtroKey` representa tab/estado/valores aplicados: es la dependencia real.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    filtroKey,
+    page,
+    f.aplicar,
+    f.nuevoReqId,
+    f.esReqVigente,
+    fOtra.nuevoReqId,
+  ]);
 
   useEffect(() => {
     cargar();
   }, [cargar]);
 
-  // #S3-12: KPIs desde el agregado completo (no desde las 300 filas mostradas).
   const totalSaldo = kpi.saldo;
   const totalDoc = kpi.total;
-  const conSaldo = kpi.conSaldo;
+  const paginas = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const abrirModal = (r) => {
     setModalCuenta({
@@ -106,23 +257,6 @@ export default function Cuentas() {
             Ventas y compras a crédito pendientes de saldar.
           </p>
         </div>
-        <button
-          onClick={() => setSoloPendientes((v) => !v)}
-          className="inline-flex h-12 items-center gap-1.5 rounded-md border px-4 text-[12.5px] font-medium transition-colors cursor-pointer"
-          style={{
-            backgroundColor: soloPendientes
-              ? "hsl(var(--primary))"
-              : "hsl(var(--card))",
-            color: soloPendientes
-              ? "hsl(var(--primary-foreground))"
-              : "hsl(var(--muted-foreground))",
-            borderColor: soloPendientes
-              ? "hsl(var(--primary))"
-              : "hsl(var(--border))",
-          }}
-        >
-          {soloPendientes ? "Solo con saldo" : "Todas (saldadas incl.)"}
-        </button>
       </div>
 
       {/* Tabs CxC / CxP */}
@@ -162,6 +296,46 @@ export default function Cuentas() {
         })}
       </div>
 
+      {/* Búsqueda + filtros cruzables (server-side) */}
+      <BarraFiltros
+        key={tab}
+        filtros={f}
+        placeholder={esCobrar ? "Buscar # o cliente…" : "Buscar # o proveedor…"}
+      />
+
+      {/* Estado de cuenta — derivado de saldo vs total, aplicado en el servidor */}
+      <div
+        className="flex flex-wrap gap-1.5"
+        role="group"
+        aria-label="Estado de cuenta"
+      >
+        {ESTADOS_CUENTA.map((e) => {
+          const active = estadoCta === e.v;
+          return (
+            <button
+              key={e.v}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setEstadoCta(e.v)}
+              className="inline-flex h-11 items-center rounded-full border px-4 text-[12.5px] font-medium transition-colors cursor-pointer"
+              style={{
+                backgroundColor: active
+                  ? "hsl(var(--primary))"
+                  : "hsl(var(--card))",
+                color: active
+                  ? "hsl(var(--primary-foreground))"
+                  : "hsl(var(--muted-foreground))",
+                borderColor: active
+                  ? "hsl(var(--primary))"
+                  : "hsl(var(--border))",
+              }}
+            >
+              {e.l}
+            </button>
+          );
+        })}
+      </div>
+
       {errorMsg && (
         <div
           role="alert"
@@ -181,20 +355,26 @@ export default function Cuentas() {
         <Kpi
           label={esCobrar ? "Total por cobrar" : "Total por pagar"}
           value={loading ? "…" : formatCOP(totalSaldo)}
-          sub={esCobrar ? "Saldo de clientes" : "Saldo a proveedores"}
+          sub={
+            (esCobrar ? "Saldo de clientes" : "Saldo a proveedores") +
+            (kpi.parcial ? ` · primeros ${KPI_CAP}` : "")
+          }
           token={esCobrar ? "--success" : "--destructive"}
           icon={CircleDollarSign}
         />
         <Kpi
-          label="Cuentas con saldo"
-          value={loading ? "…" : conSaldo}
-          sub={`${rows.length} documento(s) en vista`}
+          label="Documentos"
+          value={loading ? "…" : total}
+          sub="Total del filtro"
           icon={FileText}
         />
         <Kpi
           label="Valor documentos"
           value={loading ? "…" : formatCOP(totalDoc)}
-          sub="Total facturado (vista)"
+          sub={
+            "Total facturado del filtro" +
+            (kpi.parcial ? ` · primeros ${KPI_CAP}` : "")
+          }
           icon={Wallet}
         />
       </div>
@@ -203,8 +383,9 @@ export default function Cuentas() {
         <SkeletonList />
       ) : rows.length === 0 ? (
         <Empty icon="💸">
-          Sin cuentas {esCobrar ? "por cobrar" : "por pagar"}
-          {soloPendientes ? " con saldo" : ""}.
+          {f.hayFiltros || estadoCta !== "todas"
+            ? "Ningún documento coincide con los filtros."
+            : `Sin cuentas ${esCobrar ? "por cobrar" : "por pagar"}.`}
         </Empty>
       ) : (
         <section
@@ -389,24 +570,49 @@ export default function Cuentas() {
             })}
           </ul>
 
+          {/* Conteo honesto: lo que se ve, sobre el total real del filtro. */}
           <footer
-            className="border-t px-[18px] py-3 font-mono text-[10.5px] tracking-[0.06em]"
+            className="flex flex-wrap items-center justify-between gap-3 border-t px-[18px] py-3 font-mono text-[10.5px] tracking-[0.06em]"
             style={{
               borderColor: "hsl(var(--border))",
               backgroundColor: "hsl(var(--muted) / 0.3)",
               color: "hsl(var(--muted-foreground))",
             }}
           >
-            {rows.length} cuenta(s) · saldo total{" "}
-            <span
-              style={{
-                color: esCobrar
-                  ? "hsl(var(--success))"
-                  : "hsl(var(--destructive))",
-              }}
-            >
-              {formatCOP(totalSaldo)}
+            <span>
+              {page * PAGE_SIZE + 1}–{page * PAGE_SIZE + rows.length} de {total}{" "}
+              cuenta(s) · saldo del filtro{" "}
+              <span
+                style={{
+                  color: esCobrar
+                    ? "hsl(var(--success))"
+                    : "hsl(var(--destructive))",
+                }}
+              >
+                {formatCOP(totalSaldo)}
+              </span>
+              {kpi.parcial && ` (primeros ${KPI_CAP})`}
             </span>
+
+            {paginas > 1 && (
+              <span className="flex items-center gap-2">
+                <PagerBtn
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                >
+                  Anterior
+                </PagerBtn>
+                <span>
+                  {page + 1} / {paginas}
+                </span>
+                <PagerBtn
+                  onClick={() => setPage((p) => Math.min(paginas - 1, p + 1))}
+                  disabled={page >= paginas - 1}
+                >
+                  Siguiente
+                </PagerBtn>
+              </span>
+            )}
           </footer>
         </section>
       )}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   Triangle,
@@ -9,6 +9,8 @@ import {
   TrendingUp,
   TrendingDown,
   ArrowRight,
+  ChevronLeft,
+  ChevronRight,
   Filter,
   Building2,
 } from "lucide-react";
@@ -16,6 +18,9 @@ import { supabase } from "../../lib/supabase";
 import { formatDate, formatCOP, safeError } from "../../lib/utils";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { severidadStock, diasDesde } from "../../lib/admin-analytics-ui";
+import { useFiltros } from "../../hooks/useFiltros";
+import { useSedes } from "../../hooks/useSedes";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
 
 const TABS = [
   { key: "stock", label: "Stock bajo / agotado", icon: Package },
@@ -27,6 +32,32 @@ const TABS = [
   { key: "menor_rotacion", label: "Menor rotación", icon: TrendingDown },
 ];
 
+/* Solo la pestaña de stock tiene volumen real (~2.6k filas): es la única que
+ * pagina y filtra contra el servidor. Las demás caben enteras en memoria, así
+ * que ahí filtrar en cliente no miente: se está filtrando TODO lo que hay. */
+const PAGE_SIZE = 50;
+
+/** Valores REALES del enum `estado_stock` (OK | Bajo | Agotado | Sobrestock).
+ *  'OK' no es alerta y 'Sobrestock' tiene su propia pestaña. */
+const ESTADOS_ALERTA = ["Bajo", "Agotado"];
+const OPCIONES_ESTADO = [
+  { v: "Agotado", l: "Agotado" },
+  { v: "Bajo", l: "Bajo" },
+];
+/** Valores REALES del enum `clasificacion_abc` (columna productos.clasificacion). */
+const OPCIONES_ABC = [
+  { v: "A", l: "A — mayor impacto" },
+  { v: "B", l: "B — impacto medio" },
+  { v: "C", l: "C — menor impacto" },
+];
+
+/* `!inner` en el embed de producto: sin él, filtrar por `producto.clasificacion`
+ * solo vaciaría el objeto embebido en vez de descartar la fila (y el count
+ * seguiría contando filas que no cumplen el filtro). */
+const COLS_STOCK = `id, cantidad, estado_stock, sede_id, sede:sede_id(nombre), producto:producto_id!inner(referencia, nombre, stock_minimo, clasificacion)`;
+
+/* Las pestañas que no son de stock caben enteras en memoria y siguen con el
+ * filtro por sede/prioridad de siempre. */
 const PRIORIDADES = ["Todas", "Urgente", "Alta", "Media"];
 const TODAS_SEDES = "Todas";
 
@@ -49,6 +80,41 @@ export default function Alertas() {
   const [errorMsg, setErrorMsg] = useState("");
   const mountedRef = useRef(true);
 
+  /* Stock se cuenta y se pagina en el servidor. Antes se traían 200 filas y se
+   * filtraban aquí: con ~2.600 filas Bajo/Agotado el badge decía "200" y las
+   * demás alertas no existían para el administrador. */
+  const [stockTotal, setStockTotal] = useState(0);
+  const [stockPage, setStockPage] = useState(0);
+  const [stockLoading, setStockLoading] = useState(true);
+  const { sedes } = useSedes();
+
+  const fStock = useFiltros({
+    clave: "alertas-stock",
+    campos: [
+      {
+        id: "sede",
+        tipo: "opciones",
+        label: "Sede",
+        columna: "sede_id",
+        opciones: sedes.map((s) => ({ v: s.id, l: s.nombre })),
+      },
+      {
+        id: "estado",
+        tipo: "opciones",
+        label: "Estado",
+        columna: "estado_stock",
+        opciones: OPCIONES_ESTADO,
+      },
+      {
+        id: "abc",
+        tipo: "opciones",
+        label: "Clasificación",
+        columna: "producto.clasificacion",
+        opciones: OPCIONES_ABC,
+      },
+    ],
+  });
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -60,15 +126,7 @@ export default function Alertas() {
     setLoading(true);
     setErrorMsg("");
     try {
-      const [s, h, o, ot30, rot] = await Promise.all([
-        supabase
-          .from("inventario")
-          .select(
-            `id, cantidad, estado_stock, sede_id, sede:sede_id(nombre), producto:producto_id(referencia, nombre, stock_minimo)`,
-          )
-          .in("estado_stock", ["Bajo", "Agotado"])
-          .order("cantidad", { ascending: true })
-          .limit(200),
+      const [h, o, ot30, rot] = await Promise.all([
         supabase
           .from("herramientas_prestamo")
           .select(
@@ -95,29 +153,20 @@ export default function Alertas() {
         supabase.rpc("fn_alertas_rotacion", { p_dias: 30, p_sede: null }),
       ]);
       if (!mountedRef.current) return;
-      if (s.error) throw s.error;
       if (h.error) throw h.error;
       if (o.error) throw o.error;
       if (ot30.error) throw ot30.error;
       if (rot.error) throw rot.error;
       const rotData = rot.data ?? [];
-      // Agotado siempre antes que Bajo — ordenar por texto daría 'Bajo' primero
-      // (alfabéticamente "B" > "A"), justo al revés de lo que se necesita.
-      const stockOrdenado = [...(s.data ?? [])].sort((a, b) => {
-        if (a.estado_stock !== b.estado_stock) {
-          return a.estado_stock === "Agotado" ? -1 : 1;
-        }
-        return a.cantidad - b.cantidad;
-      });
-      setDatos({
-        stock: stockOrdenado,
+      setDatos((prev) => ({
+        ...prev,
         herramientas: h.data ?? [],
         ordenes: o.data ?? [],
         ot30dias: ot30.data ?? [],
         sobre_stock: rotData.filter((r) => r.categoria === "sobre_stock"),
         mayor_rotacion: rotData.filter((r) => r.categoria === "mayor_rotacion"),
         menor_rotacion: rotData.filter((r) => r.categoria === "menor_rotacion"),
-      });
+      }));
     } catch (err) {
       if (!mountedRef.current) return;
       setErrorMsg(safeError(err, "Error al cargar alertas"));
@@ -130,14 +179,55 @@ export default function Alertas() {
     cargar();
   }, []);
 
-  // Lista de sedes presentes en los datos (para el filtro). Cada entrada
-  // conserva su id real y un nombre legible cuando está disponible.
+  /* Stock bajo/agotado: filtrado, contado y paginado en el servidor.
+   * `estado_stock` desc deja Agotado (enum 3) antes que Bajo (enum 2), sin
+   * reordenar en cliente; y `count:'exact'` da el total honesto para el badge. */
+  const cargarStock = useCallback(async () => {
+    setStockLoading(true);
+    const reqId = fStock.nuevoReqId();
+    try {
+      let query = supabase
+        .from("inventario")
+        .select(COLS_STOCK, { count: "exact" })
+        .in("estado_stock", ESTADOS_ALERTA);
+      query = fStock.aplicar(query);
+      const desde = stockPage * PAGE_SIZE;
+      const { data, error, count } = await query
+        .order("estado_stock", { ascending: false })
+        .order("cantidad", { ascending: true })
+        .range(desde, desde + PAGE_SIZE - 1);
+      if (!mountedRef.current || !fStock.esReqVigente(reqId)) return;
+      if (error) throw error;
+      setDatos((prev) => ({ ...prev, stock: data ?? [] }));
+      setStockTotal(count ?? 0);
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setErrorMsg(safeError(err, "Error al cargar alertas de stock"));
+    } finally {
+      if (mountedRef.current && fStock.esReqVigente(reqId)) {
+        setStockLoading(false);
+      }
+    }
+  }, [fStock, stockPage]);
+
+  // Un cambio de filtro vuelve a la primera página; el efecto de carga corre en
+  // ambos casos (cambia stockPage, o cambia el filtro con la página ya en 0).
+  useEffect(() => {
+    setStockPage(0);
+  }, [fStock.valoresAplicados]);
+
+  useEffect(() => {
+    cargarStock();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockPage, fStock.valoresAplicados]);
+
+  // Sedes presentes en las pestañas NO-stock (las que filtran en cliente). El
+  // stock trae su propio filtro de sede desde la base (todas las sedes activas).
   const sedesDisponibles = useMemo(() => {
     const map = new Map();
     const add = (id, nombre) => {
       if (id && !map.has(id)) map.set(id, nombre || id);
     };
-    datos.stock.forEach((r) => add(r.sede_id, r.sede?.nombre));
     datos.herramientas.forEach((r) => add(r.sede_id, null));
     datos.ordenes.forEach((r) => add(r.sede_id, null));
     datos.ot30dias.forEach((r) => add(r.sede_id, null));
@@ -150,7 +240,7 @@ export default function Alertas() {
   }, [datos]);
 
   const counts = {
-    stock: datos.stock.length,
+    stock: stockTotal,
     herramientas: datos.herramientas.length,
     ordenes: datos.ordenes.length,
     ot30dias: datos.ot30dias.length,
@@ -160,15 +250,25 @@ export default function Alertas() {
   };
   const totalActivas = Object.values(counts).reduce((a, b) => a + b, 0);
   const tabActual = TABS.find((t) => t.key === tab);
+  const esStock = tab === "stock";
 
-  // Filas de la pestaña activa ya filtradas por sede + prioridad.
-  const filasVisibles = useMemo(
-    () => filtrarFilas(tab, datos, sede, prioridad),
-    [tab, datos, sede, prioridad],
-  );
+  /* La pestaña de stock ya llega filtrada y anotada desde el servidor; el resto
+   * cabe en memoria y conserva el filtro cliente por sede + prioridad. */
+  const filasVisibles = useMemo(() => {
+    if (esStock) {
+      return (datos.stock ?? []).map((r) => ({
+        ...r,
+        _sev: severidadDeFila("stock", r),
+      }));
+    }
+    return filtrarFilas(tab, datos, sede, prioridad);
+  }, [esStock, tab, datos, sede, prioridad]);
   const urgentesVisibles = filasVisibles.filter(
     (f) => f._sev === "--destructive",
   ).length;
+  const stockDesde = stockPage * PAGE_SIZE;
+  const stockHasta = Math.min(stockDesde + PAGE_SIZE, stockTotal);
+  const stockTotalPags = Math.max(1, Math.ceil(stockTotal / PAGE_SIZE));
 
   return (
     <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7 animate-fade-in">
@@ -286,40 +386,47 @@ export default function Alertas() {
         })}
       </div>
 
-      {/* Barra de filtros */}
-      <div className="flex flex-wrap items-center justify-between gap-3 -mt-3">
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Barra de filtros — stock filtra contra el servidor (sede/estado/ABC);
+          las demás pestañas caben en memoria y usan el filtro cliente. */}
+      {esStock ? (
+        <div className="-mt-3">
+          <BarraFiltros filtros={fStock} />
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3 -mt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="inline-flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.06em]"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              <Filter className="h-3 w-3" strokeWidth={1.5} />
+              Filtrar
+            </span>
+            {sedesDisponibles.size > 1 && (
+              <Seg
+                icon={Building2}
+                options={[TODAS_SEDES, ...sedesDisponibles.keys()]}
+                value={sede}
+                onChange={setSede}
+                labelOf={(s) =>
+                  s === TODAS_SEDES ? "Todas" : (sedesDisponibles.get(s) ?? s)
+                }
+              />
+            )}
+            <Seg
+              options={PRIORIDADES}
+              value={prioridad}
+              onChange={setPrioridad}
+            />
+          </div>
           <span
-            className="inline-flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.06em]"
+            className="font-mono text-[10.5px] tracking-[0.06em]"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            <Filter className="h-3 w-3" strokeWidth={1.5} />
-            Filtrar
+            {filasVisibles.length} resultados · {urgentesVisibles} urgentes
           </span>
-          {sedesDisponibles.size > 1 && (
-            <Seg
-              icon={Building2}
-              options={[TODAS_SEDES, ...sedesDisponibles.keys()]}
-              value={sede}
-              onChange={setSede}
-              labelOf={(s) =>
-                s === TODAS_SEDES ? "Todas" : (sedesDisponibles.get(s) ?? s)
-              }
-            />
-          )}
-          <Seg
-            options={PRIORIDADES}
-            value={prioridad}
-            onChange={setPrioridad}
-          />
         </div>
-        <span
-          className="font-mono text-[10.5px] tracking-[0.06em]"
-          style={{ color: "hsl(var(--muted-foreground))" }}
-        >
-          {filasVisibles.length} resultados · {urgentesVisibles} urgentes
-        </span>
-      </div>
+      )}
 
       {/* Lista */}
       <section
@@ -365,9 +472,66 @@ export default function Alertas() {
           </span>
         </header>
 
-        {loading ? <Skeleton /> : renderTab(tab, filasVisibles, navigate)}
+        {(esStock ? stockLoading : loading) ? (
+          <Skeleton />
+        ) : (
+          renderTab(tab, filasVisibles, navigate)
+        )}
 
-        {!loading && (
+        {/* Paginación del stock (contra el servidor). Solo en esa pestaña, que
+            es la única que puede exceder una página. */}
+        {esStock && !stockLoading && stockTotal > PAGE_SIZE && (
+          <div
+            className="flex items-center justify-between gap-2 border-t px-[18px] py-2.5 text-[12px]"
+            style={{
+              borderColor: "hsl(var(--border))",
+              backgroundColor: "hsl(var(--muted) / 0.3)",
+            }}
+          >
+            <span
+              className="font-mono text-[10.5px]"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              {stockDesde + 1}–{stockHasta} de {stockTotal}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setStockPage((p) => Math.max(0, p - 1))}
+                disabled={stockPage === 0}
+                className="inline-flex h-9 items-center gap-1 rounded-md border px-2.5 text-xs font-medium disabled:opacity-40"
+                style={{
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--foreground))",
+                }}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+              </button>
+              <span
+                className="font-mono text-[11px]"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                {stockPage + 1}/{stockTotalPags}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setStockPage((p) => (stockHasta >= stockTotal ? p : p + 1))
+                }
+                disabled={stockHasta >= stockTotal}
+                className="inline-flex h-9 items-center gap-1 rounded-md border px-2.5 text-xs font-medium disabled:opacity-40"
+                style={{
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--foreground))",
+                }}
+              >
+                Siguiente <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!(esStock ? stockLoading : loading) && (
           <footer
             className="flex flex-wrap items-center justify-between gap-2 border-t px-[18px] py-3 text-[12px]"
             style={{

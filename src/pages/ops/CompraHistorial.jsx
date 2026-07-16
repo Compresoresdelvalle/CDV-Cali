@@ -1,16 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, PackageOpen, Search } from "lucide-react";
+import { Plus, PackageOpen } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import {
-  formatCOP,
-  formatDate,
-  sanitizeSearch,
-  safeError,
-} from "../../lib/utils";
-import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
+import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
+import { useFiltros } from "../../hooks/useFiltros";
+import { useSedes } from "../../hooks/useSedes";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
 import {
   COMPRAS_TABS,
   COMPRAS_TIPO_TABS,
@@ -20,6 +17,13 @@ import {
 } from "../../lib/compras-ui";
 
 const PAGE_SIZE = 20;
+/**
+ * Tope de filas que se leen para calcular los KPIs del encabezado. Con ~300
+ * compras en la base sobra; el tope evita que el día que sean 50.000 la pantalla
+ * se traiga la tabla entera solo para sumar. Si se alcanza, el encabezado lo
+ * dice ("en vista") en vez de mentir con un total incompleto.
+ */
+const RESUMEN_CAP = 2000;
 
 export default function CompraHistorial() {
   const navigate = useNavigate();
@@ -31,62 +35,101 @@ export default function CompraHistorial() {
     perfil?.rol,
   );
 
+  const esAdmin = perfil?.rol === "Admin";
+  const { sedes } = useSedes();
+
   const [compras, setCompras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState("Todas");
   const [tipo, setTipo] = useState("Todos");
-  const [busqueda, setBusqueda] = useState("");
-  const [busquedaActiva, setBusquedaActiva] = useState("");
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [recibiendoId, setRecibiendoId] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
-  // Token de secuencia: descarta respuestas obsoletas (cambio de filtro
-  // mientras hay una carga en vuelo) para no mezclar resultados.
-  const reqIdRef = useRef(0);
+  // Totales REALES del filtro (no de lo cargado) — ver `cargarResumen`.
+  const [resumen, setResumen] = useState({
+    total: 0,
+    comprado: 0,
+    pendientes: 0,
+    parcial: false,
+  });
+
+  const campos = useMemo(
+    () => [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        // `numero` es integer: va por `numericoA` (un ilike contra integer
+        // revienta en Postgres). Escribir "873" busca ESA compra.
+        columnas: ["proveedor", "factura_proveedor", "concepto"],
+        numericoA: "numero",
+        debounce: 400,
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        // Solo Admin: al resto la RLS ya lo ata a su sede, y abajo se fuerza el
+        // `.eq` de todos modos.
+        id: "sede",
+        tipo: "opciones",
+        label: "Sede",
+        columna: "sede_destino_id",
+        opciones: sedes.map((s) => ({ v: s.id, l: s.nombre })),
+        visible: esAdmin,
+      },
+    ],
+    [esAdmin, sedes],
+  );
+
+  const filtros = useFiltros({ clave: "compras", campos });
+  const { aplicar, valoresAplicados, nuevoReqId, esReqVigente } = filtros;
+  /** Texto YA aplicado (con debounce) — es el que de verdad filtró la lista. */
+  const busquedaActiva = String(valoresAplicados.q ?? "").trim();
+
+  /** Filtros que NO viven en la barra (pestañas de estado y de tipo) + barra. */
+  const aplicarTodo = useCallback(
+    (query) => {
+      let q = query;
+      if (!esAdmin) q = q.eq("sede_destino_id", perfil?.sede_id);
+      if (filtro === "Registrada") q = q.eq("recibida", false);
+      if (filtro === "Recibida") q = q.eq("recibida", true);
+      if (filtro === "Cancelada") q = q.eq("estado", "cancelada");
+      if (filtro === "Garantía") q = q.eq("estado", "devolucion_garantia");
+      // Filtro por tipo: orden de compra formal vs. gasto de caja menor.
+      if (tipo === "Órdenes de compra") q = q.eq("es_caja_menor", false);
+      if (tipo === "Caja menor") q = q.eq("es_caja_menor", true);
+      return aplicar(q);
+    },
+    [esAdmin, perfil?.sede_id, filtro, tipo, aplicar],
+  );
 
   const cargarCompras = useCallback(
     async (reset = false) => {
-      const myReq = ++reqIdRef.current;
+      const myReq = nuevoReqId();
       setLoading(true);
       setErrorMsg(null);
       const currentPage = reset ? 0 : page;
       try {
-        let query = supabase
-          .from("compras")
-          .select(
-            `id, numero, fecha, fecha_recepcion, proveedor, factura_proveedor,
+        let query = supabase.from("compras").select(
+          `id, numero, fecha, fecha_recepcion, proveedor, factura_proveedor,
              total, recibida, estado, es_caja_menor, concepto,
              registrador:registrado_por(nombre)`,
-          )
+        );
+        query = aplicarTodo(query)
           // Desempate obligatorio: sin él, el "Cargar más" puede repetir o
           // saltar compras que comparten la misma fecha.
           .order("fecha", { ascending: false })
           .order("numero", { ascending: false })
           .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
-        if (perfil?.rol !== "Admin")
-          query = query.eq("sede_destino_id", perfil?.sede_id);
-        if (filtro === "Registrada") query = query.eq("recibida", false);
-        if (filtro === "Recibida") query = query.eq("recibida", true);
-        if (filtro === "Garantía")
-          query = query.eq("estado", "devolucion_garantia");
-        // Filtro por tipo: orden de compra formal vs. gasto de caja menor.
-        if (tipo === "Órdenes de compra")
-          query = query.eq("es_caja_menor", false);
-        if (tipo === "Caja menor") query = query.eq("es_caja_menor", true);
-
-        // Búsqueda server-side por proveedor, factura o concepto (caja menor).
-        const needle = busquedaActiva.trim();
-        if (needle.length >= 2) {
-          const safe = sanitizeSearch(needle);
-          query = query.or(
-            `proveedor.ilike.%${safe}%,factura_proveedor.ilike.%${safe}%,concepto.ilike.%${safe}%`,
-          );
-        }
-
         const { data, error } = await query;
-        if (myReq !== reqIdRef.current) return; // respuesta obsoleta
+        if (!esReqVigente(myReq)) return; // respuesta obsoleta
         if (error) throw error;
 
         if (reset) {
@@ -98,34 +141,54 @@ export default function CompraHistorial() {
         }
         setHasMore((data ?? []).length === PAGE_SIZE);
       } catch {
-        if (myReq === reqIdRef.current)
+        if (esReqVigente(myReq))
           setErrorMsg("No se pudieron cargar las compras. Reintenta.");
       } finally {
-        if (myReq === reqIdRef.current) setLoading(false);
+        if (esReqVigente(myReq)) setLoading(false);
       }
     },
     // S6-F: `page` DEBE estar en las dependencias — sin ella, "Cargar más"
     // usaba un closure congelado con page=0 y re-pedía siempre la primera
     // página (filas duplicadas, nunca avanzaba). El useEffect de abajo depende
     // de los filtros (no de esta función), así que no provoca re-fetchs.
-    [filtro, tipo, busquedaActiva, perfil?.rol, perfil?.sede_id, page],
+    [aplicarTodo, nuevoReqId, esReqVigente, page],
   );
 
+  /**
+   * KPIs honestos: el encabezado decía "N registros · $X comprado" contando SOLO
+   * la página cargada, así que con 300 compras filtradas mostraba 20. Esta
+   * consulta pide el conteo exacto al servidor y suma los totales del filtro
+   * completo, no de lo que se alcanzó a pintar.
+   */
+  const cargarResumen = useCallback(async () => {
+    const myReq = nuevoReqId();
+    try {
+      let q = supabase.from("compras").select("total, recibida", {
+        count: "exact",
+      });
+      q = aplicarTodo(q).range(0, RESUMEN_CAP - 1);
+      const { data, count, error } = await q;
+      if (!esReqVigente(myReq) || error) return;
+      const filas = data ?? [];
+      const s = comprasHeaderStats(filas);
+      setResumen({
+        total: count ?? filas.length,
+        comprado: s.comprado,
+        pendientes: s.pendientes,
+        parcial: (count ?? 0) > filas.length,
+      });
+    } catch {
+      // El resumen es informativo: si falla, el listado sigue funcionando y el
+      // error del listado (si lo hubo) es el que se le muestra al operario.
+    }
+  }, [aplicarTodo, nuevoReqId, esReqVigente]);
+
   useEffect(() => {
+    // Todo cambio de filtro reinicia la paginación (cargarCompras(true)).
     cargarCompras(true);
+    cargarResumen();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtro, tipo, busquedaActiva]);
-
-  // Debounce 400ms (estándar UX de operarios — ver CLAUDE.md).
-  const aplicarBusqueda = useDebouncedCallback((val) => {
-    setBusquedaActiva(val);
-  }, 400);
-
-  const handleBusqueda = (e) => {
-    const val = e.target.value;
-    setBusqueda(val);
-    aplicarBusqueda(val);
-  };
+  }, [filtro, tipo, valoresAplicados]);
 
   const marcarRecibida = async (compraId) => {
     // C-01: recibir ingresa stock al inventario y es difícil de revertir →
@@ -169,8 +232,6 @@ export default function CompraHistorial() {
     }
   };
 
-  const stats = comprasHeaderStats(compras);
-
   return (
     <div className="flex h-full flex-col animate-fade-in">
       {/* ── Encabezado con KPIs ─────────────────────────────────────── */}
@@ -192,28 +253,38 @@ export default function CompraHistorial() {
             className="mt-1.5 text-[13px] leading-[1.5]"
             style={{ color: "var(--n-500)" }}
           >
+            {/* Conteo REAL del filtro (count: 'exact'), no el de lo cargado. */}
             <b
               className="font-mono font-medium"
               style={{ color: "var(--n-700)" }}
             >
-              {loading && compras.length === 0 ? "…" : stats.count}
-              {hasMore ? "+" : ""}
+              {loading && compras.length === 0 ? "…" : resumen.total}
             </b>{" "}
             registros ·{" "}
             <b
               className="font-mono font-medium"
               style={{ color: "var(--n-700)" }}
             >
-              {formatCOP(stats.comprado)}
+              {formatCOP(resumen.comprado)}
             </b>{" "}
             comprado ·{" "}
             <b
               className="font-mono font-medium"
               style={{ color: "var(--n-700)" }}
             >
-              {stats.pendientes}
+              {resumen.pendientes}
             </b>{" "}
             pendientes de recepción
+            {/* Si el filtro excede RESUMEN_CAP, los montos son de una muestra:
+                se rotula en vez de mentir con un total incompleto. */}
+            {resumen.parcial && (
+              <>
+                {" "}
+                <span style={{ color: "var(--n-400)" }}>
+                  (montos sobre las primeras {RESUMEN_CAP} compras)
+                </span>
+              </>
+            )}
           </p>
         </div>
         <button
@@ -278,28 +349,12 @@ export default function CompraHistorial() {
           </div>
         </div>
 
-        {/* ── Búsqueda server-side ──────────────────────────────────── */}
-        <div
-          className="flex items-center gap-2.5 rounded-lg border px-3"
-          style={{
-            height: 44,
-            borderColor: "var(--n-150)",
-            backgroundColor: "var(--n-0)",
-          }}
-        >
-          <Search
-            className="h-4 w-4 shrink-0"
-            strokeWidth={1.7}
-            style={{ color: "var(--n-300)" }}
-          />
-          <input
-            value={busqueda}
-            onChange={handleBusqueda}
-            placeholder="Buscar por proveedor, N° de factura o concepto…"
-            className="flex-1 border-none bg-transparent text-[13.5px] outline-none"
-            style={{ color: "var(--n-700)" }}
-          />
-        </div>
+        {/* ── Búsqueda + filtros reales (server-side, cruzables) ────── */}
+        <BarraFiltros
+          filtros={filtros}
+          placeholder="Buscar por proveedor, N° de compra, factura o concepto…"
+          legacy
+        />
 
         {errorMsg && (
           <div
@@ -319,7 +374,11 @@ export default function CompraHistorial() {
         {loading && compras.length === 0 ? (
           <SkeletonList />
         ) : compras.length === 0 ? (
-          <EmptyState filtrando={busquedaActiva.trim().length >= 2} />
+          <EmptyState
+            filtrando={
+              filtros.hayFiltros || filtro !== "Todas" || tipo !== "Todos"
+            }
+          />
         ) : (
           <>
             {/* Móvil/Tablet: cards (< md) */}
@@ -383,14 +442,19 @@ export default function CompraHistorial() {
                 }}
               >
                 <span>
+                  {/* "N + compras" no decía nada: ahora se compara lo cargado
+                      contra el total REAL del filtro (count: 'exact'). */}
                   Mostrando{" "}
                   <b className="font-mono" style={{ color: "var(--n-950)" }}>
                     {compras.length}
                   </b>{" "}
-                  {hasMore ? "+ " : ""}
-                  compra{compras.length === 1 ? "" : "s"}
+                  de{" "}
+                  <b className="font-mono" style={{ color: "var(--n-950)" }}>
+                    {resumen.total}
+                  </b>{" "}
+                  compra{resumen.total === 1 ? "" : "s"}
                 </span>
-                {busquedaActiva.trim().length >= 2 && (
+                {busquedaActiva.length >= 2 && (
                   <span className="font-mono">filtro: “{busquedaActiva}”</span>
                 )}
               </div>

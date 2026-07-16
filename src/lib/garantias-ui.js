@@ -12,17 +12,36 @@ export const GARANTIAS_TABS = [
   { v: "venta", label: "De ventas", sub: "Reclamo del cliente" },
 ];
 
-/** Estados reales de una garantía de compra (columna garantias_compra.estado). */
+/**
+ * Estados reales de una garantía de compra (enum `estado_garantia_compra`).
+ * `anulada` la produce `fn_anular_garantia_compra`: faltaba en la lista, así que
+ * no había forma de filtrarla y su pill salía con el valor crudo.
+ */
 export const ESTADOS_GARANTIA_COMPRA = [
   "abierta",
   "nota_credito_emitida",
   "reposicion_pendiente",
   "reposicion_recibida",
   "cerrada",
+  "anulada",
 ];
 
-/** Estados reales de una garantía de venta (columna garantias_venta.estado). */
-export const ESTADOS_GARANTIA_VENTA = ["abierta", "cerrada"];
+/** Estados reales de una garantía de venta (enum `estado_garantia_venta`). */
+export const ESTADOS_GARANTIA_VENTA = ["abierta", "cerrada", "anulada"];
+
+/** Resoluciones reales de compra (enum `resolucion_garantia_compra`). */
+export const RESOLUCIONES_GARANTIA_COMPRA = [
+  "nota_credito",
+  "reposicion_fisica",
+  "pendiente",
+];
+
+/** Resoluciones reales de venta (enum `resolucion_garantia_venta`). */
+export const RESOLUCIONES_GARANTIA_VENTA = [
+  "cambiar_pieza",
+  "devolver_dinero",
+  "arreglar_producto",
+];
 
 /** Etiquetas legibles de los estados internos. */
 const ESTADO_LABELS = {
@@ -31,6 +50,7 @@ const ESTADO_LABELS = {
   reposicion_pendiente: "Reposición pendiente",
   reposicion_recibida: "Reposición recibida",
   cerrada: "Cerrada",
+  anulada: "Anulada",
 };
 
 /**
@@ -57,6 +77,8 @@ export function garantiaEstadoPillClass(estado) {
       return "s-pill s-apr";
     case "nota_credito_emitida":
       return "s-pill s-env";
+    case "anulada":
+      return "s-pill s-anul";
     case "abierta":
     case "reposicion_pendiente":
       return "s-pill s-ven";

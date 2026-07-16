@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Wallet,
@@ -9,7 +9,49 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { useFiltros } from "../../hooks/useFiltros";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
 import AplicarNotaCreditoModal from "../../components/compras/AplicarNotaCreditoModal";
+
+const PAGE_SIZE = 25;
+
+/**
+ * Tope del cálculo de KPIs. `notas_credito_proveedor` no tiene agregados por
+ * REST, así que los totales de dinero se suman sobre las filas del filtro —
+ * pero pidiendo SOLO las dos columnas numéricas, no el listado entero. Si
+ * alguna vez se superara el tope, los KPIs se rotulan como parciales en vez de
+ * mentir.
+ */
+const RESUMEN_CAP = 2000;
+
+const COLS_BASE = `id, numero, proveedor, monto, saldo_restante, fecha, observaciones,
+   garantia_compra_id`;
+
+/**
+ * "Parcialmente aplicada" = tiene al menos un consumo y todavía queda saldo.
+ * Es equivalente a `0 < saldo_restante < monto`, pero esa comparación es de
+ * columna contra columna y PostgREST no la sabe expresar; el `!inner` contra
+ * los consumos sí, y se resuelve en el servidor. La RLS de
+ * `notas_credito_consumos` es la misma de la nota (Admin/Bodeguero), así que el
+ * join no esconde filas que el usuario sí podría ver.
+ */
+const EMBED_CONSUMOS = `, notas_credito_consumos!inner(id)`;
+
+const OPCIONES_ESTADO = [
+  { v: "con_saldo", l: "Con saldo" },
+  { v: "parcial", l: "Parcialmente aplicadas" },
+  { v: "agotada", l: "Agotadas" },
+];
+
+/** El estado es DERIVADO (saldo vs. consumos), no una columna: lo aplica la
+ *  pantalla. Por eso el campo va con tipo propio y `useFiltros.aplicar` lo
+ *  ignora, mientras el hook igual le da persistencia y chip de "filtro activo". */
+function aplicarEstado(q, estado) {
+  if (estado === "agotada") return q.eq("saldo_restante", 0);
+  if (estado === "con_saldo" || estado === "parcial")
+    return q.gt("saldo_restante", 0);
+  return q;
+}
 
 /**
  * Listado de notas crédito de proveedor — F13.
@@ -18,46 +60,121 @@ import AplicarNotaCreditoModal from "../../components/compras/AplicarNotaCredito
 export default function NotasCredito() {
   const navigate = useNavigate();
   const [notas, setNotas] = useState([]);
-  const [filtroSoloActivas, setFiltroSoloActivas] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [resumen, setResumen] = useState({
+    saldo: 0,
+    monto: 0,
+    conSaldo: 0,
+    agotadas: 0,
+    parcial: false,
+  });
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [aplicarNota, setAplicarNota] = useState(null); // S6: nota a aplicar
 
-  const cargar = async () => {
+  // Memoizado a propósito: `useFiltros` deriva `valoresAplicados` de esta lista
+  // y un array nuevo por render la volvería inestable como dependencia del
+  // efecto de carga (bucle infinito de fetch).
+  const campos = useMemo(
+    () => [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        // El # va por `numericoA`: `numero` es integer y un ilike lo revienta.
+        columnas: ["proveedor", "observaciones"],
+        numericoA: "numero",
+        debounce: 400,
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "estado",
+        tipo: "derivado",
+        label: "Estado",
+        opciones: OPCIONES_ESTADO,
+      },
+    ],
+    [],
+  );
+
+  const f = useFiltros({ clave: "notas-credito", campos });
+  const estado = f.valoresAplicados.estado ?? "";
+
+  const cargar = async (reset = false) => {
+    const reqId = f.nuevoReqId();
     setLoading(true);
     setErrorMsg("");
+    const currentPage = reset ? 0 : page;
+
+    // Los filtros se CRUZAN: texto + fecha (del hook) y estado (derivado).
+    const conFiltros = (q) => aplicarEstado(f.aplicar(q), estado);
+    const embed = estado === "parcial" ? EMBED_CONSUMOS : "";
+
     try {
-      let q = supabase
-        .from("notas_credito_proveedor")
-        .select(
-          `id, numero, proveedor, monto, saldo_restante, fecha, observaciones,
-             garantia_compra_id`,
-        )
+      const query = conFiltros(
+        supabase
+          .from("notas_credito_proveedor")
+          .select(COLS_BASE + embed, { count: "exact" }),
+      )
+        // El segundo orden estabiliza la paginación: sin desempate, dos notas
+        // con la misma fecha pueden bailar entre páginas y duplicarse.
         .order("fecha", { ascending: false })
-        .limit(200);
-      if (filtroSoloActivas) q = q.gt("saldo_restante", 0);
-      const { data, error } = await q;
-      if (error) throw error;
-      setNotas(data ?? []);
+        .order("numero", { ascending: false })
+        .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
+
+      // KPIs de dinero sobre TODO el filtro, no sobre la página cargada.
+      const queryResumen = conFiltros(
+        supabase
+          .from("notas_credito_proveedor")
+          .select(`monto, saldo_restante${embed}`),
+      ).limit(RESUMEN_CAP);
+
+      const [res, resResumen] = await Promise.all([query, queryResumen]);
+      if (!f.esReqVigente(reqId)) return; // respuesta obsoleta: descartar
+      if (res.error) throw res.error;
+      if (resResumen.error) throw resResumen.error;
+
+      const conteo = res.count ?? 0;
+      setTotal(conteo);
+      if (reset) {
+        setNotas(res.data ?? []);
+        setPage(1);
+      } else {
+        setNotas((prev) => [...prev, ...(res.data ?? [])]);
+        setPage((p) => p + 1);
+      }
+
+      const filas = resResumen.data ?? [];
+      setResumen({
+        saldo: filas.reduce((acc, n) => acc + Number(n.saldo_restante), 0),
+        monto: filas.reduce((acc, n) => acc + Number(n.monto), 0),
+        conSaldo: filas.filter((n) => Number(n.saldo_restante) > 0).length,
+        agotadas: filas.filter((n) => Number(n.saldo_restante) === 0).length,
+        parcial: filas.length >= RESUMEN_CAP,
+      });
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al cargar notas crédito"));
+      if (f.esReqVigente(reqId))
+        setErrorMsg(safeError(err, "Error al cargar notas crédito"));
     } finally {
-      setLoading(false);
+      if (f.esReqVigente(reqId)) setLoading(false);
     }
   };
 
+  // Cada cambio de filtro recarga desde la página 0.
   useEffect(() => {
-    cargar();
+    cargar(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroSoloActivas]);
+  }, [f.valoresAplicados]);
 
-  const totalSaldo = notas.reduce(
-    (acc, n) => acc + Number(n.saldo_restante),
-    0,
-  );
-  const totalMonto = notas.reduce((acc, n) => acc + Number(n.monto), 0);
-  const conSaldo = notas.filter((n) => Number(n.saldo_restante) > 0).length;
-  const agotadas = notas.filter((n) => Number(n.saldo_restante) === 0).length;
+  const hayMas = notas.length < total;
+  const notaCap = resumen.parcial ? ` (primeras ${RESUMEN_CAP})` : "";
 
   return (
     <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7 animate-fade-in">
@@ -83,24 +200,12 @@ export default function NotasCredito() {
             Saldos a favor pendientes de aplicar en próximas compras.
           </p>
         </div>
-        <button
-          onClick={() => setFiltroSoloActivas((v) => !v)}
-          className="inline-flex h-12 items-center gap-1.5 rounded-md border px-4 text-[12.5px] font-medium transition-colors cursor-pointer"
-          style={{
-            backgroundColor: filtroSoloActivas
-              ? "hsl(var(--primary))"
-              : "hsl(var(--card))",
-            color: filtroSoloActivas
-              ? "hsl(var(--primary-foreground))"
-              : "hsl(var(--muted-foreground))",
-            borderColor: filtroSoloActivas
-              ? "hsl(var(--primary))"
-              : "hsl(var(--border))",
-          }}
-        >
-          {filtroSoloActivas ? "Solo con saldo" : "Todas (con/sin saldo)"}
-        </button>
       </div>
+
+      <BarraFiltros
+        filtros={f}
+        placeholder="Buscar por proveedor, # de NC u observaciones…"
+      />
 
       {errorMsg && (
         <div
@@ -120,37 +225,39 @@ export default function NotasCredito() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi
           label="Saldo disponible total"
-          value={loading ? "…" : formatCOP(totalSaldo)}
-          sub="A favor con proveedores"
+          value={loading ? "…" : formatCOP(resumen.saldo)}
+          sub={`A favor con proveedores${notaCap}`}
           token="--success"
           icon={Wallet}
         />
         <Kpi
           label="Notas con saldo activo"
-          value={loading ? "…" : conSaldo}
-          sub="Aplicables en compras"
+          value={loading ? "…" : resumen.conSaldo}
+          sub={`Aplicables en compras${notaCap}`}
           icon={FileText}
         />
         <Kpi
           label="Notas agotadas"
-          value={loading ? "…" : agotadas}
-          sub="Saldo consumido"
-          token={agotadas > 0 ? "--info" : "--muted-foreground"}
+          value={loading ? "…" : resumen.agotadas}
+          sub={`Saldo consumido${notaCap}`}
+          token={resumen.agotadas > 0 ? "--info" : "--muted-foreground"}
           icon={CheckCircle2}
         />
         <Kpi
-          label="Monto emitido (vista)"
-          value={loading ? "…" : formatCOP(totalMonto)}
-          sub={`${notas.length} nota(s)`}
+          label="Monto emitido"
+          value={loading ? "…" : formatCOP(resumen.monto)}
+          sub={`${total} nota(s) en el filtro${notaCap}`}
           icon={Receipt}
         />
       </div>
 
-      {loading ? (
+      {loading && notas.length === 0 ? (
         <SkeletonList />
       ) : notas.length === 0 ? (
         <Empty icon="🧾">
-          Sin notas crédito{filtroSoloActivas ? " con saldo activo" : ""}.
+          {f.hayFiltros
+            ? "Ninguna nota crédito coincide con los filtros."
+            : "Aún no hay notas crédito registradas."}
         </Empty>
       ) : (
         <section
@@ -373,6 +480,30 @@ export default function NotasCredito() {
             })}
           </ul>
 
+          {/* Paginación real: reemplaza el viejo .limit(200), que truncaba en
+              silencio. El total sale del count exacto del servidor, no de lo
+              cargado. */}
+          {hayMas && (
+            <div
+              className="border-t px-[18px] py-3"
+              style={{ borderColor: "hsl(var(--border))" }}
+            >
+              <button
+                onClick={() => cargar(false)}
+                disabled={loading}
+                className="inline-flex h-12 w-full items-center justify-center rounded-lg border px-4 text-[13px] font-medium cursor-pointer disabled:opacity-60"
+                style={{
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--primary))",
+                }}
+              >
+                {loading
+                  ? "Cargando…"
+                  : `Cargar más (${notas.length} de ${total})`}
+              </button>
+            </div>
+          )}
+
           <footer
             className="border-t px-[18px] py-3 font-mono text-[10.5px] tracking-[0.06em]"
             style={{
@@ -381,9 +512,9 @@ export default function NotasCredito() {
               color: "hsl(var(--muted-foreground))",
             }}
           >
-            {notas.length} nota(s) · saldo total{" "}
+            {notas.length} de {total} nota(s) · saldo total del filtro{notaCap}{" "}
             <span style={{ color: "hsl(var(--success))" }}>
-              {formatCOP(totalSaldo)}
+              {formatCOP(resumen.saldo)}
             </span>
           </footer>
         </section>
@@ -395,7 +526,10 @@ export default function NotasCredito() {
           onClose={() => setAplicarNota(null)}
           onDone={() => {
             setAplicarNota(null);
-            cargar();
+            // reset=true a propósito: aplicar una nota cambia su saldo (y puede
+            // sacarla del filtro), así que se recarga desde la página 0. Un
+            // cargar(false) volvería a pedir la misma página y duplicaría filas.
+            cargar(true);
           }}
         />
       )}

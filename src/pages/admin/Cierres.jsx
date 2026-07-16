@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Calendar,
   DollarSign,
@@ -14,8 +14,24 @@ import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import FeedbackBanners from "../../components/ui/FeedbackBanners";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { useAuthStore } from "../../stores/authStore";
+import { useFiltros } from "../../hooks/useFiltros";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
 
-const TABS_HIST = ["Todos", "Diarios", "Periodo"];
+// Los tres valores REALES de `cierres.tipo` (CHECK: diario|periodo|complementario).
+// Los complementarios existían en la base pero no había forma de aislarlos en el
+// histórico: solo se veían mezclados dentro de "Todos".
+const TABS_HIST = [
+  { id: "todos", label: "Todos", tipo: null },
+  { id: "diario", label: "Diarios", tipo: "diario" },
+  { id: "periodo", label: "Periodo", tipo: "periodo" },
+  { id: "complementario", label: "Complementarios", tipo: "complementario" },
+];
+
+const PAGE_SIZE = 20;
+// Tope del muestreo de los KPIs globales. Los cierres son pocos (uno por día como
+// mucho), así que en la práctica nunca se alcanza; si se alcanzara, el KPI se
+// rotula como parcial en vez de mentir.
+const KPI_CAP = 1000;
 
 const METODO_LABELS = {
   efectivo: "Efectivo",
@@ -63,7 +79,19 @@ export default function Cierres() {
   const [historial, setHistorial] = useState([]);
   const [loadingHist, setLoadingHist] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
-  const [tabHist, setTabHist] = useState("Todos");
+  const [tabHist, setTabHist] = useState("todos");
+  const [page, setPage] = useState(0);
+  const [totalHist, setTotalHist] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [responsables, setResponsables] = useState([]);
+  // KPIs del cockpit: GLOBALES y ajenos al filtro del histórico. Se calculaban
+  // sumando el array cargado, así que con paginación mentirían.
+  const [kpis, setKpis] = useState({
+    total: 0,
+    margenPeriodo: 0,
+    ultimo: null,
+    aprox: false,
+  });
 
   const [errorMsg, setErrorMsg] = useState("");
   const [okMsg, setOkMsg] = useState("");
@@ -79,28 +107,141 @@ export default function Cierres() {
     };
   }, []);
 
-  const cargarHistorial = async () => {
+  // Responsables REALES: se derivan de los cierres existentes, no de la lista de
+  // usuarios. Un Admin desactivado sigue apareciendo en sus cierres firmados y
+  // debe poder filtrarse.
+  const cargarResponsables = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("cierres")
+      .select("cerrado_por, resp:usuarios(nombre)")
+      .not("cerrado_por", "is", null)
+      .limit(KPI_CAP);
+    if (!mountedRef.current || error) return;
+    const map = new Map();
+    for (const r of data ?? []) {
+      if (r.cerrado_por && !map.has(r.cerrado_por)) {
+        map.set(r.cerrado_por, r.resp?.nombre ?? "Sin nombre");
+      }
+    }
+    setResponsables(
+      [...map]
+        .map(([id, nombre]) => ({ id, nombre }))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
+    );
+  }, []);
+
+  // KPIs globales: el conteo sale de `count: 'exact'` (no del array cargado) y
+  // el margen de un muestreo acotado que se rotula si llegara al tope.
+  const cargarKpis = useCallback(async () => {
+    const { data, error, count } = await supabase
+      .from("cierres")
+      .select(
+        "numero, tipo, margen, fecha_hasta, cerrado_por:usuarios(nombre)",
+        {
+          count: "exact",
+        },
+      )
+      .order("numero", { ascending: false })
+      .limit(KPI_CAP);
+    if (!mountedRef.current || error) return;
+    const filas = data ?? [];
+    setKpis({
+      total: count ?? filas.length,
+      margenPeriodo: filas
+        .filter((c) => c.tipo === "periodo")
+        .reduce((acc, c) => acc + Number(c.margen ?? 0), 0),
+      ultimo: filas[0] ?? null,
+      aprox: filas.length === KPI_CAP,
+    });
+  }, []);
+
+  // Campos MEMOIZADOS: `useFiltros` deriva `valoresAplicados` de ellos y, si el
+  // array se recreara en cada render, el efecto de carga entraría en bucle.
+  const campos = useMemo(
+    () => [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        // `numero` es integer: escribir "7" busca EL cierre #7 (un ilike contra
+        // integer revienta en Postgres). El texto libre cae sobre la única
+        // columna de texto del cierre.
+        columnas: ["observaciones"],
+        numericoA: "numero",
+        debounce: 400,
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Periodo cerrado",
+        // `fecha_hasta` es DATE: el instante de Bogotá se castea al día sin
+        // corrimiento de zona. Es el periodo que CUBRE el cierre, no `created_at`
+        // (cuándo se firmó) — el operario busca por lo primero.
+        columna: "fecha_hasta",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "responsable",
+        tipo: "opciones",
+        label: "Responsable",
+        columna: "cerrado_por",
+        opciones: responsables.map((r) => ({ v: r.id, l: r.nombre })),
+      },
+    ],
+    [responsables],
+  );
+
+  const f = useFiltros({ clave: "cierres-hist", campos });
+
+  const cargarHistorial = async (reset = false) => {
+    const myReq = f.nuevoReqId();
     setLoadingHist(true);
+    const actual = reset ? 0 : page;
     try {
-      const { data, error } = await supabase
+      let q = supabase
         .from("cierres")
-        .select("*, cerrado_por:usuarios(nombre)")
+        .select("*, cerrado_por:usuarios(nombre)", { count: "exact" });
+      q = f.aplicar(q);
+      // El tab de tipo es un filtro más y se CRUZA con el resto (antes filtraba
+      // en memoria lo ya cargado y los complementarios no se podían aislar).
+      const tipoTab = TABS_HIST.find((t) => t.id === tabHist)?.tipo;
+      if (tipoTab) q = q.eq("tipo", tipoTab);
+      // `numero` es único y descendente: orden total, sin filas repetidas ni
+      // saltadas entre páginas.
+      const { data, error, count } = await q
         .order("numero", { ascending: false })
-        .limit(200); // #S3-13: cota para no cargar todo el histórico sin fin
-      if (!mountedRef.current) return;
+        .range(actual * PAGE_SIZE, (actual + 1) * PAGE_SIZE - 1);
+      if (!mountedRef.current || !f.esReqVigente(myReq)) return;
       if (error) throw error;
-      setHistorial(data ?? []);
+      const filas = data ?? [];
+      if (reset) {
+        setHistorial(filas);
+        setPage(1);
+      } else {
+        setHistorial((prev) => [...prev, ...filas]);
+        setPage((p) => p + 1);
+      }
+      const totalReal = count ?? 0;
+      setTotalHist(totalReal);
+      setHasMore((actual + 1) * PAGE_SIZE < totalReal);
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || !f.esReqVigente(myReq)) return;
       setErrorMsg(safeError(err, "Error al cargar el histórico de cierres"));
     } finally {
-      if (mountedRef.current) setLoadingHist(false);
+      if (mountedRef.current && f.esReqVigente(myReq)) setLoadingHist(false);
     }
   };
 
+  // Cualquier cambio de filtro o de tab vuelve a la página 0 (reset = true).
   useEffect(() => {
-    cargarHistorial();
-  }, []);
+    cargarHistorial(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.valoresAplicados, tabHist]);
+
+  useEffect(() => {
+    cargarKpis();
+    cargarResponsables();
+  }, [cargarKpis, cargarResponsables]);
 
   // Invalida cualquier previsualización en vuelo y descarta la mostrada.
   const invalidarPreview = () => {
@@ -277,18 +418,10 @@ export default function Cierres() {
     }
   };
 
-  // KPIs del cockpit derivados del historial real.
-  const ultimoCierre = historial[0];
-  const margenMes = historial
-    .filter((c) => c.tipo === "periodo")
-    .reduce((acc, c) => acc + Number(c.margen ?? 0), 0);
-
-  // Historial filtrado por la pestaña activa (datos reales en memoria).
-  const historialFiltrado = historial.filter((c) => {
-    if (tabHist === "Diarios") return c.tipo === "diario";
-    if (tabHist === "Periodo") return c.tipo === "periodo";
-    return true;
-  });
+  // Los KPIs del cockpit (total, margen de periodo, último cierre) salen de
+  // `kpis` — count:'exact' + muestreo acotado — y NO del array paginado, que
+  // solo tiene la página cargada. La pestaña de tipo ya se aplica en el servidor
+  // (`cargarHistorial`), así que `historial` ya viene filtrado por tab.
 
   // Checklist de conciliación previo al cierre — cada ítem refleja un dato
   // REAL del preview (no inventado). Sin preview, el checklist está en
@@ -343,24 +476,28 @@ export default function Cierres() {
         />
         <Kpi
           label="Cierres registrados"
-          value={loadingHist ? "…" : historial.length}
+          value={loadingHist ? "…" : kpis.total}
           sub="Histórico inmutable"
           icon={Receipt}
         />
         <Kpi
           label="Margen acumulado periodo"
-          value={loadingHist ? "…" : formatCOP(margenMes)}
-          token={margenMes < 0 ? "--destructive" : "--success"}
+          value={
+            loadingHist
+              ? "…"
+              : `${kpis.aprox ? "≈ " : ""}${formatCOP(kpis.margenPeriodo)}`
+          }
+          token={kpis.margenPeriodo < 0 ? "--destructive" : "--success"}
           sub="Cierres tipo periodo"
           icon={DollarSign}
         />
         <Kpi
           last
           label="Último cierre"
-          value={ultimoCierre ? `#${ultimoCierre.numero}` : "—"}
+          value={kpis.ultimo ? `#${kpis.ultimo.numero}` : "—"}
           sub={
-            ultimoCierre
-              ? `${fmtFecha(ultimoCierre.fecha_hasta)} · ${ultimoCierre.cerrado_por?.nombre ?? "—"}`
+            kpis.ultimo
+              ? `${fmtFecha(kpis.ultimo.fecha_hasta)} · ${kpis.ultimo.cerrado_por?.nombre ?? "—"}`
               : "Sin cierres aún"
           }
           icon={ShieldCheck}
@@ -549,9 +686,7 @@ export default function Cierres() {
 
       {/* ── Histórico ─────────────────────────────────────────────── */}
       <SectionCard
-        title={`Histórico de cierres${
-          loadingHist ? "" : ` (${historial.length})`
-        }`}
+        title={`Histórico de cierres${loadingHist ? "" : ` (${kpis.total})`}`}
       >
         {/* Tabs de filtro del histórico (Lovable) */}
         {!loadingHist && historial.length > 0 && (
@@ -578,7 +713,7 @@ export default function Cierres() {
               className="ml-auto font-mono text-[11px]"
               style={{ color: "hsl(var(--muted-foreground))" }}
             >
-              {historialFiltrado.length} cierre(s)
+              {historial.length} cierre(s)
             </span>
           </div>
         )}
@@ -626,7 +761,7 @@ export default function Cierres() {
                   </tr>
                 </thead>
                 <tbody>
-                  {historialFiltrado.map((c) => (
+                  {historial.map((c) => (
                     <CierreRow
                       key={c.id}
                       c={c}
@@ -638,7 +773,7 @@ export default function Cierres() {
                   ))}
                 </tbody>
               </table>
-              {historialFiltrado.length === 0 && (
+              {historial.length === 0 && (
                 <p
                   className="py-6 text-center text-xs italic"
                   style={{ color: "hsl(var(--muted-foreground))" }}
@@ -650,7 +785,7 @@ export default function Cierres() {
 
             {/* Mobile */}
             <ul className="md:hidden space-y-2.5" role="list">
-              {historialFiltrado.map((c) => (
+              {historial.map((c) => (
                 <li key={c.id}>
                   <CierreCard
                     c={c}
@@ -661,7 +796,7 @@ export default function Cierres() {
                   />
                 </li>
               ))}
-              {historialFiltrado.length === 0 && (
+              {historial.length === 0 && (
                 <li
                   className="py-6 text-center text-xs italic"
                   style={{ color: "hsl(var(--muted-foreground))" }}
@@ -670,6 +805,21 @@ export default function Cierres() {
                 </li>
               )}
             </ul>
+
+            {/* Paginación real: sin esto solo se veía la primera página y el
+                histórico "terminaba" antes de tiempo. */}
+            {hasMore && (
+              <button
+                onClick={() => cargarHistorial(false)}
+                disabled={loadingHist}
+                className="btn btn-out mt-4 w-full justify-center disabled:opacity-50"
+                style={{ height: 48 }}
+              >
+                {loadingHist
+                  ? "Cargando…"
+                  : `Cargar más (${historial.length} de ${totalHist})`}
+              </button>
+            )}
           </>
         )}
       </SectionCard>

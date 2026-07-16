@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Cog, List, LayoutGrid, Search, X, Trash2 } from "lucide-react";
+import { Plus, Cog, List, LayoutGrid, Trash2 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
+import { useFiltros } from "../../hooks/useFiltros";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
+import { esNumeroPuro } from "../../lib/filtros";
+import { keywordTerms } from "../../lib/search";
+import { useSedes } from "../../hooks/useSedes";
 import {
   ensambleEstadoPill,
   tecnicoAvatar,
@@ -20,15 +25,83 @@ export default function EnsambleHistorial() {
 
   const [ensambles, setEnsambles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState(null); // null | false | true (completado)
+  const [filtro, setFiltro] = useState(null); // null | 'en_proceso' | 'terminado' | 'completado'
   const [view, setView] = useState("lista"); // 'lista' | 'tablero'
-  const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [total, setTotal] = useState(null); // total REAL del filtro (count exacto)
   const [errorMsg, setErrorMsg] = useState("");
   const esAdmin = perfil?.rol === "Admin";
+  const esTecnico = perfil?.rol === "Tecnico";
   const { confirm, ConfirmDialog } = useConfirm();
   const mountedRef = useRef(true);
+
+  // Realizadores: la lista de gente que puede aparecer en "Realizado por".
+  // Se lee de `usuarios` (RLS permite leerla a cualquier autenticado) en vez de
+  // sacarla de lo cargado, que solo mostraría a quien alcanzó a salir en la
+  // primera página.
+  const { sedes } = useSedes();
+  const [realizadores, setRealizadores] = useState([]);
+  useEffect(() => {
+    let vigente = true;
+    supabase
+      .from("usuarios")
+      .select("id, nombre")
+      .eq("activo", true)
+      .order("nombre")
+      .then(({ data }) => {
+        if (vigente && data) {
+          setRealizadores(data.map((u) => ({ v: u.id, l: u.nombre })));
+        }
+      });
+    return () => {
+      vigente = false;
+    };
+  }, []);
+
+  const campos = useMemo(
+    () => [
+      {
+        id: "q",
+        tipo: "texto",
+        label: "Buscar",
+        // Sin `columnas`: el nombre/referencia del producto viven en una tabla
+        // embebida y PostgREST no admite un `or` de nivel superior contra ella.
+        // El hook resuelve el caso "#873" (numero exacto) y el debounce; la
+        // búsqueda por producto se aplica abajo con `referencedTable`.
+        numericoA: "numero",
+        debounce: 400,
+      },
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "realizador",
+        tipo: "opciones",
+        label: "Realizado por",
+        columna: "realizado_por",
+        opciones: realizadores,
+        // El técnico solo ve sus propios ensambles: filtrar por realizador no
+        // le agrega nada.
+        visible: !esTecnico,
+      },
+      {
+        id: "sede",
+        tipo: "opciones",
+        label: "Sede",
+        columna: "sede_id",
+        opciones: sedes.map((s) => ({ v: s.id, l: s.nombre })),
+        visible: esAdmin, // al resto ya lo ata la RLS
+      },
+    ],
+    [realizadores, sedes, esAdmin, esTecnico],
+  );
+
+  const f = useFiltros({ clave: "ensambles", campos });
 
   const eliminar = async (e) => {
     const ok = await confirm({
@@ -49,10 +122,6 @@ export default function EnsambleHistorial() {
       setErrorMsg(safeError(err, "Error al eliminar ensamble"));
     }
   };
-  // Token de secuencia: descarta respuestas obsoletas (cambio de filtro o
-  // "Cargar más" mientras hay otra carga en vuelo).
-  const reqIdRef = useRef(0);
-
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -60,27 +129,42 @@ export default function EnsambleHistorial() {
     };
   }, []);
 
-  const cargar = async (reset = false, signal) => {
+  const cargar = async (pageToLoad, append) => {
     if (!mountedRef.current) return;
-    const myReq = ++reqIdRef.current;
+    const myReq = f.nuevoReqId();
     setLoading(true);
     setErrorMsg("");
-    const currentPage = reset ? 0 : page;
     try {
-      let query = supabase
-        .from("ensambles")
-        .select(
-          `id, numero, fecha, cantidad_producida, completado, terminado, costo_total,
-           producto:producto_resultado_id(referencia, nombre),
+      // Búsqueda por producto: nombre y referencia viven en la tabla embebida.
+      // PostgREST solo filtra la fila padre por un embed si el join es `!inner`,
+      // así que el `!inner` se pone SOLO cuando hay texto a buscar: dejarlo fijo
+      // escondería los ensambles sin producto resultado.
+      const texto = f.valoresAplicados.q ?? "";
+      const terminosProducto =
+        esNumeroPuro(texto) == null ? keywordTerms(texto) : [];
+      const buscaProducto = terminosProducto.length > 0;
+
+      let query = supabase.from("ensambles").select(
+        `id, numero, fecha, cantidad_producida, completado, terminado, costo_total,
+           producto:producto_resultado_id${buscaProducto ? "!inner" : ""}(referencia, nombre),
            realizador:realizado_por(nombre),
            tecnico:tecnico_id(nombre)`,
-        )
-        .order("fecha", { ascending: false })
-        .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
+        { count: "exact" },
+      );
+
+      // Texto "#873" (numero exacto), rango de fechas, realizador y sede.
+      query = f.aplicar(query);
+      // Cada palabra debe aparecer en el nombre o la referencia del producto:
+      // PostgREST une los distintos `or=(...)` con AND.
+      for (const t of terminosProducto) {
+        query = query.or(`nombre.ilike.%${t}%,referencia.ilike.%${t}%`, {
+          referencedTable: "producto",
+        });
+      }
 
       // El técnico ve solo los ensambles asignados a él; el resto (no Admin) por sede.
-      if (perfil?.rol === "Tecnico") query = query.eq("tecnico_id", perfil.id);
-      else if (perfil?.rol !== "Admin" && perfil?.sede_id)
+      if (esTecnico) query = query.eq("tecnico_id", perfil.id);
+      else if (!esAdmin && perfil?.sede_id)
         query = query.eq("sede_id", perfil.sede_id);
       if (filtro === "en_proceso")
         query = query.eq("completado", false).eq("terminado", false);
@@ -88,8 +172,13 @@ export default function EnsambleHistorial() {
         query = query.eq("terminado", true).eq("completado", false);
       else if (filtro === "completado") query = query.eq("completado", true);
 
+      query = query
+        .order("fecha", { ascending: false })
+        .order("numero", { ascending: false })
+        .range(pageToLoad * PAGE_SIZE, (pageToLoad + 1) * PAGE_SIZE - 1);
+
       // Timeout duro 15s para evitar UI atorada si la red se cuelga
-      const { data, error } = await Promise.race([
+      const { data, error, count } = await Promise.race([
         query,
         new Promise((_, reject) =>
           setTimeout(
@@ -99,54 +188,41 @@ export default function EnsambleHistorial() {
           ),
         ),
       ]);
-      if (signal?.aborted || !mountedRef.current || myReq !== reqIdRef.current)
-        return;
+      // Descarta respuestas que llegan fuera de orden.
+      if (!mountedRef.current || !f.esReqVigente(myReq)) return;
       if (error) throw error;
 
-      if (reset) {
-        setEnsambles(data ?? []);
-        setPage(1);
-      } else {
-        setEnsambles((prev) => [...prev, ...(data ?? [])]);
-        setPage((p) => p + 1);
-      }
-      setHasMore((data ?? []).length === PAGE_SIZE);
+      const filas = data ?? [];
+      setEnsambles((prev) => (append ? [...prev, ...filas] : filas));
+      setPage(pageToLoad);
+      setTotal(count ?? null);
+      setHasMore((pageToLoad + 1) * PAGE_SIZE < (count ?? 0));
     } catch (err) {
-      if (signal?.aborted || !mountedRef.current || myReq !== reqIdRef.current)
-        return;
+      if (!mountedRef.current || !f.esReqVigente(myReq)) return;
       setErrorMsg(safeError(err, "Error al cargar ensambles"));
     } finally {
       // Solo la petición más reciente controla el loading.
-      if (mountedRef.current && myReq === reqIdRef.current) setLoading(false);
+      if (mountedRef.current && f.esReqVigente(myReq)) setLoading(false);
     }
   };
 
+  // Cualquier cambio de filtro (texto ya con debounce, fecha, realizador, sede
+  // o pestaña de estado) vuelve a la página 0: paginar sobre un filtro viejo
+  // mezcla resultados de dos consultas distintas.
   useEffect(() => {
-    const ac = new AbortController();
-    setPage(0);
-    setHasMore(true);
-    cargar(true, ac.signal);
-    return () => ac.abort();
+    cargar(0, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtro, perfil?.sede_id]);
+  }, [f.valoresAplicados, filtro, perfil?.id, perfil?.rol, perfil?.sede_id]);
 
-  // Búsqueda en cliente sobre lo cargado (número, producto o referencia).
-  const filtrados = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return ensambles;
-    return ensambles.filter(
-      (e) =>
-        String(e.numero).toLowerCase().includes(needle) ||
-        (e.producto?.nombre ?? "").toLowerCase().includes(needle) ||
-        (e.producto?.referencia ?? "").toLowerCase().includes(needle),
-    );
-  }, [ensambles, q]);
-
+  // Conteos de la página cargada. NO son el total del filtro (eso es `total`),
+  // por eso van rotulados "en vista".
   const kpis = useMemo(() => {
     const pendientes = ensambles.filter((e) => !e.completado).length;
     const completados = ensambles.length - pendientes;
     return { pendientes, completados };
   }, [ensambles]);
+
+  const hayFiltros = f.hayFiltros || filtro != null;
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-[18px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
@@ -158,9 +234,11 @@ export default function EnsambleHistorial() {
             style={{ color: "var(--n-300)" }}
           >
             Operaciones · Producción ·{" "}
-            {loading
+            {loading && total == null
               ? "cargando…"
-              : `${ensambles.length}${hasMore ? "+" : ""} registros`}
+              : `${total ?? 0} ${total === 1 ? "registro" : "registros"}${
+                  hayFiltros ? " (filtrado)" : ""
+                }`}
           </p>
           <h1
             className="text-[22px] font-semibold tracking-[-0.018em] sm:text-[24px]"
@@ -221,12 +299,13 @@ export default function EnsambleHistorial() {
 
       {/* ── Filtros ─────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-1.5">
-        {ENSAMBLE_TABS.map((f) => {
-          const on = filtro === f.key;
+        {/* `tab`, no `f`: `f` es el objeto de filtros de esta pantalla. */}
+        {ENSAMBLE_TABS.map((tab) => {
+          const on = filtro === tab.key;
           return (
             <button
-              key={f.v}
-              onClick={() => setFiltro(f.key)}
+              key={tab.v}
+              onClick={() => setFiltro(tab.key)}
               className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors"
               style={
                 on
@@ -240,43 +319,20 @@ export default function EnsambleHistorial() {
                 if (!on) e.currentTarget.style.backgroundColor = "transparent";
               }}
             >
-              {f.v}
+              {tab.v}
             </button>
           );
         })}
       </div>
 
-      {/* ── Búsqueda (solo vista lista) ─────────────────────────────── */}
-      {view === "lista" && (
-        <div
-          className="flex h-12 max-w-[560px] items-center gap-2.5 rounded-lg border px-3.5"
-          style={{ borderColor: "var(--n-200)", backgroundColor: "var(--n-0)" }}
-        >
-          <Search
-            className="h-4 w-4 shrink-0"
-            strokeWidth={1.5}
-            style={{ color: "var(--n-500)" }}
-          />
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar ensamble, producto o referencia…"
-            className="min-w-0 flex-1 border-none bg-transparent text-[14px] outline-none"
-            style={{ color: "var(--n-950)" }}
-          />
-          {q && (
-            <button
-              onClick={() => setQ("")}
-              aria-label="Limpiar búsqueda"
-              className="grid h-6 w-6 place-items-center rounded"
-              style={{ color: "var(--n-500)" }}
-            >
-              <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-            </button>
-          )}
-        </div>
-      )}
+      {/* ── Búsqueda y filtros ──────────────────────────────────────── */}
+      {/* Visible también en tablero: esconder la barra con filtros puestos es
+          exactamente lo que hace leer un filtro activo como "faltan datos". */}
+      <BarraFiltros
+        filtros={f}
+        placeholder="Buscar #número, producto o referencia…"
+        legacy
+      />
 
       {/* ── Contenido ───────────────────────────────────────────────── */}
       {loading && ensambles.length === 0 ? (
@@ -292,17 +348,17 @@ export default function EnsambleHistorial() {
             />
           ))}
         </div>
-      ) : filtrados.length === 0 ? (
-        <Empty q={q} />
+      ) : ensambles.length === 0 ? (
+        <Empty q={f.valoresAplicados.q} hayFiltros={hayFiltros} />
       ) : view === "lista" ? (
-        <ListView rows={filtrados} esAdmin={esAdmin} onEliminar={eliminar} />
+        <ListView rows={ensambles} esAdmin={esAdmin} onEliminar={eliminar} />
       ) : (
-        <KanbanView rows={filtrados} esAdmin={esAdmin} />
+        <KanbanView rows={ensambles} esAdmin={esAdmin} />
       )}
 
       {hasMore && !loading && (
         <button
-          onClick={() => cargar(false)}
+          onClick={() => cargar(page + 1, true)}
           className="w-full rounded-[10px] border py-3 text-sm font-medium"
           style={{
             borderColor: "var(--n-200)",
