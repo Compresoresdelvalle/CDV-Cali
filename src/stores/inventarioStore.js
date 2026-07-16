@@ -56,7 +56,16 @@ export const useInventarioStore = create((set, get) => ({
       if (!state.hasMore || state.loadingMore) return;
       set({ loadingMore: true });
     } else {
-      set({ loading: true, error: null, items: [], page: 0 });
+      // Reset loadingMore también: si un fetch de scroll quedó en vuelo cuando
+      // el usuario cambió un filtro, su early-return por seq obsoleto no lo
+      // limpia. Resetearlo aquí evita que loadMore quede bloqueado para siempre.
+      set({
+        loading: true,
+        error: null,
+        items: [],
+        page: 0,
+        loadingMore: false,
+      });
     }
 
     const seq = ++fetchSeq;
@@ -65,13 +74,15 @@ export const useInventarioStore = create((set, get) => ({
       const s = get();
       const offset = append ? s.page * PAGE_SIZE : 0;
 
-      // Búsqueda server-side: primero obtenemos IDs de productos que coinciden
+      // Búsqueda server-side: solo el texto libre exige la pre-query de IDs
+      // (con tope de 500 para no generar una URL gigante en el `.in()`). El
+      // filtro por tipo NO dispara la pre-query: como casi todo el catálogo es
+      // tipo='nuevo', ese tope truncaba el listado a 500 productos en silencio
+      // (S4-02). El tipo se aplica directo sobre la query principal más abajo.
       // F12: extiende búsqueda a codigo_interno y codigo_proveedor.
-      // F12: aplica filtro tipo (nuevo/segunda_mano) en la pre-query.
-      // Tope de 500 para no generar una URL gigante en el `.in()` posterior.
       let productoIds = null;
       const busquedaRaw = s.filtroBusqueda.trim();
-      const necesitaPreFiltro = !!busquedaRaw || s.filtroTipo.length > 0;
+      const necesitaPreFiltro = !!busquedaRaw;
       if (necesitaPreFiltro) {
         let pq = supabase
           .from("productos")
@@ -124,12 +135,20 @@ export const useInventarioStore = create((set, get) => ({
         `,
         )
         .eq("producto.activo", true)
+        // Orden estable en el servidor: sin ORDER BY, `.range()` no garantiza
+        // las mismas filas en el mismo orden entre páginas del scroll infinito
+        // (S4-11). El orden visual final por nombre se hace luego en memoria.
+        .order("producto_id", { ascending: true })
+        .order("sede_id", { ascending: true })
         .range(offset, offset + PAGE_SIZE - 1);
 
       // #34: sede y estado multi-selección.
       if (s.filtroSede.length) q = q.in("sede_id", s.filtroSede);
       if (s.filtroEstado.length) q = q.in("estado_stock", s.filtroEstado);
       if (productoIds) q = q.in("producto_id", productoIds);
+      // S4-02: cuando no hubo pre-query de texto, el tipo se filtra directo
+      // sobre el join embebido (sin tope de 500).
+      else if (s.filtroTipo.length) q = q.in("producto.tipo", s.filtroTipo);
 
       const { data, error } = await q;
       if (seq !== fetchSeq) return; // un fetch más nuevo ya está en curso

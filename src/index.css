@@ -892,6 +892,17 @@ body {
   color: var(--n-500);
   border-color: rgba(255, 255, 255, 0.08);
 }
+/* i (info) → Sobrestock: exceso de stock, azul informativo (S4-10). */
+.stk-pill.i {
+  background: var(--info-50);
+  color: var(--info-700);
+  border-color: var(--info-border);
+}
+.dark .stk-pill.i {
+  background: rgba(46, 144, 250, 0.16);
+  color: #7cc4fd;
+  border-color: rgba(46, 144, 250, 0.35);
+}
 
 /* ─── BADGE compacto categoría (inventario tabla) ─── */
 .bdg {
@@ -1000,6 +1011,9 @@ body {
 }
 .dot-stk.n {
   background: var(--n-300);
+}
+.dot-stk.i {
+  background: var(--info-500);
 }
 .dot-cat {
   width: 8px;

@@ -27,6 +27,15 @@ export default function ProductoDetalle() {
   const authLoading = useAuthStore((s) => s.loading);
   const perfil = useAuthStore((s) => s.perfil);
   const esAdmin = perfil?.rol === "Admin";
+  // S4-04: el RPC fn_convertir_a_insumo autoriza a estos 4 roles (y notifica al
+  // Admin cuando lo usa otro rol). '→ a venta' (fn_revertir_insumo_a_venta) sí
+  // es solo Admin. Antes ambos botones estaban ocultos a todos menos Admin.
+  const puedeConvertirInsumo = [
+    "Admin",
+    "Bodeguero",
+    "Tecnico",
+    "Vendedor",
+  ].includes(perfil?.rol);
 
   const [producto, setProducto] = useState(null);
   const [inventario, setInventario] = useState([]);
@@ -80,10 +89,14 @@ export default function ProductoDetalle() {
       setLoading(true);
       setError(null);
       try {
+        // S4-01: costo_promedio es información de costo → solo Admin lo pide.
+        // Antes viajaba al navegador para cualquier rol (el ocultamiento era
+        // solo visual). Los no-Admin ya no lo reciben en la respuesta.
         const { data: prod, error: prodErr } = await supabase
           .from("productos")
           .select(
-            "id, referencia, codigo_interno, codigo_proveedor, tipo, nombre, categoria, subcategoria, marca, modelo, descripcion, precio_venta, costo_promedio, stock_minimo, stock_maximo, unidad_medida, activo, vendible, stand, posicion, en_piso",
+            "id, referencia, codigo_interno, codigo_proveedor, tipo, nombre, categoria, subcategoria, marca, modelo, descripcion, precio_venta, stock_minimo, stock_maximo, unidad_medida, activo, vendible, stand, posicion, en_piso" +
+              (esAdmin ? ", costo_promedio" : ""),
           )
           .eq("id", productoId)
           .single();
@@ -499,7 +512,12 @@ export default function ProductoDetalle() {
         )}
         <Stat label="Stock mínimo" value={producto.stock_minimo} small />
         <Stat label="Stock máximo" value={producto.stock_maximo ?? "—"} small />
-        <Stat label="Ubicación" value={ubicacionLabel(producto)} small />
+        {/* stand/posición es un dato físico solo de BODEGA (S4-05 ux). */}
+        <Stat
+          label="Ubicación (BODEGA)"
+          value={ubicacionLabel(producto)}
+          small
+        />
       </div>
 
       {producto.descripcion && (
@@ -588,7 +606,7 @@ export default function ProductoDetalle() {
                             Insumo: {inv.cantidad_insumo ?? 0}
                           </div>
                         </td>
-                        {esAdmin && (
+                        {puedeConvertirInsumo && (
                           <td style={{ width: 110 }}>
                             <div className="flex flex-col gap-1">
                               <button
@@ -599,14 +617,19 @@ export default function ProductoDetalle() {
                               >
                                 → a insumo
                               </button>
-                              <button
-                                onClick={() => abrirConversion(inv, "a_venta")}
-                                disabled={(inv.cantidad_insumo ?? 0) <= 0}
-                                className="cursor-pointer text-left text-xs font-medium disabled:cursor-default disabled:opacity-40"
-                                style={{ color: "var(--n-500)" }}
-                              >
-                                → a venta
-                              </button>
+                              {/* Revertir insumo → venta es solo Admin (S4-04). */}
+                              {esAdmin && (
+                                <button
+                                  onClick={() =>
+                                    abrirConversion(inv, "a_venta")
+                                  }
+                                  disabled={(inv.cantidad_insumo ?? 0) <= 0}
+                                  className="cursor-pointer text-left text-xs font-medium disabled:cursor-default disabled:opacity-40"
+                                  style={{ color: "var(--n-500)" }}
+                                >
+                                  → a venta
+                                </button>
+                              )}
                             </div>
                           </td>
                         )}
@@ -1099,8 +1122,10 @@ export default function ProductoDetalle() {
         </div>
       )}
 
-      {/* ── Modal: convertir stock venta <-> insumo (solo Admin) ── */}
-      {esAdmin && convInv && (
+      {/* ── Modal: convertir stock venta <-> insumo ──
+          '→ a insumo' lo pueden usar 4 roles; '→ a venta' solo Admin (S4-04).
+          El botón que abre cada dirección ya está gateado por rol arriba. */}
+      {puedeConvertirInsumo && convInv && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: "rgba(0,0,0,0.5)" }}

@@ -280,7 +280,59 @@ Estos son datos ya inconsistentes que un fix de código no corrige por sí solo;
 - **Pendiente frontend:** UI del cierre complementario (botón/aviso en Cierres.jsx, S3-01) — se integra cuando aterrice la RPC `fn_generar_cierre_complementario`; y pulido P2 UX (CIE-04/05/06 arqueo, F7).
 
 ### Sección 3 — CERRADA (2026-07-15)
+
 - **Backend aplicado** (migración `20260715210000_s3_cierres_hardening.sql`, probado con BEGIN/ROLLBACK, sin regresión del motor — agregado byte-idéntico): S3-01 (cierre complementario, 5 escenarios PASS), S3-02/S3-10 (REVOKE escritura directa), S3-04 (por_producto excluye origen='ot'), S3-08 (drop overload legacy), S3-09 (EXCLUDE per-sede), S3-15 (arqueo no negativo).
 - **S3-05 DIFERIDO:** abonos_cotizacion en el motor — 0 filas hoy, riesgo alto, requiere reescribir bloques sensibles; no afecta ningún cierre existente.
 - **Frontend:** batch 1 (S3-06,07,11,12,13) + UI del cierre complementario (botón/aviso cuando el rango ya está cerrado, más aviso al cerrar el día en curso). El cierre complementario captura el delta (soporta negativo), resolviendo también S1-08/S3-03 (anulación post-cierre).
 - **Pendiente menor:** pulido P2 UX del arqueo (CIE-05 sobra/falta visible en touch, CIE-06 color histórico, CIE-04 checklist) y S3-16 (etiqueta "Sin cuenta") — cosméticos.
+
+---
+
+## Sección 4 — Inventario y Productos (2026-07-16)
+
+Auditoría multi-agente (34 agentes). 27 hallazgos confirmados (2 P0, 12 P1 dedup, 13 P2), 1 descartado como código-viejo (QR/`referencia`: `fn_crear_producto` ya rellena referencia←codigo_interno; irreproducible). Sin regresión: cada corrección se validó contra la definición viva.
+
+### Frontend (aplicado, build OK)
+
+- **S4-01 (fe)** `ProductoDetalle`: `costo_promedio` ya NO se pide en el SELECT para no-Admin (antes viajaba al navegador; el ocultamiento era solo visual). Backend REST-hardening → DIFERIDO (decisión del dueño).
+- **S4-02** `inventarioStore`: filtrar por Tipo ya no trunca a 500; el tipo se aplica sobre la query principal (`producto.tipo`), no en la pre-query con `limit`.
+- **S4-04** `ProductoDetalle`: botón "→ a insumo" visible para Admin/Bodeguero/Técnico/Vendedor (igual que el RPC `fn_convertir_a_insumo`); "→ a venta" sigue solo Admin. Modal de conversión ahora habilitado para esos roles.
+- **S4-05** `ProductoForm`: tipo "chatarra" fuerza `vendible=false` y bloquea el checkbox.
+- **S4-07** `Inventario`: chip Stand/Pos solo en BODEGA (tabla y card); otras sedes → "—".
+- **S4-09** `inventarioStore`: `loadingMore` se resetea al iniciar un fetch no-append → `loadMore` ya no queda bloqueado tras cambiar un filtro.
+- **S4-10** `Inventario`/`inventario-ui`/`index.css`: "Sobrestock" filtrable y con color info (`.stk-pill.i`/`.dot-stk.i`), ya no gris neutro.
+- **S4-11** `inventarioStore`: `.order(producto_id, sede_id)` antes de `.range()` → paginación estable.
+- **S4-16** `ProductoForm`: `stock_maximo` se envía como 0 (no null) → no rompe el UPDATE directo de edición (NOT NULL).
+- **S4-21 (fe)** `ProductoForm`: valida `stock_maximo > stock_minimo` (0 = sin tope). + aviso de margen negativo (Admin).
+- UX: QR de producto desactivado da mensaje distinto a inexistente; `categoriaClass` amplía buckets; tap-targets de filtros ≥44px en móvil; Stat "Ubicación (BODEGA)"; confirmación de cambio de precio en `ProductoEditar`.
+
+### Backend (migraciones aplicadas y verificadas en prod)
+
+- **S4-06** `fn_actualizar_estado_stock`: Sobrestock solo si `stock_maximo>0`. Backfill: 963 `Sobrestock→OK`, 185 `OK→Agotado`. Sobrestock pasó de 968 → 5 (legítimos).
+- **S4-D2** `fn_crear_producto`: recalcula estado al crear (cantidad 0 ⇒ Agotado). Verificado: 0 filas `cantidad=0 con OK`.
+- **S4-08** `trg_productos_recalc_estado_stock`: recalcula estado al editar min/max.
+- **S4-18** RLS `inventario`: se removió `inv_modify_block`; solo queda `inv_select`. Escritura directa por REST bloqueada; todo pasa por RPCs SECURITY DEFINER (verificado: ningún flujo del frontend escribe inventario directo).
+- **S4-19** `trg_compra_sumar_stock`: `FOR UPDATE` sobre `productos` antes del promedio ponderado (evita race en compras concurrentes).
+- **S4-20** `REVOKE EXECUTE fn_actualizar_estado_stock FROM anon/PUBLIC`.
+- **S4-17** `fn_cancelar_compra`: NO-APLICA (el cambio de costo ya queda auditado por `trg_productos_log_precio_costo`).
+
+### Diferido (requiere decisión / dato)
+
+- **S4-01/S4-03 (backend REST-hardening)**: gating de `costo_promedio`/`ultimo_costo` a nivel BD requiere RPC SECURITY DEFINER Admin-only + REVOKE de columna + reescribir 2 vistas (`v_producto_ultimo_proveedor`, `v_sugerencias_reorden`) y consumidores. Riesgoso (todos los usuarios comparten rol `authenticated`). La fuga casual ya está cerrada en frontend. → Decisión del dueño.
+- **S4-21 (CHECK)**: `CHECK (stock_maximo=0 OR stock_maximo>stock_minimo)` bloqueado por 1 fila que incumple: 'CDA' (min 10 > max 3) — es dato (S4-D5). Se aplica tras corregir CDA.
+
+### Datos en producción — PENDIENTE presentar caso por caso (S4-Dx)
+
+- **S4-D1**: 509 productos activos sin ninguna fila de inventario (invisibles en el módulo).
+- **S4-D3**: 8 productos `vendible=false` con stock en pool vendible (teflón, aceite, etc.).
+- **S4-D4**: 4 costos corruptos con margen −99% sin respaldo de compra (TA1/4G, TA1/2G, UG3/8, ADAM32PP).
+- **S4-D5**: 'CDA' (servicio) min 10 > max 3.
+- **S4-D6**: 'C25AM' costo_promedio=0 con venta real (margen falso 100%).
+
+### Datos S4-Dx — decisiones aplicadas (2026-07-16)
+
+- **S4-D5** APLICADO: 'CDA' → min=0, max=0. Se habilitó el CHECK `chk_stock_max_min` (migración `s4_21_check_max_min`). S4-21 cerrado.
+- **S4-D3** APLICADO: los 8 SÍ se venden a veces → se marcaron `vendible=true` (el stock ya estaba bien en el cajón de venta; NO se movió a insumo).
+- **S4-D4 + S4-D6** APLICADO: costo reiniciado a 0 (TA1/4G, TA1/2G, UG3/8, ADAM32PP; C25AM ya en 0) + notificación `costo_revisar` al Admin para fijar costo y precio correctos.
+- **S4-D1** PENDIENTE: falta elegir enfoque (A: backfill filas en 0; B: refactor store LEFT JOIN).
+- **S4-01/03 backend**: por decisión del dueño se deja SOLO el cierre en frontend; no se toca la BD.

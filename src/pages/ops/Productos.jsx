@@ -390,7 +390,7 @@ function FilterRow({ on, onClick, children }) {
     <button
       onClick={onClick}
       className={
-        "relative flex items-center justify-between gap-1.5 rounded-[5px] px-2 py-1.5 text-left text-[12.5px] leading-tight transition-colors " +
+        "relative flex min-h-[44px] items-center justify-between gap-1.5 rounded-[5px] px-2 py-2.5 text-left text-[12.5px] leading-tight transition-colors lg:min-h-0 lg:py-1.5 " +
         (on
           ? "font-medium before:absolute before:left-[-8px] before:top-1 before:bottom-1 before:w-[2.5px] before:rounded-[1px]"
           : "")
