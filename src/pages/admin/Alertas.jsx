@@ -45,7 +45,12 @@ const OPCIONES_ESTADO = [
   { v: "Bajo", l: "Bajo" },
 ];
 /** Valores REALES del enum `clasificacion_abc` (columna productos.clasificacion). */
+// La opción "A y B" manda las dos clases con `.in()` (ver useFiltros): es el
+// arranque por defecto porque una lista de 2.634 alertas es una lista que nadie
+// mira. No se esconde nada — el encabezado sigue diciendo el total real y el
+// chip del filtro se quita en un toque.
 const OPCIONES_ABC = [
+  { v: "AB", l: "A y B — lo que más pesa", in: ["A", "B"] },
   { v: "A", l: "A — mayor impacto" },
   { v: "B", l: "B — impacto medio" },
   { v: "C", l: "C — menor impacto" },
@@ -84,6 +89,8 @@ export default function Alertas() {
    * filtraban aquí: con ~2.600 filas Bajo/Agotado el badge decía "200" y las
    * demás alertas no existían para el administrador. */
   const [stockTotal, setStockTotal] = useState(0);
+  // Total sin recorte por clasificación: es el número honesto del badge.
+  const [stockTotalGlobal, setStockTotalGlobal] = useState(0);
   const [stockPage, setStockPage] = useState(0);
   const [stockLoading, setStockLoading] = useState(true);
   const { sedes } = useSedes();
@@ -111,6 +118,8 @@ export default function Alertas() {
         label: "Clasificación",
         columna: "producto.clasificacion",
         opciones: OPCIONES_ABC,
+        // Arranca en A+B: son ~181 productos accionables de 2.634 alertas.
+        porDefecto: "AB",
       },
     ],
   });
@@ -200,6 +209,18 @@ export default function Alertas() {
       if (error) throw error;
       setDatos((prev) => ({ ...prev, stock: data ?? [] }));
       setStockTotal(count ?? 0);
+
+      // Total REAL de alertas de stock, sin el recorte por clasificación. La
+      // pantalla arranca en A+B, y si el badge mostrara solo ese subconjunto
+      // estaría escondiendo el resto: se cambiaría un número truncado (el viejo
+      // "200") por otro. El operario tiene que ver siempre cuántas hay de verdad.
+      const { count: global } = await supabase
+        .from("inventario")
+        .select("id", { count: "exact", head: true })
+        .in("estado_stock", ESTADOS_ALERTA);
+      if (mountedRef.current && fStock.esReqVigente(reqId)) {
+        setStockTotalGlobal(global ?? 0);
+      }
     } catch (err) {
       if (!mountedRef.current) return;
       setErrorMsg(safeError(err, "Error al cargar alertas de stock"));
@@ -240,7 +261,10 @@ export default function Alertas() {
   }, [datos]);
 
   const counts = {
-    stock: stockTotal,
+    // El badge de la pestaña dice cuántas alertas de stock HAY, no cuántas deja
+    // ver el filtro: es la cifra que el dueño usa para saber cómo está el
+    // inventario, y filtrar no cambia la realidad.
+    stock: stockTotalGlobal,
     herramientas: datos.herramientas.length,
     ordenes: datos.ordenes.length,
     ot30dias: datos.ot30dias.length,
@@ -471,6 +495,37 @@ export default function Alertas() {
             Ordenado por severidad
           </span>
         </header>
+
+        {/* Aviso honesto: la pantalla arranca recortada a A+B, y eso hay que
+            DECIRLO. Un filtro puesto por defecto y en silencio es lo mismo que
+            un truncado: el operario ve pocas y cree que no hay más. */}
+        {esStock && !stockLoading && stockTotal < stockTotalGlobal && (
+          <div
+            className="mx-[18px] mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-[12.5px]"
+            style={{
+              backgroundColor: "hsl(var(--info) / 0.08)",
+              borderColor: "hsl(var(--info) / 0.3)",
+              color: "hsl(var(--foreground))",
+            }}
+          >
+            <span>
+              Viendo <b>{stockTotal}</b> de <b>{stockTotalGlobal}</b> alertas de
+              stock. El resto son de <b>clase C</b> (cola larga): existen, pero
+              casi nunca se actúa sobre ellas.
+            </span>
+            <button
+              onClick={() => fStock.limpiar()}
+              className="h-12 shrink-0 rounded-lg border px-3 text-[12.5px] font-medium"
+              style={{
+                borderColor: "hsl(var(--border))",
+                backgroundColor: "hsl(var(--card))",
+                color: "hsl(var(--foreground))",
+              }}
+            >
+              Ver las {stockTotalGlobal}
+            </button>
+          </div>
+        )}
 
         {(esStock ? stockLoading : loading) ? (
           <Skeleton />
