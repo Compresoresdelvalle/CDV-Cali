@@ -10,6 +10,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
+import { hoyBogota, sumarDias } from "../../lib/filtros";
 import { sedeLabel, estadoPill } from "../../lib/herramientas-ui";
 import { ToolIcon, UserAvatar, Pill } from "./HerramientasBits";
 
@@ -32,11 +33,12 @@ export function ModalPrestar({
 }) {
   const savingRef = useRef(false);
   const [usuarioId, setUsuarioId] = useState("");
-  const [fechaEsperada, setFechaEsperada] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + DIAS_DEFAULT);
-    return d.toISOString().slice(0, 10);
-  });
+  // Bogotá, no UTC: `toISOString()` da la fecha UTC y entre las 7pm y medianoche
+  // en Colombia eso ya es el día siguiente, así que el préstamo abría con un día
+  // de más y el mínimo del calendario dejaba fuera el día de hoy.
+  const [fechaEsperada, setFechaEsperada] = useState(() =>
+    sumarDias(hoyBogota(), DIAS_DEFAULT),
+  );
   const [observaciones, setObservaciones] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -287,8 +289,8 @@ export function ModalPrestar({
                 }}
                 className="rounded-md border text-center font-mono text-sm font-bold outline-none"
                 style={{
-                  width: 56,
-                  height: 40,
+                  width: 64,
+                  height: 48,
                   borderColor: "var(--n-150)",
                   backgroundColor: "var(--n-0)",
                   color: "var(--n-950)",
@@ -406,7 +408,7 @@ export function ModalPrestar({
                 value={fechaEsperada}
                 onChange={(e) => setFechaEsperada(e.target.value)}
                 required
-                min={new Date().toISOString().slice(0, 10)}
+                min={hoyBogota()}
                 className="w-full rounded-md border bg-transparent px-3 py-2 font-mono text-[13px] font-medium outline-none"
                 style={{ borderColor: "var(--n-150)", color: "var(--n-950)" }}
               />
@@ -1054,8 +1056,8 @@ export function ModalAgregarUnidades({ herramienta, onClose, onSaved }) {
             }}
             className="rounded-md border text-center font-mono text-sm font-bold outline-none"
             style={{
-              width: 56,
-              height: 40,
+              width: 64,
+              height: 48,
               borderColor: "var(--n-150)",
               backgroundColor: "var(--n-0)",
               color: "var(--n-950)",
@@ -1192,8 +1194,8 @@ function CantidadCrearField({ cantidad, setCantidad, max, sub }) {
           }}
           className="rounded-md border text-center font-mono text-sm font-bold outline-none"
           style={{
-            width: 56,
-            height: 40,
+            width: 64,
+            height: 48,
             borderColor: "var(--n-150)",
             backgroundColor: "var(--n-0)",
             color: "var(--n-950)",
@@ -1222,8 +1224,9 @@ function QtyStep({ children, onClick, disabled, atTope }) {
       aria-disabled={atTope || undefined}
       className="flex items-center justify-center rounded-md border font-bold disabled:opacity-40"
       style={{
-        width: 40,
-        height: 40,
+        // 48px: mínimo para operar con guantes (regla de UX del proyecto).
+        width: 48,
+        height: 48,
         fontSize: 18,
         borderColor: "var(--n-150)",
         backgroundColor: "var(--n-50)",

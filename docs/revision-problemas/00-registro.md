@@ -687,3 +687,74 @@ que la enfermedad.
    Decisión del dueño: **los pone Carlos desde la app**. No tocar por SQL.
 3. Los "saltos" en `movimientos` son artefacto de dos flujos (`cantidad` y
    `cantidad_insumo`) compartiendo una sola cadena — no corrupción.
+
+---
+
+## 2026-07-17 — Sección 9: Herramientas ✅ HECHA
+
+Cacería: 6 cazadores + verificación adversarial → 25 confirmados, 0 código
+viejo, 1 refutado (los GRANT de DELETE/TRUNCATE a anon/authenticated NO son
+explotables: RLS niega el DELETE por no tener policy). Deduplicados en 6 temas.
+
+### Frontend (bugs vivos, 3 de ellos introducidos en bbe7f13 al arreglar el Historial)
+
+- **Contador "181 herramientas" → 13**: el encabezado usaba `herramientas.length`
+  (incluye 168 retiradas) en vez de `activas.length`. La verificación adversarial
+  encontró que el MISMO bug seguía vivo en un segundo sitio (el badge de la
+  pestaña "Catálogo completo") — corregido también.
+- **"Regresada a insumo" mentía en 104 filas**: `activo=false` lo ponen TANTO
+  consumir (dada de baja) COMO devolver a insumo. Ahora se distingue por
+  `estado==='consumido'` → "Dada de baja" vs "Regresada a insumo".
+- **Detalle ofrecía "Prestar" sobre 64 ya regresadas a insumo**: `esDisponible`
+  ahora exige `!estaRetirada`; badge y textos distinguen los 3 casos. También se
+  ocultó "Agregar unidades" en retiradas (P2 de la verificación).
+- Menores: fecha de préstamo en Bogotá (`hoyBogota`/`sumarDias`, antes UTC con
+  `toISOString`); atrasados al frente de la lista; confirmación al regresar a
+  insumo (irreversible); botones de cantidad 40→48px.
+- NUEVO: 4 acciones (extraviar/recuperar/mantenimiento/finalizar) + componente
+  `HistorialHerramienta` que lee `herramientas_historial`. Se quitaron los
+  `ActionDisabled` fantasma de "reportar daño / a mantenimiento" (ya tienen
+  backend real).
+
+### Backend (4 migraciones)
+
+- `20260717135219_herramientas_historial_tabla_y_backfill`: tabla append-only
+  (trigger `trg_hh_append_only`), RLS `hh_select` (espejo de `hp_select`),
+  `authenticated` solo SELECT. **341 filas de backfill** con `origen='reconstruido'`
+  (170 préstamo + 67 devolución + 104 consumo). Es historia PARCIAL: lo que se
+  pisó antes se perdió; la UI marca esas filas como reconstruidas.
+- `20260717135357_herramientas_rpcs_registran_historial`: prestar/devolver/
+  consumir escriben su evento (préstamo por lote = N eventos, uno por unidad).
+  `fn_crear_herramienta_desde_insumo` NO (crear no es evento de préstamo: ya
+  queda en `movimientos`).
+- `20260717142233_herramientas_rpcs_extravio_y_mantenimiento`: 4 RPC nuevas,
+  Bodega/Admin. **No tocan inventario** (la unidad ya salió del insumo al crear
+  la herramienta; descontar sería doble conteo — verificado contra
+  `fn_crear_herramienta_desde_insumo`). Se puede extraviar una PRESTADA y queda
+  registrado en manos de quién se perdió.
+- `20260717142528_herramientas_blindar_trigger_mutacion`: cualquier cambio de
+  `estado`/`prestada_a`/fechas/`estado_prestamo` exige el flag `cdv.herramienta_rpc`.
+  Sin REVOKE. El INSERT directo de herramientas manuales del frontend sigue vivo
+  (trigger es BEFORE UPDATE).
+
+### Verificación adversarial final (6 flujos): 1 ROTO, 4 OK_CON_REPAROS, 1 OK
+
+- **ROTO** (P1): el badge de la tab seguía mintiendo — CORREGIDO.
+- P2 corregidos: "Agregar unidades" en retiradas; aviso en el modal de cancelar
+  compra de que el costo no siempre se revierte solo (mentira silenciosa sobre
+  dinero).
+- **P3 documentados, NO tocados** (defensa en profundidad, no alcanzable desde la
+  app): el trigger no cubre `sede_id` (pero la policy `hp_update` sí lo exige en
+  su check); append-only no cubre TRUNCATE (solo el GRANT lo frena hoy); editar
+  nombre/código por REST directo no queda registrado en el historial.
+
+### `estado_prestamo='vencido'`: valor muerto confirmado, NO implementado (el
+frontend calcula el atraso). `en_mantenimiento`/`extraviada` ya NO son estados
+muertos.
+
+### Estados de la campaña
+
+Sección 9 cerrada. Sigue Sección 10 (Devoluciones / Garantías / Notas crédito).
+Nota: un agente Opus murió por error de API entre `apply` y `materialize`; dejó
+el estado coherente y se completó con un segundo agente. Lección: materializar
+cada migración inmediatamente después de aplicarla.

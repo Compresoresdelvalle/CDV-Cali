@@ -165,6 +165,17 @@ export default function Herramientas() {
      La función valida permiso (Admin o misma sede) y estado con FOR UPDATE. */
   const devolver = async (h) => {
     if (accionandoRef.current) return;
+    // Devolver una MANUAL es inocuo (vuelve a 'disponible' y se puede volver a
+    // prestar). Devolver una INVENTARIABLE retira la herramienta del catálogo
+    // para siempre: es tan irreversible como consumir, así que se pregunta igual
+    // que allí. Sin esto, un tap de más borraba una herramienta del catálogo.
+    if (h.producto_id) {
+      const ok = window.confirm(
+        `¿Regresar “${h.herramienta_nombre}” al stock de insumo de ${sedeLabel(h.sede_id)}?\n\n` +
+          `Su unidad vuelve al inventario y la herramienta sale del catálogo. Esta acción no se puede deshacer.`,
+      );
+      if (!ok) return;
+    }
     accionandoRef.current = true;
     setAccionando(h.id);
     setErrorMsg("");
@@ -223,6 +234,73 @@ export default function Herramientas() {
     }
   };
 
+  /* ── Extravío y mantenimiento ─────────────────────────────────────────
+     Estos dos estados existían en la app (filtros, badges, textos) pero
+     NINGUNA función del backend los escribía: no había forma de marcar una
+     herramienta como perdida. Las cuatro RPC son server-authoritative (validan
+     rol, sede y estado de origen) y registran su evento en el historial.
+     Ninguna toca inventario: la unidad ya salió del insumo al crearse la
+     herramienta, así que descontar otra vez sería contarla dos veces. */
+  const accionEstado = async (h, rpc, confirmar, exito) => {
+    if (accionandoRef.current) return;
+    if (confirmar && !window.confirm(confirmar)) return;
+    accionandoRef.current = true;
+    setAccionando(h.id);
+    setErrorMsg("");
+    setOkMsg("");
+    try {
+      const { error } = await supabase.rpc(rpc, {
+        p_herramienta_id: h.id,
+        p_observaciones: null,
+      });
+      if (error) throw error;
+      setDetalleId(null);
+      setOkMsg(exito);
+      await cargarHerramientas();
+    } catch (err) {
+      setErrorMsg(safeError(err, "No se pudo cambiar el estado"));
+    } finally {
+      setAccionando(null);
+      accionandoRef.current = false;
+    }
+  };
+
+  const extraviar = (h) =>
+    accionEstado(
+      h,
+      "fn_marcar_herramienta_extraviada",
+      `¿Reportar “${h.herramienta_nombre}” como EXTRAVIADA?\n\n` +
+        (h.estado === "prestada"
+          ? `Queda registrado que se perdió en manos de ${h.usuario?.nombre ?? "quien la tenía"}. `
+          : "") +
+        `Si aparece después, se puede recuperar.`,
+      `“${h.herramienta_nombre}” quedó reportada como extraviada.`,
+    );
+
+  const recuperar = (h) =>
+    accionEstado(
+      h,
+      "fn_recuperar_herramienta",
+      null,
+      `“${h.herramienta_nombre}” volvió al catálogo como disponible.`,
+    );
+
+  const mandarAMantenimiento = (h) =>
+    accionEstado(
+      h,
+      "fn_enviar_herramienta_mantenimiento",
+      `¿Mandar “${h.herramienta_nombre}” a mantenimiento?\n\nSale del catálogo mientras se repara. No se puede prestar hasta que vuelva.`,
+      `“${h.herramienta_nombre}” quedó en mantenimiento.`,
+    );
+
+  const finalizarMantenimiento = (h) =>
+    accionEstado(
+      h,
+      "fn_finalizar_mantenimiento",
+      null,
+      `“${h.herramienta_nombre}” quedó disponible de nuevo.`,
+    );
+
   /* ── Derivaciones de presentación (todas sobre datos reales) ─────────── */
 
   // Herramientas vigentes en el catálogo. Las regresadas a insumo (activo=false)
@@ -233,8 +311,22 @@ export default function Herramientas() {
     [herramientas],
   );
 
+  // Los atrasados van primero, y dentro de cada grupo el más viejo arriba.
+  // Antes solo se distinguían por color: en una lista larga, un préstamo vencido
+  // hace dos meses quedaba enterrado entre los que están al día.
   const prestadas = useMemo(
-    () => activas.filter((h) => h.estado === "prestada"),
+    () =>
+      activas
+        .filter((h) => h.estado === "prestada")
+        .sort((a, b) => {
+          const va = prestamoVencido(a) ? 0 : 1;
+          const vb = prestamoVencido(b) ? 0 : 1;
+          if (va !== vb) return va - vb;
+          return (
+            new Date(a.fecha_devolucion_esperada ?? 0) -
+            new Date(b.fecha_devolucion_esperada ?? 0)
+          );
+        }),
     [activas],
   );
   const atrasadas = useMemo(
@@ -313,7 +405,10 @@ export default function Herramientas() {
               "Cargando…"
             ) : (
               <>
-                <Stat>{herramientas.length}</Stat> herramientas ·{" "}
+                {/* `activas`, no `herramientas`: la consulta trae también las
+                    retiradas (para el Historial), y contarlas aquí decía "181
+                    herramientas" cuando en el catálogo solo hay 13. */}
+                <Stat>{activas.length}</Stat> herramientas ·{" "}
                 <Stat>{prestadas.length}</Stat> prestadas
                 {atrasadas.length > 0 && (
                   <>
@@ -358,7 +453,10 @@ export default function Herramientas() {
               t.id === "activos"
                 ? prestadas.length
                 : t.id === "catalogo"
-                  ? herramientas.length
+                  ? // `activas`, no `herramientas`: el catálogo son las vigentes
+                    // (13), no las 181 que incluyen retiradas. Coincide con el
+                    // encabezado y con el pill "Todas" de esta misma pestaña.
+                    activas.length
                   : devueltas.length;
             const danger = t.id === "activos" && atrasadas.length > 0;
             return (
@@ -498,6 +596,10 @@ export default function Herramientas() {
           onClose={() => setDetalleId(null)}
           onDevolver={() => devolver(detalle)}
           onConsumir={() => consumir(detalle)}
+          onExtraviar={() => extraviar(detalle)}
+          onRecuperar={() => recuperar(detalle)}
+          onMantenimiento={() => mandarAMantenimiento(detalle)}
+          onFinalizarMantenimiento={() => finalizarMantenimiento(detalle)}
           onPrestar={() => {
             setDetalleId(null);
             setModalPrestar(detalle);
@@ -1167,16 +1269,27 @@ function TabHistorial({ devueltas, onOpen }) {
                 style={{ color: "var(--n-500)" }}
               >
                 {h.herramienta_codigo || "Sin código"} · {sedeLabel(h.sede_id)}
-                {/* La herramienta ya no está en el catálogo porque volvió a ser
-                    insumo. Se dice explícitamente: si no, el operario la ve en
-                    el historial, la busca en el catálogo y no la encuentra. */}
-                {h.activo === false && " · Regresada a insumo"}
+                {/* La herramienta ya no está en el catálogo. Se dice por qué: si
+                    no, el operario la ve en el historial, la busca en el
+                    catálogo y no la encuentra. `activo=false` NO alcanza para
+                    saber a dónde fue: lo ponen tanto consumir (se dio de baja,
+                    no regresa nada) como devolver a insumo. Distinguir por
+                    `estado` es lo único honesto. */}
+                {h.estado === "consumido"
+                  ? " · Dada de baja"
+                  : h.activo === false && " · Regresada a insumo"}
               </div>
             </div>
             <div className="text-right">
               <Pill
                 cls={h.activo === false ? "pill-neutral" : "pill-success"}
-                label={h.activo === false ? "A insumo" : "Devuelta"}
+                label={
+                  h.estado === "consumido"
+                    ? "De baja"
+                    : h.activo === false
+                      ? "A insumo"
+                      : "Devuelta"
+                }
                 small
               />
               <div

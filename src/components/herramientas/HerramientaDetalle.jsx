@@ -13,7 +13,9 @@ import {
   Boxes,
   X,
 } from "lucide-react";
+import { useState, useEffect } from "react";
 import { formatDate } from "../../lib/utils";
+import { supabase } from "../../lib/supabase";
 import {
   estadoPill,
   prestamoTono,
@@ -22,6 +24,92 @@ import {
   diasVencida,
 } from "../../lib/herramientas-ui";
 import { ToolIcon, UserAvatar, Pill } from "./HerramientasBits";
+
+/** Cómo se lee cada evento del historial. */
+const EVENTO_TEXTO = {
+  prestamo: "Prestada a",
+  devolucion: "Devuelta",
+  consumo: "Dada de baja",
+  extravio: "Reportada como extraviada",
+  recuperacion: "Apareció",
+  mantenimiento_entrada: "Entró a mantenimiento",
+  mantenimiento_salida: "Salió de mantenimiento",
+};
+
+/**
+ * Bitácora de la herramienta. Antes no existía: cada préstamo PISABA al
+ * anterior en la misma fila, así que no había forma de saber quién había tenido
+ * una llave. Las filas con `origen='reconstruido'` son las que se pudieron
+ * rescatar de los datos viejos: se marcan porque NO son historia completa (lo
+ * que se sobrescribió en su momento se perdió y no se puede inventar).
+ */
+function HistorialHerramienta({ herramientaId }) {
+  const [filas, setFilas] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancel = false;
+    supabase
+      .from("herramientas_historial")
+      .select(
+        "id, evento, fecha, observaciones, origen, usuario:usuario_id(nombre), registrador:registrado_por(nombre)",
+      )
+      .eq("herramienta_id", herramientaId)
+      .order("fecha", { ascending: false })
+      .then(({ data, error: e }) => {
+        if (cancel) return;
+        // Un fallo aquí no puede quedar mudo: si no, la ficha diría "sin
+        // movimientos" cuando en realidad no se pudo consultar.
+        if (e) setError("No se pudo cargar el historial.");
+        setFilas(data ?? []);
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [herramientaId]);
+
+  return (
+    <>
+      {error && (
+        <div className="text-[12.5px]" style={{ color: "var(--dang-700)" }}>
+          {error}
+        </div>
+      )}
+      {!error && filas === null && (
+        <div className="text-[12.5px]" style={{ color: "var(--n-500)" }}>
+          Cargando…
+        </div>
+      )}
+      {!error && filas?.length === 0 && (
+        <div className="text-[12.5px]" style={{ color: "var(--n-500)" }}>
+          Sin movimientos registrados.
+        </div>
+      )}
+      {!error && filas?.length > 0 && (
+        <ul className="space-y-2.5" role="list">
+          {filas.map((f) => (
+            <li key={f.id} className="text-[12.5px]">
+              <div style={{ color: "var(--n-950)" }}>
+                <span className="font-medium">
+                  {EVENTO_TEXTO[f.evento] ?? f.evento}
+                </span>
+                {f.evento === "prestamo" && f.usuario?.nombre
+                  ? ` ${f.usuario.nombre}`
+                  : ""}
+              </div>
+              <div style={{ color: "var(--n-500)" }}>
+                {formatDate(f.fecha)}
+                {f.registrador?.nombre ? ` · por ${f.registrador.nombre}` : ""}
+                {f.origen === "reconstruido" && " · registro reconstruido"}
+                {f.observaciones ? ` · ${f.observaciones}` : ""}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
 
 /**
  * Detalle de una herramienta (overlay a pantalla completa).
@@ -45,11 +133,31 @@ export default function HerramientaDetalle({
   onConsumir,
   onPrestar,
   onAgregarUnidades,
+  onExtraviar,
+  onRecuperar,
+  onMantenimiento,
+  onFinalizarMantenimiento,
 }) {
   const h = herramienta;
-  const pill = estadoPill(h.estado);
+  // El badge se calcula sobre `estado`, que en una herramienta regresada a
+  // insumo sigue diciendo 'disponible'. Sin este ajuste el detalle la coronaba
+  // con un "Disponible" verde pese a estar fuera del catálogo.
+  const pill =
+    h.activo === false && h.estado !== "consumido"
+      ? { cls: "pill-neutral", label: "A insumo", tone: "neut" }
+      : estadoPill(h.estado);
+  // Una herramienta retirada (activo=false) ya no está en el catálogo: o se dio
+  // de baja (consumido) o regresó al stock de insumo. En ambos casos su `estado`
+  // puede seguir diciendo 'disponible', que es lo que hacía que el detalle
+  // ofreciera "Prestar" sobre algo que físicamente ya no existe como herramienta.
+  const estaRetirada = h.activo === false;
+  const regresadaAInsumo = estaRetirada && h.estado !== "consumido";
   const esPrestada = h.estado === "prestada";
-  const esDisponible = h.estado === "disponible";
+  const esDisponible = h.estado === "disponible" && !estaRetirada;
+  const esExtraviada = h.estado === "extraviada";
+  // Bodega y Admin manejan extravío y mantenimiento (mismo patrón que el resto
+  // de la sección). Ninguna de las dos toca stock, así que no exigen Admin.
+  const puedeGestionar = (esAdmin || esBodega) && !estaRetirada;
   const esMantenimiento = h.estado === "en_mantenimiento";
   const esInventariable = !!h.producto_id; // vinculada a un insumo del catálogo
   const tono = prestamoTono(h);
@@ -189,6 +297,61 @@ export default function HerramientaDetalle({
               <UserCheck className="h-3.5 w-3.5" strokeWidth={2} /> Prestar
             </button>
           )}
+          {/* Extravío y mantenimiento: hasta ahora la app pintaba estos estados
+              pero NINGUNA función los escribía, así que no había forma de marcar
+              una herramienta como perdida. Se puede extraviar una PRESTADA (es el
+              caso real) y la ficha conserva a quién se le perdió. */}
+          {puedeGestionar &&
+            onExtraviar &&
+            (esDisponible || esPrestada || esMantenimiento) && (
+              <button
+                onClick={onExtraviar}
+                disabled={accionando}
+                className="btn btn-out inline-flex items-center gap-1.5 disabled:opacity-50"
+                style={{
+                  height: 48,
+                  borderColor: "var(--dang-border)",
+                  color: "var(--dang-700)",
+                }}
+                title="Reportarla como perdida. Se puede recuperar si aparece."
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={2} /> Extraviada
+              </button>
+            )}
+          {puedeGestionar && onRecuperar && esExtraviada && (
+            <button
+              onClick={onRecuperar}
+              disabled={accionando}
+              className="btn btn-pri inline-flex items-center gap-1.5 disabled:opacity-50"
+              style={{ height: 48 }}
+              title="Apareció: vuelve al catálogo como disponible"
+            >
+              <Check className="h-3.5 w-3.5" strokeWidth={2} /> Apareció
+            </button>
+          )}
+          {puedeGestionar &&
+            onMantenimiento &&
+            (esDisponible || esPrestada) && (
+              <button
+                onClick={onMantenimiento}
+                disabled={accionando}
+                className="btn btn-out inline-flex items-center gap-1.5 disabled:opacity-50"
+                style={{ height: 48 }}
+                title="Sale del catálogo mientras se repara. No toca el inventario."
+              >
+                A mantenimiento
+              </button>
+            )}
+          {puedeGestionar && onFinalizarMantenimiento && esMantenimiento && (
+            <button
+              onClick={onFinalizarMantenimiento}
+              disabled={accionando}
+              className="btn btn-pri inline-flex items-center gap-1.5 disabled:opacity-50"
+              style={{ height: 48 }}
+            >
+              <Check className="h-3.5 w-3.5" strokeWidth={2} /> Reparada
+            </button>
+          )}
           {esDisponible && esInventariable && esAdmin && (
             <button
               onClick={onDevolver}
@@ -202,8 +365,9 @@ export default function HerramientaDetalle({
             </button>
           )}
           {/* Agregar más unidades físicas de esta misma herramienta (para poder
-              prestar varias). Solo Admin/Bodega; el padre pasa el handler. */}
-          {onAgregarUnidades && (
+              prestar varias). Solo Admin/Bodega, y solo si sigue vigente: sobre
+              una retirada (consumida o regresada a insumo) no tiene sentido. */}
+          {onAgregarUnidades && !estaRetirada && (
             <button
               onClick={onAgregarUnidades}
               className="btn btn-out inline-flex items-center gap-1.5"
@@ -213,17 +377,9 @@ export default function HerramientaDetalle({
               <Boxes className="h-3.5 w-3.5" strokeWidth={2} /> Agregar unidades
             </button>
           )}
-          {/* Acciones del diseño Lovable sin backend (reportar daño / enviar a
-              mantenimiento): se conservan deshabilitadas con tooltip honesto. */}
-          <ActionDisabled
-            icon={<AlertOctagon className="h-3.5 w-3.5" strokeWidth={2} />}
-            label="Reportar daño"
-            tone="warn"
-          />
-          <ActionDisabled
-            icon={<Wrench className="h-3.5 w-3.5" strokeWidth={2} />}
-            label="Enviar a mantenimiento"
-          />
+          {/* "Reportar daño / Enviar a mantenimiento" ya NO son placeholders sin
+              backend: se implementaron arriba como botones reales (extraviar /
+              a mantenimiento). Solo queda Imprimir QR pendiente de backend. */}
           <ActionDisabled
             icon={<Printer className="h-3.5 w-3.5" strokeWidth={2} />}
             label="Imprimir QR"
@@ -406,7 +562,11 @@ export default function HerramientaDetalle({
                 >
                   {h.estado === "extraviada"
                     ? "Herramienta extraviada"
-                    : "Disponible para préstamo"}
+                    : h.estado === "consumido"
+                      ? "Dada de baja"
+                      : regresadaAInsumo
+                        ? "Regresada al stock de insumo"
+                        : "Disponible para préstamo"}
                 </div>
                 <div
                   className="mt-1 text-[12.5px]"
@@ -414,17 +574,23 @@ export default function HerramientaDetalle({
                 >
                   {h.estado === "extraviada"
                     ? "Reportada como extraviada · no disponible para préstamo."
-                    : "Sin préstamo activo. Puedes prestarla desde la lista de herramientas."}
+                    : h.estado === "consumido"
+                      ? "Se consumió o se dañó · no regresó al inventario y ya no se puede prestar."
+                      : regresadaAInsumo
+                        ? "Su unidad volvió al stock de insumo · ya no está en el catálogo de herramientas."
+                        : "Sin préstamo activo. Puedes prestarla desde la lista de herramientas."}
                 </div>
               </div>
             )}
 
-            {/* Historial de uso — sin backend (no hay tabla de historial). */}
+            {/* Ya hay backend: `herramientas_historial` (append-only). Antes cada
+                préstamo pisaba al anterior en la misma fila y esta tarjeta decía
+                que el historial "aún no se registra". */}
             <Card
               icon={<Activity className="h-4 w-4" strokeWidth={1.8} />}
               title="Historial de uso"
             >
-              <EmptyInline text="El historial de préstamos por herramienta aún no se registra. Se mostrará aquí cuando se habilite el registro de movimientos de herramientas." />
+              <HistorialHerramienta herramientaId={h.id} />
             </Card>
           </div>
 
