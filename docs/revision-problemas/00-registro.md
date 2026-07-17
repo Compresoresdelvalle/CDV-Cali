@@ -604,3 +604,86 @@ sin botón de terminar — corregido), P2 de documentación (Vendedor en Ensambl
 ### PENDIENTE decisión del dueño
 
 - Remediación de los 43 costos desactualizados por el guard de compras (~$5,2M).
+
+---
+
+## 2026-07-17 — Cierre de los pendientes 1, 2 y 3 (fuera de sección)
+
+### Pendiente 3 (técnico) — Sección 6: candado de `compras.recibida` ✅ HECHO
+
+Migración `20260717120947_s6_lockdown_compras_recibida`.
+
+- **El hueco era real**, probado en baseline: un Bodeguero hacía
+  `UPDATE compras SET recibida = true` por REST y pasaba, saltándose
+  `fn_recibir_compra` (y con ella la recepción parcial) → inventario inflado y
+  deuda fantasma.
+- Se eligió **flag transaccional + trigger**, NO revoke: un REVOKE de UPDATE
+  habría dejado la policy `compras_update` como letra muerta y roto el update
+  legítimo de otras columnas.
+- **Casi se rompe la operación**: `fn_registrar_compra` hace su propio
+  `update compras set recibida = true` (flujo de caja menor) y no encendía el
+  flag. Se incluyó en la migración.
+- Matriz 8/8: los 3 roles reciben por RPC; UPDATE directo bloqueado para los 3;
+  otras columnas siguen editables; revertir `recibida` sigue bloqueado.
+- **Riesgo PWA**: un cliente con bundle anterior a `016b0a5` verá error al
+  recibir. Falla CERRADO (bloquea, no corrompe). Avisar a Bodega de recargar.
+
+### Pendiente 1 (datos) — costos dañados por el guard: PARCIAL
+
+Cifra real hoy: **49 productos / $5.728.372** (el handoff decía 43 / $5,2M). La
+diferencia son 7 líneas perdidas el 16/07 **antes** de que el fix aterrizara
+(03:58 del 17/07). Última pérdida: 16/07 22:18. **Cero pérdidas tras el fix.**
+
+- **El fix está completo**: `trg_compra_sumar_stock` Y `trg_ensamble_stock`
+  encienden `app.costo_sistema`. (El comentario dentro del guard solo menciona
+  ensambles: está desactualizado, no es un hueco.)
+- **La premisa del handoff era FALSA**: CTA1105T, C2X10, GF3/4PP y 6205FAG NO
+  son correcciones manuales del Admin — de las 40 ediciones manuales del log,
+  ninguna toca un producto dañado. Su costo es el viejo congelado. **Igual no se
+  tocan**, pero por otra razón: el valor real está entre el viejo y el de compra.
+- **No hay replay fiel posible**: reconstruir el stock global previo desde
+  `movimientos` falla. Backtest contra 34 recepciones logueadas: 24/34 exactas,
+  **29% de error**, hasta $140.625/unidad, con sesgo sistemático.
+- ✅ **6 corregidos con certeza matemática** (migración
+  `20260717121636_fix_costo_promedio_6_productos_stock_prev_cero`): los de
+  `stock_global_prev = 0`, donde la fórmula colapsa a `costo := costo_unitario`.
+  F75ECO, R1218, C25AM, 31A1/2, 31A24, 61A28 → **$2.101.900**. Verificado por dos
+  vías independientes; 0 productos colaterales tocados; 6 filas de log.
+- **Quedan 43** (~$3,6M). **Decisión del dueño: dejarlos autocorregirse** en su
+  próxima compra + lista de tarea para el Admin en
+  `docs/revision-problemas/TAREA-ADMIN-costos-por-revisar.md`. El 79% del resto
+  está en 5 productos.
+- **Margen histórico inflado comprobable: $140.935.** No se puede reexpresar.
+
+### Pendiente 2 (datos) — OT sin venta: NO SE REMEDIA (decisión razonada)
+
+Las 10 OT `entregada` sin `venta_id` son **todas del 2 al 12 de junio**. Desde el
+15 de junio: **33 OT entregadas seguidas, todas con su venta**. No es fuga viva;
+es el período de aprendizaje → aplica la regla del código viejo sobre datos.
+
+De los $182.710: #6 es literalmente "NNNN PRUEBA"; #8 (total $10 / abono $1.000),
+#34 (total $200 / abono $297.500) y #38 (total $0 / abono $800.000) son
+imposibles; #36 ya está cobrada. **Reales sin cobrar: solo 4** (#9, #12, #22
+WILLIAM LOSADA, #33 Ramiro Duran) = **$160.000**, todas `no_autorizado` (el
+cliente no autorizó la reparación y pagó solo la revisión).
+
+**Razón de no remediar**: crear esas ventas hoy metería plata de junio en el
+**cierre de hoy**. Los cierres de junio ya están cerrados. El remedio ensucia más
+que la enfermedad.
+
+### Hallazgos colaterales nuevos (no estaban en el handoff)
+
+1. 🟠 **DOS definiciones de `costo_promedio` en la base**: `trg_compra_sumar_stock`
+   usa promedio móvil; `fn_cancelar_compra` recalcula con el ponderado de TODAS
+   las compras recibidas históricas. Cancelar una compra reescribe el costo con
+   otro criterio. Fuente de descuadre viva, independiente del guard.
+   **En investigación por decisión del dueño (auditar antes de tocar).**
+2. 🟠 **3 productos con costo $0 y stock real**: TA1/2G (64 uds), UG3/8 (24 uds),
+   TA1/4G (0). Puestos en cero el **16/07 02:14:27 sin usuario**, en la ventana en
+   que corríamos el endurecimiento de la Sección 4. **Posiblemente causado por
+   nosotros**: el guard no frena nada cuando `auth.uid()` es NULL (MCP/editor SQL).
+   Descartado `fn_cancelar_compra`: esos 3 no tienen ninguna compra registrada.
+   **Origen sin explicar** — no se inventa una causa.
+   Decisión del dueño: **los pone Carlos desde la app**. No tocar por SQL.
+3. Los "saltos" en `movimientos` son artefacto de dos flujos (`cantidad` y
+   `cantidad_insumo`) compartiendo una sola cadena — no corrupción.
