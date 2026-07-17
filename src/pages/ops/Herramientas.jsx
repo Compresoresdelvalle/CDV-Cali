@@ -16,6 +16,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate, sanitizeSearch, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import {
   prestamoVencido,
   estadoPill,
@@ -68,8 +69,9 @@ export default function Herramientas() {
   const [filtroEstado, setFiltroEstado] = useState("todas");
   const [search, setSearch] = useState("");
   const [accionando, setAccionando] = useState(null);
+  // Solo el error de CARGA de la lista (estado persistente) va en un banner fijo.
+  // Los resultados de acción (devolver/consumir/extraviar…) saltan como pop-up.
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState(""); // #H-1: confirmación visible de acciones
 
   const [modalPrestar, setModalPrestar] = useState(null);
   const [modalNueva, setModalNueva] = useState(false);
@@ -178,8 +180,6 @@ export default function Herramientas() {
     }
     accionandoRef.current = true;
     setAccionando(h.id);
-    setErrorMsg("");
-    setOkMsg("");
     try {
       const { data, error } = await supabase.rpc("fn_devolver_herramienta", {
         p_herramienta_id: h.id,
@@ -188,9 +188,9 @@ export default function Herramientas() {
       setDetalleId(null);
       // #H-1: antes no había ninguna confirmación; una herramienta inventariable
       // se devolvía al insumo y desaparecía de la lista (activo=false), y parecía
-      // que "no la devolvía". Ahora se dice explícitamente qué pasó.
+      // que "no la devolvía". Ahora salta un aviso que dice qué pasó.
       if (data?.inventariable) {
-        setOkMsg(
+        avisarOk(
           `“${h.herramienta_nombre}” se devolvió al stock de insumo` +
             (data.cantidad_insumo != null
               ? ` (ahora hay ${data.cantidad_insumo} en ${sedeLabel(h.sede_id)})`
@@ -198,11 +198,11 @@ export default function Herramientas() {
             ".",
         );
       } else {
-        setOkMsg(`“${h.herramienta_nombre}” quedó disponible de nuevo.`);
+        avisarOk(`“${h.herramienta_nombre}” quedó disponible de nuevo.`);
       }
       await cargarHerramientas();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al devolver herramienta"));
+      avisarError(err, "Error al devolver herramienta");
     } finally {
       setAccionando(null);
       accionandoRef.current = false;
@@ -214,20 +214,18 @@ export default function Herramientas() {
     if (accionandoRef.current) return;
     accionandoRef.current = true;
     setAccionando(h.id);
-    setErrorMsg("");
-    setOkMsg("");
     try {
       const { error } = await supabase.rpc("fn_consumir_herramienta", {
         p_herramienta_id: h.id,
       });
       if (error) throw error;
       setDetalleId(null);
-      setOkMsg(
+      avisarOk(
         `“${h.herramienta_nombre}” se dio de baja (no regresa al insumo).`,
       );
       await cargarHerramientas();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al consumir herramienta"));
+      avisarError(err, "Error al consumir herramienta");
     } finally {
       setAccionando(null);
       accionandoRef.current = false;
@@ -246,8 +244,6 @@ export default function Herramientas() {
     if (confirmar && !window.confirm(confirmar)) return;
     accionandoRef.current = true;
     setAccionando(h.id);
-    setErrorMsg("");
-    setOkMsg("");
     try {
       const { error } = await supabase.rpc(rpc, {
         p_herramienta_id: h.id,
@@ -255,10 +251,10 @@ export default function Herramientas() {
       });
       if (error) throw error;
       setDetalleId(null);
-      setOkMsg(exito);
+      avisarOk(exito);
       await cargarHerramientas();
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo cambiar el estado"));
+      avisarError(err, "No se pudo cambiar el estado");
     } finally {
       setAccionando(null);
       accionandoRef.current = false;
@@ -532,28 +528,6 @@ export default function Herramientas() {
           </div>
         )}
 
-        {/* #H-1: confirmación visible de devolución/consumo. */}
-        {okMsg && (
-          <div
-            role="status"
-            className="mb-4 flex items-start justify-between gap-3 rounded-[10px] border px-4 py-3 text-sm"
-            style={{
-              backgroundColor: "var(--success-50, var(--n-50))",
-              borderColor: "var(--success-border, var(--n-200))",
-              color: "var(--success-700, var(--n-900))",
-            }}
-          >
-            <span>{okMsg}</span>
-            <button
-              onClick={() => setOkMsg("")}
-              className="shrink-0 font-mono text-[11px] underline"
-              style={{ color: "var(--success-700, var(--n-700))" }}
-            >
-              Cerrar
-            </button>
-          </div>
-        )}
-
         {/* El buscador vive FUERA de los tabs: antes estaba dentro del Catálogo
             y era invisible en Préstamos activos e Historial, justo donde el
             operario necesita encontrar una herramienta concreta. La consulta es
@@ -623,7 +597,9 @@ export default function Herramientas() {
           onClose={() => setModalPrestar(null)}
           onRefrescar={cargarHerramientas}
           onSaved={async () => {
+            const nombre = modalPrestar?.herramienta_nombre;
             setModalPrestar(null);
+            avisarOk(`“${nombre}” quedó prestada.`);
             await cargarHerramientas();
           }}
         />
@@ -634,6 +610,7 @@ export default function Herramientas() {
           onClose={() => setModalNueva(false)}
           onSaved={async () => {
             setModalNueva(false);
+            avisarOk("Herramienta agregada al catálogo.");
             await cargarHerramientas();
           }}
         />
@@ -643,10 +620,12 @@ export default function Herramientas() {
           herramienta={modalAgregar}
           onClose={() => setModalAgregar(null)}
           onSaved={async (n) => {
+            const nombre = modalAgregar?.herramienta_nombre;
             setModalAgregar(null);
-            setErrorMsg("");
+            avisarOk(
+              `Se ${n === 1 ? "agregó 1 unidad" : `agregaron ${n} unidades`} de “${nombre}”.`,
+            );
             await cargarHerramientas();
-            void n;
           }}
         />
       )}

@@ -6,6 +6,7 @@ import {
   subscribeParametros,
   unsubscribeParametros,
 } from "./hooks/useParametro";
+import { Toaster } from "./components/ui/sonner";
 import Login from "./pages/Login";
 import RoleGuard from "./components/layout/RoleGuard";
 import AppShell from "./components/layout/AppShell";
@@ -100,6 +101,16 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      {/* Avisos flotantes (sonner): saltan sobre cualquier scroll, abajo al
+          centro. `mobileOffset` los levanta por encima del bottom-nav (~56px)
+          para que no queden tapados por él en celular/tablet. */}
+      <Toaster
+        position="bottom-center"
+        richColors
+        closeButton
+        offset={{ bottom: "24px" }}
+        mobileOffset={{ bottom: "72px" }}
+      />
       <Routes>
         {/* Login público */}
         <Route path="/login" element={<Login />} />

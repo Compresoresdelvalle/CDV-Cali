@@ -749,6 +749,7 @@ explotables: RLS niega el DELETE por no tener policy). Deduplicados en 6 temas.
   nombre/código por REST directo no queda registrado en el historial.
 
 ### `estado_prestamo='vencido'`: valor muerto confirmado, NO implementado (el
+
 frontend calcula el atraso). `en_mantenimiento`/`extraviada` ya NO son estados
 muertos.
 

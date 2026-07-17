@@ -14,6 +14,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import QRScanner from "../../components/forms/QRScanner";
 
@@ -346,9 +347,15 @@ export default function EnsambleNuevo() {
       const nuevoId = data?.ensamble_id ?? data?.id;
       if (!nuevoId) throw new Error("Respuesta inesperada del servidor.");
 
+      // El aviso salta como pop-up y sobrevive al cambio de pantalla (el Toaster
+      // es global), así se ve aunque el botón "Crear" quede al fondo del
+      // formulario largo — que es justo donde el error pasaba desapercibido.
+      avisarOk(
+        data?.numero ? `Ensamble #${data.numero} creado.` : "Ensamble creado.",
+      );
       navigate(`/ops/ensambles/${nuevoId}`);
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al crear el ensamble"));
+      avisarError(err, "Error al crear el ensamble");
     } finally {
       setCreando(false);
       creandoRef.current = false;
