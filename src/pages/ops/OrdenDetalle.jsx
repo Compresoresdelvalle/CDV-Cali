@@ -1269,6 +1269,30 @@ function PasoCotizacion({
     persistirDraft(nuevo);
   };
 
+  /**
+   * Cantidad escrita a mano.
+   *
+   * Antes la cantidad era un texto fijo y solo se podía mover con + y −: para
+   * cotizar 12 unidades había que pulsar + once veces. Con cotizaciones de
+   * muchos repuestos eso es inviable, y es justo lo que reportó la clienta.
+   *
+   * Espeja `setCantidadDirecta` de VentaNueva (misma semántica que el equipo ya
+   * conoce del carrito de ventas): un valor no numérico se ignora — así el
+   * campo se puede borrar para reescribirlo sin que la línea desaparezca — y 0
+   * quita la línea, igual que bajar con −.
+   */
+  const fijarCantidad = (producto_id, valor) => {
+    if (ro) return;
+    const n = parseInt(valor, 10);
+    if (isNaN(n)) return;
+    const nuevo = draft
+      .map((l) =>
+        l.producto_id === producto_id ? { ...l, cantidad: Math.max(0, n) } : l,
+      )
+      .filter((l) => Number(l.cantidad) > 0);
+    persistirDraft(nuevo);
+  };
+
   const quitar = (producto_id) => {
     if (ro) return;
     persistirDraft(draft.filter((l) => l.producto_id !== producto_id));
@@ -1442,12 +1466,24 @@ function PasoCotizacion({
                 >
                   <Minus className="h-4 w-4" />
                 </button>
-                <span
-                  className="w-7 text-center font-mono text-sm font-semibold tabular-nums"
-                  style={{ color: "hsl(var(--foreground))" }}
-                >
-                  {l.cantidad}
-                </span>
+                {/* Editable: con muchos repuestos, llegar a 12 a punta de "+"
+                    no es viable (reporte de la clienta). Mismo comportamiento
+                    que el carrito de Ventas. */}
+                <input
+                  type="number"
+                  min="1"
+                  inputMode="numeric"
+                  disabled={ro}
+                  value={l.cantidad}
+                  onChange={(e) => fijarCantidad(l.producto_id, e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  aria-label={`Cantidad de ${l.nombre ?? "repuesto"}`}
+                  className="h-9 w-14 rounded-lg border bg-transparent text-center font-mono text-sm font-semibold tabular-nums outline-none disabled:opacity-50"
+                  style={{
+                    borderColor: "hsl(var(--border))",
+                    color: "hsl(var(--foreground))",
+                  }}
+                />
                 <button
                   type="button"
                   disabled={ro}
