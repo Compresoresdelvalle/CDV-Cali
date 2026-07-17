@@ -36,7 +36,12 @@ export function useFiltros({ clave, campos, persistir = "sesion" }) {
   const inicial = useMemo(() => {
     const base = {};
     for (const c of visibles) {
-      base[c.id] = c.tipo === "fecha" ? { desdeDia: "", hastaDia: "" } : "";
+      // `porDefecto` permite que una pantalla ABRA ya filtrada (p.ej. Alertas
+      // en clase A y B). No esconde nada: el total real sigue a la vista y el
+      // chip del filtro activo dice qué se está aplicando y se quita en un toque.
+      base[c.id] =
+        c.porDefecto ??
+        (c.tipo === "fecha" ? { desdeDia: "", hastaDia: "" } : "");
     }
     if (persistir === "sesion") {
       try {
@@ -105,7 +110,18 @@ export function useFiltros({ clave, campos, persistir = "sesion" }) {
         } else if (c.tipo === "fecha") {
           q = aplicarRango(q, c.columna, rangoBogota(v?.desdeDia, v?.hastaDia));
         } else if (c.tipo === "opciones") {
-          q = aplicarOpcion(q, c.columna, v, c.comparador);
+          // Una opción puede representar VARIOS valores de la columna (`in`):
+          // sirve para grupos como "A y B" o para agrupar grafías distintas de
+          // lo mismo. Sin esto habría que elegir de a uno y el filtro no podría
+          // expresar lo que el operario realmente quiere ver.
+          const op = c.opciones?.find(
+            (o) => (typeof o === "string" ? o : o.v) === v,
+          );
+          if (v && op && typeof op !== "string" && Array.isArray(op.in)) {
+            q = q.in(c.columna, op.in);
+          } else {
+            q = aplicarOpcion(q, c.columna, v, c.comparador);
+          }
         }
       }
       return q;
