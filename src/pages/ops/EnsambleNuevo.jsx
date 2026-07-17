@@ -9,11 +9,13 @@ import {
   FileText,
   X,
   Trash2,
+  ScanLine,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import UbicacionChip from "../../components/ui/UbicacionChip";
+import QRScanner from "../../components/forms/QRScanner";
 
 /**
  * Nuevo ensamble (rediseño Parte 2 — receta al vuelo, sin BOM).
@@ -66,6 +68,7 @@ export default function EnsambleNuevo() {
   const [compResultados, setCompResultados] = useState([]);
   const [compBuscando, setCompBuscando] = useState(false);
   const [modoGlobal, setModoGlobal] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   // Conversión venta→insumo de un componente
   const [convComp, setConvComp] = useState(null);
@@ -157,8 +160,11 @@ export default function EnsambleNuevo() {
           ? enriched
           : enriched.filter((p) => p.vendible === false || (p.insumo ?? 0) > 0);
         setCompResultados(visibles);
-      } catch {
-        /* ignore */
+      } catch (err) {
+        // ENS-05: este catch era silencioso — el operario veía "sin resultados"
+        // cuando en realidad la búsqueda había fallado.
+        if (!ac.signal.aborted)
+          setErrorMsg(safeError(err, "Error al buscar componentes"));
       } finally {
         setCompBuscando(false);
       }
@@ -258,11 +264,58 @@ export default function EnsambleNuevo() {
     0,
   );
   const faltantes = componentes.filter((c) => c.cantidad > (c.insumo ?? 0));
+  // Técnico OPCIONAL (decisión del dueño): si Pedro el bodeguero arma solo,
+  // no tiene por qué existir un Técnico activo para poder ensamblar.
   const puedeCrear =
-    !!productoSel &&
-    !!tecnicoSel &&
-    componentes.length > 0 &&
-    faltantes.length === 0;
+    !!productoSel && componentes.length > 0 && faltantes.length === 0;
+
+  // ENS-01 UX: cambiar el producto a ensamblar descarta la receta armada — la
+  // receta era del producto anterior y dejarla puesta induce a ensamblar el
+  // producto nuevo con los componentes del viejo.
+  const cambiarProducto = () => {
+    setProductoSel(null);
+    setComponentes([]);
+    setCompSearch("");
+    setCompResultados([]);
+    if (componentes.length > 0) {
+      setAviso("Se limpió la receta: era del producto anterior.");
+    }
+  };
+
+  // QR de componentes: agrega el producto escaneado con su stock real en la sede.
+  const handleQRFound = async (productoId) => {
+    setScannerOpen(false);
+    if (!sede) return;
+    try {
+      const [{ data: prod }, { data: inv }] = await Promise.all([
+        supabase
+          .from("productos")
+          .select("id, referencia, nombre, costo_promedio, vendible")
+          .eq("id", productoId)
+          .eq("activo", true)
+          .single(),
+        supabase
+          .from("inventario")
+          .select("cantidad, cantidad_insumo, ubicacion_id")
+          .eq("sede_id", sede)
+          .eq("producto_id", productoId)
+          .maybeSingle(),
+      ]);
+      if (!prod) {
+        setErrorMsg("El producto escaneado no existe o está inactivo.");
+        return;
+      }
+      setErrorMsg("");
+      agregarComponente({
+        ...prod,
+        insumo: inv?.cantidad_insumo ?? 0,
+        venta: inv?.cantidad ?? 0,
+        ubicacion_id: inv?.ubicacion_id ?? null,
+      });
+    } catch {
+      setErrorMsg("No se pudo leer el producto escaneado. Reintenta.");
+    }
+  };
 
   // Crea el ensamble EN PROCESO: los insumos se restan al insertar el detalle
   // (vía trigger). NO se completa aquí — eso lo hará la vendedora tras el "terminado"
@@ -486,7 +539,7 @@ export default function EnsambleNuevo() {
               </p>
             </div>
             <button
-              onClick={() => setProductoSel(null)}
+              onClick={cambiarProducto}
               className="rounded-lg border px-3 text-xs font-medium"
               style={{
                 height: 48,
@@ -524,6 +577,12 @@ export default function EnsambleNuevo() {
               color: "var(--n-950)",
             }}
           />
+          {cantProd > 1 && (
+            <p className="mt-1.5 text-xs" style={{ color: "var(--warn-700)" }}>
+              La receta de abajo es el TOTAL de insumos para las {cantProd}{" "}
+              unidades, no por unidad.
+            </p>
+          )}
         </div>
       )}
 
@@ -534,7 +593,7 @@ export default function EnsambleNuevo() {
             <div className="ib-ico">
               <Package className="h-3.5 w-3.5" strokeWidth={1.7} />
             </div>
-            <div className="ib-title">2b · Técnico asignado</div>
+            <div className="ib-title">2b · Técnico asignado (opcional)</div>
           </div>
           <select
             value={tecnicoSel}
@@ -547,7 +606,7 @@ export default function EnsambleNuevo() {
               color: "var(--n-950)",
             }}
           >
-            <option value="">Selecciona un técnico…</option>
+            <option value="">Sin técnico (lo armo yo)</option>
             {tecnicos.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.nombre}
@@ -555,8 +614,8 @@ export default function EnsambleNuevo() {
             ))}
           </select>
           {tecnicos.length === 0 && (
-            <p className="mt-1 text-xs" style={{ color: "var(--warn-700)" }}>
-              No hay técnicos activos. Crea uno o actívalo para asignar.
+            <p className="mt-1 text-xs" style={{ color: "var(--n-500)" }}>
+              No hay técnicos activos — el ensamble queda a tu nombre.
             </p>
           )}
         </div>
@@ -577,36 +636,51 @@ export default function EnsambleNuevo() {
 
           {/* Buscador de componentes */}
           <div className="space-y-2">
-            <div
-              className="flex h-12 items-center gap-2.5 rounded-lg border px-3.5"
-              style={{
-                borderColor: "var(--n-200)",
-                backgroundColor: "var(--n-0)",
-              }}
-            >
-              <Search
-                className="h-4 w-4 shrink-0"
-                strokeWidth={1.5}
-                style={{ color: "var(--n-500)" }}
-              />
-              <input
-                type="text"
-                value={compSearch}
-                onChange={(e) => setCompSearch(e.target.value)}
-                placeholder="Agregar insumo por nombre o referencia (mín 2)…"
-                className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
-                style={{ color: "var(--n-950)" }}
-              />
-              {compSearch && (
-                <button
-                  onClick={() => setCompSearch("")}
-                  aria-label="Limpiar"
-                  className="grid h-6 w-6 place-items-center rounded"
+            <div className="flex items-center gap-2">
+              <div
+                className="flex h-12 flex-1 items-center gap-2.5 rounded-lg border px-3.5"
+                style={{
+                  borderColor: "var(--n-200)",
+                  backgroundColor: "var(--n-0)",
+                }}
+              >
+                <Search
+                  className="h-4 w-4 shrink-0"
+                  strokeWidth={1.5}
                   style={{ color: "var(--n-500)" }}
-                >
-                  <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-                </button>
-              )}
+                />
+                <input
+                  type="text"
+                  value={compSearch}
+                  onChange={(e) => setCompSearch(e.target.value)}
+                  placeholder="Agregar insumo por nombre o referencia (mín 2)…"
+                  className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
+                  style={{ color: "var(--n-950)" }}
+                />
+                {compSearch && (
+                  <button
+                    onClick={() => setCompSearch("")}
+                    aria-label="Limpiar"
+                    className="grid h-6 w-6 place-items-center rounded"
+                    style={{ color: "var(--n-500)" }}
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setScannerOpen(true)}
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border transition-colors"
+                style={{
+                  borderColor: "var(--n-200)",
+                  backgroundColor: "var(--n-0)",
+                  color: "var(--n-700)",
+                }}
+                aria-label="Escanear componente por QR"
+              >
+                <ScanLine className="h-5 w-5" strokeWidth={1.8} />
+              </button>
             </div>
 
             {/* Toggle solo insumos / global */}
@@ -750,7 +824,7 @@ export default function EnsambleNuevo() {
                         step="1"
                         value={c.cantidad}
                         onChange={(e) => setCompCantidad(c.id, e.target.value)}
-                        className="w-20 rounded-lg border px-2 py-1.5 text-center font-mono text-sm tabular-nums outline-none"
+                        className="min-h-[44px] w-20 rounded-lg border px-2 text-center font-mono text-sm tabular-nums outline-none"
                         style={{
                           backgroundColor: "var(--n-0)",
                           borderColor: "var(--n-200)",
@@ -760,7 +834,7 @@ export default function EnsambleNuevo() {
                       <button
                         onClick={() => quitarComponente(c.id)}
                         aria-label="Quitar"
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-md"
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-md md:h-9 md:w-9"
                         style={{ color: "var(--dang-700)" }}
                       >
                         <Trash2 className="h-4 w-4" strokeWidth={1.7} />
@@ -851,11 +925,9 @@ export default function EnsambleNuevo() {
               color: puedeCrear ? "var(--succ-700)" : "var(--dang-700)",
             }}
           >
-            {!tecnicoSel
-              ? "Asigna un técnico para crear"
-              : faltantes.length > 0
-                ? "Faltan insumos — convierte o ajusta cantidades"
-                : "Listo para crear (los insumos se reservan al crear)"}
+            {faltantes.length > 0
+              ? "Faltan insumos — convierte o ajusta cantidades"
+              : "Listo para crear (los insumos se reservan al crear)"}
           </p>
         </div>
       )}
@@ -886,6 +958,13 @@ export default function EnsambleNuevo() {
           {creando ? "Procesando…" : "Crear ensamble"}
         </button>
       </div>
+
+      {scannerOpen && (
+        <QRScanner
+          onFound={handleQRFound}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
 
       {/* Modal: convertir venta→insumo de un componente */}
       {convComp && (
