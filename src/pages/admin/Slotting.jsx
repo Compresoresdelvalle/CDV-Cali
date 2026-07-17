@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { ArrowRight, Map, Package, Check } from "lucide-react";
+import { ArrowRight, Map, Package, Check, Search } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
 import { useAuthStore } from "../../stores/authStore";
@@ -9,6 +9,14 @@ import { pillStyle } from "../../lib/admin-ops-ui";
 import { SEDE_LABELS, sedeLabel } from "../../lib/traspasos-ui";
 
 const TODAS_SEDES = "Todas";
+const TODAS_ACCIONES = "Todas";
+// Acciones REALES que devuelve fn_slotting_sugerencias (verificado en prod:
+// 'asignar' 717, 'bajar' 3).
+const ACCIONES = [
+  { v: TODAS_ACCIONES, l: "Todas" },
+  { v: "asignar", l: "Asignar" },
+  { v: "bajar", l: "Bajar" },
+];
 
 /* ── Slotting · sugerencias de reubicación por rotación (Bloque D2) ────── */
 export default function Slotting() {
@@ -18,6 +26,8 @@ export default function Slotting() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [sedeFiltro, setSedeFiltro] = useState(TODAS_SEDES);
+  const [accionFiltro, setAccionFiltro] = useState(TODAS_ACCIONES);
+  const [busqueda, setBusqueda] = useState("");
   const [aplicando, setAplicando] = useState(null);
   const [aplicandoLote, setAplicandoLote] = useState(false);
   const [seleccion, setSeleccion] = useState(new Set());
@@ -58,13 +68,30 @@ export default function Slotting() {
     return [TODAS_SEDES, ...[...set].sort()];
   }, [items]);
 
-  const filtrados = useMemo(
-    () =>
+  // Filtros cruzables: sede + acción + texto. El match es EN MEMORIA y aquí es
+  // honesto: el RPC devuelve las sugerencias completas (720 hoy), así que el
+  // filtro no puede esconder una que exista, y la selección/KPIs de abajo se
+  // calculan sobre `filtrados`.
+  //
+  // Con 717 sugerencias de "asignar" y 3 de "bajar", sin buscador encontrar un
+  // producto concreto era imposible: había que barrer la lista a ojo.
+  const filtrados = useMemo(() => {
+    let out =
       sedeFiltro === TODAS_SEDES
         ? items
-        : items.filter((i) => i.sede_id === sedeFiltro),
-    [items, sedeFiltro],
-  );
+        : items.filter((i) => i.sede_id === sedeFiltro);
+    if (accionFiltro !== TODAS_ACCIONES)
+      out = out.filter((i) => i.accion === accionFiltro);
+    const needle = busqueda.trim().toLowerCase();
+    if (needle) {
+      out = out.filter((i) =>
+        [i.referencia, i.nombre, i.ubicacion_sugerida, i.ubicacion_actual]
+          .filter(Boolean)
+          .some((c) => String(c).toLowerCase().includes(needle)),
+      );
+    }
+    return out;
+  }, [items, sedeFiltro, accionFiltro, busqueda]);
 
   const toggle = (id) =>
     setSeleccion((prev) => {
@@ -221,6 +248,47 @@ export default function Slotting() {
             onChange={setSedeFiltro}
             labelOf={(s) => (s === TODAS_SEDES ? "Todas" : sedeLabel(s))}
           />
+        </div>
+      )}
+
+      {/* Búsqueda + acción. Se cruzan con la sede de arriba: se puede pedir
+          "las de BODEGA que haya que bajar y digan 'silicona'". */}
+      {!loading && items.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1 max-w-[380px]">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            />
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por referencia, nombre o ubicación…"
+              className="h-12 w-full rounded-lg border pl-9 pr-3 text-sm outline-none"
+              style={{
+                backgroundColor: "hsl(var(--card))",
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--foreground))",
+              }}
+            />
+          </div>
+          <select
+            value={accionFiltro}
+            onChange={(e) => setAccionFiltro(e.target.value)}
+            className="h-12 rounded-lg border px-2 text-sm"
+            style={{
+              backgroundColor: "hsl(var(--card))",
+              borderColor: "hsl(var(--border))",
+              color: "hsl(var(--foreground))",
+            }}
+          >
+            {ACCIONES.map((a) => (
+              <option key={a.v} value={a.v}>
+                {a.l}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 

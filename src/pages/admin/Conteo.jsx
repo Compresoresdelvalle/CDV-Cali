@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   ClipboardCheck,
   AlertTriangle,
@@ -18,6 +18,8 @@ import { formatDate, formatCOP, safeError } from "../../lib/utils";
 import { applyKeywordSearch } from "../../lib/search";
 import { SEDES } from "../../lib/constants";
 import { SEDE_LABELS } from "../../lib/traspasos-ui";
+import { useFiltros } from "../../hooks/useFiltros";
+import BarraFiltros from "../../components/filtros/BarraFiltros";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import MapaBodega from "../../components/inventario/MapaBodega";
@@ -30,6 +32,10 @@ import {
 
 const FILTROS = ["Todos", "Pendientes", "Aplicados"];
 const VISTAS = ["Registros", "Plan"];
+// Tamaño de página del historial de conteos. Antes se traían 100 y punto: con
+// 446 conteos, la pestaña "Aplicados" mostraba 100 y no había forma de ver el
+// resto ni de saber que existía.
+const CONTEOS_PAGE = 25;
 
 export default function Conteo() {
   const perfil = useAuthStore((s) => s.perfil);
@@ -41,7 +47,43 @@ export default function Conteo() {
   const [errorMsg, setErrorMsg] = useState("");
   const [okMsg, setOkMsg] = useState("");
   const [filtro, setFiltro] = useState("Pendientes");
+  // Paginación real: antes un `.limit(100)` escondía 346 de los 446 conteos sin
+  // avisar (la pestaña "Aplicados" mostraba 100 y parecía que eso era todo).
+  const [pageConteos, setPageConteos] = useState(0);
+  const [totalConteos, setTotalConteos] = useState(0);
+  const [hasMoreConteos, setHasMoreConteos] = useState(false);
   const [modalNuevo, setModalNuevo] = useState(false);
+
+  // Filtros reales del historial de conteos: se cruzan con las pestañas
+  // (Pendientes/Aplicados), así que se puede pedir "los conteos de CV de junio".
+  // Sin texto a propósito: la única columna de texto propia es `observaciones`;
+  // referencia y nombre del producto viven en un join y no se cruzan con un
+  // ilike simple. Un buscador que solo mirara `observaciones` haría creer que
+  // se busca por producto y devolvería vacío: mejor no ofrecerlo que mentir.
+  const camposConteos = useMemo(
+    () => [
+      {
+        id: "rango",
+        tipo: "fecha",
+        label: "Fecha",
+        columna: "fecha",
+        presets: ["hoy", "semana", "mes", "mesPasado"],
+      },
+      {
+        id: "sede",
+        tipo: "opciones",
+        label: "Sede",
+        columna: "sede_id",
+        opciones: Object.values(SEDES).map((id) => ({
+          v: id,
+          l: SEDE_LABELS[id] ?? id,
+        })),
+      },
+    ],
+    [],
+  );
+  const fConteos = useFiltros({ clave: "conteos", campos: camposConteos });
+
   // Prellenado de la cola del plan: producto + sede + modo ciego ya
   // resueltos; si es null, el modal se abre en modo búsqueda normal.
   const [modalPrefill, setModalPrefill] = useState(null);
@@ -60,40 +102,89 @@ export default function Conteo() {
     };
   }, []);
 
-  const cargar = async () => {
+  const cargar = async (reset = false) => {
+    const myReq = fConteos.nuevoReqId();
     setLoading(true);
     setErrorMsg("");
+    const paginaActual = reset ? 0 : pageConteos;
+    try {
+      let q = supabase.from("conteos").select(
+        `id, fecha, stock_sistema, stock_fisico, diferencia, ajuste_aplicado, observaciones, sede_id,
+           producto:producto_id(referencia, nombre, clasificacion, costo_promedio),
+           sede:sede_id(nombre),
+           contador:contado_por(nombre),
+           aprobador:aprobado_por(nombre)`,
+        { count: "exact" },
+      );
+      if (filtro === "Pendientes") q = q.eq("ajuste_aplicado", false);
+      if (filtro === "Aplicados") q = q.eq("ajuste_aplicado", true);
+      // Fecha y sede se resuelven en el servidor (ver `camposConteos`).
+      q = fConteos.aplicar(q);
+      q = q
+        // Desempate: `fecha` no es única y sin él la paginación repite o salta.
+        .order("fecha", { ascending: false })
+        .order("id", { ascending: false })
+        .range(
+          paginaActual * CONTEOS_PAGE,
+          (paginaActual + 1) * CONTEOS_PAGE - 1,
+        );
+
+      const { data, error, count } = await q;
+      if (!mountedRef.current || !fConteos.esReqVigente(myReq)) return;
+      if (error) throw error;
+      const filas = data ?? [];
+      if (reset) {
+        setConteos(filas);
+        setPageConteos(1);
+      } else {
+        setConteos((prev) => [...prev, ...filas]);
+        setPageConteos((p) => p + 1);
+      }
+      const totalReal = count ?? 0;
+      setTotalConteos(totalReal);
+      setHasMoreConteos((paginaActual + 1) * CONTEOS_PAGE < totalReal);
+    } catch (err) {
+      if (!mountedRef.current || !fConteos.esReqVigente(myReq)) return;
+      setErrorMsg(safeError(err, "Error al cargar conteos"));
+    } finally {
+      if (mountedRef.current && fConteos.esReqVigente(myReq)) setLoading(false);
+    }
+  };
+
+  /**
+   * Divergencias pendientes, preguntadas al servidor sobre TODO el universo
+   * (respetando fecha/sede de la barra, pero NO la pestaña ni la paginación:
+   * este número contesta "cuánto falta por ajustar", así que no puede depender
+   * de en qué pestaña estés ni de cuántas páginas hayas cargado).
+   */
+  const cargarDivergencias = async () => {
     try {
       let q = supabase
         .from("conteos")
         .select(
           `id, fecha, stock_sistema, stock_fisico, diferencia, ajuste_aplicado, observaciones, sede_id,
            producto:producto_id(referencia, nombre, clasificacion, costo_promedio),
-           sede:sede_id(nombre),
-           contador:contado_por(nombre),
-           aprobador:aprobado_por(nombre)`,
+           sede:sede_id(nombre)`,
         )
+        .eq("ajuste_aplicado", false)
+        .neq("diferencia", 0);
+      q = fConteos.aplicar(q);
+      const { data, error } = await q
         .order("fecha", { ascending: false })
-        .limit(100);
-      if (filtro === "Pendientes") q = q.eq("ajuste_aplicado", false);
-      if (filtro === "Aplicados") q = q.eq("ajuste_aplicado", true);
-
-      const { data, error } = await q;
-      if (!mountedRef.current) return;
-      if (error) throw error;
-      setConteos(data ?? []);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setErrorMsg(safeError(err, "Error al cargar conteos"));
-    } finally {
-      if (mountedRef.current) setLoading(false);
+        .limit(500);
+      if (!mountedRef.current || error) return;
+      setDivPendientes(data ?? []);
+    } catch {
+      // Informativo: si falla, el listado principal sigue funcionando.
     }
   };
 
   useEffect(() => {
-    cargar();
+    // Todo cambio de filtro reinicia la paginación.
+    cargar(true);
+    cargarDivergencias();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtro]);
+  }, [filtro, fConteos.valoresAplicados]);
 
   const aplicarAjuste = async (conteo) => {
     const ok = await confirm({
@@ -112,7 +203,9 @@ export default function Conteo() {
       });
       if (error) throw error;
       setOkMsg("Ajuste aplicado correctamente");
-      await cargar();
+      // reset=true: es un refresco tras una acción, no un "cargar más".
+      await cargar(true);
+      await cargarDivergencias();
     } catch (err) {
       setErrorMsg(safeError(err, "Error al aplicar ajuste"));
     } finally {
@@ -141,7 +234,8 @@ export default function Conteo() {
         .eq("ajuste_aplicado", false);
       if (error) throw error;
       setOkMsg("Conteo eliminado");
-      await cargar();
+      await cargar(true);
+      await cargarDivergencias();
     } catch (err) {
       setErrorMsg(safeError(err, "No se pudo eliminar el conteo"));
     } finally {
@@ -156,9 +250,12 @@ export default function Conteo() {
 
   // Divergencias por ajustar: conteos pendientes con diferencia ≠ 0.
   // Valor estimado = |diferencia| × costo_promedio real del producto.
-  const divPendientes = conteos.filter(
-    (c) => !c.ajuste_aplicado && Number(c.diferencia) !== 0,
-  );
+  //
+  // Se piden al SERVIDOR aparte, no se derivan de `conteos`: esa lista está
+  // paginada, así que derivarlas de ahí mostraría solo las divergencias de la
+  // página cargada y el valor total saldría corto sin avisar. Son la cola de
+  // trabajo (0 hoy), así que caben de sobra en una consulta.
+  const [divPendientes, setDivPendientes] = useState([]);
   const valorDivergencias = divPendientes.reduce(
     (acc, c) =>
       acc +
@@ -326,13 +423,23 @@ export default function Conteo() {
                 </button>
               );
             })}
+            {/* Conteo REAL del filtro (count exacto del servidor), no el de lo
+                cargado: con 446 conteos, decir "100" era falso. */}
             <span
               className="ml-auto font-mono text-[10.5px] tracking-[0.04em]"
               style={{ color: "hsl(var(--muted-foreground))" }}
             >
-              {loading ? "cargando…" : `${conteos.length} conteo(s)`}
+              {loading
+                ? "cargando…"
+                : conteos.length === totalConteos
+                  ? `${totalConteos} conteo(s)`
+                  : `${conteos.length} de ${totalConteos} conteo(s)`}
             </span>
           </div>
+
+          {/* Sin campo de texto (ver `camposConteos`): la barra solo ofrece
+              fecha y sede, más los chips de lo que esté activo. */}
+          <BarraFiltros filtros={fConteos} />
 
           {loading ? (
             <SkeletonList />
@@ -601,6 +708,22 @@ export default function Conteo() {
             </section>
           )}
 
+          {/* Cargar más: con 446 conteos y páginas de 25, sin esto el operario
+              solo veía los primeros y nada le decía que había más. */}
+          {!loading && hasMoreConteos && (
+            <button
+              onClick={() => cargar(false)}
+              className="h-12 w-full rounded-lg border text-sm font-medium"
+              style={{
+                backgroundColor: "hsl(var(--card))",
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--foreground))",
+              }}
+            >
+              Cargar más ({conteos.length} de {totalConteos})
+            </button>
+          )}
+
           {/* ── Divergencias por ajustar (derivado de conteos pendientes) ──── */}
           {!loading && divPendientes.length > 0 && (
             <DivergenciasSection
@@ -628,7 +751,8 @@ export default function Conteo() {
             setModalNuevo(false);
             setModalPrefill(null);
             setOkMsg("Conteo registrado");
-            await cargar();
+            await cargar(true);
+            await cargarDivergencias();
             setPlanRefreshKey((k) => k + 1);
           }}
         />
