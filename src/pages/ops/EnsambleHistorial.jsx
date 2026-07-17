@@ -728,7 +728,11 @@ function KanbanView({ rows, esAdmin }) {
 
 /* ─────────────────────────── Estado vacío ─────────────────────────────── */
 
-function Empty({ q }) {
+function Empty({ q, hayFiltros }) {
+  // ENS-04: con un chip de filtro activo (sin texto) este empty decía "Sin
+  // ensambles registrados", como si no existiera ninguno — cuando en realidad
+  // el FILTRO no encontraba coincidencias.
+  const filtrando = !!q || hayFiltros;
   return (
     <div className="flex flex-col items-center justify-center px-8 py-20 text-center">
       <div
@@ -738,12 +742,14 @@ function Empty({ q }) {
         <Cog className="h-7 w-7" strokeWidth={1.5} />
       </div>
       <p className="font-semibold" style={{ color: "var(--n-950)" }}>
-        {q ? "Sin resultados" : "Sin ensambles registrados"}
+        {filtrando ? "Sin resultados" : "Sin ensambles registrados"}
       </p>
       <p className="mt-1 text-sm" style={{ color: "var(--n-500)" }}>
         {q
           ? `No se encontraron ensambles para "${q}"`
-          : 'Crea el primero con "Nuevo ensamble"'}
+          : filtrando
+            ? "Ningún ensamble coincide con los filtros — quítalos para ver todo"
+            : 'Crea el primero con "Nuevo ensamble"'}
       </p>
     </div>
   );

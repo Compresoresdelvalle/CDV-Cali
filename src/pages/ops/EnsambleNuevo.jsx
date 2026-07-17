@@ -327,37 +327,26 @@ export default function EnsambleNuevo() {
     setCreando(true);
     setErrorMsg("");
     try {
-      const { data: ens, error: e1 } = await supabase
-        .from("ensambles")
-        .insert({
-          producto_resultado_id: productoSel.id,
-          cantidad_producida: cantProd,
-          realizado_por: perfil?.id,
-          tecnico_id: tecnicoSel,
-          sede_id: sede,
-          observaciones: observaciones.trim() || null,
-          completado: false,
-          terminado: false,
-        })
-        .select("id")
-        .single();
-      if (e1) throw e1;
+      // S8: creación transaccional por RPC — antes eran DOS llamadas REST
+      // (cabecera + detalle) y el "rollback" manual del medio ni funcionaba
+      // (no había policy DELETE). La RPC crea todo o nada y fija
+      // realizado_por = auth.uid() en el servidor.
+      const { data, error: rpcErr } = await supabase.rpc("fn_crear_ensamble", {
+        p_producto_id: productoSel.id,
+        p_cantidad: cantProd,
+        p_sede_id: sede,
+        p_tecnico_id: tecnicoSel || null,
+        p_observaciones: observaciones.trim() || null,
+        p_items: componentes.map((c) => ({
+          producto_id: c.id,
+          cantidad: c.cantidad,
+        })),
+      });
+      if (rpcErr) throw rpcErr;
+      const nuevoId = data?.ensamble_id ?? data?.id;
+      if (!nuevoId) throw new Error("Respuesta inesperada del servidor.");
 
-      const detalles = componentes.map((c) => ({
-        ensamble_id: ens.id,
-        producto_id: c.id,
-        cantidad: c.cantidad,
-        costo_unitario: c.costo_unitario,
-      }));
-      const { error: e2 } = await supabase
-        .from("detalle_ensamble")
-        .insert(detalles);
-      if (e2) {
-        await supabase.from("ensambles").delete().eq("id", ens.id);
-        throw e2;
-      }
-
-      navigate(`/ops/ensambles/${ens.id}`);
+      navigate(`/ops/ensambles/${nuevoId}`);
     } catch (err) {
       setErrorMsg(safeError(err, "Error al crear el ensamble"));
     } finally {
