@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
+import { formatCOP, sanitizeSearch } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import QRScanner from "../../components/forms/QRScanner";
@@ -274,9 +275,12 @@ export default function CompraNueva() {
       });
       if (rpcErr) throw new Error(rpcErr.message);
 
+      avisarOk(
+        recibirAhora ? "Compra registrada y recibida." : "Compra registrada.",
+      );
       navigate("/ops/compras");
     } catch (e) {
-      setError(safeError(e, "Error al guardar la compra"));
+      avisarError(e, "Error al guardar la compra");
     } finally {
       setGuardando(false);
       guardandoRef.current = false;
@@ -315,9 +319,10 @@ export default function CompraNueva() {
         p_cuenta_bancaria: esElectronico ? cuentaBancaria : null,
       });
       if (rpcErr) throw new Error(rpcErr.message);
+      avisarOk("Gasto de caja menor registrado.");
       navigate("/ops/compras");
     } catch (e) {
-      setError(safeError(e, "Error al registrar la caja menor"));
+      avisarError(e, "Error al registrar la caja menor");
     } finally {
       setGuardando(false);
       guardandoRef.current = false;

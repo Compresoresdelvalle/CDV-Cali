@@ -16,6 +16,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import {
   compraEstadoPill,
   garantiaEstadoPill,
@@ -123,8 +124,9 @@ export default function CompraDetalle() {
       });
       if (e) throw e;
       await cargar();
+      avisarOk(`Compra #${compra.numero} cancelada.`);
     } catch (e) {
-      setError(safeError(e, "No se pudo cancelar la compra"));
+      avisarError(e, "No se pudo cancelar la compra");
     } finally {
       setCancelando(false);
     }
@@ -540,6 +542,7 @@ export default function CompraDetalle() {
             // Navegamos directo al detalle de la garantía; no recargamos
             // esta vista (evita setState sobre componente desmontado).
             setModalAbrir(false);
+            avisarOk("Garantía abierta.");
             navigate(`/ops/garantias/compra/${garantiaId}`);
           }}
         />
@@ -552,6 +555,7 @@ export default function CompraDetalle() {
           onClose={() => setModalRecibir(false)}
           onDone={() => {
             setModalRecibir(false);
+            avisarOk("Recepción registrada.");
             cargar();
           }}
         />

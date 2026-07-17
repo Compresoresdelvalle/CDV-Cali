@@ -11,6 +11,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { ensambleEstadoPill } from "../../lib/ordenes-ui";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 
@@ -31,8 +32,9 @@ export default function EnsambleDetalle() {
   const [ens, setEns] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Solo el error de CARGA queda como estado (lo muestra la vista "no
+  // encontrado"). Los resultados de acción saltan como pop-up.
   const [errorMsg, setErrorMsg] = useState("");
-  const [aviso, setAviso] = useState("");
   const [accion, setAccion] = useState(false); // bloqueo durante acciones de estado
 
   // Picker de insumos
@@ -159,8 +161,6 @@ export default function EnsambleDetalle() {
   const agregarInsumo = async (p, cantidad = 1) => {
     if (agregandoRef.current) return;
     agregandoRef.current = true;
-    setErrorMsg("");
-    setAviso("");
     try {
       // S8: toda escritura va por la RPC (la tabla quedó blindada por REST).
       const { error } = await supabase.rpc("fn_ensamble_receta", {
@@ -174,7 +174,7 @@ export default function EnsambleDetalle() {
       setResultados([]);
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al agregar insumo"));
+      avisarError(err, "Error al agregar insumo");
     } finally {
       agregandoRef.current = false;
     }
@@ -188,7 +188,7 @@ export default function EnsambleDetalle() {
       setConvError("");
       setConvProd(p);
     } else {
-      setErrorMsg(
+      avisarError(
         `"${p.nombre}" no tiene insumo ni stock de venta en esta sede. Pide traspaso o compra.`,
       );
     }
@@ -217,7 +217,7 @@ export default function EnsambleDetalle() {
       const prod = convProd;
       setConvProd(null);
       await agregarInsumo(prod, 1);
-      setAviso(
+      avisarOk(
         data?.notificado_admin
           ? "Convertido a insumo. Se notificó al Admin."
           : "Convertido a insumo.",
@@ -243,7 +243,7 @@ export default function EnsambleDetalle() {
       if (error) throw error; // trigger ajusta el insumo
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al cambiar la cantidad"));
+      avisarError(err, "Error al cambiar la cantidad");
       // Re-sincroniza el input con lo que quedó en la BD: si el cambio fue
       // rechazado (p.ej. insumo insuficiente), el número en pantalla mentía.
       await cargar();
@@ -261,7 +261,7 @@ export default function EnsambleDetalle() {
       if (error) throw error; // trigger devuelve el insumo
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al quitar el insumo"));
+      avisarError(err, "Error al quitar el insumo");
     }
   };
 
@@ -276,11 +276,11 @@ export default function EnsambleDetalle() {
       });
       if (error) throw error;
       await cargar();
-      setAviso(
+      avisarOk(
         "Marcado como terminado. La receta queda congelada; quien lo creó puede completarlo.",
       );
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al marcar terminado"));
+      avisarError(err, "Error al marcar terminado");
     } finally {
       setAccion(false);
     }
@@ -297,9 +297,9 @@ export default function EnsambleDetalle() {
       });
       if (error) throw error;
       await cargar();
-      setAviso("Ensamble reabierto: la receta se puede corregir de nuevo.");
+      avisarOk("Ensamble reabierto: la receta se puede corregir de nuevo.");
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al reabrir"));
+      avisarError(err, "Error al reabrir");
     } finally {
       setAccion(false);
     }
@@ -333,9 +333,12 @@ export default function EnsambleDetalle() {
         p_accion: "completar",
       });
       if (error) throw error; // trigger produce el resultado + notifica
+      avisarOk(
+        `Ensamble completado: ${ens.cantidad_producida} × ${ens.producto?.nombre ?? "producto"} entró al inventario.`,
+      );
       navigate("/ops/ensambles");
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al completar"));
+      avisarError(err, "Error al completar");
       setAccion(false);
     }
   };
@@ -354,9 +357,10 @@ export default function EnsambleDetalle() {
         p_ensamble_id: ensambleId,
       });
       if (error) throw error;
+      avisarOk("Ensamble eliminado.");
       navigate("/ops/ensambles");
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al eliminar"));
+      avisarError(err, "Error al eliminar");
       setAccion(false);
     }
   };
@@ -405,32 +409,6 @@ export default function EnsambleDetalle() {
           {pill.label}
         </span>
       </div>
-
-      {errorMsg && (
-        <div
-          role="alert"
-          className="rounded-[10px] border px-4 py-3 text-sm"
-          style={{
-            backgroundColor: "var(--dang-50)",
-            borderColor: "var(--dang-border)",
-            color: "var(--dang-700)",
-          }}
-        >
-          {errorMsg}
-        </div>
-      )}
-      {aviso && (
-        <div
-          className="rounded-[10px] border px-4 py-3 text-sm"
-          style={{
-            backgroundColor: "var(--succ-50)",
-            borderColor: "var(--succ-500)",
-            color: "var(--succ-700)",
-          }}
-        >
-          {aviso}
-        </div>
-      )}
 
       {/* Insumos de la receta */}
       <div className="iblock">
