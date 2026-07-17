@@ -529,3 +529,78 @@ invisible al desmontarse). P3 aplicado: REVOKE REFERENCES/TRIGGER residuales.
   observaciones='Insumo'.
 - `usuario_id` del asiento de entrada = quien creó, no quien recibió
   (preexistente, aplica a ambos bolsillos).
+
+## Sección 8 — Ensambles (2026-07-17)
+
+Módulo chico (15 ensambles) sano en datos pero con el hueco de dinero más
+grande de las últimas secciones y sin ninguno de los blindajes previos.
+Cacería: 29 confirmados (0 refutados, 0 código viejo) + 6 UX, deduplicados en
+7 temas. Decisiones del dueño: alcance completo; costo por PROMEDIO PONDERADO;
+SIN control de dos personas (técnico/creador/Admin completan); cancelar el #18.
+
+### Backend (4 migraciones `s8_ensambles_*` + 1 fix transversal, 11/11 + 4/4 pruebas BEGIN/ROLLBACK)
+
+- **P0 COSTO (ENS-01)**: `trg_ensamble_stock` ahora propaga el costo real al
+  `costo_promedio` del producto (ponderado, patrón compras, pesos enteros).
+  Antes: compresores de $4.8M de materiales quedaban con costo $100 → margen
+  del negocio inflado en millones.
+- **RPCs transaccionales**: `fn_crear_ensamble` (atómica, realizado_por =
+  auth.uid(), ensamblable+activo, técnico OPCIONAL), `fn_ensamble_receta`
+  (agregar/editar/quitar; receta CONGELADA tras terminado), `fn_ensamble_estado`
+  (terminar/reabrir/completar; completar única vez y exige receta).
+- **Blindaje REST**: REVOKE total de escritura (incl. TRUNCATE/REFERENCES/
+  TRIGGER) en `ensambles`/`detalle_ensamble` para authenticated y anon.
+- **Validaciones menores** (P3 de la verificación): componente activo, técnico
+  activo, items duplicados rechazados, tope 9999, terminar exige receta.
+- **HALLAZGO TRANSVERSAL (fix `s8_fix_costo_guard_compras`)**: el guard
+  `productos_costo_guard` (2026-06-11) revertía EN SILENCIO el costo ponderado
+  de `trg_compra_sumar_stock` cuando recibía un no-Admin. Corregido con el flag
+  transaccional `app.costo_sistema` (el guard sigue bloqueando ediciones
+  manuales). **Daño histórico SOLO REPORTADO, sin remediar (pendiente decisión
+  del dueño)**: 114/151 recepciones perdieron su actualización; 43 productos
+  siguen desactualizados hoy; descuadre real ~$5,2M COP (peor caso F75ECO:
+  costo $50 vs ~$35.000). Remediar producto por producto con revisión Admin.
+
+### Datos remediados (autorizados)
+
+- Ensamble #18 cancelado vía fn_eliminar_ensamble: 184 insumos devueltos a CV
+  (delta verificado línea por línea). Quedan 14 ensambles, todos completados.
+- costo_promedio recalculado en 11 productos ensamblados con costo trivial
+  (≤$100) → valores reales $85.100–$3.054.550. El del ensamble #23 ($480.000,
+  editado a mano por el Admin) se conservó a propósito — EXCLUIRLO de
+  cualquier recálculo futuro.
+
+### Frontend (lint 0 errores + build OK)
+
+- EnsambleNuevo: creación por RPC; técnico opcional ("Sin técnico — lo armo
+  yo"); cambiar producto LIMPIA la receta (inducía a armar con la receta del
+  producto anterior); QR para componentes; errores de búsqueda visibles; nota
+  "la receta es el TOTAL para N unidades"; tap targets 44px.
+- EnsambleDetalle: receta/estados por RPC; receta congelada tras terminado +
+  botón "Reabrir para corregir"; confirmación de completar con resumen real
+  (unidades que entran, insumos, costo para Admin); input de cantidad se
+  re-sincroniza si la BD rechaza (key con cantidad); mensaje de estado para
+  observadores; sin técnico, el CREADOR marca terminado (P1 de verificación).
+- EnsambleHistorial: empty state distingue "no hay" de "el filtro no encontró".
+- CLAUDE.md: Vendedor también tiene Ensambles (deliberado, consistente en
+  RPC+RLS+RoleGuard: la vendedora crea/asigna/completa).
+
+### Verificación adversarial (workflow 6 flujos en prod)
+
+4 OK + 2 PARCIAL. Encontró: P1 real de frontend (sin técnico el flujo quedaba
+sin botón de terminar — corregido), P2 de documentación (Vendedor en Ensambles
+— documentado como deliberado), y los P3 que se cerraron con la migración 04.
+
+### P3 documentados, NO tocados
+
+- El consumo de insumos ocurre al ARMAR la receta (no al completar): un
+  ensamble en proceso retiene insumo — es el diseño (reserva física real).
+- El técnico asignado no puede editar la receta (solo creador/Admin) — más
+  estricto que el flujo dibujado, se deja así.
+- `anon` conserva SELECT en ensambles (RLS decide); patrón del flag de costo
+  frágil si algún día se envuelve en BEGIN/EXCEPTION.
+- Producto del ensamble #23 tiene referencia vacía '' (dificulta búsqueda/QR).
+
+### PENDIENTE decisión del dueño
+
+- Remediación de los 43 costos desactualizados por el guard de compras (~$5,2M).

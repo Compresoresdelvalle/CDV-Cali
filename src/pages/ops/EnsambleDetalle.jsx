@@ -86,9 +86,23 @@ export default function EnsambleDetalle() {
   const esTecnicoAsignado =
     perfil?.rol === "Tecnico" && ens?.tecnico_id === perfil?.id;
   const esCreador = ens?.realizado_por === perfil?.id;
-  const puedeEditarReceta = editable && (esAdmin || esCreador);
+  // La receta se CONGELA al marcar terminado (el equipo físico ya está armado;
+  // seguir moviendo insumos digitales ya no corresponde a nada real). Para
+  // corregir hay que "Reabrir" explícitamente.
+  const puedeEditarReceta =
+    editable && !ens?.terminado && (esAdmin || esCreador);
+  // Sin técnico asignado (lo armó el propio creador), el creador es quien
+  // marca terminado — si no, el flujo quedaba atascado sin botón (P1 verif S8).
   const puedeTerminar =
-    ens && !ens.terminado && !ens.completado && (esAdmin || esTecnicoAsignado);
+    ens &&
+    !ens.terminado &&
+    !ens.completado &&
+    (esAdmin || esTecnicoAsignado || (esCreador && !ens.tecnico_id));
+  const puedeReabrir =
+    ens &&
+    ens.terminado &&
+    !ens.completado &&
+    (esAdmin || esCreador || esTecnicoAsignado);
   const puedeCompletar =
     ens && ens.terminado && !ens.completado && (esAdmin || esCreador);
 
@@ -148,11 +162,12 @@ export default function EnsambleDetalle() {
     setErrorMsg("");
     setAviso("");
     try {
-      const { error } = await supabase.from("detalle_ensamble").insert({
-        ensamble_id: ensambleId,
-        producto_id: p.id,
-        cantidad,
-        costo_unitario: p.costo_promedio ?? 0,
+      // S8: toda escritura va por la RPC (la tabla quedó blindada por REST).
+      const { error } = await supabase.rpc("fn_ensamble_receta", {
+        p_ensamble_id: ensambleId,
+        p_accion: "agregar",
+        p_producto_id: p.id,
+        p_cantidad: cantidad,
       });
       if (error) throw error; // el trigger valida insumo suficiente
       setSearch("");
@@ -219,24 +234,30 @@ export default function EnsambleDetalle() {
     if (n === item.cantidad) return;
     setErrorMsg("");
     try {
-      const { error } = await supabase
-        .from("detalle_ensamble")
-        .update({ cantidad: n })
-        .eq("id", item.id);
+      const { error } = await supabase.rpc("fn_ensamble_receta", {
+        p_ensamble_id: ensambleId,
+        p_accion: "editar",
+        p_producto_id: item.producto?.id,
+        p_cantidad: n,
+      });
       if (error) throw error; // trigger ajusta el insumo
       await cargar();
     } catch (err) {
       setErrorMsg(safeError(err, "Error al cambiar la cantidad"));
+      // Re-sincroniza el input con lo que quedó en la BD: si el cambio fue
+      // rechazado (p.ej. insumo insuficiente), el número en pantalla mentía.
+      await cargar();
     }
   };
 
   const quitarInsumo = async (item) => {
     setErrorMsg("");
     try {
-      const { error } = await supabase
-        .from("detalle_ensamble")
-        .delete()
-        .eq("id", item.id);
+      const { error } = await supabase.rpc("fn_ensamble_receta", {
+        p_ensamble_id: ensambleId,
+        p_accion: "quitar",
+        p_producto_id: item.producto?.id,
+      });
       if (error) throw error; // trigger devuelve el insumo
       await cargar();
     } catch (err) {
@@ -249,13 +270,15 @@ export default function EnsambleDetalle() {
     setAccion(true);
     setErrorMsg("");
     try {
-      const { error } = await supabase
-        .from("ensambles")
-        .update({ terminado: true })
-        .eq("id", ensambleId);
+      const { error } = await supabase.rpc("fn_ensamble_estado", {
+        p_ensamble_id: ensambleId,
+        p_accion: "terminar",
+      });
       if (error) throw error;
       await cargar();
-      setAviso("Marcado como terminado. La vendedora puede completarlo.");
+      setAviso(
+        "Marcado como terminado. La receta queda congelada; quien lo creó puede completarlo.",
+      );
     } catch (err) {
       setErrorMsg(safeError(err, "Error al marcar terminado"));
     } finally {
@@ -263,22 +286,52 @@ export default function EnsambleDetalle() {
     }
   };
 
+  const reabrir = async () => {
+    if (accion) return;
+    setAccion(true);
+    setErrorMsg("");
+    try {
+      const { error } = await supabase.rpc("fn_ensamble_estado", {
+        p_ensamble_id: ensambleId,
+        p_accion: "reabrir",
+      });
+      if (error) throw error;
+      await cargar();
+      setAviso("Ensamble reabierto: la receta se puede corregir de nuevo.");
+    } catch (err) {
+      setErrorMsg(safeError(err, "Error al reabrir"));
+    } finally {
+      setAccion(false);
+    }
+  };
+
   const completar = async () => {
     if (accion) return;
+    // Resumen honesto de lo que va a pasar con el inventario (UX ENS-05).
+    const totalInsumos = items.reduce((s, i) => s + (i.cantidad ?? 0), 0);
+    const costoMateriales = items.reduce(
+      (s, i) => s + (i.costo_unitario ?? 0) * (i.cantidad ?? 0),
+      0,
+    );
     const ok = await confirm({
       titulo: "Completar ensamble",
       mensaje:
-        "Se sumará el producto ensamblado al inventario de venta. ¿Confirmar?",
+        `Entra al inventario de venta: ${ens.cantidad_producida} × ${ens.producto?.nombre ?? "producto"}. ` +
+        `Se consumieron ${totalInsumos} insumo(s)` +
+        (esAdmin
+          ? ` por ${formatCOP(costoMateriales)} en materiales (el costo del producto se actualizará solo).`
+          : ".") +
+        " Esta acción no se puede deshacer desde aquí.",
       confirmLabel: "Sí, completar",
     });
     if (!ok) return;
     setAccion(true);
     setErrorMsg("");
     try {
-      const { error } = await supabase
-        .from("ensambles")
-        .update({ completado: true })
-        .eq("id", ensambleId);
+      const { error } = await supabase.rpc("fn_ensamble_estado", {
+        p_ensamble_id: ensambleId,
+        p_accion: "completar",
+      });
       if (error) throw error; // trigger produce el resultado + notifica
       navigate("/ops/ensambles");
     } catch (err) {
@@ -428,9 +481,13 @@ export default function EnsambleDetalle() {
                     type="number"
                     min="1"
                     step="1"
+                    /* key con la cantidad: si la BD rechaza el cambio y
+                       cargar() re-trae el valor real, el input NO controlado
+                       se re-monta y deja de mostrar el número rechazado. */
+                    key={`${it.id}-${it.cantidad}`}
                     defaultValue={it.cantidad}
                     onBlur={(e) => cambiarCantidad(it, e.target.value)}
-                    className="w-16 rounded-lg border px-2 py-1.5 text-center font-mono text-sm tabular-nums outline-none"
+                    className="min-h-[44px] w-16 rounded-lg border px-2 text-center font-mono text-sm tabular-nums outline-none"
                     style={{
                       backgroundColor: "var(--n-0)",
                       borderColor: "var(--n-200)",
@@ -585,6 +642,21 @@ export default function EnsambleDetalle() {
             Ensamble terminado
           </button>
         )}
+        {puedeReabrir && (
+          <button
+            onClick={reabrir}
+            disabled={accion}
+            className="rounded-lg border px-4 text-sm font-medium disabled:opacity-50"
+            style={{
+              height: 48,
+              borderColor: "var(--n-200)",
+              color: "var(--n-700)",
+              backgroundColor: "var(--n-0)",
+            }}
+          >
+            Reabrir para corregir
+          </button>
+        )}
         {puedeCompletar && (
           <button
             onClick={completar}
@@ -595,14 +667,33 @@ export default function EnsambleDetalle() {
             Completar ensamble
           </button>
         )}
-        {!ens.completado && ens.terminado && !puedeCompletar && (
-          <p
-            className="flex-1 rounded-lg border px-3 py-3 text-center text-xs"
-            style={{ borderColor: "var(--n-200)", color: "var(--n-500)" }}
-          >
-            Terminado por el técnico. Falta que la vendedora lo complete.
-          </p>
-        )}
+        {!ens.completado &&
+          ens.terminado &&
+          !puedeCompletar &&
+          !puedeReabrir && (
+            <p
+              className="flex-1 rounded-lg border px-3 py-3 text-center text-xs"
+              style={{ borderColor: "var(--n-200)", color: "var(--n-500)" }}
+            >
+              Terminado por el técnico. Falta que quien lo creó lo complete.
+            </p>
+          )}
+        {/* Observador sin acciones en un ensamble en proceso: decirle qué
+            está pasando en vez de una pantalla muda (UX ENS-04). */}
+        {!ens.completado &&
+          !ens.terminado &&
+          !puedeTerminar &&
+          !puedeEditarReceta && (
+            <p
+              className="flex-1 rounded-lg border px-3 py-3 text-center text-xs"
+              style={{ borderColor: "var(--n-200)", color: "var(--n-500)" }}
+            >
+              En proceso:{" "}
+              {ens.tecnico?.nombre ?? ens.realizador?.nombre ?? "el taller"}{" "}
+              está armando el equipo. Cuando lo marque terminado, quien lo creó
+              podrá completarlo.
+            </p>
+          )}
         {esAdmin && (
           <button
             onClick={eliminar}
