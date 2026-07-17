@@ -109,7 +109,9 @@ export default function CompraDetalle() {
     if (cancelando) return;
     const ok = window.confirm(
       compra.recibida
-        ? "Se cancelará la compra y se REVERTIRÁ del inventario el stock que ingresó. Esta acción no se puede deshacer. ¿Continuar?"
+        ? "Se cancelará la compra y se REVERTIRÁ del inventario el stock que ingresó.\n\n" +
+            "OJO: el costo promedio del producto NO siempre se recalcula solo al cancelar (depende de las compras que haya tenido). Después de cancelar, revisa el costo del producto y ajústalo a mano si quedó mal.\n\n" +
+            "Esta acción no se puede deshacer. ¿Continuar?"
         : "Se cancelará la compra. Esta acción no se puede deshacer. ¿Continuar?",
     );
     if (!ok) return;

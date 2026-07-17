@@ -38,17 +38,29 @@ que se pagó, más cerca de uno u otro según cuánto stock viejo hubiera.
 
 ---
 
-## Grupo A — Los 5 grandes (79% del descuadre)
+## Grupo A — Los 4 grandes (el grueso del descuadre)
 
-Si solo vas a hacer una parte, haz esta. Son **$2,87M de los $3,6M** en 5 productos.
+Si solo vas a hacer una parte, haz esta. Son **~$1,97M** en 4 productos.
 
 | Ref      | Producto                          |  Costo hoy | Lo que se pagó                          | Stock |  Descuadre |
 | -------- | --------------------------------- | ---------: | --------------------------------------- | ----: | ---------: |
 | CTA1105T | CABEZOTE 5 HP 1105T TIPO CHEQUERA | $1.500.000 | 01/07: 1 × $1.000.000                   |     2 | $1.000.000 |
-| C2X10    | CABLE ENCAUCHETADO 2X10           |       $443 | 18/06: 5.000 × $115                     | 2.730 |   $895.959 |
 | M1501/4V | MANOMETRO 150 1/4 V               |    $13.700 | 01/07: 100 × $8.000                     |    96 |   $547.200 |
 | GF3/4PP  | GRAPAS DE FIJACION 3/4 PP         |     $1.031 | 12/06: 50 × $50                         |   266 |   $260.999 |
 | 6205FAG  | RODAMIENTO 6205 ZZ FAG            |    $44.100 | 01/07: 4 × $11.765 · 08/07: 4 × $11.758 |     5 |   $161.690 |
+
+> **C2X10 (CABLE ENCAUCHETADO 2X10) ya no está en esta lista: se corrigió.**
+> Era el segundo descuadre más grande (~$970.000 de inventario sobrevalorado) y
+> resultó ser el único del grupo que sí se podía calcular con certeza.
+>
+> Su historia: la compra #92 se digitó como 50 uds × $11.451,50 en vez de 5.000 ×
+> $114,52 — el mismo total, $572.575, con las cantidades corridas 100 veces. Se
+> canceló y se recapturó bien como la #106, pero al cancelar **el costo no volvió
+> atrás**, y la #106, que lo habría diluido, se la comió el error del guard. Dos
+> errores sumados sobre el mismo producto.
+>
+> Como el costo venía de $109,60 y la compra real fue a $114,52, el valor
+> correcto tenía que estar entre esas dos puntas. Se dejó en **$114,52**.
 
 ---
 
@@ -140,10 +152,11 @@ cuestan**. Ponles el valor real desde la app y quedan bien.
 |                                                    | Productos |         Descuadre |
 | -------------------------------------------------- | --------: | ----------------: |
 | Ya corregidos automáticamente (certeza matemática) |         6 |        $2.101.900 |
-| Grupo A — los 5 grandes                            |         5 |        $2.866.000 |
+| C2X10 — corregido aparte (ver Grupo A)             |         1 |         ~$970.000 |
+| **Grupo A — los 4 grandes (tu tarea principal)**   |         4 |   **~$1.970.000** |
 | Grupo B — con stock                                |        27 |         ~$770.000 |
 | Grupo C — sin stock, se autocorrigen               |        10 |            $0 hoy |
-| Costos en $0 (caso aparte)                         |         3 | margen 100% falso |
+| Costos en $0 (caso aparte, los pones tú)           |         3 | margen 100% falso |
 
 El margen histórico ya reportado quedó inflado en **$140.935** comprobables. Eso no se
 puede reexpresar: los cierres pasados quedan como están.
