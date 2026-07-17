@@ -1,6 +1,12 @@
 import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeftCircle, Search, Trash2, ArrowRight } from "lucide-react";
+import {
+  ArrowLeftCircle,
+  Search,
+  Trash2,
+  ArrowRight,
+  ScanLine,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
@@ -9,6 +15,7 @@ import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { sedeLabel } from "../../lib/traspasos-ui";
 import { useSedes } from "../../hooks/useSedes";
 import UbicacionChip from "../../components/ui/UbicacionChip";
+import QRScanner from "../../components/forms/QRScanner";
 
 const TIPOS = [
   { v: "normal", label: "Normal" },
@@ -39,6 +46,7 @@ export default function TraspasoNuevo() {
   const [resultados, setResultados] = useState([]);
   const [buscando, setBuscando] = useState(false);
   const [items, setItems] = useState([]);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
@@ -66,27 +74,29 @@ export default function TraspasoNuevo() {
           return;
         }
 
+        // S7-A: el inventario tiene DOS bolsillos (cantidad = vendible,
+        // cantidad_insumo = insumo) y ambos se pueden traspasar. Antes el
+        // `.gt("cantidad", 0)` escondía los productos que solo tenían stock
+        // de insumo — 33 casos reales sin forma de moverse entre sedes.
         const { data: inv } = await supabase
           .from("inventario")
-          .select("producto_id, cantidad, ubicacion_id")
+          .select("producto_id, cantidad, cantidad_insumo, ubicacion_id")
           .eq("sede_id", sedeOrigen)
-          .gt("cantidad", 0)
+          .or("cantidad.gt.0,cantidad_insumo.gt.0")
           .in("producto_id", ids);
 
-        const stockMap = Object.fromEntries(
-          (inv ?? []).map((i) => [i.producto_id, i.cantidad]),
-        );
-        const ubicMap = Object.fromEntries(
-          (inv ?? []).map((i) => [i.producto_id, i.ubicacion_id]),
+        const invMap = Object.fromEntries(
+          (inv ?? []).map((i) => [i.producto_id, i]),
         );
 
         setResultados(
           (prods ?? [])
-            .filter((p) => stockMap[p.id] !== undefined)
+            .filter((p) => invMap[p.id] !== undefined)
             .map((p) => ({
               ...p,
-              stock: stockMap[p.id],
-              ubicacion_id: ubicMap[p.id] ?? null,
+              stock: invMap[p.id].cantidad ?? 0,
+              stock_insumo: invMap[p.id].cantidad_insumo ?? 0,
+              ubicacion_id: invMap[p.id].ubicacion_id ?? null,
             })),
         );
       } catch {
@@ -105,6 +115,8 @@ export default function TraspasoNuevo() {
     setResultados([]);
     setItems((prev) => {
       if (prev.find((i) => i.producto_id === prod.id)) return prev;
+      // Bolsillo por defecto: venta si hay; si solo hay insumo, insumo.
+      const esInsumo = (prod.stock ?? 0) <= 0 && (prod.stock_insumo ?? 0) > 0;
       return [
         ...prev,
         {
@@ -112,12 +124,17 @@ export default function TraspasoNuevo() {
           nombre: prod.nombre,
           referencia: prod.referencia,
           unidad: prod.unidad_medida,
-          stock_disponible: prod.stock,
+          stock_venta: prod.stock ?? 0,
+          stock_insumo: prod.stock_insumo ?? 0,
+          es_insumo: esInsumo,
           cantidad_solicitada: 1,
         },
       ];
     });
   };
+
+  const stockDelBolsillo = (i) =>
+    i.es_insumo ? i.stock_insumo : i.stock_venta;
 
   const actualizarCantidad = (productoId, valor) => {
     const n = parseInt(valor, 10);
@@ -128,11 +145,74 @@ export default function TraspasoNuevo() {
           ? i
           : {
               ...i,
-              cantidad_solicitada: Math.min(n, i.stock_disponible),
+              cantidad_solicitada: Math.min(n, stockDelBolsillo(i)),
             },
       ),
     );
   };
+
+  // Cambia el bolsillo del item (venta <-> insumo) y re-topa la cantidad al
+  // stock del bolsillo elegido.
+  const cambiarBolsillo = (productoId, esInsumo) => {
+    setItems((prev) =>
+      prev.map((i) => {
+        if (i.producto_id !== productoId) return i;
+        const nuevo = { ...i, es_insumo: esInsumo };
+        nuevo.cantidad_solicitada = Math.min(
+          i.cantidad_solicitada,
+          Math.max(1, stockDelBolsillo(nuevo)),
+        );
+        return nuevo;
+      }),
+    );
+  };
+
+  // QR: agrega el producto escaneado si tiene stock (en cualquiera de los dos
+  // bolsillos) en la sede de origen seleccionada.
+  const handleQRFound = useCallback(
+    async (productoId) => {
+      setScannerOpen(false);
+      if (!sedeOrigen) return;
+      try {
+        const [{ data: prod }, { data: inv }] = await Promise.all([
+          supabase
+            .from("productos")
+            .select("id, nombre, referencia, unidad_medida")
+            .eq("id", productoId)
+            .eq("activo", true)
+            .single(),
+          supabase
+            .from("inventario")
+            .select("cantidad, cantidad_insumo, ubicacion_id")
+            .eq("sede_id", sedeOrigen)
+            .eq("producto_id", productoId)
+            .maybeSingle(),
+        ]);
+        if (!prod) {
+          setError("El producto escaneado no existe o está inactivo.");
+          return;
+        }
+        const stock = inv?.cantidad ?? 0;
+        const stockInsumo = inv?.cantidad_insumo ?? 0;
+        if (stock <= 0 && stockInsumo <= 0) {
+          setError(
+            `"${prod.nombre}" no tiene stock en ${sedeLabel(sedeOrigen)}.`,
+          );
+          return;
+        }
+        setError(null);
+        agregarItem({
+          ...prod,
+          stock,
+          stock_insumo: stockInsumo,
+          ubicacion_id: inv?.ubicacion_id ?? null,
+        });
+      } catch {
+        setError("No se pudo leer el producto escaneado. Reintenta.");
+      }
+    },
+    [sedeOrigen],
+  );
 
   const eliminarItem = (productoId) =>
     setItems((prev) => prev.filter((i) => i.producto_id !== productoId));
@@ -170,6 +250,7 @@ export default function TraspasoNuevo() {
         p_items: items.map((i) => ({
           producto_id: i.producto_id,
           cantidad_solicitada: i.cantidad_solicitada,
+          es_insumo: i.es_insumo === true,
         })),
       });
       if (rpcErr) throw new Error(rpcErr.message);
@@ -284,29 +365,44 @@ export default function TraspasoNuevo() {
               </p>
             ) : (
               <>
-                <div
-                  className="flex h-12 items-center gap-2.5 rounded-lg border px-3.5"
-                  style={{
-                    borderColor: "var(--n-200)",
-                    backgroundColor: "var(--n-0)",
-                  }}
-                >
-                  <Search
-                    className="h-4 w-4 shrink-0"
-                    strokeWidth={1.5}
-                    style={{ color: "var(--n-500)" }}
-                  />
-                  <input
-                    type="text"
-                    value={busqueda}
-                    onChange={(e) => {
-                      setBusqueda(e.target.value);
-                      buscarDebounced(e.target.value);
+                <div className="flex items-center gap-2">
+                  <div
+                    className="flex h-12 flex-1 items-center gap-2.5 rounded-lg border px-3.5"
+                    style={{
+                      borderColor: "var(--n-200)",
+                      backgroundColor: "var(--n-0)",
                     }}
-                    placeholder="Buscar por nombre o referencia…"
-                    className="flex-1 border-none bg-transparent text-[14px] outline-none"
-                    style={{ color: "var(--n-950)" }}
-                  />
+                  >
+                    <Search
+                      className="h-4 w-4 shrink-0"
+                      strokeWidth={1.5}
+                      style={{ color: "var(--n-500)" }}
+                    />
+                    <input
+                      type="text"
+                      value={busqueda}
+                      onChange={(e) => {
+                        setBusqueda(e.target.value);
+                        buscarDebounced(e.target.value);
+                      }}
+                      placeholder="Buscar por nombre o referencia…"
+                      className="flex-1 border-none bg-transparent text-[14px] outline-none"
+                      style={{ color: "var(--n-950)" }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setScannerOpen(true)}
+                    className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border transition-colors"
+                    style={{
+                      borderColor: "var(--n-200)",
+                      backgroundColor: "var(--n-0)",
+                      color: "var(--n-700)",
+                    }}
+                    aria-label="Escanear código QR"
+                  >
+                    <ScanLine className="h-5 w-5" strokeWidth={1.8} />
+                  </button>
                 </div>
 
                 {buscando && (
@@ -353,7 +449,16 @@ export default function TraspasoNuevo() {
                             {p.referencia} · {p.unidad_medida}
                           </p>
                         </div>
-                        <span className="stk-pill s">{p.stock} disp.</span>
+                        <span className="inline-flex flex-col items-end gap-1">
+                          {p.stock > 0 && (
+                            <span className="stk-pill s">{p.stock} venta</span>
+                          )}
+                          {p.stock_insumo > 0 && (
+                            <span className="stk-pill i">
+                              {p.stock_insumo} insumo
+                            </span>
+                          )}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -409,12 +514,17 @@ export default function TraspasoNuevo() {
                                   className="font-mono text-[12.5px]"
                                   style={{ color: "var(--n-700)" }}
                                 >
-                                  {item.stock_disponible} {item.unidad}
+                                  {stockDelBolsillo(item)} {item.unidad}
                                 </span>
+                                <BolsilloToggle
+                                  item={item}
+                                  onChange={cambiarBolsillo}
+                                />
                               </td>
                               <td className="text-right">
                                 <CantidadCtrl
                                   item={item}
+                                  max={stockDelBolsillo(item)}
                                   onChange={actualizarCantidad}
                                 />
                               </td>
@@ -453,15 +563,20 @@ export default function TraspasoNuevo() {
                                 style={{ color: "var(--n-500)" }}
                               >
                                 {item.referencia} · Stock:{" "}
-                                {item.stock_disponible} {item.unidad}
+                                {stockDelBolsillo(item)} {item.unidad}
                               </p>
                             </div>
                             <BotonEliminar
                               onClick={() => eliminarItem(item.producto_id)}
                             />
                           </div>
+                          <BolsilloToggle
+                            item={item}
+                            onChange={cambiarBolsillo}
+                          />
                           <CantidadCtrl
                             item={item}
+                            max={stockDelBolsillo(item)}
                             onChange={actualizarCantidad}
                           />
                         </div>
@@ -543,6 +658,13 @@ export default function TraspasoNuevo() {
           </button>
         </aside>
       </div>
+
+      {scannerOpen && (
+        <QRScanner
+          onFound={handleQRFound}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -582,7 +704,49 @@ function Label({ children }) {
   );
 }
 
-function CantidadCtrl({ item, onChange }) {
+/**
+ * Toggle Venta/Insumo del item. Solo aparece cuando el producto tiene stock en
+ * AMBOS bolsillos; si solo tiene uno, el bolsillo viene fijado desde
+ * `agregarItem` y no hay nada que elegir.
+ */
+function BolsilloToggle({ item, onChange }) {
+  if (!(item.stock_venta > 0 && item.stock_insumo > 0)) {
+    return item.es_insumo ? (
+      <span className="stk-pill i mt-1 inline-block">Insumo</span>
+    ) : null;
+  }
+  const opciones = [
+    { v: false, label: `Venta (${item.stock_venta})` },
+    { v: true, label: `Insumo (${item.stock_insumo})` },
+  ];
+  return (
+    <div
+      className="mt-1 inline-flex items-center gap-0.5 rounded-lg p-0.5"
+      style={{ backgroundColor: "var(--n-50)" }}
+    >
+      {opciones.map((o) => {
+        const on = item.es_insumo === o.v;
+        return (
+          <button
+            key={String(o.v)}
+            type="button"
+            onClick={() => onChange(item.producto_id, o.v)}
+            className="min-h-[36px] rounded-md px-2.5 text-[11px] font-medium transition-colors"
+            style={{
+              backgroundColor: on ? "var(--n-0)" : "transparent",
+              color: on ? "var(--n-950)" : "var(--n-500)",
+              boxShadow: on ? "0 1px 2px rgb(0 0 0 / 0.08)" : "none",
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CantidadCtrl({ item, max, onChange }) {
   return (
     <div className="inline-flex items-center gap-1">
       <QtyBtn
@@ -593,7 +757,7 @@ function CantidadCtrl({ item, onChange }) {
       <input
         type="number"
         min={1}
-        max={item.stock_disponible}
+        max={max}
         value={item.cantidad_solicitada}
         onChange={(e) => onChange(item.producto_id, e.target.value)}
         className="w-14 rounded-lg border py-1.5 text-center font-mono text-sm font-semibold outline-none"
@@ -612,11 +776,12 @@ function CantidadCtrl({ item, onChange }) {
   );
 }
 
+/* 44px en táctil (uso con guantes); compacto solo en desktop con mouse. */
 function QtyBtn({ children, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="grid h-8 w-8 place-items-center rounded-lg border text-lg font-bold transition-colors"
+      className="grid h-11 w-11 place-items-center rounded-lg border text-lg font-bold transition-colors md:h-9 md:w-9"
       style={{
         borderColor: "var(--n-150)",
         color: "var(--n-700)",
@@ -632,7 +797,7 @@ function BotonEliminar({ onClick }) {
   return (
     <button
       onClick={onClick}
-      className="grid h-8 w-8 place-items-center rounded-lg transition-colors"
+      className="grid h-11 w-11 place-items-center rounded-lg transition-colors md:h-9 md:w-9"
       style={{ color: "var(--n-500)" }}
       onMouseEnter={(e) => (e.currentTarget.style.color = "var(--dang-600)")}
       onMouseLeave={(e) => (e.currentTarget.style.color = "var(--n-500)")}

@@ -463,3 +463,69 @@ conteo real del servidor como cifra principal y las filas cargadas como "en vist
 
 PENDIENTE: verificación en navegador de las pantallas tras login (regla del
 proyecto: el login/E2E lo corre el usuario). Build + lint son la evidencia por ahora.
+
+## Sección 7 — Traspasos (2026-07-16)
+
+Módulo más sano de la campaña (320 traspasos, 0 P0, 0 duplicación de stock,
+0 inventario negativo). Decisiones del dueño: HABILITAR traspaso de insumos;
+techo DURO de picking (bloquear enviar > solicitado).
+
+### Backend (3 migraciones `s7_traspasos_*` + 1 de higiene, probadas BEGIN/ROLLBACK, 7/7 escenarios)
+
+- **S7-A Insumos traspasables** (feature, 33 casos reales esperando): columna
+  `detalle_traspaso.es_insumo` (default false, retrocompatible); `fn_crear_traspaso`
+  acepta `es_insumo` por ítem; `trg_traspaso_salida`/`trg_traspaso_entrada` mueven
+  el bolsillo correcto por línea, incluida la ruta de merma (`con_diferencia`);
+  asientos en `movimientos` con el mismo tipo histórico y nota "Insumo".
+  Bug latente encontrado y cerrado de paso: `fn_cancelar_traspaso` habría
+  devuelto insumo en tránsito al bolsillo VENDIBLE.
+- **S7-B Techo de picking**: `fn_procesar_traspaso` (actualizar_items) RAISE si
+  `cantidad_enviada > cantidad_solicitada`. Validado en RPC, NO CHECK (2 filas
+  históricas lo violan). Frontend topa el input en la solicitada.
+- **S7-C Admin en picking**: `actualizar_items` acepta picker O Admin (antes el
+  Admin entraba a la pantalla, el RPC lo rechazaba y el error se tragaba).
+- **Blindaje REST**: REVOKE INSERT/UPDATE/DELETE/TRUNCATE (y luego
+  REFERENCES/TRIGGER por higiene) sobre `traspasos`/`detalle_traspaso` para
+  authenticated y anon; todo pasa por las 3 RPCs SECURITY DEFINER;
+  `search_path = public, pg_temp` en las 5 funciones.
+- **Notificación** `traspaso_en_camino` al pasar a en_transito (idempotente,
+  payload con sede_destino_id). OJO: tabla `notificaciones` es por ROL y la
+  campana solo está en AdminShell → el aviso al personal de sede se cubrió en
+  frontend con banner en TraspasoHistorial.
+
+### Frontend (lint 0 errores + build OK)
+
+- **TraspasoNuevo**: búsqueda incluye bolsillo insumo (`or cantidad/cantidad_insumo > 0`),
+  pills "N venta / N insumo", toggle Venta/Insumo por ítem (solo si hay ambos),
+  tope de cantidad por bolsillo, `es_insumo` en el payload, escáner QR (patrón
+  CompraNueva), tap targets 44px.
+- **PickingPage**: tope duro en la solicitada; `guardarProgreso` devuelve éxito;
+  Finalizar y la X NO navegan si el guardado falla (la X además hace flush del
+  autosave pendiente y el ref se limpia al dispararse); badge "Insumo";
+  **dark mode arreglado** (`.pk` tenía `background:#fff` fijo con textos en
+  tokens invertidos → ilegible; ahora `var(--n-0)`; `pk-qr-img` queda blanco a
+  propósito por contraste del QR).
+- **TraspasoDetalle**: `window.prompt` de cancelación reemplazado por modal
+  propio (ConfirmDialog extendido con campo de texto opcional, retrocompatible).
+- **TraspasoHistorial**: banner "tienes N traspasos en camino por recibir"
+  (cuenta en_transito hacia la sede del usuario, ignora filtros; Admin ve todas);
+  el refresco Realtime re-carga TODO lo paginado (antes reseteaba a página 1).
+- **RecepcionTraspaso**: badge "Insumo" por línea.
+
+### Verificación adversarial (workflow 6 flujos independientes, BEGIN/ROLLBACK en prod)
+
+5 OK + 1 PARCIAL. El PARCIAL encontró un P2 real que se corrigió al momento:
+la X de salida despachaba el autosave pero navegaba aunque fallara (error
+invisible al desmontarse). P3 aplicado: REVOKE REFERENCES/TRIGGER residuales.
+
+### P3 latentes documentados, NO tocados (decisión: no cambiar diseño sin necesidad)
+
+- `cantidad_recibida` DEFAULT 0 hace código muerto el COALESCE del trigger de
+  entrada; si un flujo futuro no-RPC marcara recibido sin setear recibida,
+  habría merma total silenciosa. Hoy no explotable (REST bloqueado, RPC la escribe).
+- `fn_crear_traspaso` no pre-valida stock al crear (igual que vendible); el
+  bloqueo real está al enviar con FOR UPDATE.
+- `movimientos.stock_posterior` mezcla bolsillos si un reporte suma sin mirar
+  observaciones='Insumo'.
+- `usuario_id` del asiento de entrada = quien creó, no quien recibió
+  (preexistente, aplica a ambos bolsillos).

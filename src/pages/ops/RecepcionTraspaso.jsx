@@ -47,7 +47,7 @@ export default function RecepcionTraspaso() {
             supabase
               .from("detalle_traspaso")
               .select(
-                `id, cantidad_solicitada, cantidad_enviada,
+                `id, cantidad_solicitada, cantidad_enviada, es_insumo,
                  producto:producto_id(nombre, referencia, unidad_medida)`,
               )
               .eq("traspaso_id", id)
@@ -316,6 +316,9 @@ export default function RecepcionTraspaso() {
                     style={{ color: "var(--n-950)" }}
                   >
                     {item.producto?.nombre ?? "—"}
+                    {item.es_insumo && (
+                      <span className="stk-pill i ml-1.5">Insumo</span>
+                    )}
                   </p>
                   <p
                     className="mt-0.5 font-mono text-[11px]"

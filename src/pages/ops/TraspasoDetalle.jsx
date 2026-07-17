@@ -30,6 +30,7 @@ import {
   Pill,
   TipoBadge,
 } from "../../components/traspasos/TraspasoBits";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 
 /* Estado real → kind del Pill de Lovable. */
 const PILL_KIND = {
@@ -52,6 +53,7 @@ export default function TraspasoDetalle() {
   const [loading, setLoading] = useState(true);
   const [accionando, setAccionando] = useState(false);
   const [error, setError] = useState(null);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const esAdmin = perfil?.rol === "Admin";
   const accionandoRef = useRef(false);
@@ -186,8 +188,18 @@ export default function TraspasoDetalle() {
   // ── Acción: cancelar traspaso (#5 · solo Admin · solo no recibido) ──
   const cancelarTraspaso = async () => {
     if (accionandoRef.current) return;
-    const motivo = window.prompt("Motivo de la cancelación (opcional):", "");
-    if (motivo === null) return; // el Admin cerró el prompt
+    // Modal propio, no window.prompt: el prompt nativo se ve fuera del sistema
+    // de diseño y algunos WebView/PWA directamente lo bloquean.
+    const motivo = await confirm({
+      titulo: "Cancelar traspaso",
+      mensaje:
+        "El traspaso quedará cancelado y no se moverá stock. Puedes anotar el motivo (opcional).",
+      confirmLabel: "Cancelar traspaso",
+      cancelLabel: "Volver",
+      danger: true,
+      input: { placeholder: "Motivo de la cancelación (opcional)…" },
+    });
+    if (motivo === false) return; // el Admin cerró el modal
     accionandoRef.current = true;
     setError(null);
     setAccionando(true);
@@ -463,6 +475,8 @@ export default function TraspasoDetalle() {
           />
         </div>
       </div>
+
+      <ConfirmDialog />
     </div>
   );
 }
@@ -633,6 +647,7 @@ function ProductoRow({ item, estado, last }) {
           style={{ color: "var(--n-950)" }}
         >
           {item.producto?.nombre ?? "—"}
+          {item.es_insumo && <span className="stk-pill i ml-1.5">Insumo</span>}
         </span>
         <span
           className="font-mono text-[11px]"
