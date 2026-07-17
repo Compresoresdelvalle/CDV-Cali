@@ -35,6 +35,27 @@ const SELECT_COLS =
   "categoria, marca, modelo, precio_venta, unidad_medida, activo";
 
 /**
+ * Raíz de una categoría, para agrupar la misma cosa escrita de varias formas.
+ *
+ * En el catálogo real conviven RODAMIENTOS/RODAMIENTO, CODOS/CODO,
+ * FLAPPER/FLAPPERS, EMPAQUEES/EMPAQUE… Se normaliza a mayúsculas, sin tildes y
+ * sin la terminación de plural. Verificado contra producción: agrupa 8 pares
+ * reales y NO junta categorías distintas entre sí.
+ *
+ * Es a propósito conservador: si algún día une dos categorías que no deben ir
+ * juntas, el síntoma es visible (aparecen mezcladas en el desplegable), no
+ * silencioso como el problema que resuelve.
+ */
+function raizCategoria(cat) {
+  return (cat ?? "")
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // quita tildes
+    .replace(/(OES|ES|S)$/, ""); // singulariza la terminación
+}
+
+/**
  * Catálogo maestro de productos — una fila por producto (sin stock por sede).
  * Lee la tabla real `productos` respetando RLS (sesión authenticated).
  */
@@ -100,6 +121,67 @@ export default function Productos() {
   const { aplicar, nuevoReqId, esReqVigente, valoresAplicados } = f;
   const busquedaAplicada = valoresAplicados.q ?? "";
 
+  // ── Filtro de categoría ──────────────────────────────────────────────────
+  // El catálogo tiene la misma categoría escrita de varias formas (verificado
+  // en producción: RODAMIENTOS/RODAMIENTO, CODOS/CODO, FLAPPER/FLAPPERS…). Un
+  // filtro que mandara `categoria = 'CODOS'` escondería los 3 productos
+  // guardados como 'CODO' sin avisar: sería un filtro que miente, que es justo
+  // el problema que esta campaña busca matar.
+  //
+  // Por eso el desplegable ofrece GRUPOS (una entrada por categoría real, no
+  // por grafía) y al filtrar manda TODAS las grafías del grupo con `.in()`.
+  // No se tocan los datos: la limpieza del catálogo es otra decisión.
+  const [gruposCat, setGruposCat] = useState([]);
+  const [catSel, setCatSel] = useState("");
+
+  useEffect(() => {
+    let vigente = true;
+    (async () => {
+      // Se leen las categorías del catálogo activo para armar los grupos.
+      const filas = [];
+      for (let pagina = 0; pagina < 10; pagina++) {
+        const { data, error } = await supabase
+          .from("productos")
+          .select("categoria")
+          .eq("activo", true)
+          .not("categoria", "is", null)
+          .order("categoria")
+          .range(pagina * 1000, pagina * 1000 + 999);
+        if (error) break;
+        const lote = data ?? [];
+        filas.push(...lote);
+        if (lote.length < 1000) break;
+      }
+      if (!vigente) return;
+      // Una sola pasada: por raíz, cuántos productos y cuántos por grafía.
+      const porRaiz = new Map();
+      for (const { categoria } of filas) {
+        const cat = (categoria ?? "").trim();
+        if (!cat) continue;
+        const raiz = raizCategoria(cat);
+        const g = porRaiz.get(raiz) ?? { grafias: new Map(), n: 0 };
+        g.grafias.set(cat, (g.grafias.get(cat) ?? 0) + 1);
+        g.n += 1;
+        porRaiz.set(raiz, g);
+      }
+      setGruposCat(
+        [...porRaiz.values()]
+          .map((g) => {
+            // Se muestra la grafía más usada del grupo: es la que el equipo
+            // reconoce, aunque el filtro traiga todas por debajo.
+            const [label] = [...g.grafias.entries()].sort(
+              (a, b) => b[1] - a[1],
+            )[0];
+            return { label, grafias: [...g.grafias.keys()], n: g.n };
+          })
+          .sort((a, b) => a.label.localeCompare(b.label, "es")),
+      );
+    })();
+    return () => {
+      vigente = false;
+    };
+  }, []);
+
   const pageRef = useRef(0);
 
   const fetchProductos = useCallback(
@@ -123,6 +205,13 @@ export default function Productos() {
         q = aplicar(q); // texto + tipo + vendible, cruzables entre sí.
 
         if (soloActivos) q = q.eq("activo", true);
+
+        // Categoría por GRUPO: se mandan todas las grafías, no la elegida. Con
+        // `.eq('categoria','CODOS')` se perderían los 3 guardados como 'CODO'.
+        if (catSel) {
+          const g = gruposCat.find((x) => x.label === catSel);
+          if (g) q = q.in("categoria", g.grafias);
+        }
 
         const min = aNumero(precioMinAplicado);
         const max = aNumero(precioMaxAplicado);
@@ -174,6 +263,8 @@ export default function Productos() {
       soloActivos,
       precioMinAplicado,
       precioMaxAplicado,
+      catSel,
+      gruposCat,
     ],
   );
 
@@ -189,10 +280,18 @@ export default function Productos() {
     setPrecioMin("");
     setPrecioMax("");
     setSoloActivos(true);
+    setCatSel("");
   }, [f]);
 
+  // La categoría cuenta como filtro activo: si no, "Limpiar filtros" no
+  // aparecería con una categoría puesta y el operario vería una lista recortada
+  // sin nada que le dijera por qué.
   const hayFiltros =
-    f.hayFiltros || precioMin !== "" || precioMax !== "" || !soloActivos;
+    f.hayFiltros ||
+    precioMin !== "" ||
+    precioMax !== "" ||
+    !soloActivos ||
+    catSel !== "";
 
   const loadMore = useCallback(() => {
     if (hasMore && !loadingMore && !loading) fetchProductos(true);
@@ -319,6 +418,33 @@ export default function Productos() {
               </FilterRow>
             </div>
           </div>
+
+          {/* Categoría. Es un desplegable con buscador propio del navegador y
+              no chips: son ~145 categorías y en chips no cabrían. Cada opción
+              es un GRUPO, no una grafía (ver `raizCategoria`). */}
+          {gruposCat.length > 0 && (
+            <div>
+              <div
+                className="mb-2 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
+                style={{ color: "var(--n-500)" }}
+              >
+                Categoría
+              </div>
+              <select
+                value={catSel}
+                onChange={(e) => setCatSel(e.target.value)}
+                className="h-12 w-full rounded-[8px] border bg-transparent px-2 text-[12.5px] outline-none"
+                style={{ borderColor: "var(--n-200)", color: "var(--n-950)" }}
+              >
+                <option value="">Todas</option>
+                {gruposCat.map((g) => (
+                  <option key={g.label} value={g.label}>
+                    {g.label} ({g.n})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Tipo — valores reales del enum `tipo_producto`. Se cruzan con el
               resto: tipo + vendible + precio + búsqueda actúan a la vez. */}
