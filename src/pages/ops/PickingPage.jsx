@@ -47,7 +47,7 @@ export default function PickingPage() {
             supabase
               .from("detalle_traspaso")
               .select(
-                `id, producto_id, cantidad_solicitada, cantidad_enviada, picking_completado,
+                `id, producto_id, cantidad_solicitada, cantidad_enviada, picking_completado, es_insumo,
                  producto:producto_id(nombre, referencia, unidad_medida),
                  ubicacion:ubicacion_origen_id(pasillo, estante, nivel, prioridad_picking)`,
               )
@@ -148,7 +148,7 @@ export default function PickingPage() {
   /* ── Guardar progreso vía RPC ─────────────────────────────── */
   const guardarProgreso = useCallback(
     async (localSnapshot) => {
-      if (!items.length) return;
+      if (!items.length) return true;
       setGuardando(true);
       setError(null);
       try {
@@ -169,8 +169,10 @@ export default function PickingPage() {
           p_items,
         });
         if (rpcErr) throw new Error(rpcErr.message);
+        return true;
       } catch (e) {
-        setError(safeError(e, "Error en picking"));
+        setError(safeError(e, "No se pudo guardar el picking"));
+        return false;
       } finally {
         setGuardando(false);
       }
@@ -181,7 +183,13 @@ export default function PickingPage() {
   const scheduleAutoSave = useCallback(
     (nextLocal) => {
       clearTimeout(autoSaveRef.current);
-      autoSaveRef.current = setTimeout(() => guardarProgreso(nextLocal), 1500);
+      autoSaveRef.current = setTimeout(() => {
+        // Limpiar el ref al dispararse: así `autoSaveRef.current` significa
+        // "hay un autosave PENDIENTE", no "alguna vez hubo uno" (la X lo usa
+        // para decidir si debe hacer flush antes de salir).
+        autoSaveRef.current = null;
+        guardarProgreso(nextLocal);
+      }, 1500);
     },
     [guardarProgreso],
   );
@@ -202,7 +210,12 @@ export default function PickingPage() {
   const saltar = () => setIndex((i) => Math.min(i + 1, items.length));
 
   const setCantidad = (itemId, value) => {
-    const num = Math.min(100000, Math.max(1, parseInt(value, 10) || 1));
+    // Techo DURO: no se puede recoger más de lo solicitado (decisión del dueño
+    // 2026-07-16; ya había pasado 2 veces que salía de más). El backend también
+    // lo rechaza — este tope evita que el operario se entere tarde.
+    const solicitada =
+      items.find((i) => i.id === itemId)?.cantidad_solicitada ?? 1;
+    const num = Math.min(solicitada, Math.max(1, parseInt(value, 10) || 1));
     setLocal((prev) => {
       const next = {
         ...prev,
@@ -215,9 +228,26 @@ export default function PickingPage() {
 
   const handleFinalizar = async () => {
     clearTimeout(autoSaveRef.current);
-    await guardarProgreso(local);
+    const ok = await guardarProgreso(local);
+    // Si el guardado falló, quedarse en la pantalla con el error visible.
+    // Antes se navegaba igual y el trabajo se perdía en silencio (S7-C).
+    if (!ok) return;
     // B6: el picking ya no requiere verificación por un tercero. Volvemos al
     // detalle, donde el mismo picker confirma el envío (picking → en tránsito).
+    navigate(`/ops/traspasos/${id}`);
+  };
+
+  // Salir con la X: despacha el autosave pendiente antes de irse para no
+  // perder los últimos cambios (el debounce de 1500ms podía quedar en el aire).
+  // Si el flush FALLA, no se navega: el error queda visible y el operario puede
+  // reintentar — navegar igual habría perdido el trabajo en silencio.
+  const handleSalir = async () => {
+    if (autoSaveRef.current) {
+      clearTimeout(autoSaveRef.current);
+      autoSaveRef.current = null;
+      const ok = await guardarProgreso(local);
+      if (!ok) return;
+    }
     navigate(`/ops/traspasos/${id}`);
   };
 
@@ -242,7 +272,7 @@ export default function PickingPage() {
         <button
           className="pk-close"
           aria-label="Salir del picking"
-          onClick={() => navigate(`/ops/traspasos/${id}`)}
+          onClick={handleSalir}
         >
           <X className="h-3.5 w-3.5" strokeWidth={2} />
         </button>
@@ -331,6 +361,9 @@ export default function PickingPage() {
               </span>
               <span className="pk-sku">{item.producto?.referencia ?? "—"}</span>
               <h1 className="pk-name">{item.producto?.nombre ?? "—"}</h1>
+              {item.es_insumo && (
+                <span className="stk-pill i">Insumo (no vendible)</span>
+              )}
               {item.producto?.unidad_medida && (
                 <p className="pk-model">{item.producto.unidad_medida}</p>
               )}

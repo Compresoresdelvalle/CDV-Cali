@@ -3436,7 +3436,10 @@ body {
 .pk {
   display: flex;
   flex-direction: column;
-  background: #fff;
+  /* var(--n-0), NO #fff: los textos de esta pantalla usan tokens --n-* que se
+     invierten en modo oscuro; con fondo blanco fijo el texto quedaba casi
+     invisible en dark (P1 UX S7). */
+  background: var(--n-0);
   color: var(--n-950);
   font-family: var(--sans);
 }
@@ -3637,7 +3640,7 @@ body {
 }
 .pk-btn-skip {
   flex: 1;
-  background: #fff;
+  background: var(--n-0);
   color: var(--n-700);
   border: 1px solid var(--n-200);
 }

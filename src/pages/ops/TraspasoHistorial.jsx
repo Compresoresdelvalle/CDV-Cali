@@ -8,6 +8,7 @@ import {
   Clock,
   MoreHorizontal,
   RefreshCw,
+  Truck,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -124,6 +125,9 @@ export default function TraspasoHistorial() {
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [activos, setActivos] = useState(0);
+  // Traspasos en tránsito HACIA la sede del usuario (todos, ignora el filtro):
+  // el aviso "te llegó mercancía" no puede depender de qué filtro esté puesto.
+  const [porRecibir, setPorRecibir] = useState(0);
   const [errorMsg, setErrorMsg] = useState(null);
   const pageRef = useRef(0);
 
@@ -183,12 +187,17 @@ export default function TraspasoHistorial() {
       if (!silent) setLoading(true);
       setErrorMsg(null);
       const currentPage = reset ? 0 : pageRef.current;
+      // Refresco silencioso (Realtime): re-carga TODO lo que ya estaba en
+      // pantalla, no solo la primera página — antes un evento en vivo devolvía
+      // al usuario a la página 1 y las filas paginadas "desaparecían".
+      const hastaPagina =
+        reset && silent ? Math.max(1, pageRef.current) : currentPage + 1;
       try {
         let query = supabase.from("traspasos").select(COLS, { count: "exact" });
         query = aplicarAlcance(aplicar(query))
           .order("fecha", { ascending: false })
           .order("numero", { ascending: false })
-          .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
+          .range(currentPage * PAGE_SIZE, hastaPagina * PAGE_SIZE - 1);
 
         // Conteo honesto de activos: se le pregunta al servidor sobre TODO el
         // filtro, no sobre la página cargada.
@@ -200,11 +209,27 @@ export default function TraspasoHistorial() {
           ESTADOS_ACTIVOS,
         );
 
-        const [res, resActivos] = await Promise.all([query, qActivos]);
+        // "Te llegó mercancía": en tránsito hacia MI sede, sin filtros — la
+        // campana de notificaciones solo la ve el Admin, así que el aviso al
+        // personal de la sede destino vive aquí.
+        let qPorRecibir = supabase
+          .from("traspasos")
+          .select("id", { count: "exact", head: true })
+          .eq("estado", "en_transito");
+        if (!esAdmin) {
+          qPorRecibir = qPorRecibir.eq("sede_destino_id", perfil?.sede_id);
+        }
+
+        const [res, resActivos, resPorRecibir] = await Promise.all([
+          query,
+          qActivos,
+          qPorRecibir,
+        ]);
         if (!esReqVigente(myReq)) return;
         if (res.error) throw res.error;
+        if (!resPorRecibir.error) setPorRecibir(resPorRecibir.count ?? 0);
 
-        pageRef.current = currentPage + 1;
+        pageRef.current = hastaPagina;
         if (reset) setTraspasos(res.data ?? []);
         else setTraspasos((prev) => [...prev, ...(res.data ?? [])]);
         setTotal(res.count ?? 0);
@@ -216,7 +241,14 @@ export default function TraspasoHistorial() {
         if (esReqVigente(myReq)) setLoading(false);
       }
     },
-    [aplicar, aplicarAlcance, nuevoReqId, esReqVigente],
+    [
+      aplicar,
+      aplicarAlcance,
+      nuevoReqId,
+      esReqVigente,
+      esAdmin,
+      perfil?.sede_id,
+    ],
   );
 
   // Cualquier cambio de filtro vuelve a la página 0: paginar con el filtro
@@ -372,6 +404,29 @@ export default function TraspasoHistorial() {
 
       {/* ── Contenido ───────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto px-4 pb-14 pt-5 sm:px-7">
+        {/* Aviso de mercancía en camino (la campana solo la ve el Admin). */}
+        {porRecibir > 0 && (
+          <div
+            role="status"
+            className="mb-4 flex items-center gap-2.5 rounded-[10px] border px-4 py-3 text-sm"
+            style={{
+              backgroundColor: "var(--warn-50)",
+              borderColor: "var(--warn-border, var(--warn-200))",
+              color: "var(--warn-700)",
+            }}
+          >
+            <Truck className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+            <span>
+              {esAdmin ? "Hay" : "Tienes"}{" "}
+              <b className="font-mono">{porRecibir}</b>{" "}
+              {porRecibir === 1
+                ? "traspaso en camino por recibir"
+                : "traspasos en camino por recibir"}
+              .
+            </span>
+          </div>
+        )}
+
         {errorMsg && (
           <div
             role="alert"
