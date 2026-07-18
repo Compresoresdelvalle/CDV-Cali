@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { abcBadgeStyle } from "../../lib/admin-analytics-ui";
 import { useAuthStore } from "../../stores/authStore";
@@ -692,7 +693,6 @@ function ModalMinMax({ onClose, onAplicado }) {
   const [recalculando, setRecalculando] = useState(false);
   const [aplicando, setAplicando] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
   const [sugerencias, setSugerencias] = useState([]);
   const [soloSinConfigurar, setSoloSinConfigurar] = useState(true);
   const [seleccion, setSeleccion] = useState(() => new Set());
@@ -780,7 +780,6 @@ function ModalMinMax({ onClose, onAplicado }) {
     }
     setRecalculando(true);
     setErrorMsg("");
-    setOkMsg("");
     try {
       // Guarda los 3 parámetros (update por clave, ya existen por la semilla
       // de la migración) y vuelve a llamar al RPC con los valores nuevos.
@@ -795,9 +794,9 @@ function ModalMinMax({ onClose, onAplicado }) {
         if (error) throw error;
       }
       await cargarSugerencias();
-      setOkMsg("Parámetros actualizados");
+      avisarOk("Parámetros actualizados");
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al guardar parámetros"));
+      avisarError(err, "Error al guardar parámetros");
     } finally {
       setRecalculando(false);
     }
@@ -846,8 +845,6 @@ function ModalMinMax({ onClose, onAplicado }) {
     });
     if (!ok) return;
     setAplicando(true);
-    setErrorMsg("");
-    setOkMsg("");
     try {
       const payload = seleccionados.map((i) => ({
         producto_id: i.producto_id,
@@ -858,12 +855,12 @@ function ModalMinMax({ onClose, onAplicado }) {
         p_items: payload,
       });
       if (error) throw error;
-      setOkMsg(
+      avisarOk(
         `${data?.aplicados ?? seleccionados.length} productos actualizados`,
       );
       await onAplicado();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al aplicar sugerencias"));
+      avisarError(err, "Error al aplicar sugerencias");
     } finally {
       setAplicando(false);
     }
@@ -917,7 +914,6 @@ function ModalMinMax({ onClose, onAplicado }) {
         {/* Cuerpo scrolleable */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
-          {okMsg && <Banner type="success">{okMsg}</Banner>}
 
           {/* Parámetros editables */}
           <div

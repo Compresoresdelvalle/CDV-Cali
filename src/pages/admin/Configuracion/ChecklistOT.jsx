@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { AlertTriangle, Plus, Pencil, Power, Info } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { safeError } from "../../../lib/utils";
+import { avisarOk, avisarError } from "../../../lib/notify";
 import { useConfirm } from "../../../components/ui/ConfirmDialog";
 import { pillStyle, surfaceInputStyle } from "../../../lib/admin-config-ui";
 
@@ -9,7 +10,6 @@ export default function ChecklistOT() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
   const [editando, setEditando] = useState(null); // item o {nuevo:true}
   const [saving, setSaving] = useState(false);
   const mountedRef = useRef(true);
@@ -71,7 +71,6 @@ export default function ChecklistOT() {
     savingRef.current = true;
     setSaving(true);
     setErrorMsg("");
-    setOkMsg("");
     try {
       const payload = { nombre, orden, activo: editando.activo ?? true };
       if (editando.nuevo) {
@@ -79,19 +78,19 @@ export default function ChecklistOT() {
           .from("checklist_componentes")
           .insert(payload);
         if (error) throw error;
-        setOkMsg(`Componente "${nombre}" creado`);
+        avisarOk(`Componente "${nombre}" creado`);
       } else {
         const { error } = await supabase
           .from("checklist_componentes")
           .update(payload)
           .eq("id", editando.id);
         if (error) throw error;
-        setOkMsg(`Componente "${nombre}" actualizado`);
+        avisarOk(`Componente "${nombre}" actualizado`);
       }
       setEditando(null);
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al guardar"));
+      avisarError(err, "Error al guardar");
     } finally {
       savingRef.current = false;
       if (mountedRef.current) setSaving(false);
@@ -112,10 +111,10 @@ export default function ChecklistOT() {
         .update({ activo: !it.activo })
         .eq("id", it.id);
       if (error) throw error;
-      setOkMsg(`Componente ${it.activo ? "desactivado" : "activado"}`);
+      avisarOk(`Componente ${it.activo ? "desactivado" : "activado"}`);
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error"));
+      avisarError(err, "Error");
     }
   };
 
@@ -124,7 +123,6 @@ export default function ChecklistOT() {
   return (
     <div className="flex flex-col gap-4">
       {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
-      {okMsg && <Banner type="success">{okMsg}</Banner>}
 
       {/* Banner: no afecta OTs ya creadas */}
       <WarnBanner title="Los cambios no afectan OTs ya creadas">

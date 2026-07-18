@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, safeError } from "../../lib/utils";
+import { formatCOP } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 
 /**
  * Modal para abrir garantía de compra (Fase 13).
@@ -75,9 +76,10 @@ export default function ModalAbrirGarantiaCompra({
         p_payload: payload,
       });
       if (error) throw error;
+      avisarOk("Garantía abierta");
       onCreated?.(data);
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al abrir garantía"));
+      avisarError(err, "Error al abrir garantía");
     } finally {
       setSubmitting(false);
       guardandoRef.current = false;

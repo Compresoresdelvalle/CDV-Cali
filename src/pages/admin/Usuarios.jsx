@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { Plus, Pencil, Shield, Search, Power, Mail } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { usuarioDisplayName } from "../../lib/user-display";
 import { useAuthStore } from "../../stores/authStore";
 import { useDebounce } from "../../hooks/useDebounce";
@@ -24,7 +25,6 @@ export default function Usuarios() {
   const [sedes, setSedes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
   const [editando, setEditando] = useState(null); // user object or null
   const [search, setSearch] = useState("");
   const busqueda = useDebounce(search, 400);
@@ -86,7 +86,6 @@ export default function Usuarios() {
     if (guardandoRef.current) return;
     guardandoRef.current = true;
     setErrorMsg("");
-    setOkMsg("");
     try {
       const update = {
         nombre: editando.nombre.trim(),
@@ -99,13 +98,13 @@ export default function Usuarios() {
         .update(update)
         .eq("id", editando.id);
       if (error) throw error;
-      setOkMsg(
+      avisarOk(
         `Usuario "${usuarioDisplayName({ ...editando, nombre: editando.nombre.trim() })}" actualizado`,
       );
       setEditando(null);
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al guardar"));
+      avisarError(err, "Error al guardar");
     } finally {
       guardandoRef.current = false;
     }
@@ -124,17 +123,16 @@ export default function Usuarios() {
       danger: u.activo,
     });
     if (!ok) return;
-    setErrorMsg("");
     try {
       const { error } = await supabase
         .from("usuarios")
         .update({ activo: !u.activo })
         .eq("id", u.id);
       if (error) throw error;
-      setOkMsg(`Usuario ${u.activo ? "desactivado" : "activado"}`);
+      avisarOk(`Usuario ${u.activo ? "desactivado" : "activado"}`);
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error"));
+      avisarError(err, "Error");
     }
   };
 
@@ -226,7 +224,6 @@ export default function Usuarios() {
       </div>
 
       {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
-      {okMsg && <Banner type="success">{okMsg}</Banner>}
 
       {/* Banner alta de usuarios (Supabase Auth) */}
       <InfoBanner

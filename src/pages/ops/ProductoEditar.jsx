@@ -4,6 +4,7 @@ import { ArrowLeftCircle } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { safeError, formatCOP } from "../../lib/utils";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
+import { avisarOk, avisarError } from "../../lib/notify";
 import ProductoForm from "../../components/forms/ProductoForm";
 
 /**
@@ -66,9 +67,10 @@ export default function ProductoEditar() {
         .update(campos)
         .eq("id", productoId);
       if (error) throw error;
+      avisarOk("Cambios guardados.");
       navigate(`/ops/inventario/${productoId}`);
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al guardar los cambios"));
+      avisarError(err, "Error al guardar los cambios");
     } finally {
       setSubmitting(false);
     }

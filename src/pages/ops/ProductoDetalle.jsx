@@ -18,6 +18,7 @@ import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { ubicacionLabel } from "../../lib/inventario-ui";
 import { usuarioDisplayName } from "../../lib/user-display";
 
@@ -44,7 +45,6 @@ export default function ProductoDetalle() {
   // y estado de guardado por fila de inventario.
   const [ubicacionesActivas, setUbicacionesActivas] = useState([]);
   const [guardandoUbicacionId, setGuardandoUbicacionId] = useState(null);
-  const [errorUbicacion, setErrorUbicacion] = useState("");
   const puedeAsignarUbicacion =
     perfil?.rol === "Admin" || perfil?.rol === "Bodeguero";
   const [proveedores, setProveedores] = useState([]); // F12: historial proveedores
@@ -258,8 +258,9 @@ export default function ProductoDetalle() {
       if (rpcErr) throw rpcErr;
       setProducto((p) => (p ? { ...p, precio_venta: precio } : p));
       setEditandoPrecio(false);
+      avisarOk("Precio actualizado.");
     } catch (err) {
-      setErrorPrecio(safeError(err, "Error al actualizar el precio"));
+      avisarError(err, "Error al actualizar el precio");
     } finally {
       setGuardandoPrecio(false);
       guardandoPrecioRef.current = false;
@@ -313,8 +314,9 @@ export default function ProductoDetalle() {
       if (rpcErr) throw rpcErr;
       setProducto((p) => (p ? { ...p, costo_promedio: costo } : p));
       setEditandoCosto(false);
+      avisarOk("Costo actualizado.");
     } catch (err) {
-      setErrorCosto(safeError(err, "Error al actualizar el costo"));
+      avisarError(err, "Error al actualizar el costo");
     } finally {
       setGuardandoCosto(false);
       guardandoCostoRef.current = false;
@@ -374,9 +376,14 @@ export default function ProductoDetalle() {
               };
         }),
       );
+      avisarOk(
+        convDir === "a_insumo"
+          ? "Stock convertido a insumo."
+          : "Stock devuelto a venta.",
+      );
       setConvInv(null);
     } catch (err) {
-      setErrorConv(safeError(err, "Error al convertir stock"));
+      avisarError(err, "Error al convertir stock");
     } finally {
       setGuardandoConv(false);
       guardandoConvRef.current = false;
@@ -387,7 +394,6 @@ export default function ProductoDetalle() {
   // sede. No bloquea nada más de la pantalla; feedback inline por fila.
   const asignarUbicacion = async (inv, nuevaUbicacionId) => {
     if (!producto) return;
-    setErrorUbicacion("");
     setGuardandoUbicacionId(inv.id);
     try {
       const { error: rpcErr } = await supabase.rpc("fn_asignar_ubicacion", {
@@ -403,8 +409,11 @@ export default function ProductoDetalle() {
             : r,
         ),
       );
+      avisarOk(
+        nuevaUbicacionId ? "Ubicación asignada." : "Ubicación eliminada.",
+      );
     } catch (err) {
-      setErrorUbicacion(safeError(err, "No se pudo asignar la ubicación"));
+      avisarError(err, "No se pudo asignar la ubicación");
     } finally {
       setGuardandoUbicacionId(null);
     }
@@ -639,14 +648,6 @@ export default function ProductoDetalle() {
                 </tbody>
               </table>
             </div>
-          )}
-          {errorUbicacion && (
-            <p
-              className="px-4 pb-3 text-xs"
-              style={{ color: "var(--dang-700)" }}
-            >
-              {errorUbicacion}
-            </p>
           )}
         </div>
 

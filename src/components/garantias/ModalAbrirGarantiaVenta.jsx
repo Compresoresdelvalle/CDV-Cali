@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, safeError, sanitizeSearch } from "../../lib/utils";
+import { formatCOP, sanitizeSearch } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 
 /**
@@ -163,9 +164,10 @@ export default function ModalAbrirGarantiaVenta({
         p_payload: payload,
       });
       if (error) throw error;
+      avisarOk("Garantía abierta correctamente");
       onCreated?.(data);
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al abrir garantía"));
+      avisarError(err, "Error al abrir garantía");
     } finally {
       setSubmitting(false);
       guardandoRef.current = false;

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Info, Plus, Pencil, Power, Wrench } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { formatCOP, safeError } from "../../../lib/utils";
+import { avisarOk, avisarError } from "../../../lib/notify";
 import { useConfirm } from "../../../components/ui/ConfirmDialog";
 import { pillStyle, surfaceInputStyle } from "../../../lib/admin-config-ui";
 
@@ -14,7 +15,6 @@ export default function Servicios() {
   const [servicios, setServicios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
   const [editando, setEditando] = useState(null); // servicio o {nuevo:true}
   const [saving, setSaving] = useState(false);
   const mountedRef = useRef(true);
@@ -83,7 +83,6 @@ export default function Servicios() {
     savingRef.current = true;
     setSaving(true);
     setErrorMsg("");
-    setOkMsg("");
     try {
       const payload = {
         nombre,
@@ -95,19 +94,19 @@ export default function Servicios() {
       if (editando.nuevo) {
         const { error } = await supabase.from("servicios").insert(payload);
         if (error) throw error;
-        setOkMsg(`Servicio "${nombre}" creado`);
+        avisarOk(`Servicio "${nombre}" creado`);
       } else {
         const { error } = await supabase
           .from("servicios")
           .update({ ...payload, updated_at: new Date().toISOString() })
           .eq("id", editando.id);
         if (error) throw error;
-        setOkMsg(`Servicio "${nombre}" actualizado`);
+        avisarOk(`Servicio "${nombre}" actualizado`);
       }
       setEditando(null);
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al guardar"));
+      avisarError(err, "Error al guardar");
     } finally {
       savingRef.current = false;
       if (mountedRef.current) setSaving(false);
@@ -130,10 +129,10 @@ export default function Servicios() {
         .update({ activo: !s.activo, updated_at: new Date().toISOString() })
         .eq("id", s.id);
       if (error) throw error;
-      setOkMsg(`Servicio ${s.activo ? "desactivado" : "activado"}`);
+      avisarOk(`Servicio ${s.activo ? "desactivado" : "activado"}`);
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error"));
+      avisarError(err, "Error");
     }
   };
 
@@ -142,7 +141,6 @@ export default function Servicios() {
   return (
     <div className="flex flex-col gap-4">
       {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
-      {okMsg && <Banner type="success">{okMsg}</Banner>}
 
       <InfoBanner title="Servicios vendibles (solo Admin)">
         Los servicios activos aparecen al registrar una venta o cotización,

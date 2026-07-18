@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Info, Plus, Pencil, Power } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { safeError } from "../../../lib/utils";
+import { avisarOk, avisarError } from "../../../lib/notify";
 import { useConfirm } from "../../../components/ui/ConfirmDialog";
 import { pillStyle, surfaceInputStyle } from "../../../lib/admin-config-ui";
 
@@ -11,7 +12,6 @@ export default function CuentasBancarias() {
   const [cuentas, setCuentas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
   const [editando, setEditando] = useState(null); // cuenta o {nuevo:true}
   const [saving, setSaving] = useState(false);
   const mountedRef = useRef(true);
@@ -86,7 +86,6 @@ export default function CuentasBancarias() {
     savingRef.current = true;
     setSaving(true);
     setErrorMsg("");
-    setOkMsg("");
     try {
       const payload = {
         banco,
@@ -101,19 +100,19 @@ export default function CuentasBancarias() {
           .from("cuentas_bancarias")
           .insert(payload);
         if (error) throw error;
-        setOkMsg(`Cuenta "${banco}" creada`);
+        avisarOk(`Cuenta "${banco}" creada`);
       } else {
         const { error } = await supabase
           .from("cuentas_bancarias")
           .update(payload)
           .eq("id", editando.id);
         if (error) throw error;
-        setOkMsg(`Cuenta "${banco}" actualizada`);
+        avisarOk(`Cuenta "${banco}" actualizada`);
       }
       setEditando(null);
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al guardar"));
+      avisarError(err, "Error al guardar");
     } finally {
       savingRef.current = false;
       if (mountedRef.current) setSaving(false);
@@ -134,10 +133,10 @@ export default function CuentasBancarias() {
         .update({ activo: !c.activo })
         .eq("id", c.id);
       if (error) throw error;
-      setOkMsg(`Cuenta ${c.activo ? "desactivada" : "activada"}`);
+      avisarOk(`Cuenta ${c.activo ? "desactivada" : "activada"}`);
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error"));
+      avisarError(err, "Error");
     }
   };
 
@@ -147,7 +146,6 @@ export default function CuentasBancarias() {
   return (
     <div className="flex flex-col gap-4">
       {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
-      {okMsg && <Banner type="success">{okMsg}</Banner>}
 
       {/* Banner informativo */}
       <InfoBanner title="Cuentas para datos de pago en cotizaciones">

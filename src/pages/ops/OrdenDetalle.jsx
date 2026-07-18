@@ -30,6 +30,7 @@ import {
   safeError,
   sanitizeSearch,
 } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { construirHistorialOT } from "../../lib/ordenes-ui";
 import { cuentaBancariaLabel } from "../../lib/cuentas-ui";
@@ -188,7 +189,6 @@ export default function OrdenDetalle() {
   const [abonos, setAbonos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [aviso, setAviso] = useState("");
 
   // Paso abierto en el acordeón (por defecto el activo).
   const [pasoAbierto, setPasoAbierto] = useState(null);
@@ -344,9 +344,9 @@ export default function OrdenDetalle() {
       try {
         await updateOrden({ estado: next });
         setPasoAbierto(i + 1);
-        setAviso(TX.guardado);
+        avisarOk(TX.guardado);
       } catch (err) {
-        setErrorMsg(safeError(err, "No se pudo avanzar de paso"));
+        avisarError(err, "No se pudo avanzar de paso");
       } finally {
         busyRef.current = false;
       }
@@ -419,7 +419,7 @@ export default function OrdenDetalle() {
         modo: "recepcion",
       }).print();
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo generar la constancia"));
+      avisarError(err, "No se pudo generar la constancia");
     }
   };
 
@@ -450,7 +450,7 @@ export default function OrdenDetalle() {
         vendedor: v?.vendedor?.nombre ?? "—",
       }).print();
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo generar el recibo de venta"));
+      avisarError(err, "No se pudo generar el recibo de venta");
     }
   };
 
@@ -499,20 +499,8 @@ export default function OrdenDetalle() {
         </div>
       )}
 
-      {/* Avisos / errores */}
-      {aviso && (
-        <div
-          role="status"
-          className="rounded-xl border px-4 py-2.5 text-sm"
-          style={{
-            backgroundColor: "hsl(var(--success) / 0.1)",
-            borderColor: "hsl(var(--success) / 0.3)",
-            color: "hsl(var(--success))",
-          }}
-        >
-          {aviso}
-        </div>
-      )}
+      {/* Errores fijos (carga y validación). Los resultados de acción saltan
+          como pop-up. */}
       {errorMsg && (
         <div
           role="alert"
@@ -570,7 +558,6 @@ export default function OrdenDetalle() {
                 continuar={continuar}
                 setPasoAbierto={setPasoAbierto}
                 setErrorMsg={setErrorMsg}
-                setAviso={setAviso}
                 setChecklistTocado={setChecklistTocado}
                 imprimirConstancia={imprimirConstancia}
                 imprimirReciboVenta={imprimirReciboVenta}
@@ -957,7 +944,6 @@ function PasoRecepcion({
   ctx,
   continuar,
   updateOrden,
-  setErrorMsg,
   setChecklistTocado,
   imprimirConstancia,
 }) {
@@ -972,7 +958,7 @@ function PasoRecepcion({
     try {
       await updateOrden(patch);
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo guardar"));
+      avisarError(err, "No se pudo guardar");
     }
   };
 
@@ -1077,14 +1063,7 @@ function PasoRecepcion({
 }
 
 /* ── PASO 2 · Diagnóstico ───────────────────────────────────────────────── */
-function PasoDiagnostico({
-  orden,
-  ro,
-  ctx,
-  continuar,
-  updateOrden,
-  setErrorMsg,
-}) {
+function PasoDiagnostico({ orden, ro, ctx, continuar, updateOrden }) {
   const [tecnicos, setTecnicos] = useState([]);
   const [diagnostico, setDiagnostico] = useState(orden.diagnostico ?? "");
 
@@ -1103,7 +1082,7 @@ function PasoDiagnostico({
     try {
       await updateOrden(patch);
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo guardar"));
+      avisarError(err, "No se pudo guardar");
     }
   };
 
@@ -1156,7 +1135,6 @@ function PasoCotizacion({
   montos,
   continuar,
   updateOrden,
-  setErrorMsg,
 }) {
   const [search, setSearch] = useState("");
   const [resultados, setResultados] = useState([]);
@@ -1179,7 +1157,7 @@ function PasoCotizacion({
         valor_repuestos: totalRepuestos,
       });
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo guardar la cotización"));
+      avisarError(err, "No se pudo guardar la cotización");
     }
   };
 
@@ -1524,7 +1502,7 @@ function PasoCotizacion({
             onChange={(e) => setMano(e.target.value.replace(/[^\d]/g, ""))}
             onBlur={() =>
               updateOrden({ costo_mano_obra: Number(mano) || 0 }).catch((err) =>
-                setErrorMsg(safeError(err)),
+                avisarError(err),
               )
             }
             className="h-12 rounded-lg border px-3 text-sm outline-none disabled:opacity-60"
@@ -1540,7 +1518,7 @@ function PasoCotizacion({
             onChange={(e) => setDesc(e.target.value.replace(/[^\d]/g, ""))}
             onBlur={() =>
               updateOrden({ descuento_valor: Number(desc) || 0 }).catch((err) =>
-                setErrorMsg(safeError(err)),
+                avisarError(err),
               )
             }
             className="h-12 rounded-lg border px-3 text-sm outline-none disabled:opacity-60"
@@ -1559,9 +1537,7 @@ function PasoCotizacion({
                 type="button"
                 disabled={ro}
                 onClick={() =>
-                  updateOrden({ iva_pct: pct }).catch((err) =>
-                    setErrorMsg(safeError(err)),
-                  )
+                  updateOrden({ iva_pct: pct }).catch((err) => avisarError(err))
                 }
                 className="flex-1 rounded-lg border text-sm font-medium disabled:opacity-50"
                 style={{
@@ -1631,7 +1607,7 @@ function PasoAutorizacion({
         valor_revision: null,
       });
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo guardar"));
+      avisarError(err, "No se pudo guardar");
     }
   };
   const setNoAutorizado = async () => {
@@ -1639,7 +1615,7 @@ function PasoAutorizacion({
     try {
       await updateOrden({ estado_autorizacion: "no_autorizado" });
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo guardar"));
+      avisarError(err, "No se pudo guardar");
     }
   };
 
@@ -1671,7 +1647,7 @@ function PasoAutorizacion({
       setCuenta("");
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo registrar el anticipo"));
+      avisarError(err, "No se pudo registrar el anticipo");
     } finally {
       setGuardando(false);
     }
@@ -1732,7 +1708,7 @@ function PasoAutorizacion({
             onChange={(e) => setValorRev(e.target.value.replace(/[^\d]/g, ""))}
             onBlur={() =>
               updateOrden({ valor_revision: Number(valorRev) || 0 }).catch(
-                (err) => setErrorMsg(safeError(err)),
+                (err) => avisarError(err),
               )
             }
             className="h-12 rounded-lg border px-3 text-sm outline-none disabled:opacity-60"
@@ -1858,7 +1834,6 @@ function PasoTrabajo({
   updateOrden,
   setPasoAbierto,
   setErrorMsg,
-  setAviso,
 }) {
   // Si el cliente NO autorizó, no hay descarga de repuestos: la OT se cierra
   // cobrando solo la revisión/diagnóstico y la cotización (borrador) se descarta
@@ -1888,7 +1863,7 @@ function PasoTrabajo({
     try {
       await updateOrden({ trabajo_realizado: trabajo || null });
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo guardar"));
+      avisarError(err, "No se pudo guardar");
     }
   };
 
@@ -1907,10 +1882,10 @@ function PasoTrabajo({
       // inventario; esos repuestos nunca se usaron.
       if (noAutoriza && (draft?.length ?? 0) > 0) payload.cotizacion_draft = [];
       await updateOrden(payload);
-      setAviso("OT marcada como terminada.");
+      avisarOk("OT marcada como terminada.");
       setPasoAbierto?.(5);
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo marcar como terminada"));
+      avisarError(err, "No se pudo marcar como terminada");
     } finally {
       setTerminando(false);
     }
@@ -1954,7 +1929,7 @@ function PasoTrabajo({
               faltante: Math.max(Number(l.cantidad) - insumoDisp, 1),
               nombre: l.nombre,
             });
-            setErrorMsg(safeError(error, "Stock de insumo insuficiente"));
+            avisarError(error, "Stock de insumo insuficiente");
             setDescargando(false);
             return;
           }
@@ -1964,9 +1939,9 @@ function PasoTrabajo({
         pendientes = pendientes.slice(1);
         await updateOrden({ cotizacion_draft: pendientes });
       }
-      setAviso("Repuestos descargados del inventario.");
+      avisarOk("Repuestos descargados del inventario.");
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo descargar el inventario"));
+      avisarError(err, "No se pudo descargar el inventario");
     } finally {
       setDescargando(false);
     }
@@ -1985,7 +1960,7 @@ function PasoTrabajo({
       setConv(null);
       await descargar(); // reintenta el lote completo
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo convertir a insumo"));
+      avisarError(err, "No se pudo convertir a insumo");
     }
   };
 
@@ -1996,7 +1971,7 @@ function PasoTrabajo({
         estado: esperando ? "en_proceso" : "esperando_repuesto",
       });
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo cambiar el estado"));
+      avisarError(err, "No se pudo cambiar el estado");
     }
   };
 
@@ -2201,7 +2176,6 @@ function PasoEntrega({
   perfil,
   cargar,
   setErrorMsg,
-  setAviso,
   imprimirReciboVenta,
 }) {
   const [monto, setMonto] = useState("");
@@ -2241,7 +2215,7 @@ function PasoEntrega({
       setCuenta("");
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo registrar el pago"));
+      avisarError(err, "No se pudo registrar el pago");
     } finally {
       setGuardando(false);
     }
@@ -2267,11 +2241,11 @@ function PasoEntrega({
       });
       if (error) throw error;
       await cargar();
-      setAviso("OT convertida a venta. Generando recibo…");
+      avisarOk("OT convertida a venta. Generando recibo…");
       // Recibo = el MISMO documento POS del módulo de Ventas (precio de venta).
       await imprimirReciboVenta?.(data?.venta_id);
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo convertir a venta"));
+      avisarError(err, "No se pudo convertir a venta");
     } finally {
       setGenerando(false);
     }

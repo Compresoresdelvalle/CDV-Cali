@@ -11,6 +11,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
 import { sedeLabel } from "../../lib/traspasos-ui";
+import { avisarOk, avisarError } from "../../lib/notify";
 
 export default function RecepcionTraspaso() {
   const { id } = useParams();
@@ -125,9 +126,10 @@ export default function RecepcionTraspaso() {
         p_items,
       });
       if (rpcErr) throw new Error(rpcErr.message);
+      avisarOk("Recepción confirmada");
       navigate(`/ops/traspasos/${id}`);
     } catch (e) {
-      setError(safeError(e, "Error en recepción de traspaso"));
+      avisarError(e, "Error en recepción de traspaso");
       setConfirmarDiff(false);
     } finally {
       setRecibiendo(false);

@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
+import { formatCOP, sanitizeSearch } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import QRScanner from "../../components/forms/QRScanner";
 import ClientePicker from "../../components/forms/ClientePicker";
 import UbicacionChip from "../../components/ui/UbicacionChip";
@@ -413,9 +414,10 @@ export default function CotizacionNueva() {
         });
       }
 
+      avisarOk("Cotización generada correctamente");
       navigate("/ops/cotizaciones");
     } catch (e) {
-      setError(safeError(e, "Error al guardar la cotización"));
+      avisarError(e, "Error al guardar la cotización");
     } finally {
       setGuardando(false);
       guardandoRef.current = false;

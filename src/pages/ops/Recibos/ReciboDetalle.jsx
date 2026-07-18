@@ -15,6 +15,7 @@ import { supabase } from "../../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../../lib/utils";
 import { useConfirm } from "../../../components/ui/ConfirmDialog";
 import { generarReciboPDF } from "../../../lib/pdf/reciboPDF";
+import { avisarOk, avisarError } from "../../../lib/notify";
 import {
   metodoPagoLabel,
   cuentaBancariaLabel,
@@ -101,12 +102,11 @@ export default function ReciboDetalle() {
   // Imprime / descarga EL MISMO documento que muestra el preview.
   const manejarPDF = (accion) => {
     if (!reciboDoc) return;
-    setErrorMsg("");
     try {
       if (accion === "print") reciboDoc.print();
       else reciboDoc.download();
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo generar el PDF del recibo"));
+      avisarError(err, "No se pudo generar el PDF del recibo");
     }
   };
 
@@ -125,9 +125,10 @@ export default function ReciboDetalle() {
         p_recibo_id: id,
       });
       if (error) throw error;
+      avisarOk("Recibo anulado");
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al anular el recibo"));
+      avisarError(err, "Error al anular el recibo");
     } finally {
       setAnulando(false);
     }

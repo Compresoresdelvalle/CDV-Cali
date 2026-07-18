@@ -4,6 +4,7 @@ import { Plus, Cog, List, LayoutGrid, Trash2 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { useFiltros } from "../../hooks/useFiltros";
 import BarraFiltros from "../../components/filtros/BarraFiltros";
@@ -118,8 +119,9 @@ export default function EnsambleHistorial() {
       });
       if (error) throw error;
       setEnsambles((prev) => prev.filter((x) => x.id !== e.id));
+      avisarOk("Ensamble eliminado.");
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al eliminar ensamble"));
+      avisarError(err, "Error al eliminar ensamble");
     }
   };
   useEffect(() => {

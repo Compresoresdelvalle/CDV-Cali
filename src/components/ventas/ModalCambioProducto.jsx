@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Search, Check, ArrowRightLeft, X } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, safeError, sanitizeSearch } from "../../lib/utils";
+import { formatCOP, sanitizeSearch } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../ui/UbicacionChip";
 
@@ -94,7 +95,6 @@ export default function ModalCambioProducto({
   const [cuenta, setCuenta] = useState("");
   const [cuentasBanco, setCuentasBanco] = useState([]);
   const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState("");
   const guardandoRef = useRef(false);
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -224,7 +224,6 @@ export default function ModalCambioProducto({
     if (!puedeGuardar || guardandoRef.current) return;
     guardandoRef.current = true;
     setGuardando(true);
-    setError("");
     try {
       const { data, error: rpcErr } = await supabase.rpc(
         "fn_registrar_cambio",
@@ -248,9 +247,10 @@ export default function ModalCambioProducto({
         },
       );
       if (rpcErr) throw new Error(rpcErr.message);
+      avisarOk("Cambio de producto registrado correctamente");
       onDone?.(data);
     } catch (e) {
-      setError(safeError(e, "No se pudo registrar el cambio"));
+      avisarError(e, "No se pudo registrar el cambio");
     } finally {
       if (mountedRef.current) setGuardando(false);
       guardandoRef.current = false;
@@ -646,23 +646,6 @@ export default function ModalCambioProducto({
                 </p>
               )}
             </Section>
-          )}
-
-          {error && (
-            <div
-              className="rounded-lg border px-3 py-2.5"
-              style={{
-                backgroundColor: "hsl(var(--destructive) / 0.08)",
-                borderColor: "hsl(var(--destructive) / 0.3)",
-              }}
-            >
-              <p
-                className="text-sm"
-                style={{ color: "hsl(var(--destructive))" }}
-              >
-                {error}
-              </p>
-            </div>
           )}
         </div>
 

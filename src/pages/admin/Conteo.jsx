@@ -15,6 +15,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate, formatCOP, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { applyKeywordSearch } from "../../lib/search";
 import { SEDES } from "../../lib/constants";
 import { SEDE_LABELS } from "../../lib/traspasos-ui";
@@ -45,7 +46,6 @@ export default function Conteo() {
   const [conteos, setConteos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
   const [filtro, setFiltro] = useState("Pendientes");
   // Paginación real: antes un `.limit(100)` escondía 346 de los 446 conteos sin
   // avisar (la pestaña "Aplicados" mostraba 100 y parecía que eso era todo).
@@ -195,19 +195,17 @@ export default function Conteo() {
     });
     if (!ok) return;
     setAplicandoId(conteo.id);
-    setErrorMsg("");
-    setOkMsg("");
     try {
       const { error } = await supabase.rpc("fn_aplicar_ajuste_conteo", {
         p_conteo_id: conteo.id,
       });
       if (error) throw error;
-      setOkMsg("Ajuste aplicado correctamente");
+      avisarOk("Ajuste aplicado correctamente");
       // reset=true: es un refresco tras una acción, no un "cargar más".
       await cargar(true);
       await cargarDivergencias();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al aplicar ajuste"));
+      avisarError(err, "Error al aplicar ajuste");
     } finally {
       setAplicandoId(null);
     }
@@ -224,8 +222,6 @@ export default function Conteo() {
     });
     if (!ok) return;
     setBorrandoId(conteo.id);
-    setErrorMsg("");
-    setOkMsg("");
     try {
       const { error } = await supabase
         .from("conteos")
@@ -233,11 +229,11 @@ export default function Conteo() {
         .eq("id", conteo.id)
         .eq("ajuste_aplicado", false);
       if (error) throw error;
-      setOkMsg("Conteo eliminado");
+      avisarOk("Conteo eliminado");
       await cargar(true);
       await cargarDivergencias();
     } catch (err) {
-      setErrorMsg(safeError(err, "No se pudo eliminar el conteo"));
+      avisarError(err, "No se pudo eliminar el conteo");
     } finally {
       setBorrandoId(null);
     }
@@ -307,7 +303,6 @@ export default function Conteo() {
       </div>
 
       {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
-      {okMsg && <Banner type="success">{okMsg}</Banner>}
 
       {/* Tabs de nivel superior — Registros (todo lo existente) vs Plan (nuevo) */}
       <div
@@ -750,7 +745,7 @@ export default function Conteo() {
           onSaved={async () => {
             setModalNuevo(false);
             setModalPrefill(null);
-            setOkMsg("Conteo registrado");
+            avisarOk("Conteo registrado");
             await cargar(true);
             await cargarDivergencias();
             setPlanRefreshKey((k) => k + 1);
@@ -1125,7 +1120,6 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
 
   const generarPlan = async () => {
     setGenerando(true);
-    setErrorMsg("");
     try {
       const { error } = await supabase.rpc("fn_generar_plan_conteo", {
         p_sede_id: sede,
@@ -1133,10 +1127,11 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
         p_conteo_ciego: ciegoForm,
       });
       if (error) throw error;
+      avisarOk("Plan de conteo generado correctamente");
       setMostrarForm(false);
       await cargarPlan();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al generar el plan"));
+      avisarError(err, "Error al generar el plan");
     } finally {
       setGenerando(false);
     }
@@ -1700,8 +1695,9 @@ function ModalNuevoConteo({
         ...prev,
         ubicacion_id: ubicacionId || null,
       }));
+      avisarOk("Ubicación asignada");
     } catch (err) {
-      setError(safeError(err, "No se pudo asignar la ubicación"));
+      avisarError(err, "No se pudo asignar la ubicación");
     } finally {
       setAsignandoUbicacion(false);
     }
@@ -1809,7 +1805,7 @@ function ModalNuevoConteo({
       if (data?.ok === false) throw new Error("No se pudo registrar el conteo");
       await onSaved();
     } catch (err) {
-      setError(safeError(err, "Error al guardar conteo"));
+      avisarError(err, "Error al guardar conteo");
     } finally {
       setSaving(false);
     }

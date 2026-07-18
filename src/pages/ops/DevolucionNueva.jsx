@@ -13,9 +13,10 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { sanitizeSearch, safeError } from "../../lib/utils";
+import { sanitizeSearch } from "../../lib/utils";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../../components/ui/UbicacionChip";
+import { avisarOk, avisarError } from "../../lib/notify";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,7 +38,6 @@ export default function DevolucionNueva() {
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
-  const [exito, setExito] = useState(null);
   const guardandoRef = useRef(false);
 
   const buscarProductos = useCallback(
@@ -127,7 +127,6 @@ export default function DevolucionNueva() {
     if (guardandoRef.current) return;
     guardandoRef.current = true;
     setError(null);
-    setExito(null);
     setGuardando(true);
     try {
       const { data, error: rpcErr } = await supabase.rpc(
@@ -144,7 +143,7 @@ export default function DevolucionNueva() {
       if (rpcErr) throw new Error(rpcErr.message);
       if (!data?.numero) throw new Error("Respuesta inesperada del servidor.");
       const delta = tipo === "cliente" ? `+${cantidad}` : `-${cantidad}`;
-      setExito(
+      avisarOk(
         `Devolución #${data.numero} registrada. Stock ajustado: ${delta} unidades.`,
       );
       // Reset form
@@ -154,7 +153,7 @@ export default function DevolucionNueva() {
       setMotivo("");
       setVentaId("");
     } catch (e) {
-      setError(safeError(e, "Error al registrar la devolución"));
+      avisarError(e, "Error al registrar la devolución");
     } finally {
       setGuardando(false);
       guardandoRef.current = false;
@@ -476,23 +475,6 @@ export default function DevolucionNueva() {
                 )}
               </div>
             </div>
-
-            {exito && (
-              <div
-                className="rounded-[10px] border px-4 py-3"
-                style={{
-                  backgroundColor: "var(--succ-50)",
-                  borderColor: "var(--succ-border)",
-                }}
-              >
-                <p
-                  className="text-sm font-medium"
-                  style={{ color: "var(--succ-700)" }}
-                >
-                  {exito}
-                </p>
-              </div>
-            )}
 
             {error && (
               <div

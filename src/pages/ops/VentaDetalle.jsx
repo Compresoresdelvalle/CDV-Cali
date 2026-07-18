@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { formatCOP, formatDate } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import ModalAbrirGarantiaVenta from "../../components/garantias/ModalAbrirGarantiaVenta";
 import ModalCambioProducto from "../../components/ventas/ModalCambioProducto";
 import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
@@ -42,7 +43,6 @@ export default function VentaDetalle() {
   const [anulando, setAnulando] = useState(false);
   const [confirmAnular, setConfirmAnular] = useState(false);
   const [motivoAnular, setMotivoAnular] = useState("");
-  const [error, setError] = useState(null);
   const [modalGarantia, setModalGarantia] = useState(false);
   const [modalCambio, setModalCambio] = useState(false);
   const [imprimiendo, setImprimiendo] = useState(false);
@@ -186,7 +186,6 @@ export default function VentaDetalle() {
 
   const anularVenta = async () => {
     setAnulando(true);
-    setError(null);
     try {
       const { error: fnErr } = await supabase.rpc("fn_anular_venta", {
         p_venta_id: id,
@@ -195,8 +194,9 @@ export default function VentaDetalle() {
       if (fnErr) throw new Error(fnErr.message);
       setVenta((prev) => ({ ...prev, anulada: true }));
       setConfirmAnular(false);
+      avisarOk("Venta anulada correctamente");
     } catch (e) {
-      setError(safeError(e, "Error al anular la venta"));
+      avisarError(e, "Error al anular la venta");
     } finally {
       setAnulando(false);
     }
@@ -507,21 +507,6 @@ export default function VentaDetalle() {
               {anulando ? "Anulando…" : "Sí, anular"}
             </button>
           </div>
-        </div>
-      )}
-
-      {/* ── Error ──────────────────────────────────────────────────── */}
-      {error && (
-        <div
-          className="mt-4 rounded-[10px] border px-4 py-3"
-          style={{
-            backgroundColor: "var(--dang-50)",
-            borderColor: "var(--dang-border)",
-          }}
-        >
-          <p className="text-sm" style={{ color: "var(--dang-700)" }}>
-            {error}
-          </p>
         </div>
       )}
 

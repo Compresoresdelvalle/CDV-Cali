@@ -12,6 +12,7 @@ import {
 import { supabase } from "../../../lib/supabase";
 import { formatCOP, safeError } from "../../../lib/utils";
 import { useAuthStore } from "../../../stores/authStore";
+import { avisarOk, avisarError } from "../../../lib/notify";
 import {
   RECIBO_METODOS_PAGO,
   metodoPagoLabel,
@@ -135,9 +136,10 @@ export default function ReciboNuevo() {
         p_payload: payload,
       });
       if (error) throw error;
+      avisarOk("Recibo creado");
       navigate(`/ops/recibos/${data.recibo_id}`);
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al registrar recibo"));
+      avisarError(err, "Error al registrar recibo");
     } finally {
       setSubmitting(false);
       guardandoRef.current = false;

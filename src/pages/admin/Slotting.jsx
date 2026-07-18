@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { ArrowRight, Map, Package, Check, Search } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { useAuthStore } from "../../stores/authStore";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import UbicacionChip from "../../components/ui/UbicacionChip";
@@ -128,7 +129,6 @@ export default function Slotting() {
     });
     if (!ok) return;
     setAplicando(keyOf(item));
-    setErrorMsg("");
     try {
       const { error } = await supabase.rpc("fn_asignar_ubicacion", {
         p_producto_id: item.producto_id,
@@ -137,6 +137,7 @@ export default function Slotting() {
       });
       if (error) throw error;
       if (!mountedRef.current) return;
+      avisarOk("Ubicación aplicada correctamente");
       setItems((prev) => prev.filter((i) => keyOf(i) !== keyOf(item)));
       setSeleccion((prev) => {
         const next = new Set(prev);
@@ -145,7 +146,7 @@ export default function Slotting() {
       });
     } catch (err) {
       if (!mountedRef.current) return;
-      setErrorMsg(safeError(err, "Error al aplicar la sugerencia"));
+      avisarError(err, "Error al aplicar la sugerencia");
     } finally {
       if (mountedRef.current) setAplicando(null);
     }
@@ -162,7 +163,6 @@ export default function Slotting() {
     });
     if (!ok) return;
     setAplicandoLote(true);
-    setErrorMsg("");
     try {
       const payload = seleccionados.map((i) => ({
         producto_id: i.producto_id,
@@ -174,12 +174,15 @@ export default function Slotting() {
       });
       if (error) throw error;
       if (!mountedRef.current) return;
+      avisarOk(
+        `${seleccionados.length} ${seleccionados.length === 1 ? "ubicación aplicada" : "ubicaciones aplicadas"} correctamente`,
+      );
       const aplicadosKeys = new Set(seleccionados.map(keyOf));
       setItems((prev) => prev.filter((i) => !aplicadosKeys.has(keyOf(i))));
       setSeleccion(new Set());
     } catch (err) {
       if (!mountedRef.current) return;
-      setErrorMsg(safeError(err, "Error al aplicar las ubicaciones"));
+      avisarError(err, "Error al aplicar las ubicaciones");
     } finally {
       if (mountedRef.current) setAplicandoLote(false);
     }

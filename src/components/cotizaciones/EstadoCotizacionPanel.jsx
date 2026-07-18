@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { formatDate, safeError } from "../../lib/utils";
+import { formatDate } from "../../lib/utils";
 import { useConfirm } from "../ui/ConfirmDialog";
 import FeedbackBanners from "../ui/FeedbackBanners";
+import { avisarOk, avisarError } from "../../lib/notify";
 
 /**
  * Banner contextual del estado de una cotizacion (Fase 11.5).
@@ -27,7 +28,6 @@ export default function EstadoCotizacionPanel({
   const [nota, setNota] = useState("");
   const [razon, setRazon] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
   if (!cotizacion) return null;
@@ -37,7 +37,6 @@ export default function EstadoCotizacionPanel({
 
   const cambiar = async (nuevo, opts = {}) => {
     setErrorMsg("");
-    setOkMsg("");
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc(
@@ -50,12 +49,12 @@ export default function EstadoCotizacionPanel({
         },
       );
       if (error) throw error;
-      setOkMsg(`Estado actualizado: ${data?.estado ?? nuevo}`);
+      avisarOk(`Estado actualizado: ${data?.estado ?? nuevo}`);
       setNota("");
       setRazon("");
       onChange?.();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al actualizar estado"));
+      avisarError(err, "Error al actualizar estado");
     } finally {
       setLoading(false);
     }
@@ -150,7 +149,7 @@ export default function EstadoCotizacionPanel({
   // ── Render por estado ──
   return (
     <>
-      <FeedbackBanners errorMsg={errorMsg} okMsg={okMsg} />
+      <FeedbackBanners errorMsg={errorMsg} />
 
       {estado === "borrador" && (
         <Card tone="muted" titulo="📝 Borrador">
