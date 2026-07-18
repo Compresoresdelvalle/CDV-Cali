@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftCircle,
@@ -16,6 +16,7 @@ import { supabase } from "../../../lib/supabase";
 import { useAuthStore } from "../../../stores/authStore";
 import AnularGarantiaModal from "../../../components/garantias/AnularGarantiaModal";
 import { formatCOP, formatDate, safeError } from "../../../lib/utils";
+import { avisarOk, avisarError } from "../../../lib/notify";
 import {
   garantiaEstadoLabel,
   garantiaEstadoPillClass,
@@ -114,14 +115,20 @@ export default function GarantiaCompraDetalle() {
     cargar();
   }, [cargar]);
 
+  const submittingRef = useRef(false);
+  const anulBusyRef = useRef(false);
+
   const marcarReposicion = async () => {
     const seleccionados = detalles.filter(
       (d) => seleccion[d.id] && !d.reposicion_recibida_at,
     );
     if (seleccionados.length === 0) {
+      // Validación en vivo: se queda fija mientras el usuario elige items.
       setErrorMsg("Selecciona al menos un item para marcar recibido");
       return;
     }
+    if (submittingRef.current) return; // guard síncrono anti doble-submit
+    submittingRef.current = true;
     setSubmitting(true);
     setErrorMsg("");
     try {
@@ -131,17 +138,20 @@ export default function GarantiaCompraDetalle() {
       });
       if (error) throw error;
       setSeleccion({});
+      avisarOk("Reposición marcada como recibida.");
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al marcar reposición"));
+      avisarError(err, "Error al marcar reposición");
     } finally {
       setSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
   const anularGarantia = async (motivo) => {
+    if (anulBusyRef.current) return; // guard síncrono anti doble-submit
+    anulBusyRef.current = true;
     setAnulBusy(true);
-    setErrorMsg("");
     try {
       const { error } = await supabase.rpc("fn_anular_garantia_compra", {
         p_garantia_id: id,
@@ -149,12 +159,14 @@ export default function GarantiaCompraDetalle() {
       });
       if (error) throw error;
       setAnulOpen(false);
+      avisarOk("Garantía anulada.");
       await cargar();
     } catch (err) {
       setAnulOpen(false);
-      setErrorMsg(safeError(err, "No se pudo anular la garantía"));
+      avisarError(err, "No se pudo anular la garantía");
     } finally {
       setAnulBusy(false);
+      anulBusyRef.current = false;
     }
   };
 
