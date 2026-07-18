@@ -855,3 +855,51 @@ Sección 10 cerrada. Sigue Sección 11 (Recibos / Clientes).
 - Anular una garantía devolver_dinero DESPUÉS de que su periodo ya tiene cierre
   generado deja un egreso fantasma en ese cierre viejo (no dispara complementario
   automático). Caso raro; requeriría un complementario manual como el #19.
+
+---
+
+## 2026-07-18 — Sección 11: Recibos / Clientes ✅ HECHA
+
+Cacería 22 confirmados/0 refutados/0 código viejo (los verificadores adversariales
+no corrieron: límite de sesión — se compensó con verificación manual). Sección
+LIVIANA: de 52 recibos, solo 1 vinculado a OT, 0 crearon abono, 0 anulados, 0 con
+cliente_id → los recibos se usan como comprobantes impresos sueltos; los riesgos
+de dinero son latentes/código dormido. El cierre NO lee recibos (sin doble conteo;
+verificado). Clientes sano (234, 0 duplicados por identificación, 5 grupos de
+nombre — casi todos prueba/genéricos).
+
+### Aplicado (decisiones del dueño)
+
+- **[P0/P1 seguridad] Recibos blindados** (mig `20260718114213`): REVOKE
+  INSERT/UPDATE/DELETE/TRUNCATE en recibos/detalle_recibo para authenticated/anon
+  (solo lectura; escritura solo por fn_registrar_recibo/fn_anular_recibo). Cierra
+  el hueco de borrar un comprobante sin rastro o anular por REST dejando abono
+  huérfano. Matriz 7/7. `clientes` NO se blindó (decisión: se deja el INSERT
+  directo; solo se mejora la RPC).
+- **[P1 dinero, latente] crear_abono OFF por defecto + aviso** (frontend): el
+  checkbox de "registrar como abono de la OT" ya no viene activado; con aviso de
+  que marcarlo puede duplicar el pago si ya se registró en la OT. Evita doble
+  conteo antes de que empiecen a vincular recibos a OT.
+- **[P2 lógica] fn_upsert_cliente mejorado** (mig `20260718114615`): la rama por
+  identificación ahora también llena teléfono/email/dirección (coalesce, no pisa);
+  búsqueda por nombre normaliza espacios múltiples ("PRO  ESTIBAS" empareja). NO
+  colapsa a cero espacios (riesgo de falsos positivos) — documentado.
+- **[P2 datos] Fusión del duplicado + backfill de cliente_id** (mig
+  `20260718114638`, remediación de datos): "PROESTIBAS"→"PRO ESTIBAS" (maestro el
+  más completo; duplicado soft-desactivado y renombrado como traza, NUNCA borrado;
+  clientes tiene `activo`). Backfill de cliente_id por match exacto y unívoco
+  contra cliente activo: 728 ventas, 4 recibos, 18 cotizaciones, 1 OT (712 filas).
+  Ambiguos (0) y sin-nombre quedaron NULL a propósito. **0 FKs huérfanas**
+  verificado. Los otros 4 grupos de nombre duplicado (NNNN PRUEBA ×7, CONSUMIDOR
+  FINAL ×4, basura "j"/"s"/"blady") NO se fusionaron — son prueba/genéricos, a
+  criterio del dueño.
+
+### P2 documentados, NO tocados
+
+- recibos.numero sin UNIQUE (solo la secuencia lo protege); ReciboNuevo no usa
+  ClientePicker (los recibos nuevos siguen sin llenar cliente_id salvo backfill);
+  total/saldo del recibo no se valida contra el total real de la OT (puede imprimir
+  saldo falso — latente, 1 recibo con OT); botones móviles de Clientes a 44px;
+  ClientePicker sin anti-carrera. El maestro PRO ESTIBAS sigue sin NIT.
+
+Sección 11 cerrada. Sigue Sección 12 (Panel Admin + transversal), la última.
