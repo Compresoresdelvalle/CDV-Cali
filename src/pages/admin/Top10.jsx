@@ -70,7 +70,17 @@ export default function Top10() {
   const totalVendido = items.reduce((s, i) => s + Number(i.valor || 0), 0);
   const totalUnidades = items.reduce((s, i) => s + Number(i.unidades || 0), 0);
   const totalTx = items.reduce((s, i) => s + Number(i.transacciones || 0), 0);
-  const ticketPromedio = totalUnidades > 0 ? totalVendido / totalUnidades : 0;
+  // Clientes y Proveedores se agrupan por cabecera (ventas/compras), donde no
+  // hay cantidad de unidades: antes las tarjetas "Unidades" y "Ticket promedio"
+  // mostraban 0 y $0 fijos, que se leía como "no se vendió nada". Cuando no hay
+  // unidades ocultamos esa tarjeta y el ticket pasa a ser POR TRANSACCIÓN, que
+  // sí es calculable con los datos que tenemos.
+  const hayUnidades = totalUnidades > 0;
+  const ticketPromedio = hayUnidades
+    ? totalVendido / totalUnidades
+    : totalTx > 0
+      ? totalVendido / totalTx
+      : 0;
   const tabActual = RANK_TABS.find((t) => t.key === tab);
   const esCompras = tab === "proveedores";
 
@@ -147,7 +157,9 @@ export default function Top10() {
 
       {/* KPI strip */}
       <div
-        className="grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:grid-cols-4 md:gap-y-0"
+        className={`grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:gap-y-0 ${
+          hayUnidades ? "md:grid-cols-4" : "md:grid-cols-3"
+        }`}
         style={{ borderColor: "hsl(var(--border))" }}
       >
         <Kpi
@@ -155,15 +167,25 @@ export default function Top10() {
           value={formatCOP(totalVendido)}
           sub={`Total Top ${LIMITE_RANKING}`}
         />
-        <Kpi
-          label="Unidades"
-          value={totalUnidades.toLocaleString("es-CO")}
-          sub="Suma del ranking"
-        />
+        {hayUnidades && (
+          <Kpi
+            label="Unidades"
+            value={totalUnidades.toLocaleString("es-CO")}
+            sub="Suma del ranking"
+          />
+        )}
         <Kpi
           label="Ticket promedio"
           value={formatCOP(Math.round(ticketPromedio))}
-          sub={esCompras ? "Costo por unidad" : "Ingreso por unidad"}
+          sub={
+            hayUnidades
+              ? esCompras
+                ? "Costo por unidad"
+                : "Ingreso por unidad"
+              : esCompras
+                ? "Por orden de compra"
+                : "Por transacción"
+          }
         />
         <Kpi
           last

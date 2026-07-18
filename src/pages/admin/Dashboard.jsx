@@ -218,16 +218,38 @@ export default function Dashboard() {
 
   const k = kpis ?? {};
 
-  const ingresosProductos = Number(k.ventas_mes ?? 0);
-  const ingresosServicios = Number(k.ingresos_servicios_mes ?? 0);
+  const facturacionMes = Number(k.ventas_mes ?? 0);
   const egresosMes = Number(k.compras_mes ?? 0);
-  const margenMes = ingresosProductos + ingresosServicios - egresosMes;
+  const devolucionesMes = Number(k.devoluciones_mes ?? 0);
 
+  // OJO — doble conteo: `ventas_mes` YA incluye la facturación de las órdenes de
+  // servicio (origen 'ot'), y los abonos de servicios (`ingresos_servicios_mes`)
+  // son el COBRO de esas mismas facturas, no un ingreso adicional: se verificó
+  // al peso que $9.194.301 de los $10.187.181 de abonos del mes corresponden a
+  // OTs ya facturadas. Sumarlos inflaba el margen en esa cantidad. El margen se
+  // calcula sobre FACTURACIÓN: ventas (mostrador + OT) − compras − devoluciones.
+  const margenMes = facturacionMes - egresosMes - devolucionesMes;
+
+  // El delta comparaba SIEMPRE hoy vs ayer, aunque el KPI dijera "Semana" o
+  // "Mes": se leía una caída de un día como si fuera del mes. Ahora compara
+  // contra el periodo anterior equivalente.
+  const REF_PERIODO = {
+    Hoy: { actual: k.ventas_hoy, previo: k.ventas_ayer, etiqueta: "vs ayer" },
+    Semana: {
+      actual: k.ventas_semana,
+      previo: k.ventas_semana_prev,
+      etiqueta: "vs semana pasada",
+    },
+    Mes: {
+      actual: k.ventas_mes,
+      previo: k.ventas_mes_prev,
+      etiqueta: "vs mes pasado",
+    },
+  };
+  const ref = REF_PERIODO[periodo] ?? REF_PERIODO.Hoy;
   const ventasDelta =
-    Number(k.ventas_ayer) > 0
-      ? ((Number(k.ventas_hoy) - Number(k.ventas_ayer)) /
-          Number(k.ventas_ayer)) *
-        100
+    Number(ref.previo) > 0
+      ? ((Number(ref.actual) - Number(ref.previo)) / Number(ref.previo)) * 100
       : null;
 
   const ventasPeriodo = periodoVentas(k, periodo);
@@ -246,7 +268,7 @@ export default function Dashboard() {
 
       {/* KPI strip */}
       <div
-        className="grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:grid-cols-4 md:gap-y-0"
+        className="grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:grid-cols-5 md:gap-y-0"
         style={{ borderColor: "hsl(var(--border))" }}
       >
         <Kpi
@@ -254,7 +276,7 @@ export default function Dashboard() {
           value={formatCOP(ventasPeriodo)}
           sub={
             ventasDelta !== null ? (
-              <DeltaPill delta={ventasDelta} />
+              <DeltaPill delta={ventasDelta} etiqueta={ref.etiqueta} />
             ) : (
               <span style={{ color: "hsl(var(--muted-foreground))" }}>
                 sin referencia
@@ -272,12 +294,21 @@ export default function Dashboard() {
           }
         />
         <Kpi
+          label="Devoluciones del mes"
+          value={formatCOP(devolucionesMes)}
+          sub={
+            <span style={{ color: "hsl(var(--muted-foreground))" }}>
+              procesadas, a precio de venta
+            </span>
+          }
+        />
+        <Kpi
           label="Margen del mes"
           value={formatCOP(margenMes)}
           danger={margenMes < 0}
           sub={
             <span style={{ color: "hsl(var(--muted-foreground))" }}>
-              prod. + serv. − egresos
+              ventas − compras − devol.
             </span>
           }
         />
@@ -746,7 +777,7 @@ function Kpi({ label, value, sub, last, danger }) {
   );
 }
 
-function DeltaPill({ delta }) {
+function DeltaPill({ delta, etiqueta = "vs ayer" }) {
   const positive = delta >= 0;
   return (
     <span
@@ -755,7 +786,7 @@ function DeltaPill({ delta }) {
         color: positive ? "hsl(var(--success))" : "hsl(var(--destructive))",
       }}
     >
-      {positive ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}% vs ayer
+      {positive ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}% {etiqueta}
     </span>
   );
 }
