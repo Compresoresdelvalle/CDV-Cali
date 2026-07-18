@@ -12,7 +12,7 @@ import {
 import { supabase } from "../../../lib/supabase";
 import { formatCOP, safeError } from "../../../lib/utils";
 import { useAuthStore } from "../../../stores/authStore";
-import { avisarOk, avisarError } from "../../../lib/notify";
+import { avisarOk, avisarError, avisarInfo } from "../../../lib/notify";
 import {
   RECIBO_METODOS_PAGO,
   metodoPagoLabel,
@@ -49,7 +49,10 @@ export default function ReciboNuevo() {
   const [ordenNum, setOrdenNum] = useState("");
   const [orden, setOrden] = useState(null);
   const [abonosPrevios, setAbonosPrevios] = useState(0);
-  const [crearAbono, setCrearAbono] = useState(true);
+  // OFF por defecto: crear el abono es una decisión consciente. Si viniera en
+  // ON, el mismo pago podría contarse dos veces (este abono + el que se registre
+  // a mano en la OT) e inflar el cierre.
+  const [crearAbono, setCrearAbono] = useState(false);
 
   useEffect(() => {
     supabase
@@ -136,7 +139,13 @@ export default function ReciboNuevo() {
         p_payload: payload,
       });
       if (error) throw error;
-      avisarOk("Recibo creado");
+      if (data?.abono_omitido) {
+        avisarInfo(
+          "Recibo creado. Ya existía un abono idéntico reciente en la OT, así que no se duplicó el pago.",
+        );
+      } else {
+        avisarOk("Recibo creado");
+      }
       navigate(`/ops/recibos/${data.recibo_id}`);
     } catch (err) {
       avisarError(err, "Error al registrar recibo");
@@ -279,6 +288,16 @@ export default function ReciboNuevo() {
                       {orden.numero}
                     </span>
                   </label>
+                  {crearAbono && (
+                    <p
+                      className="text-[12px] leading-[1.4]"
+                      style={{ color: "var(--warn-700)" }}
+                    >
+                      Esto crea un abono en la OT. Si ya lo registraste en la
+                      OT, no marques esta casilla o el pago se contaría dos
+                      veces.
+                    </p>
+                  )}
                 </>
               )}
             </div>
