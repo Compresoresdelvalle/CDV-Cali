@@ -307,9 +307,27 @@ async function cargarClientes(dias) {
   if (error) throw error;
   return agruparPorClave(
     data ?? [],
-    (v) => (v.cliente_nombre || "").trim() || "Consumidor final",
+    (v) => claveCanonica(v.cliente_nombre, "CONSUMIDOR FINAL"),
     inicioISO,
   );
+}
+
+/**
+ * Clave canónica para agrupar clientes/proveedores. Antes se agrupaba por el
+ * texto crudo (case-sensitive), así que el mismo cliente se partía en dos filas
+ * del ranking: las ventas sin nombre (etiquetadas "Consumidor final") quedaban
+ * separadas del literal "CONSUMIDOR FINAL", y "Pro Estibas" de "PRO ESTIBAS".
+ * Normaliza mayúsculas, espacios múltiples y acentos, y unifica el vacío con el
+ * fallback para que caigan en una sola fila.
+ */
+function claveCanonica(raw, fallback) {
+  const limpio = (raw || "").trim();
+  if (!limpio) return fallback;
+  return limpio
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // quita acentos combinados
+    .replace(/\s+/g, " ");
 }
 
 async function cargarCategorias(dias) {
@@ -337,13 +355,16 @@ async function cargarProveedores(dias) {
   const { data, error } = await supabase
     .from("compras")
     .select("proveedor, total, fecha")
+    // Las compras canceladas nunca se pagaron: incluirlas inflaba el gasto y el
+    // ranking (un proveedor con una sola compra cancelada aparecía como gasto real).
+    .neq("estado", "cancelada")
     .gte("fecha", inicioPrevISO)
     .limit(5000);
   if (error) throw error;
   // Proveedores se mide por volumen de COMPRAS (no hay venta por proveedor).
   return agruparPorClave(
     data ?? [],
-    (c) => (c.proveedor || "").trim() || "Sin proveedor",
+    (c) => claveCanonica(c.proveedor, "SIN PROVEEDOR"),
     inicioISO,
   );
 }

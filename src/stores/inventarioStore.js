@@ -114,12 +114,20 @@ export const useInventarioStore = create((set, get) => ({
         }
         // #34: tipo multi-selección.
         if (s.filtroTipo.length) pq = pq.in("tipo", s.filtroTipo);
-        const { data: prods, error: pqError } = await pq;
+        const { data: prods, error: pqError, count: preCount } = await pq;
         if (seq !== fetchSeq) return;
         if (pqError) {
           set({ error: pqError.message, loading: false, loadingMore: false });
           return;
         }
+        // S4-02 (bug vivo hasta S12): el `count` de la pre-query nunca se leía,
+        // así que la bandera de truncado estaba muerta. Si el texto empata con
+        // más de PRE_QUERY_CAP productos, el listado es un recorte y la UI debe
+        // avisarlo — si no, el operario cree que el producto no existe.
+        set({
+          total: preCount ?? null,
+          truncado: (preCount ?? 0) > PRE_QUERY_CAP,
+        });
         productoIds = prods?.map((p) => p.id) ?? [];
         if (productoIds.length === 0) {
           set({
@@ -218,6 +226,8 @@ export const useInventarioStore = create((set, get) => ({
       hasMore: true,
       page: 0,
       error: null,
+      total: null,
+      truncado: false,
       filtroSede: [],
       filtroBusqueda: "",
       filtroEstado: [],
