@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, PackageOpen } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
@@ -90,6 +90,13 @@ export default function CompraHistorial() {
 
   const filtros = useFiltros({ clave: "compras", campos });
   const { aplicar, valoresAplicados, nuevoReqId, esReqVigente } = filtros;
+  /**
+   * Secuencia propia del resumen del encabezado. NO debe compartir el contador
+   * de useFiltros con el listado: son dos consultas concurrentes y el guardia
+   * anti-carrera invalida todo id que no sea el último, así que compartirlo hacía
+   * que una cancelara a la otra. Ver el comentario en cargarResumen.
+   */
+  const resumenReqRef = useRef(0);
   /** Texto YA aplicado (con debounce) — es el que de verdad filtró la lista. */
   const busquedaActiva = String(valoresAplicados.q ?? "").trim();
 
@@ -162,14 +169,21 @@ export default function CompraHistorial() {
    * completo, no de lo que se alcanzó a pintar.
    */
   const cargarResumen = useCallback(async () => {
-    const myReq = nuevoReqId();
+    // Contador PROPIO, separado del de useFiltros. Antes el resumen pedía turno
+    // al mismo contador que el listado y, como se lanzan juntos en el useEffect,
+    // el resumen (que arranca segundo) dejaba SIEMPRE obsoleto al listado: la
+    // respuesta de las compras se descartaba y el `finally` no ejecutaba su
+    // setLoading(false) porque su id ya no era el vigente. Resultado: esqueletos
+    // girando para siempre con el encabezado ya cargado — la "carga infinita"
+    // que solo ocurría en Compras (única pantalla con dos cargas concurrentes).
+    const myReq = ++resumenReqRef.current;
     try {
       let q = supabase.from("compras").select("total, recibida", {
         count: "exact",
       });
       q = aplicarTodo(q).range(0, RESUMEN_CAP - 1);
       const { data, count, error } = await q;
-      if (!esReqVigente(myReq) || error) return;
+      if (myReq !== resumenReqRef.current || error) return;
       const filas = data ?? [];
       const s = comprasHeaderStats(filas);
       setResumen({
@@ -182,7 +196,7 @@ export default function CompraHistorial() {
       // El resumen es informativo: si falla, el listado sigue funcionando y el
       // error del listado (si lo hubo) es el que se le muestra al operario.
     }
-  }, [aplicarTodo, nuevoReqId, esReqVigente]);
+  }, [aplicarTodo]);
 
   useEffect(() => {
     // Todo cambio de filtro reinicia la paginación (cargarCompras(true)).
