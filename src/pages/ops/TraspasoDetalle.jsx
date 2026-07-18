@@ -31,6 +31,7 @@ import {
   TipoBadge,
 } from "../../components/traspasos/TraspasoBits";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
+import { avisarOk, avisarError } from "../../lib/notify";
 
 /* Estado real → kind del Pill de Lovable. */
 const PILL_KIND = {
@@ -154,9 +155,10 @@ export default function TraspasoDetalle() {
         p_items: null,
       });
       if (rpcErr) throw new Error(rpcErr.message);
+      avisarOk("Picking iniciado");
       navigate(`/ops/traspasos/${id}/picking`);
     } catch (e) {
-      setError(safeError(e, "Error en operación de traspaso"));
+      avisarError(e, "Error en operación de traspaso");
     } finally {
       setAccionando(false);
       accionandoRef.current = false;
@@ -176,9 +178,10 @@ export default function TraspasoDetalle() {
         p_items: null,
       });
       if (rpcErr) throw new Error(rpcErr.message);
+      avisarOk("Traspaso enviado");
       await cargar();
     } catch (e) {
-      setError(safeError(e, "Error en operación de traspaso"));
+      avisarError(e, "Error en operación de traspaso");
     } finally {
       setAccionando(false);
       accionandoRef.current = false;
@@ -209,9 +212,10 @@ export default function TraspasoDetalle() {
         p_motivo: motivo.trim() || null,
       });
       if (rpcErr) throw new Error(rpcErr.message);
+      avisarOk("Traspaso cancelado");
       await cargar();
     } catch (e) {
-      setError(safeError(e, "Error al cancelar el traspaso"));
+      avisarError(e, "Error al cancelar el traspaso");
     } finally {
       setAccionando(false);
       accionandoRef.current = false;

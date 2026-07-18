@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { RefreshCw, Package, TrendingUp, Search } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import {
   abcBadgeStyle,
@@ -70,7 +71,6 @@ export default function AnalisisABC() {
   const [loading, setLoading] = useState(true);
   const [recalculando, setRecalculando] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
   const [filtro, setFiltro] = useState("Todos");
   const [periodo, setPeriodo] = useState(90);
   const [busqueda, setBusqueda] = useState("");
@@ -122,8 +122,6 @@ export default function AnalisisABC() {
     });
     if (!ok) return;
     setRecalculando(true);
-    setErrorMsg("");
-    setOkMsg("");
     try {
       // Timeout duro 30s — recalcular ABC sobre 3000 productos puede tardar
       const { error } = await Promise.race([
@@ -142,11 +140,11 @@ export default function AnalisisABC() {
       ]);
       if (!mountedRef.current) return;
       if (error) throw error;
-      setOkMsg("Clasificación ABC recalculada correctamente");
+      avisarOk("Clasificación ABC recalculada correctamente");
       await cargar();
     } catch (err) {
       if (!mountedRef.current) return;
-      setErrorMsg(safeError(err, "Error al recalcular"));
+      avisarError(err, "Error al recalcular");
     } finally {
       if (mountedRef.current) setRecalculando(false);
     }
@@ -269,7 +267,6 @@ export default function AnalisisABC() {
       </div>
 
       {errorMsg && <Alert tone="destructive">{errorMsg}</Alert>}
-      {okMsg && <Alert tone="success">{okMsg}</Alert>}
 
       {/* KPI strip */}
       <div

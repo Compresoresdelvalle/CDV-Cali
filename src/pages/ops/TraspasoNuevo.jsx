@@ -9,8 +9,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { safeError } from "../../lib/utils";
 import { applyKeywordSearch } from "../../lib/search";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { sedeLabel } from "../../lib/traspasos-ui";
 import { useSedes } from "../../hooks/useSedes";
@@ -257,9 +257,10 @@ export default function TraspasoNuevo() {
       if (!data?.traspaso_id)
         throw new Error("Respuesta inesperada del servidor.");
 
+      avisarOk("Traspaso creado");
       navigate(`/ops/traspasos/${data.traspaso_id}`);
     } catch (e) {
-      setError(safeError(e, "Error al crear el traspaso"));
+      avisarError(e, "Error al crear el traspaso");
     } finally {
       setGuardando(false);
       guardandoRef.current = false;

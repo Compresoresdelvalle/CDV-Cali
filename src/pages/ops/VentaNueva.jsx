@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { formatCOP, formatDate } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { applyKeywordSearch } from "../../lib/search";
 import QRScanner from "../../components/forms/QRScanner";
 import ClientePicker from "../../components/forms/ClientePicker";
@@ -233,11 +234,9 @@ export default function VentaNueva() {
         agregarAlCarrito({ ...prod, stock_disponible: inv?.cantidad ?? 0 });
       } catch (e) {
         // #S1-19: un error real (red/permisos) ya no se traga en silencio.
-        setError(
-          safeError(
-            e,
-            "No se pudo leer el producto escaneado. Revisa la conexión e intenta de nuevo.",
-          ),
+        avisarError(
+          e,
+          "No se pudo leer el producto escaneado. Revisa la conexión e intenta de nuevo.",
         );
       }
     },
@@ -511,9 +510,10 @@ export default function VentaNueva() {
           direccion: clienteDireccion,
         });
       }
+      avisarOk("Venta registrada correctamente");
       navigate("/ops/ventas");
     } catch (e) {
-      setError(safeError(e, "Error al registrar la venta"));
+      avisarError(e, "Error al registrar la venta");
     } finally {
       setConfirmando(false);
     }

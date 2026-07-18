@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { formatCOP, safeError, sanitizeSearch } from "../../../lib/utils";
+import { avisarOk, avisarError } from "../../../lib/notify";
 import { useConfirm } from "../../../components/ui/ConfirmDialog";
 import { pillStyle, surfaceInputStyle } from "../../../lib/admin-config-ui";
 
@@ -29,7 +30,6 @@ export default function EquiposEnsamblables() {
   const [equipos, setEquipos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
   const [editando, setEditando] = useState(null); // solo EDITAR un ensamblable existente
   const [nuevoOpen, setNuevoOpen] = useState(false); // modal "Nuevo equipo"
   const [saving, setSaving] = useState(false);
@@ -40,8 +40,7 @@ export default function EquiposEnsamblables() {
   // Callback de éxito del modal Nuevo: refresca la lista y muestra el aviso.
   const onNuevoSaved = async (mensaje) => {
     setNuevoOpen(false);
-    setOkMsg(mensaje || "Equipo agregado");
-    setErrorMsg("");
+    avisarOk(mensaje || "Equipo agregado");
     await cargar();
   };
 
@@ -102,7 +101,6 @@ export default function EquiposEnsamblables() {
     savingRef.current = true;
     setSaving(true);
     setErrorMsg("");
-    setOkMsg("");
     try {
       // Solo EDITAR un ensamblable existente (crear/elegir va por ModalNuevoEquipo).
       // Si vacían la referencia, se regenera (NOT NULL + UNIQUE: nunca "").
@@ -114,11 +112,11 @@ export default function EquiposEnsamblables() {
         .update({ nombre, referencia, precio_venta: precio })
         .eq("id", editando.id);
       if (error) throw error;
-      setOkMsg(`Equipo "${nombre}" actualizado`);
+      avisarOk(`Equipo "${nombre}" actualizado`);
       setEditando(null);
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al guardar"));
+      avisarError(err, "Error al guardar");
     } finally {
       savingRef.current = false;
       if (mountedRef.current) setSaving(false);
@@ -143,10 +141,10 @@ export default function EquiposEnsamblables() {
         .update({ ensamblable: false })
         .eq("id", e.id);
       if (error) throw error;
-      setOkMsg(`"${e.nombre}" quitado de ensamblables`);
+      avisarOk(`"${e.nombre}" quitado de ensamblables`);
       await cargar();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error"));
+      avisarError(err, "Error");
     }
   };
 
@@ -155,7 +153,6 @@ export default function EquiposEnsamblables() {
   return (
     <div className="flex flex-col gap-4">
       {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
-      {okMsg && <Banner type="success">{okMsg}</Banner>}
 
       <InfoBanner title="Equipos para ensamble (solo Admin)">
         Son los equipos que aparecen como objetivo al crear un ensamble. Lo
@@ -545,7 +542,7 @@ function ModalNuevoEquipo({ onClose, onSaved }) {
         `Listo: "${p.nombre}" ya aparece como equipo para ensamblar. Se usó el producto que ya existía en el inventario, sin duplicarlo.`,
       );
     } catch (err) {
-      setError(safeError(err, "No se pudo marcar el producto"));
+      avisarError(err, "No se pudo marcar el producto");
       setMarcandoId(null);
     }
   };
@@ -612,7 +609,7 @@ function ModalNuevoEquipo({ onClose, onSaved }) {
       if (e) throw e;
       onSaved(`Equipo "${n}" creado y agregado a la lista de ensamblables.`);
     } catch (err) {
-      setError(safeError(err, "No se pudo crear el equipo"));
+      avisarError(err, "No se pudo crear el equipo");
     } finally {
       savingRef.current = false;
       setSaving(false);

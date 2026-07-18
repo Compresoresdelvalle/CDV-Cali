@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { AlertTriangle, Info } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { safeError } from "../../../lib/utils";
+import { avisarOk, avisarError } from "../../../lib/notify";
 import { invalidateParametro } from "../../../hooks/useParametro";
 import { paramLabel } from "../../../lib/admin-config-ui";
 
@@ -27,7 +28,6 @@ export default function Parametros() {
   const [params, setParams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
   const [edits, setEdits] = useState({}); // { key: value pendiente }
   const [savingKey, setSavingKey] = useState(null);
   const mountedRef = useRef(true);
@@ -100,7 +100,6 @@ export default function Parametros() {
     savingRef.current = true;
     setSavingKey(p.key);
     setErrorMsg("");
-    setOkMsg("");
     try {
       // updated_by y updated_at los setea el trigger fn_set_updated_by_auth (anti-spoof)
       const { error } = await supabase
@@ -109,10 +108,10 @@ export default function Parametros() {
         .eq("key", p.key);
       if (error) throw error;
       invalidateParametro(p.key);
-      setOkMsg(`Parámetro "${p.key}" actualizado`);
+      avisarOk(`Parámetro "${p.key}" actualizado`);
       await cargar();
     } catch (e) {
-      setErrorMsg(safeError(e, "Error al guardar"));
+      avisarError(e, "Error al guardar");
     } finally {
       savingRef.current = false;
       if (mountedRef.current) setSavingKey(null);
@@ -122,7 +121,6 @@ export default function Parametros() {
   return (
     <div className="flex flex-col gap-4">
       {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
-      {okMsg && <Banner type="success">{okMsg}</Banner>}
 
       {/* Banner propagación en tiempo real */}
       <WarnBanner title="Propagación en tiempo real">

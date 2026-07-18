@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Check, Info } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
+import { avisarError } from "../../lib/notify";
 import FeedbackBanners from "../ui/FeedbackBanners";
 
 /**
@@ -111,7 +112,7 @@ export default function ChecklistRecepcion({
       );
       onChange?.();
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al actualizar checklist"));
+      avisarError(err, "Error al actualizar checklist");
     } finally {
       if (mountedRef.current) setSavingId(null);
     }

@@ -17,6 +17,7 @@ import { useAuthStore } from "../../../stores/authStore";
 import AnularGarantiaModal from "../../../components/garantias/AnularGarantiaModal";
 import { formatCOP, formatDate, safeError } from "../../../lib/utils";
 import { getParametroInt } from "../../../hooks/useParametro";
+import { avisarOk, avisarError } from "../../../lib/notify";
 import {
   garantiaEstadoLabel,
   garantiaEstadoPillClass,
@@ -116,10 +117,11 @@ export default function GarantiaVentaDetalle() {
       });
       if (error) throw error;
       setAnulOpen(false);
+      avisarOk("Garantía anulada");
       setReloadTick((t) => t + 1);
     } catch (err) {
       setAnulOpen(false);
-      setErrorMsg(safeError(err, "No se pudo anular la garantía"));
+      avisarError(err, "No se pudo anular la garantía");
     } finally {
       setAnulBusy(false);
     }

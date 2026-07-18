@@ -11,6 +11,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate } from "../../lib/utils";
+import { avisarError } from "../../lib/notify";
 import { SEDES } from "../../lib/constants";
 import { useFiltros } from "../../hooks/useFiltros";
 import BarraFiltros from "../../components/filtros/BarraFiltros";
@@ -726,7 +727,9 @@ function CotizacionCard({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              generarPDFDirecto(c.id).catch(() => {});
+              generarPDFDirecto(c.id).catch((err) =>
+                avisarError(err, "Error al generar PDF"),
+              );
             }}
             title="Descargar PDF"
             className="btn btn-out"

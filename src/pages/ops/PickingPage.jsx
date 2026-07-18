@@ -5,6 +5,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
 import UbicacionChip from "../../components/ui/UbicacionChip";
+import { avisarOk, avisarError } from "../../lib/notify";
 
 /**
  * Picking · Modo tarea pantalla completa (diseño Lovable `pk-*`).
@@ -146,11 +147,13 @@ export default function PickingPage() {
   }, [id, perfil?.id, perfil?.rol, navigate]);
 
   /* ── Guardar progreso vía RPC ─────────────────────────────── */
+  // Nota: no muestra el aviso de resultado — eso lo decide cada llamador según
+  // si es un autosave en segundo plano (banner fijo) o el resultado de pulsar
+  // un botón (toast). La lógica/RPC es la misma en ambos casos.
   const guardarProgreso = useCallback(
     async (localSnapshot) => {
-      if (!items.length) return true;
+      if (!items.length) return { ok: true };
       setGuardando(true);
-      setError(null);
       try {
         const p_items = items.map((item) => ({
           detalle_id: item.id,
@@ -169,10 +172,12 @@ export default function PickingPage() {
           p_items,
         });
         if (rpcErr) throw new Error(rpcErr.message);
-        return true;
+        return { ok: true };
       } catch (e) {
-        setError(safeError(e, "No se pudo guardar el picking"));
-        return false;
+        return {
+          ok: false,
+          mensaje: safeError(e, "No se pudo guardar el picking"),
+        };
       } finally {
         setGuardando(false);
       }
@@ -188,7 +193,9 @@ export default function PickingPage() {
         // "hay un autosave PENDIENTE", no "alguna vez hubo uno" (la X lo usa
         // para decidir si debe hacer flush antes de salir).
         autoSaveRef.current = null;
-        guardarProgreso(nextLocal);
+        guardarProgreso(nextLocal).then((res) => {
+          if (!res.ok) setError(res.mensaje);
+        });
       }, 1500);
     },
     [guardarProgreso],
@@ -228,12 +235,16 @@ export default function PickingPage() {
 
   const handleFinalizar = async () => {
     clearTimeout(autoSaveRef.current);
-    const ok = await guardarProgreso(local);
+    const res = await guardarProgreso(local);
     // Si el guardado falló, quedarse en la pantalla con el error visible.
     // Antes se navegaba igual y el trabajo se perdía en silencio (S7-C).
-    if (!ok) return;
+    if (!res.ok) {
+      avisarError(res.mensaje);
+      return;
+    }
     // B6: el picking ya no requiere verificación por un tercero. Volvemos al
     // detalle, donde el mismo picker confirma el envío (picking → en tránsito).
+    avisarOk("Picking finalizado");
     navigate(`/ops/traspasos/${id}`);
   };
 
@@ -245,8 +256,11 @@ export default function PickingPage() {
     if (autoSaveRef.current) {
       clearTimeout(autoSaveRef.current);
       autoSaveRef.current = null;
-      const ok = await guardarProgreso(local);
-      if (!ok) return;
+      const res = await guardarProgreso(local);
+      if (!res.ok) {
+        avisarError(res.mensaje);
+        return;
+      }
     }
     navigate(`/ops/traspasos/${id}`);
   };

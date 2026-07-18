@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeftCircle } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { safeError } from "../../lib/utils";
 import { useAuthStore } from "../../stores/authStore";
+import { avisarOk, avisarError } from "../../lib/notify";
 import ProductoForm from "../../components/forms/ProductoForm";
 
 /**
@@ -17,19 +17,18 @@ export default function ProductoNuevo() {
   const navigate = useNavigate();
   const esAdmin = useAuthStore((s) => s.perfil?.rol) === "Admin";
   const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
 
   const onSubmit = async (payload) => {
     setSubmitting(true);
-    setErrorMsg("");
     try {
       const { data, error } = await supabase.rpc("fn_crear_producto", {
         p_payload: payload,
       });
       if (error) throw error;
+      avisarOk("Producto creado.");
       navigate(`/ops/inventario/${data}`);
     } catch (err) {
-      setErrorMsg(safeError(err, "Error al crear producto"));
+      avisarError(err, "Error al crear producto");
     } finally {
       setSubmitting(false);
     }
@@ -77,7 +76,6 @@ export default function ProductoNuevo() {
           onSubmit={onSubmit}
           onCancel={() => navigate("/ops/inventario")}
           submitting={submitting}
-          errorMsg={errorMsg}
           submitLabel="Crear producto"
           puedeEditarCosto={esAdmin}
         />

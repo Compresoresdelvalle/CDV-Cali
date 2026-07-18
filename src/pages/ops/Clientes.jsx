@@ -5,6 +5,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useDebounce } from "../../hooks/useDebounce";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { sanitizeSearch, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 
 const PAGE_SIZE = 30;
 const SELECT_COLS =
@@ -126,8 +127,9 @@ export default function Clientes() {
         .eq("id", cliente.id);
       if (e) throw e;
       setItems((prev) => prev.filter((c) => c.id !== cliente.id));
+      avisarOk("Cliente eliminado.");
     } catch (err) {
-      setError(safeError(err, "No se pudo eliminar el cliente"));
+      avisarError(err, "No se pudo eliminar el cliente");
     }
   };
 
@@ -353,6 +355,7 @@ function ClienteModal({ cliente, esAdmin, onClose, onSaved }) {
           .select(SELECT_COLS)
           .single();
         if (e2) throw e2;
+        avisarOk("Cliente actualizado.");
         onSaved(data, false);
       } else {
         // Crear/reutilizar: RPC (cualquier autenticado).
@@ -365,10 +368,11 @@ function ClienteModal({ cliente, esAdmin, onClose, onSaved }) {
         });
         if (e2) throw e2;
         const row = Array.isArray(data) ? data[0] : data;
+        avisarOk("Cliente creado.");
         onSaved(row, true);
       }
     } catch (err) {
-      setError(safeError(err, "No se pudo guardar el cliente"));
+      avisarError(err, "No se pudo guardar el cliente");
     } finally {
       setGuardando(false);
       guardandoRef.current = false;

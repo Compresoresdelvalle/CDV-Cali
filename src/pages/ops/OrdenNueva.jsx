@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeftCircle, User, Wrench, ClipboardList } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import ClientePicker from "../../components/forms/ClientePicker";
 import { upsertCliente } from "../../lib/clientes";
 
@@ -122,10 +122,11 @@ export default function OrdenNueva() {
         .select("id")
         .single();
       if (e2) throw e2;
+      avisarOk("Orden de trabajo creada.");
       navigate(`/ops/ordenes/${data.id}`);
     } catch (err) {
       console.error("[OrdenNueva] guardar:", err);
-      setError(safeError(err, "Error al crear la orden"));
+      avisarError(err, "Error al crear la orden");
     } finally {
       setSaving(false);
       savingRef.current = false;

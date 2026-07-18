@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { generarCotizacionPDF } from "../../lib/pdf/cotizacionPDF";
 import { MARCA } from "../../lib/pdf/pdfStyles";
 import { cuentaBancariaLabel } from "../../lib/cuentas-ui";
@@ -157,7 +158,7 @@ export default function CotizacionDetalle() {
       if (action === "print") pdf.print();
       else pdf.download();
     } catch (err) {
-      setError(safeError(err, "Error al generar PDF"));
+      avisarError(err, "Error al generar PDF");
     }
   };
 
@@ -1092,8 +1093,9 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
       setCuentaBancaria("");
       setObs("");
       await cargar();
+      avisarOk("Abono registrado correctamente");
     } catch (e2) {
-      setErr(safeError(e2, "No se pudo registrar el abono"));
+      avisarError(e2, "No se pudo registrar el abono");
     } finally {
       setGuardando(false);
       registrandoRef.current = false;
@@ -1110,8 +1112,9 @@ function AbonosCotizacionSection({ cotizacion, rolUsuario }) {
       });
       if (e) throw new Error(e.message);
       await cargar();
+      avisarOk("Abono eliminado correctamente");
     } catch (e2) {
-      setErr(safeError(e2, "No se pudo eliminar el abono"));
+      avisarError(e2, "No se pudo eliminar el abono");
     } finally {
       eliminandoRef.current = false;
     }

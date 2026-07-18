@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import FeedbackBanners from "../../components/ui/FeedbackBanners";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { useAuthStore } from "../../stores/authStore";
@@ -94,7 +95,6 @@ export default function Cierres() {
   });
 
   const [errorMsg, setErrorMsg] = useState("");
-  const [okMsg, setOkMsg] = useState("");
   const mountedRef = useRef(true);
   const generandoRef = useRef(false); // guard síncrono anti doble-submit
   const previewSeqRef = useRef(0); // token de secuencia anti preview obsoleto
@@ -269,7 +269,6 @@ export default function Cierres() {
 
   const previsualizar = async () => {
     setErrorMsg("");
-    setOkMsg("");
     setPreview(null);
     if (!desde || !hasta) {
       setErrorMsg("Debes indicar fecha desde y hasta");
@@ -329,8 +328,6 @@ export default function Cierres() {
       generandoRef.current = false;
       return;
     }
-    setErrorMsg("");
-    setOkMsg("");
     setGenerating(true);
     try {
       const arqueoArr = (preview.detalle?.arqueo_esperado ?? [])
@@ -350,14 +347,14 @@ export default function Cierres() {
       });
       if (!mountedRef.current) return;
       if (error) throw error;
-      setOkMsg(`Cierre #${data?.numero ?? ""} generado correctamente`);
+      avisarOk(`Cierre #${data?.numero ?? ""} generado correctamente`);
       setPreview(null);
       setArqueo({});
       setObservaciones("");
       await cargarHistorial();
     } catch (err) {
       if (mountedRef.current) {
-        setErrorMsg(safeError(err, "Error al generar el cierre"));
+        avisarError(err, "Error al generar el cierre");
       }
     } finally {
       generandoRef.current = false;
@@ -384,8 +381,6 @@ export default function Cierres() {
       generandoRef.current = false;
       return;
     }
-    setErrorMsg("");
-    setOkMsg("");
     setGenerating(true);
     try {
       const { data, error } = await supabase.rpc(
@@ -399,7 +394,7 @@ export default function Cierres() {
       );
       if (!mountedRef.current) return;
       if (error) throw error;
-      setOkMsg(
+      avisarOk(
         `Cierre complementario${data?.numero ? ` #${data.numero}` : ""} generado correctamente`,
       );
       setPreview(null);
@@ -408,9 +403,7 @@ export default function Cierres() {
       await cargarHistorial();
     } catch (err) {
       if (mountedRef.current) {
-        setErrorMsg(
-          safeError(err, "Error al generar el cierre complementario"),
-        );
+        avisarError(err, "Error al generar el cierre complementario");
       }
     } finally {
       generandoRef.current = false;
@@ -461,7 +454,7 @@ export default function Cierres() {
         </div>
       </div>
 
-      <FeedbackBanners errorMsg={errorMsg} okMsg={okMsg} />
+      <FeedbackBanners errorMsg={errorMsg} />
 
       {/* KPI strip */}
       <div

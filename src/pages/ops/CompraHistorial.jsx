@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Plus, PackageOpen } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { formatCOP, formatDate } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { useFiltros } from "../../hooks/useFiltros";
 import { useSedes } from "../../hooks/useSedes";
@@ -202,7 +203,6 @@ export default function CompraHistorial() {
     });
     if (!ok) return;
     setRecibiendoId(compraId);
-    setErrorMsg(null);
     try {
       // S6-08/S6-A: toda recepción pasa por la RPC (ajusta stock, movimientos,
       // costo y protege el estado). null = recibe todo tal cual.
@@ -221,12 +221,11 @@ export default function CompraHistorial() {
             : c,
         ),
       );
+      avisarOk("Compra recibida.");
     } catch (err) {
       // S6-06: mostrar el motivo real (p.ej. recibir una cancelada) en vez de
       // un genérico que oculta qué pasó.
-      setErrorMsg(
-        safeError(err, "No se pudo marcar la compra como recibida. Reintenta."),
-      );
+      avisarError(err, "No se pudo marcar la compra como recibida. Reintenta.");
     } finally {
       setRecibiendoId(null);
     }

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
+import { avisarOk, avisarError } from "../../lib/notify";
 import QRScanner from "../../components/forms/QRScanner";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
@@ -434,9 +435,10 @@ export default function CotizacionEditar() {
         p_cuentas_ids: cuentasLimpias,
       });
       if (rpcErr) throw new Error(rpcErr.message);
+      avisarOk("Cambios guardados correctamente");
       navigate(`/ops/cotizaciones/${id}`);
     } catch (e) {
-      setError(safeError(e, "Error al guardar los cambios"));
+      avisarError(e, "Error al guardar los cambios");
     } finally {
       setGuardando(false);
       guardandoRef.current = false;
