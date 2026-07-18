@@ -3,6 +3,55 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// ── Timeout de red ───────────────────────────────────────────────────────────
+// El `fetch` del navegador NO tiene timeout propio. Si la conexión se cae a
+// medio request (wifi inestable en bodega/almacén, el service worker de la PWA
+// reactivándose, o el navegador congelando la pestaña en segundo plano), la
+// promesa NUNCA se resuelve ni se rechaza: no corre el .catch ni el .finally.
+// Como todas las pantallas hacen `finally { setLoading(false) }`, el spinner
+// quedaba girando indefinidamente — la "carga casi infinita" que se reportó en
+// Compras, que en realidad podía pasar en cualquier pantalla.
+//
+// Con este wrapper la request se aborta a los 20s y entra al .catch de la
+// pantalla, que ya muestra su mensaje de error. El servidor corta a los 8s por
+// statement_timeout, así que 20s solo se alcanza cuando algo está realmente
+// colgado, nunca por una consulta legítimamente lenta.
+const FETCH_TIMEOUT_MS = 20000;
+
+function fetchConTimeout(input, init = {}) {
+  const controller = new AbortController();
+  let porTimeout = false;
+  const timer = setTimeout(() => {
+    porTimeout = true;
+    controller.abort();
+  }, FETCH_TIMEOUT_MS);
+
+  // supabase-js puede traer su propia señal (p.ej. `.abortSignal()`): la
+  // encadenamos para no romper esa cancelación.
+  const externa = init.signal;
+  const onAbortExterno = () => controller.abort();
+  if (externa) {
+    if (externa.aborted) controller.abort();
+    else externa.addEventListener("abort", onAbortExterno, { once: true });
+  }
+
+  return fetch(input, { ...init, signal: controller.signal })
+    .catch((err) => {
+      if (porTimeout) {
+        const e = new Error(
+          "La conexión tardó demasiado. Revisa tu señal e inténtalo de nuevo.",
+        );
+        e.name = "TimeoutError";
+        throw e;
+      }
+      throw err;
+    })
+    .finally(() => {
+      clearTimeout(timer);
+      if (externa) externa.removeEventListener("abort", onAbortExterno);
+    });
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
@@ -29,6 +78,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
   global: {
     headers: { "x-client-info": "compresores-app" },
+    // Aplica el timeout a TODA petición HTTP (consultas, RPC y auth). No afecta
+    // Realtime, que va por WebSocket y tiene su propio manejo de reconexión.
+    fetch: fetchConTimeout,
   },
 });
 

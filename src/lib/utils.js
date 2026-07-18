@@ -86,7 +86,12 @@ export const safeError = (err, fallback = "Ocurrió un error inesperado") => {
     return "Ya existe un registro con esos datos";
   if (m.includes("foreign key") || code === "23503")
     return "Referencia inválida — el registro no existe";
-  if (m.includes("network") || m.includes("fetch"))
+  // Timeout de red del cliente (ver fetchConTimeout en lib/supabase.js): la
+  // request se colgó y se abortó a los 20s. Mostrar el mensaje tal cual, que ya
+  // le dice al operario qué hacer.
+  if (err.name === "TimeoutError" || m.includes("tardó demasiado"))
+    return err.message;
+  if (m.includes("network") || m.includes("fetch") || err.name === "AbortError")
     return "Sin conexión — revisa tu internet";
   // #S3-06: los mensajes de regla de negocio vienen de RAISE EXCEPTION (SQLSTATE
   // P0001) y están redactados en español para el usuario (Cierres, Cuentas, OT,

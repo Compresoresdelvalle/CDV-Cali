@@ -7,8 +7,8 @@ App de gestión de inventarios y operaciones para empresa colombiana de compreso
 ## Escala
 
 - ~2.000-3.000 productos en catálogo
-- 1 bodega principal + 3 almacenes (4 sedes total)
-- 6 usuarios operativos con roles distintos
+- 1 bodega principal + 3 almacenes (4 sedes total): `BODEGA`, `CHV`, `CV`, `L3`
+- 12 usuarios operativos con roles distintos
 - Uso diario desde celular/tablet/PC simultáneamente
 
 ## Stack técnico
@@ -16,7 +16,7 @@ App de gestión de inventarios y operaciones para empresa colombiana de compreso
 - **Frontend:** React 19 + Vite + Tailwind CSS (PWA)
 - **Estado global:** Zustand (NO usar Context API para estado)
 - **Base de datos:** Supabase (PostgreSQL + Realtime + Auth + Edge Functions)
-- **Auth:** 6 usuarios reales en Supabase Auth — PIN de 4 dígitos como password
+- **Auth:** 12 usuarios reales en Supabase Auth — PIN de 4 dígitos como password
 - **Hosting:** Cloudflare
 - **QR:** qrcode.react (generar) + html5-qrcode (escanear con cámara)
 
@@ -148,9 +148,15 @@ Font: `"IBM Plex Sans", system-ui, -apple-system, sans-serif`
 
 ## Roles y permisos
 
-- **Admin (Carlos):** Ve y hace todo. Acceso a Panel Admin.
-- **Bodeguero (Pedro):** Inventario, Compras, Traspasos, Picking, Ensambles, Devoluciones, Herramientas.
-- **Vendedor (María, Juan, Ana):** Inventario (solo su sede), Ventas, Cotizaciones, Herramientas, **Compras** (rol "todero": la operación real exige que el vendedor también registre compras, marque recepción y abra garantías de compra; se le ocultan los costos históricos pero conserva el resto de acciones). Decisión del dueño 2026-07-16. También **Ensambles** (solo su sede): la vendedora crea el ensamble, asigna técnico (opcional) y lo completa cuando el técnico lo marca terminado — deliberado y consistente en RPC + RLS + RoleGuard.
+> Usuarios REALES en producción (verificado 2026-07-18 contra la tabla `usuarios`).
+> Los nombres antiguos de este archivo (Carlos/Pedro/María/Juan/Ana/Luis) eran de
+> plantilla y NO correspondían a nadie. OJO: "Carlos A" sí existe, pero es **Técnico**,
+> no Admin. El Admin es **Maritza**.
+
+- **Admin (Admin Maritza — sede BODEGA):** Ve y hace todo. Acceso a Panel Admin.
+  **Es el ÚNICO Admin activo**: cuidado con cualquier cambio que pueda dejar el sistema sin Admin.
+- **Bodeguero (Bodega, Bodega2 — BODEGA):** Inventario, Compras, Traspasos, Picking, Ensambles, Devoluciones, Herramientas.
+- **Vendedor (Bladimir → CHV; Deyanira y Edna → CV; Sofía → L3):** Inventario (solo su sede), Ventas, Cotizaciones, Herramientas, **Compras** (rol "todero": la operación real exige que el vendedor también registre compras, marque recepción y abra garantías de compra; se le ocultan los costos históricos pero conserva el resto de acciones). Decisión del dueño 2026-07-16. También **Ensambles** (solo su sede): la vendedora crea el ensamble, asigna técnico (opcional) y lo completa cuando el técnico lo marca terminado — deliberado y consistente en RPC + RLS + RoleGuard.
 - **Técnico (Luis):** Órdenes de servicio, Ensambles, Herramientas.
 
 ## Convenciones de código
