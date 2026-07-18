@@ -882,7 +882,7 @@ nombre — casi todos prueba/genéricos).
   conteo antes de que empiecen a vincular recibos a OT.
 - **[P2 lógica] fn_upsert_cliente mejorado** (mig `20260718114615`): la rama por
   identificación ahora también llena teléfono/email/dirección (coalesce, no pisa);
-  búsqueda por nombre normaliza espacios múltiples ("PRO  ESTIBAS" empareja). NO
+  búsqueda por nombre normaliza espacios múltiples ("PRO ESTIBAS" empareja). NO
   colapsa a cero espacios (riesgo de falsos positivos) — documentado.
 - **[P2 datos] Fusión del duplicado + backfill de cliente_id** (mig
   `20260718114638`, remediación de datos): "PROESTIBAS"→"PRO ESTIBAS" (maestro el
@@ -902,4 +902,25 @@ nombre — casi todos prueba/genéricos).
   saldo falso — latente, 1 recibo con OT); botones móviles de Clientes a 44px;
   ClientePicker sin anti-carrera. El maestro PRO ESTIBAS sigue sin NIT.
 
-Sección 11 cerrada. Sigue Sección 12 (Panel Admin + transversal), la última.
+### Verificación adversarial (corrida 2026-07-18, 6 verificadores solo-lectura)
+
+5/6 afirmaciones resistieron: blindaje recibos, cierre-no-lee-recibos,
+fn_upsert_cliente, fusión-sin-huérfanas (0 FKs huérfanas/inactivas en las 4
+tablas), clientes-sin-blindar (hueco solo cosmético — sin columnas de dinero,
+UPDATE solo Admin, DELETE bloqueado por RLS). 1 refutó (P2):
+
+- **[P2 dinero — CORREGIDO] crear_abono sin guard de servidor** (mig
+  `20260718121237`): el verificador dio la razón en que "mitigado"
+  sobredimensionaba — el default OFF era barrera SOLO de frontend; la RPC
+  `fn_registrar_recibo` insertaba el abono en la OT sin verificar duplicado.
+  Escenario: abono manual $X + recibo del mismo pago con checkbox → doble abono,
+  saldo OT mentido y cierre con $X de más en arqueo. Fix: guard suave — si ya
+  existe un abono idéntico (misma OT, mismo monto, mismo método) en los últimos
+  10 min, NO se inserta (devuelve `abono_omitido`); frontend avisa. Montos/métodos
+  distintos SÍ pasan (dos pagos reales iguales back-to-back permitidos). Probado
+  en BEGIN/ROLLBACK: duplicado_detectado=true, monto_distinto=false,
+  metodo_distinto=false. 0 casos históricos afectados.
+
+Sección 11 cerrada (con verificación adversarial). Sigue Sección 12 (Panel Admin
+
+- transversal), la última.
