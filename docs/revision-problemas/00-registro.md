@@ -759,3 +759,72 @@ Sección 9 cerrada. Sigue Sección 10 (Devoluciones / Garantías / Notas crédit
 Nota: un agente Opus murió por error de API entre `apply` y `materialize`; dejó
 el estado coherente y se completó con un segundo agente. Lección: materializar
 cada migración inmediatamente después de aplicarla.
+
+---
+
+## 2026-07-18 — Sección 10: Devoluciones / Garantías / Notas de crédito ✅ HECHA
+
+Cacería: 6 cazadores + verificación adversarial → 27 confirmados, **0 refutados,
+0 código viejo**, 7 UX. Mucho solapamiento: los seis cazadores convergieron en
+los dos P0. Datos escasos (devoluciones=4, garantías venta=9, garantías compra=0,
+notas crédito=0): garantías de compra y notas de crédito son código para cuando
+las usen — se auditó su corrección igual (regla "no descartar nada").
+
+### P0 / P1 de dinero y seguridad (verificados a mano en prod)
+
+- **[P0 seguridad] Garantías de venta abiertas a escritura directa por REST.**
+  `garantias_venta` y `detalle_garantia_venta` tenían INSERT/UPDATE/DELETE/TRUNCATE
+  para `authenticated` Y `anon` + policies permisivas (Admin/Vendedor), sin
+  trigger. Un vendedor podía crear/cerrar/BORRAR garantías por REST saltándose
+  `fn_abrir_garantia_venta`/`fn_anular_garantia_venta`. El lado compra sí estaba
+  blindado. ✅ Migración `20260718032951`: REVOKE de escritura a authenticated/
+  anon (solo lectura), policies inertes. Probado: REST directo → 42501; RPC OK.
+- **[P0 dinero] El reembolso de garantía (`devolver_dinero`) no entraba al cierre.**
+  `fn_abrir_garantia_venta` guarda `monto_devuelto` pero el motor del cierre no
+  leía garantías: el dinero salía de la caja y el arqueo no lo veía. Histórico
+  invisible: $240.057 (real: #15 $100k, #16 $139k; prueba: $13/$22/$22/$1000).
+  ✅ Migración `20260717150000` (aplicada por execute_sql — el clasificador
+  bloqueó apply_migration): `_fn_cierre_totales` cuenta el reembolso como egreso
+  (efectivo, en los 6 puntos del motor + arqueo). **Decisión del dueño**: contar
+  como egreso + ajustar histórico completo. La #15 caía en cierre cerrado (#5) →
+  **complementario #19** (append, cierre #5 INTACTO verificado). Las otras 5 en
+  periodos sin cierre aún → el fix las cubre al generarse. Supuesto: reembolso en
+  EFECTIVO (el modelo no guarda el método). **Decisión del dueño**: Vendedor SÍ
+  puede reembolsar (todero) → se corrigió el texto "reembolso solo Admin" que
+  mentía; la RPC ya limita a monto ≤ total de la venta.
+- **[P1 seguridad] `fn_registrar_devolucion` sin guard de rol/sede.** Solo validaba
+  auth.uid(); el RoleGuard (Admin/Bodeguero) era client-side. ✅ Migración
+  `20260718033454`: rol IN (Admin,Bodeguero) + sede propia salvo Admin.
+- **[P1] Nota de crédito: segunda vía peligrosa.** `fn_consumir_nota_credito`
+  quemaba el saldo sin insertar el pago ni bajar la deuda (la correcta es
+  `fn_aplicar_nota_credito`). 0 callers. ✅ Migración `20260718033757`:
+  neutralizada, redirige a la correcta.
+
+### P2 arreglados
+
+- ✅ `fn_marcar_reposicion_recibida` reingresa al cajón de origen (insumo/vendible)
+  según `detalle_garantia_compra.destino` (migración `20260718034448`).
+- ✅ Frontend: texto "reembolso solo Admin" corregido; ruta `garantias/compra/:id`
+  abierta al Vendedor (era el bug F1, la RLS ya lo dejaba); toast duplicado al
+  abrir garantía quitado; `GarantiaCompraDetalle` migrado a pop-up + guards
+  anti doble-submit (había quedado fuera de la tanda de avisos).
+- ✅ **Fachada de validación de devoluciones quitada** (decisión del dueño): el
+  flujo pendiente/aprobada/rechazada nunca ocurría (todo entra 'procesada'); se
+  quitó el KPI "N pendientes" y los subfiltros por estado. La columna 'estado'
+  real se conserva.
+- ✅ **Buscador de venta en DevolucionNueva** (decisión del dueño): antes exigía
+  pegar el UUID de la venta a mano (impracticable); ahora busca por número o
+  cliente, reusando el patrón de VentaHistorial.
+
+### Deuda / notas
+
+- **Migraciones del cierre (`20260717150000`, `150500`) en disco pero NO
+  registradas en `supabase_migrations`** (el clasificador bloqueó apply_migration;
+  se aplicó por execute_sql). La función está viva y correcta en prod. La primera
+  es CREATE OR REPLACE idempotente; la segunda es solo comentarios (traza del
+  ajuste histórico). Un futuro `db push` las reconcilia sin daño.
+- El complementario #19 quedó atribuido a `cerrado_por = Admin Maritza`.
+- Supuesto del reembolso en efectivo: si algún día el reembolso puede ser por
+  transferencia, habría que guardar el método en `garantias_venta`.
+
+Sección 10 cerrada. Sigue Sección 11 (Recibos / Clientes).

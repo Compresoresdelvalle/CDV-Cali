@@ -190,7 +190,7 @@ export default function GarantiaVentaDetalle() {
     }.`,
     "Cubre: defectos de fábrica reproducibles y fallas prematuras.",
     "No cubre: uso fuera de especificación, daño por instalación o modificaciones.",
-    "Resoluciones posibles: reparación, cambio de pieza o reembolso (reembolso solo Admin).",
+    "Resoluciones posibles: reparación, cambio de pieza o reembolso. El reembolso no puede superar el total de la venta.",
   ];
 
   return (

@@ -1,0 +1,34 @@
+-- AJUSTE HISTÓRICO (dato, no DDL) — registro de traza. YA APLICADO en producción.
+-- NO re-ejecutar: volver a correrlo generaría un complementario duplicado.
+--
+-- Contexto: el reembolso de garantía de venta #15 ($100.000, Almacén CHV, 2026-06-12,
+-- resolucion='devolver_dinero') salió de la caja pero el motor del cierre no lo veía.
+-- Tras el fix hacia adelante (20260717150000_cierre_reembolsos_garantia_egreso.sql),
+-- _fn_cierre_totales para 2026-06-12 pasó a incluir ese egreso. El periodo 2026-06-12 ya
+-- tenía un cierre generado (cierre diario #5, id 1575a616-b806-4dbb-a02f-782c4af25fec),
+-- que es INMUTABLE (trg_no_modify_cierre). Por eso el ajuste se hizo con el mecanismo
+-- sancionado de CIERRE COMPLEMENTARIO (append de delta, NUNCA edita el cierre cerrado).
+--
+-- Resultado (aplicado como Admin Maritza):
+--   cierre complementario #19, complementa_id = #5,
+--   delta egresos = +100.000,22  (los $100.000 del reembolso + $0,22 de redondeo preexistente),
+--   delta ingresos_productos = -0,19 (redondeo preexistente, subpeso), counts = 0.
+--   Cierre #5 original quedó intacto (egresos 12.851.981,78).
+--
+-- Las otras 5 garantías devolver_dinero NO requieren complementario: sus periodos aún no
+-- tenían cierre generado, así que el fix hacia adelante las cubre al generarse el cierre.
+--   De prueba (marcadas): #1 $22 (2026-06-02 CV), #4 $22 (2026-06-03 CV),
+--                         #5-garantia $13 (2026-06-03 CHV), #6 $1.000 (2026-06-08 BODEGA).
+--   Real: #16 $139.000 (2026-07-06 L3) — periodo de julio sin cierre aún.
+--
+-- SQL EXACTO EJECUTADO (requiere sesión con auth.uid() = Admin):
+--
+--   select set_config('request.jwt.claim.sub','8742975c-d3ef-44b7-94ce-372eafbc943b', true);
+--   select fn_generar_cierre_complementario(
+--     '2026-06-12','2026-06-12',NULL,
+--     'Ajuste histórico: reembolso de garantía de venta #15 ($100.000, Almacén CHV, 2026-06-12) '
+--     || 'que no se contabilizaba como egreso de caja. Aplicado por campaña revisión de problemas.'
+--   );
+--
+-- (Se deja como comentario a propósito: es un registro de auditoría, no una migración
+--  re-ejecutable. El efecto ya está persistido en la tabla cierres, fila numero=19.)

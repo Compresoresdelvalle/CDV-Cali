@@ -220,10 +220,12 @@ export default function App() {
               </RoleGuard>
             }
           />
+          {/* Vendedor "todero": abre garantías de compra, así que debe poder ver
+              su detalle. La RLS ya lo deja (registrado_por o su sede). */}
           <Route
             path="garantias/compra/:id"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <GarantiaCompraDetalle />
               </RoleGuard>
             }

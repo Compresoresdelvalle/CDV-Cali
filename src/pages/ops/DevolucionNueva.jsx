@@ -10,16 +10,15 @@ import {
   Info,
   Package,
   ClipboardList,
+  Receipt,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
-import { sanitizeSearch } from "../../lib/utils";
+import { sanitizeSearch, formatCOP, formatDate } from "../../lib/utils";
+import { esNumeroPuro } from "../../lib/filtros";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import { avisarOk, avisarError } from "../../lib/notify";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function DevolucionNueva() {
   const navigate = useNavigate();
@@ -34,7 +33,12 @@ export default function DevolucionNueva() {
 
   const [cantidad, setCantidad] = useState(1);
   const [motivo, setMotivo] = useState("");
-  const [ventaId, setVentaId] = useState("");
+
+  // Buscador de venta origen (solo devolución de cliente).
+  const [busquedaVenta, setBusquedaVenta] = useState("");
+  const [resultadosVenta, setResultadosVenta] = useState([]);
+  const [buscandoVenta, setBuscandoVenta] = useState(false);
+  const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
@@ -101,6 +105,65 @@ export default function DevolucionNueva() {
     setResultados([]);
   };
 
+  /**
+   * Buscador de venta origen (devolución de cliente): antes había que pegar a
+   * mano el UUID de la venta, impracticable en el día a día. Busca por número
+   * exacto (columna integer) o por nombre de cliente (ilike), recortado a la
+   * sede del usuario salvo Admin, y excluye ventas anuladas.
+   */
+  const buscarVentas = useCallback(
+    async (q) => {
+      if (!q || q.trim().length < 2) {
+        setResultadosVenta([]);
+        return;
+      }
+      setBuscandoVenta(true);
+      try {
+        let query = supabase
+          .from("ventas")
+          .select("id, numero, fecha, cliente_nombre, total, sede_id")
+          .eq("anulada", false);
+        if (perfil?.rol !== "Admin") {
+          query = query.eq("sede_id", perfil?.sede_id);
+        }
+        const n = esNumeroPuro(q);
+        if (n != null) {
+          query = query.eq("numero", n);
+        } else {
+          query = query.ilike(
+            "cliente_nombre",
+            `%${sanitizeSearch(q.trim())}%`,
+          );
+        }
+        const { data, error: e } = await query
+          .order("fecha", { ascending: false })
+          .limit(20);
+        if (e) throw e;
+        setResultadosVenta(data ?? []);
+      } catch {
+        setResultadosVenta([]);
+      } finally {
+        setBuscandoVenta(false);
+      }
+    },
+    [perfil?.rol, perfil?.sede_id],
+  );
+
+  const buscarVentaDebounced = useDebouncedCallback(buscarVentas, 400);
+
+  const handleBusquedaVentaChange = (e) => {
+    const val = e.target.value;
+    setBusquedaVenta(val);
+    setVentaSeleccionada(null);
+    buscarVentaDebounced(val);
+  };
+
+  const seleccionarVenta = (v) => {
+    setVentaSeleccionada(v);
+    setBusquedaVenta("");
+    setResultadosVenta([]);
+  };
+
   const registrar = async () => {
     if (!productoSeleccionado) {
       setError("Selecciona un producto.");
@@ -110,18 +173,9 @@ export default function DevolucionNueva() {
       setError("La cantidad debe ser al menos 1.");
       return;
     }
-    const ventaTrim = ventaId.trim();
-    if (tipo === "cliente") {
-      if (!ventaTrim) {
-        setError(
-          "La devolución de cliente requiere el ID de la venta original.",
-        );
-        return;
-      }
-      if (!UUID_RE.test(ventaTrim)) {
-        setError("El ID de venta no tiene un formato válido (UUID).");
-        return;
-      }
+    if (tipo === "cliente" && !ventaSeleccionada) {
+      setError("Busca y selecciona la venta original.");
+      return;
     }
     // Guard síncrono contra doble-submit (el `disabled` no es inmediato).
     if (guardandoRef.current) return;
@@ -137,7 +191,7 @@ export default function DevolucionNueva() {
           p_sede_id: perfil?.sede_id,
           p_cantidad: cantidad,
           p_motivo: motivo.trim() || "Sin motivo especificado",
-          p_venta_id: ventaTrim || null,
+          p_venta_id: tipo === "cliente" ? ventaSeleccionada?.id : null,
         },
       );
       if (rpcErr) throw new Error(rpcErr.message);
@@ -151,7 +205,8 @@ export default function DevolucionNueva() {
       setBusqueda("");
       setCantidad(1);
       setMotivo("");
-      setVentaId("");
+      setVentaSeleccionada(null);
+      setBusquedaVenta("");
     } catch (e) {
       avisarError(e, "Error al registrar la devolución");
     } finally {
@@ -175,15 +230,18 @@ export default function DevolucionNueva() {
           tone: "var(--warn-700)",
         };
 
-  // Pasos del wizard. El backend pide producto + (UUID de venta para cliente);
-  // se reflejan en el stepper aunque la lógica real no use buscador de venta.
+  // Pasos del wizard. El backend pide producto + (venta origen para cliente).
   const pasoProducto = !!productoSeleccionado;
   const pasoDetalle =
     pasoProducto &&
     cantidad >= 1 &&
-    (tipo === "proveedor" || UUID_RE.test(ventaId.trim()));
+    (tipo === "proveedor" || !!ventaSeleccionada);
 
-  const puedeRegistrar = pasoProducto && cantidad >= 1 && !guardando;
+  const puedeRegistrar =
+    pasoProducto &&
+    cantidad >= 1 &&
+    !guardando &&
+    (tipo === "proveedor" || !!ventaSeleccionada);
 
   return (
     <div className="flex h-full flex-col animate-fade-in">
@@ -447,30 +505,141 @@ export default function DevolucionNueva() {
                 </Field>
 
                 {tipo === "cliente" && (
-                  <Field label="ID de venta relacionada" req>
-                    <input
-                      type="text"
-                      value={ventaId}
-                      onChange={(e) => setVentaId(e.target.value)}
-                      placeholder="UUID de la venta original"
-                      className="finput sans"
-                    />
-                    {/* Nuestro flujo vincula por UUID de venta (no por buscador
-                        de venta-origen como el diseño Lovable). Lógica real
-                        intacta: fn_registrar_devolucion exige este p_venta_id. */}
-                    <div
-                      className="mt-1.5 flex items-center gap-2 rounded-md px-3 py-2 text-[11.5px]"
-                      style={{
-                        backgroundColor: "var(--info-50)",
-                        color: "var(--info-700)",
-                      }}
-                    >
-                      <Info className="h-3.5 w-3.5 shrink-0" />
-                      <span>
-                        La devolución de cliente debe vincularse a la venta
-                        original mediante su identificador (UUID).
-                      </span>
-                    </div>
+                  <Field label="Venta original" req>
+                    {ventaSeleccionada ? (
+                      <div
+                        className="flex items-center gap-3 rounded-xl border px-4 py-3"
+                        style={{
+                          backgroundColor: "var(--succ-50)",
+                          borderColor: "var(--succ-border)",
+                        }}
+                      >
+                        <CheckCircle2
+                          className="h-5 w-5 shrink-0"
+                          style={{ color: "var(--succ-600)" }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="truncate text-sm font-semibold"
+                            style={{ color: "var(--n-950)" }}
+                          >
+                            V-{ventaSeleccionada.numero} ·{" "}
+                            {ventaSeleccionada.cliente_nombre || "Sin nombre"}
+                          </p>
+                          <p
+                            className="font-mono text-xs"
+                            style={{ color: "var(--n-500)" }}
+                          >
+                            {formatDate(ventaSeleccionada.fecha)} ·{" "}
+                            {formatCOP(ventaSeleccionada.total)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setVentaSeleccionada(null)}
+                          className="text-xs font-medium"
+                          style={{ color: "var(--p-600)" }}
+                        >
+                          Cambiar
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div
+                          className="flex h-12 items-center gap-2.5 rounded-lg border px-3.5"
+                          style={{
+                            borderColor: "var(--n-200)",
+                            backgroundColor: "var(--n-0)",
+                          }}
+                        >
+                          <Receipt
+                            className="h-4 w-4 shrink-0"
+                            strokeWidth={1.5}
+                            style={{ color: "var(--n-500)" }}
+                          />
+                          <input
+                            type="text"
+                            value={busquedaVenta}
+                            onChange={handleBusquedaVentaChange}
+                            placeholder="Buscar por número de venta o cliente…"
+                            className="flex-1 border-none bg-transparent text-[14px] outline-none"
+                            style={{ color: "var(--n-950)" }}
+                          />
+                        </div>
+
+                        {buscandoVenta && (
+                          <p
+                            className="mt-1.5 text-xs"
+                            style={{ color: "var(--n-500)" }}
+                          >
+                            Buscando…
+                          </p>
+                        )}
+
+                        {resultadosVenta.length > 0 && (
+                          <div
+                            className="mt-1.5 max-h-72 overflow-y-auto rounded-lg border"
+                            style={{ borderColor: "var(--n-150)" }}
+                          >
+                            {resultadosVenta.map((v, idx) => (
+                              <button
+                                key={v.id}
+                                onClick={() => seleccionarVenta(v)}
+                                className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors"
+                                style={{
+                                  borderTop:
+                                    idx === 0
+                                      ? "none"
+                                      : "1px solid var(--n-100)",
+                                  backgroundColor: "var(--n-0)",
+                                }}
+                                onMouseEnter={(e) =>
+                                  (e.currentTarget.style.backgroundColor =
+                                    "var(--n-50)")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.currentTarget.style.backgroundColor =
+                                    "var(--n-0)")
+                                }
+                              >
+                                <div className="min-w-0">
+                                  <p
+                                    className="text-sm font-medium"
+                                    style={{ color: "var(--n-950)" }}
+                                  >
+                                    V-{v.numero} ·{" "}
+                                    {v.cliente_nombre || "Sin nombre"}
+                                  </p>
+                                  <p
+                                    className="font-mono text-[11px]"
+                                    style={{ color: "var(--n-500)" }}
+                                  >
+                                    {formatDate(v.fecha)} · {formatCOP(v.total)}
+                                  </p>
+                                </div>
+                                <Check
+                                  className="h-4 w-4 shrink-0"
+                                  style={{ color: "var(--n-400)" }}
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        <div
+                          className="mt-1.5 flex items-center gap-2 rounded-md px-3 py-2 text-[11.5px]"
+                          style={{
+                            backgroundColor: "var(--info-50)",
+                            color: "var(--info-700)",
+                          }}
+                        >
+                          <Info className="h-3.5 w-3.5 shrink-0" />
+                          <span>
+                            La devolución de cliente debe vincularse a la venta
+                            original.
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </Field>
                 )}
               </div>

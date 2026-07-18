@@ -10,8 +10,6 @@ import BarraFiltros from "../../components/filtros/BarraFiltros";
 import { esNumeroPuro } from "../../lib/filtros";
 import { keywordTerms } from "../../lib/search";
 import {
-  DEVOLUCIONES_SUBFILTROS,
-  subfiltroToEstado,
   devolucionTipoPill,
   devolucionSigno,
   devolucionEstadoClass,
@@ -48,15 +46,12 @@ export default function DevolucionHistorial() {
   const [devoluciones, setDevoluciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("cliente");
-  const [subfiltro, setSubfiltro] = useState("Todas");
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
-  const [pendientes, setPendientes] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
-  const pendReqRef = useRef(0);
-  // Cache del último "texto → ids de producto": el listado y el contador de
-  // pendientes usan el mismo término y no tiene sentido resolverlo dos veces.
+  // Cache del último "texto → ids de producto": evita resolverlo dos veces
+  // para la misma búsqueda.
   const idsCacheRef = useRef({ texto: null, ids: [] });
 
   const reingresa = tab === "cliente";
@@ -151,8 +146,6 @@ export default function DevolucionHistorial() {
         count: "exact",
       });
       query = await aplicarBase(query);
-      const estado = subfiltroToEstado(subfiltro);
-      if (estado) query = query.eq("estado", estado);
       query = query
         // Desempate obligatorio: sin él, el "Cargar más" puede repetir o
         // saltar devoluciones que comparten la misma fecha.
@@ -183,32 +176,13 @@ export default function DevolucionHistorial() {
     }
   };
 
-  // El contador de pendientes se pregunta al servidor sobre TODO el filtro (sin
-  // el subfiltro de estado, que es justo lo que este número contesta): antes
-  // contaba solo las 20 filas cargadas y decía "0 pendientes" con la bodega llena.
-  const cargarPendientes = async () => {
-    const myReq = ++pendReqRef.current;
-    try {
-      let query = supabase
-        .from("devoluciones")
-        .select("id", { count: "exact", head: true });
-      query = await aplicarBase(query);
-      const { count, error } = await query.eq("estado", "pendiente");
-      if (myReq !== pendReqRef.current || error) return;
-      setPendientes(count ?? 0);
-    } catch {
-      // Un KPI que no carga no puede tumbar el listado.
-    }
-  };
-
   useEffect(() => {
     cargarDevoluciones(true);
-    cargarPendientes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [f.valoresAplicados, tab, subfiltro, esAdmin, perfil?.sede_id]);
+  }, [f.valoresAplicados, tab, esAdmin, perfil?.sede_id]);
 
   const enVista = devoluciones.length;
-  const filtrando = f.hayFiltros || subfiltro !== "Todas";
+  const filtrando = f.hayFiltros;
 
   return (
     <div className="flex h-full flex-col animate-fade-in">
@@ -248,10 +222,7 @@ export default function DevolucionHistorial() {
                   {total}
                 </b>{" "}
                 {reingresa ? "de cliente" : "a proveedor"}
-                {filtrando ? " (filtro)" : ""} ·{" "}
-                <b className="font-medium" style={{ color: "var(--warn-700)" }}>
-                  {pendientes} pendientes de validación
-                </b>
+                {filtrando ? " (filtro)" : ""}
               </>
             )}
           </p>
@@ -282,10 +253,7 @@ export default function DevolucionHistorial() {
             return (
               <button
                 key={t.id}
-                onClick={() => {
-                  setTab(t.id);
-                  setSubfiltro("Todas");
-                }}
+                onClick={() => setTab(t.id)}
                 className="relative -mb-px flex flex-1 items-center justify-center gap-2 border-b-2 px-4 text-[13px] font-medium transition-colors"
                 style={{
                   height: 48,
@@ -313,41 +281,6 @@ export default function DevolucionHistorial() {
             );
           })}
         </div>
-      </div>
-
-      {/* ── Sub-filtros por estado ──────────────────────────────────── */}
-      <div
-        className="flex flex-wrap items-center gap-1.5 border-b px-4 py-3 sm:px-7"
-        style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
-      >
-        {/* `sf` y no `f`: el objeto de filtros ya se llama `f` en este scope y
-            reusar el nombre lo tapaba dentro del map. */}
-        {DEVOLUCIONES_SUBFILTROS.map((sf) => {
-          const active = subfiltro === sf;
-          return (
-            <button
-              key={sf}
-              onClick={() => setSubfiltro(sf)}
-              className="rounded-md border px-3 text-[12px] font-medium transition-colors"
-              style={{
-                minHeight: 36,
-                borderColor: active ? "var(--n-950)" : "var(--n-150)",
-                backgroundColor: active ? "var(--n-950)" : "var(--n-0)",
-                color: active ? "var(--n-0)" : "var(--n-700)",
-              }}
-              onMouseEnter={(e) => {
-                if (!active)
-                  e.currentTarget.style.backgroundColor = "var(--n-50)";
-              }}
-              onMouseLeave={(e) => {
-                if (!active)
-                  e.currentTarget.style.backgroundColor = "var(--n-0)";
-              }}
-            >
-              {sf}
-            </button>
-          );
-        })}
       </div>
 
       {/* ── Barra de filtros ────────────────────────────────────────── */}
