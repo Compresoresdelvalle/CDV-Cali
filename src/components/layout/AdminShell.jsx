@@ -31,11 +31,18 @@ function useAlertasCountAdmin(perfil) {
     if (!perfil?.id) return;
 
     const fetchCount = async () => {
-      const { count: c } = await supabase
+      const { count: c, error } = await supabase
         .from("inventario")
-        .select("id", { count: "exact", head: true })
+        // productos!inner + activo: no contar alertas de productos dados de baja.
+        .select("id, producto:productos!inner(activo)", {
+          count: "exact",
+          head: true,
+        })
+        .eq("producto.activo", true)
         .in("estado_stock", ["Bajo", "Agotado"]);
-      setCount(c ?? 0);
+      // Si la consulta falla, conservar el último conteo conocido en vez de
+      // caer a 0 (que leería como "todo en orden" siendo mentira).
+      if (!error) setCount(c ?? 0);
     };
 
     fetchCount();
