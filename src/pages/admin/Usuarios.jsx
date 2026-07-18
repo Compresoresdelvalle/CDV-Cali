@@ -74,13 +74,14 @@ export default function Usuarios() {
   const guardar = async () => {
     if (!editando) return;
     if (!editando.nombre.trim()) {
-      setErrorMsg("El nombre es obligatorio.");
+      // Toast, no banner: el modal tapa el banner y "Guardar" parecía muerto.
+      avisarError("El nombre es obligatorio.");
       return;
     }
     // Anti-lockout: bloquear la auto-desactivación también desde el modal
     // (el servidor lo refuerza vía trg_usuarios_inmutables).
     if (editando.id === perfil?.id && !editando.activo) {
-      setErrorMsg("No puedes desactivar tu propio usuario (lockout).");
+      avisarError("No puedes desactivar tu propio usuario (lockout).");
       return;
     }
     if (guardandoRef.current) return;
@@ -113,7 +114,7 @@ export default function Usuarios() {
   const toggleActivo = async (u) => {
     // Anti-lockout: el Admin no puede desactivarse a sí mismo
     if (u.id === perfil?.id && u.activo) {
-      setErrorMsg("No puedes desactivarte a ti mismo (lockout)");
+      avisarError("No puedes desactivarte a ti mismo (lockout)");
       return;
     }
     const ok = await confirm({
