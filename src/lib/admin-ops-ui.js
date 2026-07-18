@@ -19,6 +19,7 @@ export function movimientoToken(tipo) {
     "traspaso_salida",
     "ensamble_consumo",
     "orden_consumo",
+    "garantia_salida",
   ];
   const entradas = [
     "compra",
