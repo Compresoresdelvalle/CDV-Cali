@@ -12,7 +12,7 @@ import {
 import { supabase } from "../../../lib/supabase";
 import { formatCOP, safeError } from "../../../lib/utils";
 import { useAuthStore } from "../../../stores/authStore";
-import { avisarOk, avisarError } from "../../../lib/notify";
+import { avisarOk, avisarError, avisarInfo } from "../../../lib/notify";
 import {
   RECIBO_METODOS_PAGO,
   metodoPagoLabel,
@@ -139,7 +139,13 @@ export default function ReciboNuevo() {
         p_payload: payload,
       });
       if (error) throw error;
-      avisarOk("Recibo creado");
+      if (data?.abono_omitido) {
+        avisarInfo(
+          "Recibo creado. Ya existía un abono idéntico reciente en la OT, así que no se duplicó el pago.",
+        );
+      } else {
+        avisarOk("Recibo creado");
+      }
       navigate(`/ops/recibos/${data.recibo_id}`);
     } catch (err) {
       avisarError(err, "Error al registrar recibo");
