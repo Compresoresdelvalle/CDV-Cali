@@ -65,6 +65,11 @@ export default function GarantiaCompraDetalle() {
   const [submitting, setSubmitting] = useState(false);
   const perfil = useAuthStore((s) => s.perfil);
   const esAdmin = perfil?.rol === "Admin";
+  const esBodega = perfil?.rol === "Bodeguero";
+  // Quién puede OPERAR la garantía (marcar reposición). Es lo que exige la RPC
+  // fn_marcar_reposicion_recibida. El Vendedor puede VER el detalle (abrió la
+  // garantía) pero no operarla, así que no se le ofrece el botón que fallaría.
+  const puedeOperar = esAdmin || esBodega;
   const [anulOpen, setAnulOpen] = useState(false);
   const [anulBusy, setAnulBusy] = useState(false);
 
@@ -198,7 +203,8 @@ export default function GarantiaCompraDetalle() {
     );
   }
 
-  const puedeRecibir = garantia.estado === "reposicion_pendiente";
+  const puedeRecibir =
+    garantia.estado === "reposicion_pendiente" && puedeOperar;
   const total = detalles.reduce(
     (acc, d) => acc + Number(d.cantidad) * Number(d.costo_unitario),
     0,
@@ -512,7 +518,12 @@ export default function GarantiaCompraDetalle() {
               }}
             >
               {garantia.resolucion === "nota_credito"
-                ? "Nota crédito aún no registrada."
+                ? // Un Vendedor no puede ver las notas crédito (RLS Bodega/Admin):
+                  // para él `notaCredito` siempre es null, así que no se le dice
+                  // "aún no registrada" (mentiría), sino quién la gestiona.
+                  puedeOperar
+                  ? "Nota crédito aún no registrada."
+                  : "La nota crédito la gestiona Bodega/Administración."
                 : "Resolución por reposición física — sin nota crédito."}
             </div>
           )}
