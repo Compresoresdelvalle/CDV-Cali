@@ -325,6 +325,11 @@ async function cargarClientes(dias) {
     .select("cliente_nombre, total, fecha")
     .eq("anulada", false)
     .gte("fecha", inicioPrevISO)
+    // Sin ORDER BY, el recorte del .limit() es arbitrario: el día que se superen
+    // las 5000 ventas del periodo, el ranking se calcularía sobre una muestra
+    // impredecible. Ordenando por fecha desc el recorte se queda con lo más
+    // reciente, que es lo sensato. Hoy hay ~880 ventas/año, así que no trunca.
+    .order("fecha", { ascending: false })
     .limit(5000);
   if (error) throw error;
   return agruparPorClave(
@@ -381,6 +386,8 @@ async function cargarProveedores(dias) {
     // ranking (un proveedor con una sola compra cancelada aparecía como gasto real).
     .neq("estado", "cancelada")
     .gte("fecha", inicioPrevISO)
+    // Recorte determinista (ver nota en cargarClientes): lo más reciente primero.
+    .order("fecha", { ascending: false })
     .limit(5000);
   if (error) throw error;
   // Proveedores se mide por volumen de COMPRAS (no hay venta por proveedor).
