@@ -12,37 +12,9 @@
  * resolución: esas features del diseño Lovable no tienen respaldo en BD.
  */
 
-/** Pestañas de tipo (mapeadas a la query por `reingresa_stock`). */
-export const DEVOLUCIONES_TABS = ["Todas", "Cliente", "Proveedor"];
-
-/**
- * Sub-filtros por estado real, dependientes de la pestaña de tipo.
- * El diseño Lovable usa nomenclatura de cliente/proveedor; aquí mapeamos a
- * los 4 estados reales del enum `estado_devolucion`.
- */
-export const DEVOLUCIONES_SUBFILTROS = [
-  "Todas",
-  "Pendiente",
-  "Aprobada",
-  "Rechazada",
-  "Procesada",
-];
-
-/** Sub-filtro (label de UI) → valor real de la columna `estado`. */
-export function subfiltroToEstado(label) {
-  switch (label) {
-    case "Pendiente":
-      return "pendiente";
-    case "Aprobada":
-      return "aprobada";
-    case "Rechazada":
-      return "rechazada";
-    case "Procesada":
-      return "procesada";
-    default:
-      return null;
-  }
-}
+// El flujo de estados pendiente/aprobada/rechazada nunca se usó (toda devolución
+// entra 'procesada'); se quitó la fachada en DevolucionHistorial y con ella los
+// exports DEVOLUCIONES_TABS, DEVOLUCIONES_SUBFILTROS y subfiltroToEstado.
 
 /**
  * reingresa_stock → tipo de devolución (clase de pill de tono + etiqueta).

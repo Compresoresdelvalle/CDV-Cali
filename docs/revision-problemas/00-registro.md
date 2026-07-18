@@ -828,3 +828,30 @@ las usen — se auditó su corrección igual (regla "no descartar nada").
   transferencia, habría que guardar el método en `garantias_venta`.
 
 Sección 10 cerrada. Sigue Sección 11 (Recibos / Clientes).
+
+### Verificación adversarial S10 (6 flujos): 1 ROTO, 2 OK_CON_REPAROS, 3 OK
+
+- 🔴 **ROTO (P1 dinero) — sobre-reembolso**: `fn_abrir_garantia_venta` validaba
+  cada reembolso ≤ total de la venta pero NO contra la SUMA de reembolsos ya
+  dados. Ya ocurrió: venta de $22 con 2 garantías de $22 = $44 (las de prueba
+  #1/#4). ✅ Corregido (migración `20260718042443`): valida reembolso ACUMULADO
+  (excluye anuladas) + `FOR UPDATE` sobre la venta/OT contra la carrera. Matriz
+  4/4. Datos históricos NO tocados.
+- 🟠 **P2 frontend (introducidos al abrir la ruta de garantía de compra al
+  Vendedor)** ✅ corregidos: el botón "Marcar reposición recibida" ya no se le
+  muestra al Vendedor (la RPC es Admin/Bodega); el texto de nota de crédito ya no
+  le miente ("la gestiona Bodega/Administración" en vez de "aún no registrada",
+  porque la RLS no le deja ver la nota). Limpiados 3 exports muertos en
+  devoluciones-ui.js.
+- ✅ Blindaje, guard de devolución, notas/reposición y motor del cierre: sin
+  error introducido. El verificador recalculó el cierre al centavo: #5 intacto
+  (12.851.981,78) y complementario #19 = +100.000,22 exacto.
+
+### Reparos documentados (NO son errores de cálculo — deuda de diseño/proceso)
+
+- El reembolso se asume EFECTIVO (garantias_venta no guarda método/cuenta). Si un
+  reembolso real fue por transferencia, el arqueo mostrará un faltante de caja
+  inexistente. Para cerrarlo habría que agregar método/cuenta al reembolso.
+- Anular una garantía devolver_dinero DESPUÉS de que su periodo ya tiene cierre
+  generado deja un egreso fantasma en ese cierre viejo (no dispara complementario
+  automático). Caso raro; requeriría un complementario manual como el #19.
