@@ -329,6 +329,15 @@ async function cargarClientes(dias) {
     // las 5000 ventas del periodo, el ranking se calcularía sobre una muestra
     // impredecible. Ordenando por fecha desc el recorte se queda con lo más
     // reciente, que es lo sensato. Hoy hay ~880 ventas/año, así que no trunca.
+    //
+    // SESGO CONOCIDO (latente, documentado en la verificación adversarial de la
+    // S12): la consulta abarca periodo actual + previo, así que si algún día
+    // trunca, lo primero que se descarta son las filas más viejas — justo las
+    // que alimentan `valorPrev`. Los montos y el orden del podio seguirían
+    // bien, pero la columna "Var. vs ant." se inflaría al alza. El arreglo
+    // definitivo es traer los dos periodos en consultas separadas (o mover la
+    // agregación a una RPC con GROUP BY); no se hizo porque faltan años para
+    // llegar a 5000 y el cambio es mayor.
     .order("fecha", { ascending: false })
     .limit(5000);
   if (error) throw error;
@@ -366,6 +375,12 @@ async function cargarCategorias(dias) {
     )
     .eq("venta.anulada", false)
     .gte("venta.fecha", inicioPrevISO)
+    // Recorte determinista, igual que Clientes y Proveedores (ver nota allí).
+    // Se ordena por `created_at` de detalle_venta (columna PROPIA) y no por la
+    // fecha de la venta embebida: en PostgREST, ordenar por un campo embebido
+    // NO reordena las filas padre, así que no serviría para hacer determinista
+    // el recorte del .limit(). created_at sigue el mismo orden cronológico.
+    .order("created_at", { ascending: false })
     .limit(8000);
   if (error) throw error;
   const norm = (data ?? []).map((d) => ({
