@@ -924,3 +924,105 @@ UPDATE solo Admin, DELETE bloqueado por RLS). 1 refutó (P2):
 Sección 11 cerrada (con verificación adversarial). Sigue Sección 12 (Panel Admin
 
 - transversal), la última.
+
+---
+
+## 2026-07-19 — Sección 12: Panel Admin + transversal ✅ HECHA (ÚLTIMA)
+
+Cacería de 6 cazadores: **44 hallazgos — 0 P0, 8 P1, 22 P2, 14 P3** (4 código
+viejo). Cero P0 es coherente con que las 11 secciones previas ya barrieron el
+motor de dinero. Verificación adversarial posterior: **los 6 verificadores
+refutaron** su afirmación, incluidas 2 regresiones introducidas por la propia
+sección (ver abajo).
+
+### Decisiones del dueño
+
+- OT sin aislamiento por sede → **dejarlo abierto** (intencional, solo documentar).
+- Parámetros del sistema (tabla vacía) → **solo arreglar la pantalla**, no sembrar.
+- 4 Edge Functions muertas sin JWT → **eliminarlas**.
+- Riesgo de lockout de Admin → **blindar en servidor**.
+- KPI de ventas → **completo: mostrador + OT** + indicador de devoluciones aparte.
+- Trigger legacy de devoluciones → **eliminarlo**.
+- Cron de cotizaciones → los borradores **sí** siguen venciendo.
+
+### Bloque A — Seguridad de BD (8 migraciones)
+
+`20260718221011` REVOKE TRUNCATE a anon/authenticated en las 39 tablas (71
+grants → 0) + default privileges de postgres. TRUNCATE no dispara triggers de
+fila ni pasa por RLS, así que burlaba el candado append-only de `movimientos`:
+era el P1 real. · `221446` anti-lockout de Admin. · `221632` REVOKE EXECUTE de
+PUBLIC/anon en 4 RPC de dinero. · `221904` clientes_insert restringido. ·
+`222317` eliminada policy `cont_all` (FOR ALL) que aflojaba por OR las
+restricciones de sede/rol de conteos; añadida `ct_delete` solo-Admin. · `222558`
+validación de rango de parámetros extendida a decimal y bool. · `222824` DROP
+del trigger legacy `trg_devolucion_stock`. · `223233` el cron ya no vence
+cotizaciones con abonos del cliente.
+
+**A9 OMITIDA a propósito**: restringir la lectura de `cuentas_bancarias` a
+solo-Admin habría roto el registro de pagos por transferencia de los Vendedores
+(la leen VentaNueva, ReciboNuevo, CotizacionDetalle, PagoCuentaModal y otras).
+Se deja `USING (true)` documentado.
+
+### Bloque B/C — Frontend
+
+3 P1 de "la pantalla miente": Top10 Clientes partía al mismo cliente en dos filas
+por mayúsculas ($29,2M y $12,9M separados); Top10 Proveedores sumaba compras
+canceladas ($681.364 inexistentes de EL COMERCIO ELÉCTRICO); Inventario truncaba
+la búsqueda a 500 con la bandera de aviso **muerta**. Además: campana de alertas
+(mentía a 0 al fallar y contaba productos dados de baja), Auditoría (406
+movimientos —8,8%— invisibles por 3 tipos ausentes del filtro, y KPIs sobre 50
+filas presentados como totales), GlobalSearch (anti-carrera + ya no traga el
+error mostrando "Sin resultados"), filtros que sobrevivían al logout en tablets
+compartidas, Parámetros con estado vacío honesto, toasts de validación, pestañas
+de Garantías según rol (el Bodeguero entraba a "De ventas" y rebotaba al inicio),
+y recarga automática de la PWA al activarse una versión nueva.
+
+Edge Functions: el MCP de Supabase **no expone borrado**, así que se dejaron
+inertes (`verify_jwt=true` + respuesta 410, sin CORS abierto). Para eliminarlas:
+`supabase functions delete <slug>`.
+
+### Verificación adversarial — 6/6 refutados
+
+- **[P2] TRUNCATE incompleto**: el default ACL de `supabase_admin` conserva la
+  `D` y **no se puede alterar desde postgres** (42501). Toda tabla nueva creada
+  por esa vía nacería con el hueco. Mitigado con event trigger en
+  `ddl_command_end` que revoca TRUNCATE sobre cada tabla nueva, con el REVOKE en
+  un bloque EXCEPTION degradado a WARNING para no abortar nunca un CREATE TABLE.
+  **Residual**: cierre de raíz requiere que Supabase ejecute el ALTER como
+  `supabase_admin` (no urgente con el event trigger puesto).
+- **[P2] Anti-lockout burlable**: el conteo dentro de un trigger BEFORE por fila
+  no ve los cambios de su propia sentencia ni los concurrentes. El caso
+  realmente explotable era la **concurrencia** (dos Admins degradándose en
+  paralelo). Cerrado con CONSTRAINT TRIGGER DEFERRABLE + advisory lock.
+- **[P2] Dashboard**: ticket promedio incluía 20 ventas en $0 ($263.549 →
+  $278.609 real); nuevo `devoluciones_mes_sin_venta` ($65.000, la parte estimada
+  a precio de catálogo); y nuevo `anticipos_ot_sin_facturar` ($992.880), plata
+  cobrada que quedó invisible al quitar el doble conteo.
+- **[P3] clientes_insert INERTE**: `fn_upsert_cliente` es SECURITY DEFINER
+  (owner postgres, BYPASSRLS) y `clientes` no tiene FORCE RLS → la RPC saltaba la
+  policy. Ahora valida el rol dentro de la función. Verificado que el Técnico no
+  crea clientes, así que excluirlo no rompe la operación.
+- **[P2] Regresión propia**: el banner de truncado de Inventario quedaba
+  **pegado** al limpiar la búsqueda (la bandera solo se recalculaba con texto).
+- **[P3] Regresión propia**: Top10 Categorías quedó fuera del arreglo, y
+  ordenarla por la fecha de la venta embebida **no habría servido** (en PostgREST
+  ordenar por campo embebido no reordena las filas padre). Se ordena por
+  `created_at` de `detalle_venta` (0% de divergencia con `venta.fecha` en 1846
+  filas).
+
+### Doble conteo de dinero — hallazgo de fondo
+
+Las ventas con `origen='ot'` y los abonos de servicios son **el mismo dinero**:
+los $9.194.301 de ventas de OT del mes están contenidos íntegros en los
+$10.187.181 de abonos (el abono es el cobro de esa misma factura, ligado por
+`abonos.venta_id`). El margen sumaba ambos. Ahora se calcula sobre facturación:
+ventas (mostrador + OT) − compras − devoluciones.
+
+### P2/P3 documentados, NO tocados
+
+Lecturas sin filtro de sede en inventario/abonos/pagos (restringirlas rompería
+Traspasos y el Cierre); sesgo latente de `valorPrev` en Top10 si algún día se
+superan las 5000 filas (faltan años); `.neq('estado','cancelada')` es lista
+negra y un estado nuevo entraría al ranking como gasto real.
+
+**Sección 12 cerrada. CAMPAÑA COMPLETA: las 12 secciones hechas y verificadas.**

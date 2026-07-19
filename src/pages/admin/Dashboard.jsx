@@ -221,6 +221,13 @@ export default function Dashboard() {
   const facturacionMes = Number(k.ventas_mes ?? 0);
   const egresosMes = Number(k.compras_mes ?? 0);
   const devolucionesMes = Number(k.devoluciones_mes ?? 0);
+  // Parte de `devoluciones_mes` valorizada a precio de catálogo (devoluciones
+  // sin venta asociada): se muestra para que se sepa qué porción es estimada.
+  const devolucionesEstimadas = Number(k.devoluciones_mes_sin_venta ?? 0);
+  // Anticipos cobrados de OT que AÚN no se facturan. No entran en ventas ni en
+  // el margen (eso duplicaría), pero es plata que ya entró a caja: al quitar el
+  // doble conteo se había vuelto invisible en todos los KPIs.
+  const anticiposOT = Number(k.anticipos_ot_sin_facturar ?? 0);
 
   // OJO — doble conteo: `ventas_mes` YA incluye la facturación de las órdenes de
   // servicio (origen 'ot'), y los abonos de servicios (`ingresos_servicios_mes`)
@@ -268,7 +275,7 @@ export default function Dashboard() {
 
       {/* KPI strip */}
       <div
-        className="grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:grid-cols-5 md:gap-y-0"
+        className="grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:grid-cols-3 md:gap-y-0 lg:grid-cols-6"
         style={{ borderColor: "hsl(var(--border))" }}
       >
         <Kpi
@@ -298,7 +305,18 @@ export default function Dashboard() {
           value={formatCOP(devolucionesMes)}
           sub={
             <span style={{ color: "hsl(var(--muted-foreground))" }}>
-              procesadas, a precio de venta
+              {devolucionesEstimadas > 0
+                ? `incluye ${formatCOP(devolucionesEstimadas)} estimados`
+                : "procesadas, a precio de venta"}
+            </span>
+          }
+        />
+        <Kpi
+          label="Anticipos de OT"
+          value={formatCOP(anticiposOT)}
+          sub={
+            <span style={{ color: "hsl(var(--muted-foreground))" }}>
+              cobrados, aún sin facturar
             </span>
           }
         />
