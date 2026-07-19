@@ -25,6 +25,10 @@ import {
   surfaceInputStyle,
 } from "../../lib/admin-ops-ui";
 
+// Debe cubrir TODOS los tipos reales de `movimientos`. Antes faltaban
+// conversion_a_insumo, conversion_a_venta y garantia_salida (406 movimientos,
+// ~8.8% del total), que quedaban inalcanzables por el filtro pese a que la
+// pantalla se presenta como "registro de TODA la actividad de stock".
 const TIPOS = [
   "Todos",
   "venta",
@@ -32,11 +36,14 @@ const TIPOS = [
   "traspaso_salida",
   "traspaso_entrada",
   "ajuste",
+  "conteo_ajuste",
   "ensamble_consumo",
   "ensamble_produccion",
-  "devolucion",
   "orden_consumo",
-  "conteo_ajuste",
+  "conversion_a_insumo",
+  "conversion_a_venta",
+  "devolucion",
+  "garantia_salida",
 ];
 const PAGE_SIZE = 50;
 
@@ -258,24 +265,27 @@ export default function Auditoria() {
           sub="En esta vista"
           icon={Shield}
         />
+        {/* Estos tres cuentan solo sobre las filas YA cargadas (paginado), no
+            sobre el total del filtro. El sufijo "+" y "en esta vista" lo hacen
+            explícito para no leer "Ajustes: 3" cuando en la BD hay cientos. */}
         <KpiCard
           label="Entradas"
-          value={entradas}
-          sub="Compras · entradas · prod."
+          value={`${entradas}${hasMore ? "+" : ""}`}
+          sub="En esta vista"
           token="--success"
           icon={TrendingUp}
         />
         <KpiCard
           label="Salidas"
-          value={salidas}
-          sub="Ventas · consumos · salidas"
+          value={`${salidas}${hasMore ? "+" : ""}`}
+          sub="En esta vista"
           token="--destructive"
           icon={TrendingDown}
         />
         <KpiCard
           label="Ajustes"
-          value={ajustes}
-          sub="Manuales y de conteo"
+          value={`${ajustes}${hasMore ? "+" : ""}`}
+          sub="En esta vista"
           token={ajustes > 0 ? "--warning" : "--muted-foreground"}
           icon={SlidersHorizontal}
         />

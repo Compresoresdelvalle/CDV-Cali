@@ -4,7 +4,7 @@ import { Search, X, Loader2 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { applyKeywordSearch } from "../../lib/search";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
-import { formatCOP } from "../../lib/utils";
+import { formatCOP, safeError } from "../../lib/utils";
 import { categoriaClass } from "../../lib/inventario-ui";
 
 /**
@@ -19,17 +19,25 @@ export default function GlobalSearch() {
   const [q, setQ] = useState("");
   const [resultados, setResultados] = useState([]);
   const [buscando, setBuscando] = useState(false);
+  const [errorBusqueda, setErrorBusqueda] = useState(null);
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
   const boxRef = useRef(null);
+  // Token de secuencia: en tablet con red lenta, una respuesta vieja podía
+  // llegar después de una nueva y pisar los resultados (mostrar coincidencias
+  // que ya no correspondían a lo tecleado). Descartamos las respuestas obsoletas.
+  const seqRef = useRef(0);
 
   const buscar = useCallback(async (text) => {
     if (text.trim().length < 2) {
       setResultados([]);
       setBuscando(false);
+      setErrorBusqueda(null);
       return;
     }
+    const id = ++seqRef.current;
     setBuscando(true);
+    setErrorBusqueda(null);
     try {
       let pq = supabase
         .from("productos")
@@ -44,12 +52,17 @@ export default function GlobalSearch() {
         "codigo_proveedor",
       ]);
       const { data, error } = await pq.order("nombre").limit(1000);
+      if (id !== seqRef.current) return; // respuesta obsoleta
       if (error) throw error;
       setResultados(data ?? []);
-    } catch {
+    } catch (e) {
+      if (id !== seqRef.current) return;
+      // Antes se tragaba el error y se mostraba "Sin resultados", afirmando que
+      // el producto no existe aunque la búsqueda hubiera fallado (red/RLS).
+      setErrorBusqueda(safeError(e, "No se pudo buscar. Reintenta."));
       setResultados([]);
     } finally {
-      setBuscando(false);
+      if (id === seqRef.current) setBuscando(false);
     }
   }, []);
 
@@ -162,7 +175,16 @@ export default function GlobalSearch() {
             </div>
           )}
 
-          {!buscando && resultados.length === 0 && (
+          {!buscando && errorBusqueda && (
+            <div
+              className="px-3.5 py-3 text-[12.5px]"
+              style={{ color: "var(--dang-600)" }}
+            >
+              {errorBusqueda}
+            </div>
+          )}
+
+          {!buscando && !errorBusqueda && resultados.length === 0 && (
             <div
               className="px-3.5 py-3 text-[12.5px]"
               style={{ color: "var(--n-500)" }}

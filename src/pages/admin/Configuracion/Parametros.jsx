@@ -93,7 +93,9 @@ export default function Parametros() {
     const raw = edits[p.key] ?? p.value;
     const err = validate(p, raw);
     if (err) {
-      setErrorMsg(`${p.key}: ${err}`);
+      // Toast en vez de banner: el banner se pintaba arriba, fuera de la vista,
+      // y parecía que "Guardar" no hacía nada.
+      avisarError(`${p.key}: ${err}`);
       return;
     }
     if (savingRef.current) return;
@@ -122,13 +124,43 @@ export default function Parametros() {
     <div className="flex flex-col gap-4">
       {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
 
-      {/* Banner propagación en tiempo real */}
-      <WarnBanner title="Propagación en tiempo real">
-        Los cambios se aplican en <b>tiempo real</b> a todas las pestañas
-        abiertas. Cotizaciones, OTs y otros documentos creados después usarán
-        los nuevos valores; los existentes mantienen los suyos. Editar con
-        cuidado: afecta toda la operación.
-      </WarnBanner>
+      {/* Banner propagación en tiempo real (solo si hay parámetros que editar) */}
+      {!loading && params.length > 0 && (
+        <WarnBanner title="Propagación en tiempo real">
+          Los cambios se aplican en <b>tiempo real</b> a todas las pestañas
+          abiertas. Cotizaciones, OTs y otros documentos creados después usarán
+          los nuevos valores; los existentes mantienen los suyos. Editar con
+          cuidado: afecta toda la operación.
+        </WarnBanner>
+      )}
+
+      {/* S12: la tabla parametros_sistema está vacía en producción. Antes se
+          veía un panel en blanco sin explicación; ahora un estado honesto que
+          aclara que el sistema corre con valores por defecto. */}
+      {!loading && params.length === 0 && (
+        <div
+          className="rounded-[10px] border p-6 text-center"
+          style={{
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+          }}
+        >
+          <p
+            className="text-sm font-medium"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            No hay parámetros configurables
+          </p>
+          <p
+            className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            El sistema está funcionando con sus valores por defecto (por ejemplo
+            IVA 19% y garantía de 90 días). No hay nada que ajustar aquí por
+            ahora.
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -143,7 +175,7 @@ export default function Parametros() {
             />
           ))}
         </div>
-      ) : (
+      ) : params.length === 0 ? null : (
         <div
           className="rounded-[10px] border p-5"
           style={{

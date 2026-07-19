@@ -746,15 +746,21 @@ function useAlertasCount(perfil) {
     const fetchCount = async () => {
       let q = supabase
         .from("inventario")
-        .select("id", { count: "exact", head: true })
+        // productos!inner + activo: no contar alertas de productos dados de baja.
+        .select("id, producto:productos!inner(activo)", {
+          count: "exact",
+          head: true,
+        })
+        .eq("producto.activo", true)
         .in("estado_stock", ["Bajo", "Agotado"]);
 
       if (perfil.rol !== "Admin" && perfil.sede_id) {
         q = q.eq("sede_id", perfil.sede_id);
       }
 
-      const { count: c } = await q;
-      setCount(c ?? 0);
+      const { count: c, error } = await q;
+      // Si falla, conservar el último conteo en vez de mentir con 0.
+      if (!error) setCount(c ?? 0);
     };
 
     fetchCount();
