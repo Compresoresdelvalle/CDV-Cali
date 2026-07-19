@@ -70,7 +70,17 @@ export default function Top10() {
   const totalVendido = items.reduce((s, i) => s + Number(i.valor || 0), 0);
   const totalUnidades = items.reduce((s, i) => s + Number(i.unidades || 0), 0);
   const totalTx = items.reduce((s, i) => s + Number(i.transacciones || 0), 0);
-  const ticketPromedio = totalUnidades > 0 ? totalVendido / totalUnidades : 0;
+  // Clientes y Proveedores se agrupan por cabecera (ventas/compras), donde no
+  // hay cantidad de unidades: antes las tarjetas "Unidades" y "Ticket promedio"
+  // mostraban 0 y $0 fijos, que se leía como "no se vendió nada". Cuando no hay
+  // unidades ocultamos esa tarjeta y el ticket pasa a ser POR TRANSACCIÓN, que
+  // sí es calculable con los datos que tenemos.
+  const hayUnidades = totalUnidades > 0;
+  const ticketPromedio = hayUnidades
+    ? totalVendido / totalUnidades
+    : totalTx > 0
+      ? totalVendido / totalTx
+      : 0;
   const tabActual = RANK_TABS.find((t) => t.key === tab);
   const esCompras = tab === "proveedores";
 
@@ -147,7 +157,9 @@ export default function Top10() {
 
       {/* KPI strip */}
       <div
-        className="grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:grid-cols-4 md:gap-y-0"
+        className={`grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:gap-y-0 ${
+          hayUnidades ? "md:grid-cols-4" : "md:grid-cols-3"
+        }`}
         style={{ borderColor: "hsl(var(--border))" }}
       >
         <Kpi
@@ -155,15 +167,25 @@ export default function Top10() {
           value={formatCOP(totalVendido)}
           sub={`Total Top ${LIMITE_RANKING}`}
         />
-        <Kpi
-          label="Unidades"
-          value={totalUnidades.toLocaleString("es-CO")}
-          sub="Suma del ranking"
-        />
+        {hayUnidades && (
+          <Kpi
+            label="Unidades"
+            value={totalUnidades.toLocaleString("es-CO")}
+            sub="Suma del ranking"
+          />
+        )}
         <Kpi
           label="Ticket promedio"
           value={formatCOP(Math.round(ticketPromedio))}
-          sub={esCompras ? "Costo por unidad" : "Ingreso por unidad"}
+          sub={
+            hayUnidades
+              ? esCompras
+                ? "Costo por unidad"
+                : "Ingreso por unidad"
+              : esCompras
+                ? "Por orden de compra"
+                : "Por transacción"
+          }
         />
         <Kpi
           last
@@ -303,13 +325,45 @@ async function cargarClientes(dias) {
     .select("cliente_nombre, total, fecha")
     .eq("anulada", false)
     .gte("fecha", inicioPrevISO)
+    // Sin ORDER BY, el recorte del .limit() es arbitrario: el día que se superen
+    // las 5000 ventas del periodo, el ranking se calcularía sobre una muestra
+    // impredecible. Ordenando por fecha desc el recorte se queda con lo más
+    // reciente, que es lo sensato. Hoy hay ~880 ventas/año, así que no trunca.
+    //
+    // SESGO CONOCIDO (latente, documentado en la verificación adversarial de la
+    // S12): la consulta abarca periodo actual + previo, así que si algún día
+    // trunca, lo primero que se descarta son las filas más viejas — justo las
+    // que alimentan `valorPrev`. Los montos y el orden del podio seguirían
+    // bien, pero la columna "Var. vs ant." se inflaría al alza. El arreglo
+    // definitivo es traer los dos periodos en consultas separadas (o mover la
+    // agregación a una RPC con GROUP BY); no se hizo porque faltan años para
+    // llegar a 5000 y el cambio es mayor.
+    .order("fecha", { ascending: false })
     .limit(5000);
   if (error) throw error;
   return agruparPorClave(
     data ?? [],
-    (v) => (v.cliente_nombre || "").trim() || "Consumidor final",
+    (v) => claveCanonica(v.cliente_nombre, "CONSUMIDOR FINAL"),
     inicioISO,
   );
+}
+
+/**
+ * Clave canónica para agrupar clientes/proveedores. Antes se agrupaba por el
+ * texto crudo (case-sensitive), así que el mismo cliente se partía en dos filas
+ * del ranking: las ventas sin nombre (etiquetadas "Consumidor final") quedaban
+ * separadas del literal "CONSUMIDOR FINAL", y "Pro Estibas" de "PRO ESTIBAS".
+ * Normaliza mayúsculas, espacios múltiples y acentos, y unifica el vacío con el
+ * fallback para que caigan en una sola fila.
+ */
+function claveCanonica(raw, fallback) {
+  const limpio = (raw || "").trim();
+  if (!limpio) return fallback;
+  return limpio
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // quita acentos combinados
+    .replace(/\s+/g, " ");
 }
 
 async function cargarCategorias(dias) {
@@ -321,6 +375,12 @@ async function cargarCategorias(dias) {
     )
     .eq("venta.anulada", false)
     .gte("venta.fecha", inicioPrevISO)
+    // Recorte determinista, igual que Clientes y Proveedores (ver nota allí).
+    // Se ordena por `created_at` de detalle_venta (columna PROPIA) y no por la
+    // fecha de la venta embebida: en PostgREST, ordenar por un campo embebido
+    // NO reordena las filas padre, así que no serviría para hacer determinista
+    // el recorte del .limit(). created_at sigue el mismo orden cronológico.
+    .order("created_at", { ascending: false })
     .limit(8000);
   if (error) throw error;
   const norm = (data ?? []).map((d) => ({
@@ -337,13 +397,18 @@ async function cargarProveedores(dias) {
   const { data, error } = await supabase
     .from("compras")
     .select("proveedor, total, fecha")
+    // Las compras canceladas nunca se pagaron: incluirlas inflaba el gasto y el
+    // ranking (un proveedor con una sola compra cancelada aparecía como gasto real).
+    .neq("estado", "cancelada")
     .gte("fecha", inicioPrevISO)
+    // Recorte determinista (ver nota en cargarClientes): lo más reciente primero.
+    .order("fecha", { ascending: false })
     .limit(5000);
   if (error) throw error;
   // Proveedores se mide por volumen de COMPRAS (no hay venta por proveedor).
   return agruparPorClave(
     data ?? [],
-    (c) => (c.proveedor || "").trim() || "Sin proveedor",
+    (c) => claveCanonica(c.proveedor, "SIN PROVEEDOR"),
     inicioISO,
   );
 }

@@ -45,6 +45,8 @@ export default function Inventario() {
     loadingMore,
     hasMore,
     error,
+    total,
+    truncado,
     filtroSede,
     filtroEstado,
     filtroTipo,
@@ -220,6 +222,25 @@ export default function Inventario() {
           )}
 
           {loading && <SkeletonList />}
+
+          {/* S4-02: la búsqueda empató con más de 500 productos y el listado es
+              un recorte. Avisarlo evita que el operario concluya "no existe"
+              cuando en realidad hay más coincidencias que la app no mostró. */}
+          {!loading && truncado && (
+            <div
+              className="mb-3 rounded-[10px] border p-3"
+              style={{
+                backgroundColor: "var(--warn-50)",
+                borderColor: "var(--warn-border)",
+              }}
+            >
+              <p className="text-xs" style={{ color: "var(--warn-700)" }}>
+                Mostrando las primeras 500 coincidencias
+                {total ? ` de ${total}` : ""}. Escribe más letras para afinar la
+                búsqueda y ver el producto que buscas.
+              </p>
+            </div>
+          )}
 
           {!loading && items.length === 0 && !error && (
             <EmptyState filtroBusqueda={filtroBusqueda} />

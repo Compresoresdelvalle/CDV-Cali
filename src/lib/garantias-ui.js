@@ -13,6 +13,22 @@ export const GARANTIAS_TABS = [
 ];
 
 /**
+ * Pestañas que un rol puede ABRIR de verdad. El listado se mostraba completo a
+ * los 4 roles, pero el detalle está protegido por RoleGuard con roles distintos:
+ * `garantias/compra/:id` excluye al Técnico y `garantias/venta/:id` excluye al
+ * Bodeguero. Resultado: el Bodeguero entraba a "De ventas", hacía clic en una
+ * fila y la app lo lanzaba al inicio sin explicación (botón muerto), y al
+ * Técnico le pasaba lo mismo en "De compras". Debe seguir alineado con las
+ * rutas de App.jsx.
+ */
+export function tabsGarantiasPorRol(rol) {
+  if (rol === "Bodeguero")
+    return GARANTIAS_TABS.filter((t) => t.v === "compra");
+  if (rol === "Tecnico") return GARANTIAS_TABS.filter((t) => t.v === "venta");
+  return GARANTIAS_TABS; // Admin y Vendedor abren ambas
+}
+
+/**
  * Estados reales de una garantía de compra (enum `estado_garantia_compra`).
  * `anulada` la produce `fn_anular_garantia_compra`: faltaba en la lista, así que
  * no había forma de filtrarla y su pill salía con el valor crudo.

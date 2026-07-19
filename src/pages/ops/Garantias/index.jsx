@@ -6,7 +6,7 @@ import { Search, ShieldCheck, ShieldAlert, X } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { formatDate, formatCOP, safeError } from "../../../lib/utils";
 import {
-  GARANTIAS_TABS,
+  tabsGarantiasPorRol,
   ESTADOS_GARANTIA_COMPRA,
   ESTADOS_GARANTIA_VENTA,
   garantiaEstadoLabel,
@@ -14,6 +14,7 @@ import {
   resolucionPillClass,
   resolucionLabel,
 } from "../../../lib/garantias-ui";
+import { useAuthStore } from "../../../stores/authStore";
 
 /**
  * Listado de garantías — F13 (re-vestido con diseño Lovable).
@@ -43,7 +44,20 @@ const RESOLUCION_OPCIONES = {
  */
 export default function GarantiasIndex() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState("compra"); // compra | venta
+  const perfil = useAuthStore((s) => s.perfil);
+  // Solo las pestañas cuyo detalle puede abrir este rol (ver tabsGarantiasPorRol).
+  const tabsVisibles = useMemo(
+    () => tabsGarantiasPorRol(perfil?.rol),
+    [perfil?.rol],
+  );
+  // La pestaña inicial debe ser una permitida: al Técnico, cuyo detalle de
+  // compra está vetado, no puede arrancarle "compra" por defecto.
+  const [tab, setTab] = useState(() => tabsGarantiasPorRol(perfil?.rol)[0].v);
+
+  // Si el perfil carga después del primer render, corregir la pestaña activa.
+  useEffect(() => {
+    if (!tabsVisibles.some((t) => t.v === tab)) setTab(tabsVisibles[0].v);
+  }, [tabsVisibles, tab]);
   const [filtroEstado, setFiltroEstado] = useState("");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -187,7 +201,7 @@ export default function GarantiasIndex() {
         className="flex max-w-[560px] items-end border-b"
         style={{ borderColor: "var(--n-150)" }}
       >
-        {GARANTIAS_TABS.map((t) => {
+        {tabsVisibles.map((t) => {
           const active = tab === t.v;
           const Icon = t.v === "venta" ? ShieldCheck : ShieldAlert;
           return (

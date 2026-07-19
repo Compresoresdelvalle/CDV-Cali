@@ -81,6 +81,9 @@ export function useInventario() {
     loadingMore: store.loadingMore,
     hasMore: store.hasMore,
     error: store.error,
+    // S4-02: total real de coincidencias y si la búsqueda quedó recortada a 500.
+    total: store.total,
+    truncado: store.truncado,
     filtroSede: store.filtroSede,
     filtroEstado: store.filtroEstado,
     filtroTipo: store.filtroTipo,

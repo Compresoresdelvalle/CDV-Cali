@@ -99,6 +99,18 @@ export const useAuthStore = create((set, get) => ({
       // FRONTEND-03: limpiar el inventario cacheado para que el siguiente usuario
       // en un dispositivo compartido no vea el estado del anterior.
       useInventarioStore.getState().reset();
+      // S12: los filtros de las listas (useFiltros) se guardan en sessionStorage
+      // con prefijo "filtros:". En las tablets compartidas de bodega sobrevivían
+      // al cierre de sesión, así que el siguiente usuario abría Ventas/Órdenes/
+      // Cuentas con los filtros (fechas, texto que puede ser un cliente) del
+      // anterior ya aplicados. Los borramos al salir.
+      try {
+        for (const k of Object.keys(sessionStorage)) {
+          if (k.startsWith("filtros:")) sessionStorage.removeItem(k);
+        }
+      } catch {
+        // sessionStorage no disponible (modo privado extremo) — nada que limpiar
+      }
     }
   },
 
