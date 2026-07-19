@@ -94,6 +94,12 @@ export const useInventarioStore = create((set, get) => ({
       let productoIds = null;
       const busquedaRaw = s.filtroBusqueda.trim();
       const necesitaPreFiltro = !!busquedaRaw;
+      // Sin texto de búsqueda NO hay pre-query, así que no hay recorte posible:
+      // hay que APAGAR la bandera aquí. Si no, al limpiar la búsqueda (la X, o
+      // borrar el texto) o al cambiar solo el filtro de sede, el banner
+      // "Mostrando las primeras 500 de N" se quedaba pegado sobre un listado
+      // que ya estaba completo — un aviso falso permanente.
+      if (!necesitaPreFiltro) set({ total: null, truncado: false });
       if (necesitaPreFiltro) {
         // `count: 'exact'` devuelve cuántos productos empata el texto EN TOTAL,
         // aunque `.limit()` solo traiga los primeros: así sabemos si el listado
