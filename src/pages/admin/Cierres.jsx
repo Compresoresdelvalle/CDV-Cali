@@ -684,12 +684,19 @@ export default function Cierres() {
         {/* Tabs de filtro del histórico (Lovable) */}
         {!loadingHist && historial.length > 0 && (
           <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            {/* TABS_HIST son OBJETOS {id, label, tipo}. Este bloque los trataba
+                como si fueran strings: key={t}, setTabHist(t) y {t}. Renderizar
+                un objeto revienta React (error #31 "Objects are not valid as a
+                React child") y, sin barrera de error, dejaba TODA la app en
+                blanco al entrar a Cierres. El resto del archivo siempre usó el
+                `id` (línea 83 inicializa "todos"; el filtro busca t.id===tabHist),
+                así que lo correcto es guardar el id y pintar el label. */}
             {TABS_HIST.map((t) => {
-              const on = t === tabHist;
+              const on = t.id === tabHist;
               return (
                 <button
-                  key={t}
-                  onClick={() => setTabHist(t)}
+                  key={t.id}
+                  onClick={() => setTabHist(t.id)}
                   className="rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors cursor-pointer"
                   style={{
                     backgroundColor: on ? "hsl(var(--primary))" : "transparent",
@@ -698,7 +705,7 @@ export default function Cierres() {
                       : "hsl(var(--muted-foreground))",
                   }}
                 >
-                  {t}
+                  {t.label}
                 </button>
               );
             })}
@@ -771,7 +778,10 @@ export default function Cierres() {
                   className="py-6 text-center text-xs italic"
                   style={{ color: "hsl(var(--muted-foreground))" }}
                 >
-                  Sin cierres de tipo {tabHist.toLowerCase()}
+                  Sin cierres de tipo{" "}
+                  {(
+                    TABS_HIST.find((t) => t.id === tabHist)?.label ?? tabHist
+                  ).toLowerCase()}
                 </p>
               )}
             </div>
@@ -794,7 +804,10 @@ export default function Cierres() {
                   className="py-6 text-center text-xs italic"
                   style={{ color: "hsl(var(--muted-foreground))" }}
                 >
-                  Sin cierres de tipo {tabHist.toLowerCase()}
+                  Sin cierres de tipo{" "}
+                  {(
+                    TABS_HIST.find((t) => t.id === tabHist)?.label ?? tabHist
+                  ).toLowerCase()}
                 </li>
               )}
             </ul>
