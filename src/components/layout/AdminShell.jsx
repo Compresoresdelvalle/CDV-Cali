@@ -20,6 +20,7 @@ import { useAuthStore } from "../../stores/authStore";
 import ThemeToggle from "../ui/ThemeToggle";
 import NotificacionesBell from "../admin/NotificacionesBell";
 import Logo from "../ui/Logo";
+import ErrorBoundary from "../ui/ErrorBoundary";
 import { supabase } from "../../lib/supabase";
 import { SECCIONES_ADMIN, getInitials } from "../../lib/admin-shell-ui";
 
@@ -560,7 +561,12 @@ export default function AdminShell() {
 
         {/* Página */}
         <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
-          <Outlet />
+          {/* La barrera contiene el fallo en el contenido: si una pantalla del
+              panel revienta, el sidebar y la navegación siguen vivos y se ve el
+              error real en vez de una pantalla en blanco. */}
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
 
         {/* Bottom nav móvil/tablet */}

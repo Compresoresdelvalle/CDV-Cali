@@ -32,6 +32,7 @@ import { ROLE_MODULES, MODULE_ROUTES } from "../../lib/constants";
 import ThemeToggle from "../ui/ThemeToggle";
 import GlobalSearch from "./GlobalSearch";
 import Logo from "../ui/Logo";
+import ErrorBoundary from "../ui/ErrorBoundary";
 import { supabase } from "../../lib/supabase";
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
@@ -852,7 +853,10 @@ export default function AppShell() {
 
         {/* Contenido de página */}
         <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
-          <Outlet />
+          {/* Ver AdminShell: contiene el fallo para no dejar la app en blanco. */}
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
 
         {/* Bottom nav móvil/tablet */}
