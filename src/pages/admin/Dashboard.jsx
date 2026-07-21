@@ -218,24 +218,23 @@ export default function Dashboard() {
 
   const k = kpis ?? {};
 
-  const facturacionMes = Number(k.ventas_mes ?? 0);
+  // Mismo criterio que el CIERRE (documento autoritativo de caja):
+  //   · ventas de MOSTRADOR  → "productos"
+  //   · abonos de OT         → "servicios"  (el cobro real, en su fecha real)
+  // No se suman las ventas origen='ot': serían la MISMA plata de los abonos,
+  // contada de nuevo el día de la facturación (que puede ser semanas después).
+  const ventasMostrador = Number(k.ventas_mes ?? 0);
+  const serviciosMes = Number(k.ingresos_servicios_mes ?? 0);
   const egresosMes = Number(k.compras_mes ?? 0);
   const devolucionesMes = Number(k.devoluciones_mes ?? 0);
   // Parte de `devoluciones_mes` valorizada a precio de catálogo (devoluciones
   // sin venta asociada): se muestra para que se sepa qué porción es estimada.
   const devolucionesEstimadas = Number(k.devoluciones_mes_sin_venta ?? 0);
-  // Anticipos cobrados de OT que AÚN no se facturan. No entran en ventas ni en
-  // el margen (eso duplicaría), pero es plata que ya entró a caja: al quitar el
-  // doble conteo se había vuelto invisible en todos los KPIs.
-  const anticiposOT = Number(k.anticipos_ot_sin_facturar ?? 0);
 
-  // OJO — doble conteo: `ventas_mes` YA incluye la facturación de las órdenes de
-  // servicio (origen 'ot'), y los abonos de servicios (`ingresos_servicios_mes`)
-  // son el COBRO de esas mismas facturas, no un ingreso adicional: se verificó
-  // al peso que $9.194.301 de los $10.187.181 de abonos del mes corresponden a
-  // OTs ya facturadas. Sumarlos inflaba el margen en esa cantidad. El margen se
-  // calcula sobre FACTURACIÓN: ventas (mostrador + OT) − compras − devoluciones.
-  const margenMes = facturacionMes - egresosMes - devolucionesMes;
+  // Margen sobre lo REALMENTE recaudado, igual que el cierre:
+  // mostrador + servicios (abonos de OT) − compras − devoluciones.
+  const margenMes =
+    ventasMostrador + serviciosMes - egresosMes - devolucionesMes;
 
   // El delta comparaba SIEMPRE hoy vs ayer, aunque el KPI dijera "Semana" o
   // "Mes": se leía una caída de un día como si fuera del mes. Ahora compara
@@ -278,16 +277,16 @@ export default function Dashboard() {
         className="grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:grid-cols-3 md:gap-y-0 lg:grid-cols-6"
         style={{ borderColor: "hsl(var(--border))" }}
       >
-        {/* El rótulo dice "mostrador + OT" a propósito: este KPI incluye la
-            facturación de órdenes de servicio, mientras que el Cierre muestra
-            esa misma plata aparte, bajo "Servicios". Sin decirlo, al comparar
-            las dos pantallas parece que la plata de OT se cuenta dos veces
-            (no se cuenta dos veces en ningún cálculo: es la misma, con dos
-            nombres). */}
+        {/* Solo MOSTRADOR, igual que "Productos" en el Cierre. La plata de las
+            órdenes de servicio va en su propia tarjeta ("Servicios"), medida por
+            los abonos: ese es el cobro real y en su fecha real. Incluir aquí las
+            ventas origen='ot' inflaba el día con plata recibida semanas antes
+            (una OT abonada el 8 de julio y facturada el 21 aparecía como venta
+            del 21). */}
         <Kpi
           label={`Ventas · ${periodo}`}
           value={formatCOP(ventasPeriodo)}
-          hint="Mostrador + órdenes de servicio. En Cierres esta misma plata aparece separada: mostrador en “Productos” y las OT en “Servicios”."
+          hint="Ventas de mostrador. Lo cobrado por órdenes de servicio se muestra aparte, en “Servicios”. Coincide con “Productos” del Cierre."
           sub={
             ventasDelta !== null ? (
               <DeltaPill delta={ventasDelta} etiqueta={ref.etiqueta} />
@@ -319,11 +318,12 @@ export default function Dashboard() {
           }
         />
         <Kpi
-          label="Anticipos de OT"
-          value={formatCOP(anticiposOT)}
+          label="Servicios del mes"
+          value={formatCOP(serviciosMes)}
+          hint="Abonos cobrados en órdenes de servicio, en la fecha real del cobro. Coincide con “Servicios” del Cierre. Cuando la OT se factura NO se vuelve a contar: es el mismo dinero."
           sub={
             <span style={{ color: "hsl(var(--muted-foreground))" }}>
-              cobrados, aún sin facturar
+              cobrado en órdenes de trabajo
             </span>
           }
         />
@@ -333,7 +333,7 @@ export default function Dashboard() {
           danger={margenMes < 0}
           sub={
             <span style={{ color: "hsl(var(--muted-foreground))" }}>
-              ventas − compras − devol.
+              ventas + serv. − compras − devol.
             </span>
           }
         />
