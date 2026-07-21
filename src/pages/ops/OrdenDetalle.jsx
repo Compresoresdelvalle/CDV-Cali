@@ -2223,13 +2223,26 @@ function PasoEntrega({
 
   const convertirAVenta = async () => {
     if (ro || generando || !saldoCubierto) return;
+
+    // La OT solo se puede facturar con saldo en cero, así que a esta altura el
+    // cliente YA pagó (todo o parte en abonos). El riesgo real de operación es
+    // volver a cobrarle en el mostrador al ver la factura nueva, y también
+    // explica por qué la plata "parece" contarse dos veces: entró como abono y
+    // ahora aparece como venta, pero es el MISMO dinero.
+    const yaPagado = (montos.anticipos ?? 0) > 0;
+    const avisoPago = yaPagado
+      ? `\n\n⚠️ NO LE COBRES AL CLIENTE.\nYa pagó ${formatCOP(
+          montos.anticipos,
+        )} en abonos durante esta orden. Ese dinero YA entró a caja: la factura solo formaliza la entrega, no es un cobro nuevo.`
+      : "";
+
     // #S2-17: acción irreversible (genera la venta, cierra garantías y congela
     // la OT). Confirmar explicando la consecuencia antes de ejecutar.
     if (
       !window.confirm(
         `Vas a facturar y entregar la OT-${orden.numero} por ${formatCOP(
           montos.total,
-        )}.\n\nEsto genera la venta y cierra la orden; no se puede deshacer. ¿Continuar?`,
+        )}.${avisoPago}\n\nEsto genera la venta y cierra la orden; no se puede deshacer. ¿Continuar?`,
       )
     )
       return;
@@ -2365,14 +2378,42 @@ function PasoEntrega({
       )}
 
       {!entregada ? (
-        <PrimaryButton
-          disabled={ro || !saldoCubierto || generando}
-          onClick={convertirAVenta}
-          style={{ width: "100%" }}
-        >
-          <ShieldCheck className="h-4 w-4" />
-          {generando ? "Generando…" : TX.convertirVenta}
-        </PrimaryButton>
+        <div className="space-y-2">
+          {/* Aviso EN PANTALLA (no solo en el pop-up de confirmación): el dinero
+              de esta OT ya está en caja como abonos. Sin esto, al ver la factura
+              nueva es fácil cobrarle otra vez al cliente. */}
+          {saldoCubierto && (montos.anticipos ?? 0) > 0 && (
+            <div
+              className="rounded-lg border px-3 py-2.5"
+              style={{
+                backgroundColor: "hsl(var(--warning) / 0.1)",
+                borderColor: "hsl(var(--warning) / 0.4)",
+              }}
+            >
+              <p
+                className="text-[12.5px] font-semibold"
+                style={{ color: "hsl(var(--foreground))" }}
+              >
+                No le cobres al cliente
+              </p>
+              <p
+                className="mt-0.5 text-[11.5px] leading-relaxed"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                Ya pagó {formatCOP(montos.anticipos)} en abonos. Ese dinero ya
+                entró a caja: la factura solo formaliza la entrega.
+              </p>
+            </div>
+          )}
+          <PrimaryButton
+            disabled={ro || !saldoCubierto || generando}
+            onClick={convertirAVenta}
+            style={{ width: "100%" }}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            {generando ? "Generando…" : TX.convertirVenta}
+          </PrimaryButton>
+        </div>
       ) : (
         <div className="space-y-3">
           <div

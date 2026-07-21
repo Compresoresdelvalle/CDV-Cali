@@ -278,9 +278,16 @@ export default function Dashboard() {
         className="grid grid-cols-2 gap-y-4 border-b pb-5 pt-1 md:grid-cols-3 md:gap-y-0 lg:grid-cols-6"
         style={{ borderColor: "hsl(var(--border))" }}
       >
+        {/* El rótulo dice "mostrador + OT" a propósito: este KPI incluye la
+            facturación de órdenes de servicio, mientras que el Cierre muestra
+            esa misma plata aparte, bajo "Servicios". Sin decirlo, al comparar
+            las dos pantallas parece que la plata de OT se cuenta dos veces
+            (no se cuenta dos veces en ningún cálculo: es la misma, con dos
+            nombres). */}
         <Kpi
           label={`Ventas · ${periodo}`}
           value={formatCOP(ventasPeriodo)}
+          hint="Mostrador + órdenes de servicio. En Cierres esta misma plata aparece separada: mostrador en “Productos” y las OT en “Servicios”."
           sub={
             ventasDelta !== null ? (
               <DeltaPill delta={ventasDelta} etiqueta={ref.etiqueta} />
@@ -762,7 +769,7 @@ function Seg({ options, value, onChange }) {
 }
 
 /* ── KPI con separadores punteados ────────────────────────────────────── */
-function Kpi({ label, value, sub, last, danger }) {
+function Kpi({ label, value, sub, last, danger, hint }) {
   return (
     <div
       className={`flex flex-col gap-1.5 pr-7 md:pl-7 md:first:pl-0 ${
@@ -777,8 +784,12 @@ function Kpi({ label, value, sub, last, danger }) {
             ? "hsl(var(--destructive))"
             : "hsl(var(--muted-foreground))",
         }}
+        // `hint` explica de dónde sale el número al pasar el mouse: evita que un
+        // KPI se interprete mal al compararlo con otra pantalla.
+        title={hint || undefined}
       >
         {label}
+        {hint && <span aria-hidden="true"> ⓘ</span>}
       </div>
       <div
         className="font-mono text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums"
