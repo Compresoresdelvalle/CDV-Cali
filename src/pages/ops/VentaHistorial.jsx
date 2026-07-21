@@ -21,7 +21,11 @@ const PAGE_SIZE = 20;
 
 // Join read-only a detalle_venta para derivar el resumen de productos
 // (columna del diseño Lovable). NO modifica lógica de escritura.
-const COLS = `id, numero, fecha, cliente_nombre, metodo_pago, total, anulada, sede_id,
+// `origen` se trae para poder MARCAR las ventas que nacen de una orden de
+// trabajo. Sin esa marca, la facturación de una OT se ve igual que una venta de
+// mostrador y parece que la plata se cobró dos veces: una como abono en la OT y
+// otra como venta aquí. Es el mismo dinero.
+const COLS = `id, numero, fecha, cliente_nombre, metodo_pago, total, anulada, sede_id, origen,
    vendedor:vendedor_id(nombre),
    detalle_venta(producto:producto_id(nombre))`;
 
@@ -519,6 +523,7 @@ function VentaFila({ venta: v, onClick }) {
         <span className="font-medium" style={{ color: "var(--n-950)" }}>
           {v.cliente_nombre || "Cliente mostrador"}
         </span>
+        {v.origen === "ot" && <MarcaOT />}
       </Td>
       <Td>
         <span
@@ -606,6 +611,7 @@ function VentaCard({ venta: v, esAdmin, onClick }) {
           >
             {v.cliente_nombre || "Cliente mostrador"}
           </p>
+          {v.origen === "ot" && <MarcaOT />}
           {resumen && (
             <p
               className="mt-0.5 truncate text-[12px]"
@@ -686,5 +692,29 @@ function EmptyState({ filtrando, hayMas }) {
             : "Prueba con otro número, cliente o producto"}
       </p>
     </div>
+  );
+}
+
+/**
+ * Marca para las ventas que son la facturación de una orden de trabajo.
+ *
+ * Sin esta marca, en el listado de Ventas una OT facturada se ve exactamente
+ * igual que una venta de mostrador. Como la plata de esa OT ya había entrado
+ * como abonos, al verla también aquí parece cobrada dos veces (es el mismo
+ * dinero: el abono es el cobro, la venta es la factura). La caja NO la cuenta
+ * dos veces — el cierre excluye estas ventas a propósito.
+ */
+function MarcaOT() {
+  return (
+    <span
+      className="ml-1.5 inline-flex items-center rounded px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide"
+      style={{
+        backgroundColor: "var(--warn-50)",
+        color: "var(--warn-700)",
+      }}
+      title="Facturación de una orden de trabajo. El dinero ya había entrado como abonos de la OT: no es un cobro nuevo."
+    >
+      De OT
+    </span>
   );
 }
