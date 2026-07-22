@@ -199,9 +199,17 @@ export default function Dashboard() {
     month: "long",
   });
 
+  // Ventas de MOSTRADOR de la sede del usuario (la RPC ya filtra por sede para
+  // los no-Admin). Se renombró de "Ventas hoy" a "Mostrador hoy" al agregar la
+  // tarjeta de servicios, para que el vendedor distinga sus dos fuentes.
   const ventasHoy = kpis?.ventas_hoy ?? 0;
   const ventasAyer = kpis?.ventas_ayer ?? 0;
   const trend = trendPercent(ventasHoy, ventasAyer);
+  // Servicios (abonos de OT) de la sede del usuario, cobrados hoy. Antes el
+  // vendedor no veía esta plata en su panel aunque sí la recauda.
+  const serviciosHoy = kpis?.servicios_hoy ?? 0;
+  const serviciosAyer = kpis?.servicios_ayer ?? 0;
+  const trendServicios = trendPercent(serviciosHoy, serviciosAyer);
   const alertas = kpis?.alertas ?? [];
   const actividad = kpis?.actividad_reciente ?? [];
 
@@ -283,13 +291,21 @@ export default function Dashboard() {
       )}
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
         <KpiCard
-          title="Ventas hoy"
+          title="Mostrador hoy"
           value={formatCOP(ventasHoy)}
           icon={<Icon d={ICONS.dollar} size={15} />}
           trend={trend}
           subtitle="vs. ayer"
+          loading={loading}
+        />
+        <KpiCard
+          title="Servicios hoy"
+          value={formatCOP(serviciosHoy)}
+          icon={<Icon d={ICONS.dollar} size={15} />}
+          trend={trendServicios}
+          subtitle="abonos de OT · vs. ayer"
           loading={loading}
         />
         <KpiCard
