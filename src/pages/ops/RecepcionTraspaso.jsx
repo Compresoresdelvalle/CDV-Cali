@@ -25,6 +25,8 @@ export default function RecepcionTraspaso() {
   const [recibiendo, setRecibiendo] = useState(false);
   const [error, setError] = useState(null);
   const [confirmarDiff, setConfirmarDiff] = useState(false);
+  // Qué hacer con lo que faltó, por línea: 'origen' (vuelve a la sede origen) | 'perdida' (merma).
+  const [dispos, setDispos] = useState({});
 
   const esAdmin = perfil?.rol === "Admin";
 
@@ -115,10 +117,17 @@ export default function RecepcionTraspaso() {
     setRecibiendo(true);
     setError(null);
     try {
-      const p_items = items.map((item) => ({
-        detalle_id: item.id,
-        cantidad_recibida: recibidas[item.id] ?? item.cantidad_enviada ?? 0,
-      }));
+      const p_items = items.map((item) => {
+        const rec = recibidas[item.id] ?? item.cantidad_enviada ?? 0;
+        const faltante = (item.cantidad_enviada ?? 0) - rec;
+        return {
+          detalle_id: item.id,
+          cantidad_recibida: rec,
+          // Solo aplica cuando faltó algo. Default seguro: vuelve a la sede origen.
+          faltante_a_origen:
+            faltante > 0 ? (dispos[item.id] ?? "origen") !== "perdida" : true,
+        };
+      });
 
       const { error: rpcErr } = await supabase.rpc("fn_procesar_traspaso", {
         p_traspaso_id: id,
@@ -160,6 +169,21 @@ export default function RecepcionTraspaso() {
   const recibidosTotal = items.length;
   const pct =
     recibidosTotal > 0 ? Math.round((completos / recibidosTotal) * 100) : 0;
+
+  const origenLabel = sedeLabel(traspaso.sede_origen_id);
+  // Resumen de lo faltante para el modal: cuánto vuelve a origen vs cuánto se pierde.
+  const resumenDispo = items.reduce(
+    (acc, item) => {
+      const rec = recibidas[item.id] ?? item.cantidad_enviada ?? 0;
+      const falt = (item.cantidad_enviada ?? 0) - rec;
+      if (falt > 0) {
+        if ((dispos[item.id] ?? "origen") === "perdida") acc.perdidas += falt;
+        else acc.origen += falt;
+      }
+      return acc;
+    },
+    { origen: 0, perdidas: 0 },
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-4 px-4 py-5 pb-40 sm:px-7 sm:py-6 animate-fade-in">
@@ -244,9 +268,10 @@ export default function RecepcionTraspaso() {
             className="mt-0.5 text-xs leading-[1.5]"
             style={{ color: "var(--n-500)" }}
           >
-            Ingresa las cantidades realmente recibidas. Si difieren de lo
-            enviado, el traspaso quedará marcado como{" "}
-            <strong>Con Diferencia</strong>.
+            Ingresa las cantidades realmente recibidas. Si recibes menos de lo
+            enviado, elige si lo que faltó{" "}
+            <strong>vuelve a {origenLabel}</strong> o se{" "}
+            <strong>da por perdido</strong>.
           </p>
         </div>
       </div>
@@ -410,6 +435,42 @@ export default function RecepcionTraspaso() {
                   </span>
                 )}
               </div>
+
+              {/* Qué hacer con lo que faltó: vuelve a origen (default) o se pierde */}
+              {hasDiff && (
+                <div
+                  className="mt-3 flex flex-wrap items-center gap-2.5 border-t pt-3"
+                  style={{ borderColor: "var(--n-150)" }}
+                >
+                  <span
+                    className="text-[12px] font-medium"
+                    style={{ color: "var(--n-600)" }}
+                  >
+                    Faltaron {enviado - recibido} — ¿qué se hace con lo que
+                    faltó?
+                  </span>
+                  <div className="flex gap-1.5">
+                    <DispoBtn
+                      active={(dispos[item.id] ?? "origen") !== "perdida"}
+                      tone="ok"
+                      onClick={() =>
+                        setDispos((p) => ({ ...p, [item.id]: "origen" }))
+                      }
+                    >
+                      Vuelven a {origenLabel}
+                    </DispoBtn>
+                    <DispoBtn
+                      active={(dispos[item.id] ?? "origen") === "perdida"}
+                      tone="danger"
+                      onClick={() =>
+                        setDispos((p) => ({ ...p, [item.id]: "perdida" }))
+                      }
+                    >
+                      Se perdieron
+                    </DispoBtn>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -443,14 +504,32 @@ export default function RecepcionTraspaso() {
                 Confirmar recepción con diferencias
               </p>
             </div>
-            <p
-              className="mb-4 text-sm leading-[1.5]"
-              style={{ color: "var(--n-500)" }}
+            <div
+              className="mb-4 space-y-1.5 text-sm leading-[1.5]"
+              style={{ color: "var(--n-600)" }}
             >
-              Las cantidades recibidas no coinciden con las enviadas. El
-              traspaso quedará marcado como <strong>Con Diferencia</strong> y
-              las diferencias quedarán registradas en auditoría.
-            </p>
+              <p>Las cantidades recibidas no coinciden con las enviadas:</p>
+              {resumenDispo.origen > 0 && (
+                <p style={{ color: "var(--succ-700)" }}>
+                  • <strong>{resumenDispo.origen}</strong> unidad
+                  {resumenDispo.origen !== 1 ? "es" : ""} vuelven a{" "}
+                  {origenLabel}.
+                </p>
+              )}
+              {resumenDispo.perdidas > 0 && (
+                <p
+                  className="rounded-md px-2 py-1.5 font-semibold"
+                  style={{
+                    backgroundColor: "var(--dang-50)",
+                    color: "var(--dang-700)",
+                  }}
+                >
+                  ⚠ <strong>{resumenDispo.perdidas}</strong> unidad
+                  {resumenDispo.perdidas !== 1 ? "es" : ""} se dan por PERDIDAS
+                  (merma) y salen del inventario de la empresa.
+                </p>
+              )}
+            </div>
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmarDiff(false)}
@@ -526,6 +605,26 @@ function QtyBtn({ children, onClick }) {
         borderColor: "var(--n-150)",
         backgroundColor: "var(--n-50)",
         color: "var(--n-700)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function DispoBtn({ children, active, tone, onClick }) {
+  // tone: 'ok' (verde) | 'danger' (rojo). Activo = relleno; inactivo = contorno tenue.
+  const color = tone === "danger" ? "--dang" : "--succ";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-lg border px-3 text-[12px] font-semibold transition-colors"
+      style={{
+        minHeight: 40,
+        borderColor: active ? `var(${color}-600)` : "var(--n-150)",
+        backgroundColor: active ? `var(${color}-600)` : "var(--n-0)",
+        color: active ? "#fff" : "var(--n-500)",
       }}
     >
       {children}
