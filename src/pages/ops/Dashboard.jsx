@@ -319,7 +319,7 @@ export default function Dashboard() {
           title="Alertas de stock"
           value={kpis?.alertas_count ?? 0}
           icon={<Icon d={ICONS.alert} size={15} />}
-          subtitle="bajo o agotado"
+          subtitle="productos bajo o agotado"
           loading={loading}
         />
         <KpiCard
