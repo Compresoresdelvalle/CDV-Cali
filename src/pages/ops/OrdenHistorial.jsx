@@ -70,6 +70,17 @@ const ESTADO_OPCIONES = GRUPOS_TABLERO.map((v) => ({
 }));
 const SEDE_OPCIONES = Object.entries(SEDE_LABEL).map(([v, l]) => ({ v, l }));
 
+/* Aviso de que el equipo DEL CLIENTE está guardado en otra sede (custodia),
+   para ubicarlo sin tener que abrir la orden. Vacío = está en su sede. */
+function EquipoGuardadoEn({ sedeEquipo }) {
+  if (!sedeEquipo) return null;
+  return (
+    <span className="ml-1 font-medium" style={{ color: "hsl(var(--warning))" }}>
+      · guardado en {SEDE_LABEL[sedeEquipo] ?? sedeEquipo}
+    </span>
+  );
+}
+
 /** ¿La fecha (timestamptz de la fila) cae dentro del rango de Bogotá? */
 function dentroDeRango(fecha, rango) {
   if (!rango) return true;
@@ -162,7 +173,7 @@ export default function OrdenHistorial() {
             // $11.4M donde la factura real es $424k). El Detalle sí lo traía,
             // así que la misma OT mostraba dos totales distintos.
             .select(
-              "id,numero,cliente_nombre,equipo_descripcion,equipo_serie,estado,estado_autorizacion,sede_id,fecha,pendiente_recogida_at,total,costo_mano_obra,valor_repuestos,valor_revision,descuento_valor,iva_pct",
+              "id,numero,cliente_nombre,equipo_descripcion,equipo_serie,estado,estado_autorizacion,sede_id,sede_equipo_id,fecha,pendiente_recogida_at,total,costo_mano_obra,valor_repuestos,valor_revision,descuento_valor,iva_pct",
             )
             .order("fecha", { ascending: false }),
           supabase.from("abonos").select("orden_id,monto"),
@@ -526,6 +537,7 @@ function OrdenFila({ orden: o, onClick }) {
           >
             {o.equipo_descripcion}
             {o.equipo_serie ? ` · ${o.equipo_serie}` : ""}
+            <EquipoGuardadoEn sedeEquipo={o.sede_equipo_id} />
           </span>
         </div>
       </Td>
@@ -616,6 +628,7 @@ function OrdenCard({ orden: o, onClick }) {
           >
             {o.equipo_descripcion}
             {o.equipo_serie ? ` · ${o.equipo_serie}` : ""}
+            <EquipoGuardadoEn sedeEquipo={o.sede_equipo_id} />
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             {o._propia ? (
@@ -780,6 +793,7 @@ function KanbanCard({ orden: o, onClick }) {
         style={{ color: "hsl(var(--muted-foreground))" }}
       >
         {o.equipo_descripcion}
+        <EquipoGuardadoEn sedeEquipo={o.sede_equipo_id} />
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
         <span
