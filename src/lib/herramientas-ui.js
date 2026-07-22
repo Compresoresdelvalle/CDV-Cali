@@ -189,6 +189,56 @@ export function diasEnUsoTexto(h) {
   return `${d} día${d === 1 ? "" : "s"}`;
 }
 
+/* ─────────────────────── Agrupación de préstamos ───────────────────────── */
+
+/**
+ * Llave del préstamo al que pertenece una unidad.
+ *
+ * `herramientas_prestamo` guarda UNA FILA POR UNIDAD FÍSICA, así que prestar 5
+ * unidades del mismo producto deja 5 filas. Las 5 comparten producto (o
+ * nombre+código si es manual), sede, responsable y un `fecha_prestamo` idéntico
+ * al microsegundo — el préstamo por lote las marca en un solo UPDATE. Esas
+ * cuatro cosas identifican el préstamo real.
+ * @param {object} h fila de `herramientas_prestamo`
+ * @returns {string}
+ */
+export function claveGrupoPrestamo(h) {
+  // Misma normalización que `agruparHerramientas` del catálogo (#H-2).
+  const producto = h?.producto_id
+    ? `p:${h.producto_id}`
+    : `m:${(h?.herramienta_nombre || "").trim().toLowerCase()}|${(
+        h?.herramienta_codigo || ""
+      )
+        .trim()
+        .toLowerCase()}`;
+  return [
+    producto,
+    h?.sede_id ?? "",
+    h?.prestada_a ?? "",
+    h?.fecha_prestamo ?? "",
+  ].join("§");
+}
+
+/**
+ * Agrupa unidades prestadas en préstamos reales, conservando el orden de
+ * entrada (la lista ya viene con los atrasados primero).
+ * @param {object[]} prestadas unidades con estado 'prestada'
+ * @returns {{clave:string, anchor:object, unidades:object[], cantidad:number}[]}
+ */
+export function agruparPrestamos(prestadas) {
+  const mapa = new Map();
+  for (const h of prestadas ?? []) {
+    const clave = claveGrupoPrestamo(h);
+    const grupo = mapa.get(clave);
+    if (grupo) grupo.unidades.push(h);
+    else mapa.set(clave, { clave, anchor: h, unidades: [h] });
+  }
+  return Array.from(mapa.values(), (g) => ({
+    ...g,
+    cantidad: g.unidades.length,
+  }));
+}
+
 /**
  * Días que lleva vencida una herramienta atrasada (entero ≥ 0) o `null`.
  * @param {{ estado?: string, fecha_devolucion_esperada?: string|null }} h

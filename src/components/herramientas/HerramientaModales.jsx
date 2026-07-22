@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Search,
   Boxes,
+  Trash2,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -1102,6 +1103,184 @@ export function ModalAgregarUnidades({ herramienta, onClose, onSaved }) {
           {saving
             ? "Agregando…"
             : `Agregar ${cantidad} unidad${cantidad === 1 ? "" : "es"}`}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* ─────────── Modal: devolver / dar de baja N unidades de un préstamo ────── */
+
+/**
+ * Un préstamo puede tener varias unidades de la misma herramienta (cada unidad
+ * es una fila). Este modal permite procesar solo una parte: devolver 2 y dar de
+ * baja 3, por ejemplo. Dice en palabras qué va a pasar con las unidades
+ * elegidas, porque las dos acciones son irreversibles en el caso inventariable.
+ *
+ * @param {object} props
+ * @param {{anchor:object, cantidad:number}} props.grupo préstamo agrupado
+ * @param {"devolver"|"consumir"} props.accion
+ * @param {(n:number)=>Promise<void>} props.onConfirmar
+ */
+export function ModalCantidadPrestamo({ grupo, accion, onClose, onConfirmar }) {
+  const max = grupo.cantidad;
+  const h = grupo.anchor;
+  const esInsumo = !!h.producto_id;
+  const esBaja = accion === "consumir";
+  const [cantidad, setCantidad] = useState(max);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const savingRef = useRef(false);
+
+  const confirmar = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      await onConfirmar(Math.max(1, Math.min(cantidad || 1, max)));
+    } catch (err) {
+      setError(safeError(err, "No se pudo completar la acción"));
+      setSaving(false);
+      savingRef.current = false;
+    }
+  };
+
+  const n = Math.max(1, Math.min(cantidad || 1, max));
+  const unidades = `${n} unidad${n === 1 ? "" : "es"}`;
+  const explicacion = esBaja
+    ? `${unidades} se dan de baja: NO regresan al stock de insumo y salen del catálogo.`
+    : esInsumo
+      ? `${unidades} regresan al stock de insumo de ${sedeLabel(h.sede_id)} y salen del catálogo.`
+      : `${unidades} quedan disponibles de nuevo en el catálogo.`;
+
+  return (
+    <ModalShell onClose={saving ? () => {} : onClose} maxWidth={440}>
+      <div className="mb-1.5 flex items-center gap-2.5">
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-lg"
+          style={{
+            backgroundColor: esBaja ? "var(--dang-50)" : "var(--succ-50)",
+            color: esBaja ? "var(--dang-700)" : "var(--succ-700)",
+          }}
+        >
+          {esBaja ? (
+            <Trash2 className="h-5 w-5" strokeWidth={1.8} />
+          ) : (
+            <Check className="h-5 w-5" strokeWidth={1.8} />
+          )}
+        </div>
+        <h2
+          className="m-0 flex-1 text-[16px] font-semibold leading-[1.3]"
+          style={{ color: "var(--n-950)" }}
+        >
+          {esBaja ? "Dar de baja unidades" : "Devolver unidades"}
+        </h2>
+      </div>
+
+      <p
+        className="mb-4 text-[13px] leading-[1.5]"
+        style={{ color: "var(--n-500)" }}
+      >
+        <b style={{ color: "var(--n-900)" }}>{h.herramienta_nombre}</b> · {max}{" "}
+        unidad{max === 1 ? "" : "es"} prestada
+        {max === 1 ? "" : "s"} a{" "}
+        <b style={{ color: "var(--n-900)" }}>{h.usuario?.nombre ?? "—"}</b>.
+        Elige cuántas quieres {esBaja ? "dar de baja" : "devolver"}.
+      </p>
+
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <FieldLabel>
+          {esBaja ? "Unidades a dar de baja" : "Unidades a devolver"}
+        </FieldLabel>
+        <div className="flex items-center gap-1.5">
+          <QtyStep
+            onClick={() => setCantidad((c) => Math.max(1, c - 1))}
+            disabled={cantidad <= 1 || saving}
+          >
+            −
+          </QtyStep>
+          <input
+            type="number"
+            value={cantidad}
+            min={1}
+            max={max}
+            disabled={saving}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10);
+              setCantidad(Number.isNaN(v) ? 1 : Math.max(1, Math.min(v, max)));
+            }}
+            className="rounded-md border text-center font-mono text-sm font-bold outline-none"
+            style={{
+              width: 64,
+              height: 48,
+              borderColor: "var(--n-150)",
+              backgroundColor: "var(--n-0)",
+              color: "var(--n-950)",
+            }}
+          />
+          <QtyStep
+            onClick={() => setCantidad((c) => Math.min(max, c + 1))}
+            disabled={cantidad >= max || saving}
+          >
+            +
+          </QtyStep>
+        </div>
+      </div>
+
+      <div
+        className="mb-2 rounded-lg border px-3 py-2.5 text-[12.5px] leading-[1.5]"
+        style={{
+          borderColor: esBaja ? "var(--dang-border)" : "var(--succ-border)",
+          backgroundColor: esBaja ? "var(--dang-50)" : "var(--succ-50)",
+          color: esBaja ? "var(--dang-700)" : "var(--succ-700)",
+        }}
+      >
+        {esBaja && "⚠ "}
+        {explicacion}
+        {n < max && (
+          <>
+            {" "}
+            Las otras {max - n} siguen prestadas a {h.usuario?.nombre ?? "—"}.
+          </>
+        )}
+      </div>
+
+      {error && (
+        <p className="mb-2 text-xs" style={{ color: "var(--dang-700)" }}>
+          {error}
+        </p>
+      )}
+
+      <div
+        className="mt-2 flex justify-end gap-2 border-t pt-4"
+        style={{ borderColor: "var(--n-100)" }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={saving}
+          className="btn btn-out disabled:opacity-50"
+          style={{ height: 48 }}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={confirmar}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 rounded-lg px-4 text-sm font-semibold text-white disabled:opacity-50"
+          style={{
+            height: 48,
+            backgroundColor: esBaja ? "var(--dang-600)" : "var(--succ-600)",
+          }}
+        >
+          <Check className="h-3.5 w-3.5" strokeWidth={2} />
+          {saving
+            ? "Procesando…"
+            : esBaja
+              ? `Dar de baja ${n}`
+              : `Devolver ${n}`}
         </button>
       </div>
     </ModalShell>

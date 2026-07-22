@@ -12,6 +12,7 @@ import {
   ChevronRight,
   MessageCircle,
   MoreHorizontal,
+  Trash2,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -27,6 +28,7 @@ import {
   sedeLabel,
   diasEnUsoTexto,
   diasVencida,
+  agruparPrestamos,
   STATUS_FILTERS,
 } from "../../lib/herramientas-ui";
 import {
@@ -39,6 +41,7 @@ import {
   ModalPrestar,
   ModalNueva,
   ModalAgregarUnidades,
+  ModalCantidadPrestamo,
 } from "../../components/herramientas/HerramientaModales";
 
 /* Selección de columnas REAL — sin cambios respecto a la versión funcional. */
@@ -76,6 +79,8 @@ export default function Herramientas() {
   const [modalPrestar, setModalPrestar] = useState(null);
   const [modalNueva, setModalNueva] = useState(false);
   const [modalAgregar, setModalAgregar] = useState(null); // herramienta a la que sumar unidades
+  // Devolver / dar de baja parte de un préstamo de varias unidades: { grupo, accion }
+  const [modalCantidad, setModalCantidad] = useState(null);
   const [detalleId, setDetalleId] = useState(null);
 
   const mountedRef = useRef(true);
@@ -165,13 +170,14 @@ export default function Herramientas() {
        · Inventariable: regresa 1 al stock de insumo y retira la herramienta
          (activo=false), por lo que desaparece del catálogo tras recargar.
      La función valida permiso (Admin o misma sede) y estado con FOR UPDATE. */
-  const devolver = async (h) => {
+  const devolver = async (h, cantidad = 1, yaConfirmado = false) => {
     if (accionandoRef.current) return;
     // Devolver una MANUAL es inocuo (vuelve a 'disponible' y se puede volver a
     // prestar). Devolver una INVENTARIABLE retira la herramienta del catálogo
     // para siempre: es tan irreversible como consumir, así que se pregunta igual
     // que allí. Sin esto, un tap de más borraba una herramienta del catálogo.
-    if (h.producto_id) {
+    // Si viene del modal de cantidad, ese modal ya explicó y confirmó.
+    if (h.producto_id && !yaConfirmado) {
       const ok = window.confirm(
         `¿Regresar “${h.herramienta_nombre}” al stock de insumo de ${sedeLabel(h.sede_id)}?\n\n` +
           `Su unidad vuelve al inventario y la herramienta sale del catálogo. Esta acción no se puede deshacer.`,
@@ -181,24 +187,32 @@ export default function Herramientas() {
     accionandoRef.current = true;
     setAccionando(h.id);
     try {
-      const { data, error } = await supabase.rpc("fn_devolver_herramienta", {
-        p_herramienta_id: h.id,
-      });
+      // Lote server-authoritative: resuelve las N unidades del MISMO préstamo y
+      // delega en la función de una unidad. Con cantidad=1 equivale a devolver
+      // una sola, así que este es el único camino (sin lógica duplicada).
+      const { data, error } = await supabase.rpc(
+        "fn_devolver_herramientas_lote",
+        { p_herramienta_id: h.id, p_cantidad: cantidad },
+      );
       if (error) throw error;
       setDetalleId(null);
       // #H-1: antes no había ninguna confirmación; una herramienta inventariable
       // se devolvía al insumo y desaparecía de la lista (activo=false), y parecía
       // que "no la devolvía". Ahora salta un aviso que dice qué pasó.
+      const n = Number(data?.devueltas ?? cantidad);
+      const uds = `${n} unidad${n === 1 ? "" : "es"}`;
       if (data?.inventariable) {
         avisarOk(
-          `“${h.herramienta_nombre}” se devolvió al stock de insumo` +
+          `${uds} de “${h.herramienta_nombre}” ${n === 1 ? "regresó" : "regresaron"} al stock de insumo` +
             (data.cantidad_insumo != null
               ? ` (ahora hay ${data.cantidad_insumo} en ${sedeLabel(h.sede_id)})`
               : "") +
             ".",
         );
       } else {
-        avisarOk(`“${h.herramienta_nombre}” quedó disponible de nuevo.`);
+        avisarOk(
+          `${uds} de “${h.herramienta_nombre}” ${n === 1 ? "quedó disponible" : "quedaron disponibles"} de nuevo.`,
+        );
       }
       await cargarHerramientas();
     } catch (err) {
@@ -210,18 +224,20 @@ export default function Herramientas() {
   };
 
   /* ── B11 — Acción: consumir (NO regresa al inventario; desaparece) ──── */
-  const consumir = async (h) => {
+  const consumir = async (h, cantidad = 1) => {
     if (accionandoRef.current) return;
     accionandoRef.current = true;
     setAccionando(h.id);
     try {
-      const { error } = await supabase.rpc("fn_consumir_herramienta", {
-        p_herramienta_id: h.id,
-      });
+      const { data, error } = await supabase.rpc(
+        "fn_consumir_herramientas_lote",
+        { p_herramienta_id: h.id, p_cantidad: cantidad },
+      );
       if (error) throw error;
       setDetalleId(null);
+      const n = Number(data?.consumidas ?? cantidad);
       avisarOk(
-        `“${h.herramienta_nombre}” se dio de baja (no regresa al insumo).`,
+        `${n} unidad${n === 1 ? "" : "es"} de “${h.herramienta_nombre}” se ${n === 1 ? "dio" : "dieron"} de baja (no ${n === 1 ? "regresa" : "regresan"} al insumo).`,
       );
       await cargarHerramientas();
     } catch (err) {
@@ -324,6 +340,13 @@ export default function Herramientas() {
           );
         }),
     [activas],
+  );
+  // Un préstamo real puede abarcar varias unidades de la misma herramienta (una
+  // fila por unidad física). Se agrupan para no pintar 6 tarjetas idénticas de
+  // un solo préstamo, y para poder devolver/dar de baja por cantidades.
+  const gruposPrestados = useMemo(
+    () => agruparPrestamos(prestadas),
+    [prestadas],
   );
   const atrasadas = useMemo(
     () => activas.filter((h) => prestamoVencido(h)),
@@ -447,7 +470,9 @@ export default function Herramientas() {
             const Icon = t.Icon;
             const count =
               t.id === "activos"
-                ? prestadas.length
+                ? // Préstamos REALES, no unidades: prestar 6 rollos de teflón
+                  // de una vez es UN préstamo, no seis.
+                  gruposPrestados.length
                 : t.id === "catalogo"
                   ? // `activas`, no `herramientas`: el catálogo son las vigentes
                     // (13), no las 181 que incluyen retiradas. Coincide con el
@@ -538,14 +563,15 @@ export default function Herramientas() {
           <SkeletonGrid />
         ) : tab === "activos" ? (
           <TabActivos
-            prestadas={prestadas}
+            grupos={gruposPrestados}
+            unidadesPrestadas={prestadas.length}
             atrasadas={atrasadas}
             disponiblesCount={disponibles.length}
             accionando={accionando}
             esAdmin={isAdmin}
             esBodega={esBodega}
             onOpen={setDetalleId}
-            onDevolver={devolver}
+            onAccion={(grupo, accion) => setModalCantidad({ grupo, accion })}
           />
         ) : tab === "catalogo" ? (
           <TabCatalogo
@@ -615,6 +641,22 @@ export default function Herramientas() {
           }}
         />
       )}
+      {modalCantidad && (
+        <ModalCantidadPrestamo
+          grupo={modalCantidad.grupo}
+          accion={modalCantidad.accion}
+          onClose={() => setModalCantidad(null)}
+          onConfirmar={async (n) => {
+            const { grupo, accion } = modalCantidad;
+            // El modal ya explicó y confirmó: no se vuelve a preguntar. Se cierra
+            // DESPUÉS de terminar para que se vea el estado "Procesando…" y para
+            // no dejar el modal desmontado a mitad de la acción.
+            if (accion === "consumir") await consumir(grupo.anchor, n);
+            else await devolver(grupo.anchor, n, true);
+            setModalCantidad(null);
+          }}
+        />
+      )}
       {modalAgregar && (
         <ModalAgregarUnidades
           herramienta={modalAgregar}
@@ -636,16 +678,17 @@ export default function Herramientas() {
 /* ─────────────────────────── TAB · Préstamos activos ───────────────────── */
 
 function TabActivos({
-  prestadas,
+  grupos,
+  unidadesPrestadas,
   atrasadas,
   disponiblesCount,
   accionando,
   esAdmin,
   esBodega,
   onOpen,
-  onDevolver,
+  onAccion,
 }) {
-  if (prestadas.length === 0) {
+  if (grupos.length === 0) {
     return (
       <EmptyState
         title="Sin préstamos activos"
@@ -751,15 +794,15 @@ function TabActivos({
             </tr>
           </thead>
           <tbody>
-            {prestadas.map((h) => (
+            {grupos.map((g) => (
               <LoanRow
-                key={h.id}
-                h={h}
-                accionando={accionando === h.id}
+                key={g.clave}
+                g={g}
+                accionando={g.unidades.some((u) => u.id === accionando)}
                 esAdmin={esAdmin}
                 esBodega={esBodega}
-                onOpen={() => onOpen(h.id)}
-                onDevolver={() => onDevolver(h)}
+                onOpen={() => onOpen(g.anchor.id)}
+                onAccion={(accion) => onAccion(g, accion)}
               />
             ))}
           </tbody>
@@ -773,10 +816,16 @@ function TabActivos({
           }}
         >
           <span>
-            Mostrando <Stat>{prestadas.length}</Stat> préstamo
-            {prestadas.length === 1 ? "" : "s"} activo
-            {prestadas.length === 1 ? "" : "s"} ·{" "}
-            <Stat>{atrasadas.length}</Stat> atrasada
+            Mostrando <Stat>{grupos.length}</Stat> préstamo
+            {grupos.length === 1 ? "" : "s"} activo
+            {grupos.length === 1 ? "" : "s"}
+            {unidadesPrestadas !== grupos.length && (
+              <>
+                {" ("}
+                <Stat>{unidadesPrestadas}</Stat> unidades{")"}
+              </>
+            )}{" "}
+            · <Stat>{atrasadas.length}</Stat> atrasada
             {atrasadas.length === 1 ? "" : "s"} ·{" "}
             <Stat>{disponiblesCount}</Stat> disponible
             {disponiblesCount === 1 ? "" : "s"}
@@ -786,15 +835,15 @@ function TabActivos({
 
       {/* Mobile: cards */}
       <ul className="space-y-2.5 md:hidden" role="list">
-        {prestadas.map((h) => (
-          <li key={h.id}>
+        {grupos.map((g) => (
+          <li key={g.clave}>
             <LoanCard
-              h={h}
-              accionando={accionando === h.id}
+              g={g}
+              accionando={g.unidades.some((u) => u.id === accionando)}
               esAdmin={esAdmin}
               esBodega={esBodega}
-              onOpen={() => onOpen(h.id)}
-              onDevolver={() => onDevolver(h)}
+              onOpen={() => onOpen(g.anchor.id)}
+              onAccion={(accion) => onAccion(g, accion)}
             />
           </li>
         ))}
@@ -803,12 +852,20 @@ function TabActivos({
   );
 }
 
-function LoanRow({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
+function LoanRow({ g, accionando, esAdmin, esBodega, onOpen, onAccion }) {
+  // Todas las unidades del grupo comparten herramienta, responsable y fechas:
+  // el ancla las representa. Solo el código puede variar entre unidades.
+  const h = g.anchor;
   const tono = prestamoTono(h);
   const dang = tono === "danger";
   // Solo Admin o Bodega pueden devolver. Una inventariable la regresa al insumo
-  // (retiro) → solo Admin.
+  // (retiro) → solo Admin. Dar de baja (consumir) es solo Admin.
   const puedeDevolver = (esAdmin || esBodega) && (!h.producto_id || esAdmin);
+  const codigo = g.unidades.every(
+    (u) => u.herramienta_codigo === h.herramienta_codigo,
+  )
+    ? h.herramienta_codigo
+    : "varios";
   return (
     <tr
       className={dang ? "hrm-row-dang" : undefined}
@@ -824,13 +881,16 @@ function LoanRow({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
         <div className="flex items-center gap-3">
           <ToolIcon />
           <div className="min-w-0">
-            <button
-              onClick={onOpen}
-              className="block text-left text-[13px] font-medium leading-tight hover:underline"
-              style={{ color: "var(--n-950)" }}
-            >
-              {h.herramienta_nombre}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onOpen}
+                className="block text-left text-[13px] font-medium leading-tight hover:underline"
+                style={{ color: "var(--n-950)" }}
+              >
+                {h.herramienta_nombre}
+              </button>
+              {g.cantidad > 1 && <UnidadesPill n={g.cantidad} />}
+            </div>
             <div
               className="mt-0.5 text-[11px]"
               style={{ color: "var(--n-500)" }}
@@ -844,7 +904,7 @@ function LoanRow({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
         className="px-3.5 font-mono text-[12.5px] font-medium"
         style={{ color: "var(--n-900)" }}
       >
-        {h.herramienta_codigo || "—"}
+        {codigo || "—"}
       </td>
       <td className="px-3.5">
         <div className="flex items-center gap-2.5">
@@ -894,7 +954,7 @@ function LoanRow({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
         <div className="flex items-center justify-end gap-1.5">
           {puedeDevolver ? (
             <button
-              onClick={onDevolver}
+              onClick={() => onAccion("devolver")}
               disabled={accionando}
               className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[12px] font-medium disabled:opacity-50"
               style={{
@@ -904,7 +964,11 @@ function LoanRow({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
               }}
             >
               <Check className="h-3 w-3" strokeWidth={2} />
-              {accionando ? "…" : "Marcar devuelta"}
+              {accionando
+                ? "…"
+                : g.cantidad > 1
+                  ? "Devolver…"
+                  : "Marcar devuelta"}
             </button>
           ) : (
             <span
@@ -914,6 +978,22 @@ function LoanRow({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
             >
               Devuelve Admin
             </span>
+          )}
+          {esAdmin && (
+            <button
+              onClick={() => onAccion("consumir")}
+              disabled={accionando}
+              className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[12px] font-medium disabled:opacity-50"
+              style={{
+                borderColor: "var(--dang-border)",
+                color: "var(--dang-700)",
+                backgroundColor: "var(--n-0)",
+              }}
+              title="Dar de baja: no regresa al stock de insumo"
+            >
+              <Trash2 className="h-3 w-3" strokeWidth={2} />
+              Baja
+            </button>
           )}
           <button
             onClick={onOpen}
@@ -929,7 +1009,9 @@ function LoanRow({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
   );
 }
 
-function LoanCard({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
+function LoanCard({ g, accionando, esAdmin, esBodega, onOpen, onAccion }) {
+  // El ancla representa al grupo: comparten herramienta, responsable y fechas.
+  const h = g.anchor;
   const tono = prestamoTono(h);
   const dang = tono === "danger";
   const puedeDevolver = (esAdmin || esBodega) && (!h.producto_id || esAdmin);
@@ -954,14 +1036,17 @@ function LoanCard({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
             >
               {h.herramienta_nombre}
             </p>
-            {h.herramienta_codigo && (
-              <p
-                className="mt-0.5 font-mono text-xs"
-                style={{ color: "var(--n-500)" }}
-              >
-                {h.herramienta_codigo}
-              </p>
-            )}
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+              {g.cantidad > 1 && <UnidadesPill n={g.cantidad} />}
+              {h.herramienta_codigo && (
+                <span
+                  className="font-mono text-xs"
+                  style={{ color: "var(--n-500)" }}
+                >
+                  {h.herramienta_codigo}
+                </span>
+              )}
+            </div>
           </div>
         </button>
         <Pill cls={tonoPillCls(tono)} label={tonoLabel(tono)} pulse={dang} />
@@ -995,31 +1080,68 @@ function LoanCard({ h, accionando, esAdmin, esBodega, onOpen, onDevolver }) {
         )}
       </div>
 
-      {puedeDevolver ? (
-        <button
-          onClick={onDevolver}
-          disabled={accionando}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border text-sm font-medium disabled:opacity-50"
-          style={{
-            height: 48,
-            borderColor: "var(--succ-border)",
-            color: "var(--succ-700)",
-            backgroundColor: "var(--succ-50)",
-          }}
-        >
-          <Check className="h-4 w-4" strokeWidth={2} />
-          {accionando ? "Procesando…" : "Marcar devuelta"}
-        </button>
-      ) : (
-        <p
-          className="text-center text-[11.5px] italic"
-          style={{ color: "var(--n-400)" }}
-        >
-          La devolución de esta herramienta (regresa al insumo) la registra el
-          Admin.
-        </p>
-      )}
+      <div className="flex gap-2">
+        {puedeDevolver ? (
+          <button
+            onClick={() => onAccion("devolver")}
+            disabled={accionando}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border text-sm font-medium disabled:opacity-50"
+            style={{
+              height: 48,
+              borderColor: "var(--succ-border)",
+              color: "var(--succ-700)",
+              backgroundColor: "var(--succ-50)",
+            }}
+          >
+            <Check className="h-4 w-4" strokeWidth={2} />
+            {accionando
+              ? "Procesando…"
+              : g.cantidad > 1
+                ? "Devolver…"
+                : "Marcar devuelta"}
+          </button>
+        ) : (
+          <p
+            className="flex-1 text-center text-[11.5px] italic"
+            style={{ color: "var(--n-400)" }}
+          >
+            La devolución de esta herramienta (regresa al insumo) la registra el
+            Admin.
+          </p>
+        )}
+        {esAdmin && (
+          <button
+            onClick={() => onAccion("consumir")}
+            disabled={accionando}
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium disabled:opacity-50"
+            style={{
+              height: 48,
+              borderColor: "var(--dang-border)",
+              color: "var(--dang-700)",
+              backgroundColor: "var(--dang-50)",
+            }}
+            title="Dar de baja: no regresa al stock de insumo"
+          >
+            <Trash2 className="h-4 w-4" strokeWidth={2} />
+            Baja
+          </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+/** Cuántas unidades de la misma herramienta abarca un préstamo.
+    Mismo lenguaje visual que el `×N` del catálogo (CatalogCard). */
+function UnidadesPill({ n }) {
+  return (
+    <span
+      className="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[11px] font-semibold"
+      style={{ backgroundColor: "var(--p-50)", color: "var(--p-700)" }}
+      title={`${n} unidades en este préstamo`}
+    >
+      ×{n}
+    </span>
   );
 }
 
