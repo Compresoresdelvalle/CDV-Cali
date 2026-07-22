@@ -688,6 +688,11 @@ function Header({
               </>
             )}
           </div>
+          <EquipoUbicacion
+            orden={orden}
+            perfil={perfil}
+            onRefresh={onRefresh}
+          />
         </div>
 
         {/* Total / Saldo */}
@@ -918,6 +923,144 @@ function PasoBody(props) {
     default:
       return null;
   }
+}
+
+/* ── Custodia del equipo del cliente ─────────────────────────────────────
+   Muestra dónde quedó guardado el equipo mientras el cliente no lo recoge y
+   permite mandarlo a otra sede (típicamente a Bodega) o traerlo de vuelta.
+   El equipo es del CLIENTE: esto no toca inventario ni plata, solo custodia. */
+function EquipoUbicacion({ orden, perfil, onRefresh }) {
+  const [abierto, setAbierto] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const enOtraSede = !!orden.sede_equipo_id;
+  const sedeActual = orden.sede_equipo_id ?? orden.sede_id;
+  // Por defecto se propone Bodega; si ya está en Bodega, se propone devolverlo.
+  const [destino, setDestino] = useState(
+    sedeActual === "BODEGA" ? orden.sede_id : "BODEGA",
+  );
+  const [nota, setNota] = useState("");
+
+  const readOnly = !puedeManipular(perfil, orden);
+  const opciones = Object.keys(SEDE_LABEL).filter((s) => s !== sedeActual);
+  const vuelveASuSede = destino === orden.sede_id;
+
+  const confirmar = async () => {
+    if (guardando) return;
+    setGuardando(true);
+    try {
+      const { error } = await supabase.rpc("fn_mover_equipo_orden", {
+        p_orden_id: orden.id,
+        // Volver a la sede de la orden se manda como null: el servidor lo
+        // interpreta como "el equipo está en su sitio" y limpia los campos.
+        p_sede_destino: vuelveASuSede ? null : destino,
+        p_nota: vuelveASuSede ? null : nota || null,
+      });
+      if (error) throw error;
+      avisarOk(
+        vuelveASuSede
+          ? "El equipo volvió a la sede de la orden."
+          : `El equipo quedó guardado en ${SEDE_LABEL[destino] ?? destino}.`,
+      );
+      setAbierto(false);
+      setNota("");
+      await onRefresh();
+    } catch (err) {
+      avisarError(err, "No se pudo mover el equipo");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+      {enOtraSede && (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium"
+          style={{
+            backgroundColor: "hsl(var(--warning) / 0.12)",
+            borderColor: "hsl(var(--warning) / 0.4)",
+            color: "hsl(var(--warning))",
+          }}
+          title="El equipo del cliente no está en la sede de la orden"
+        >
+          <Package className="h-3.5 w-3.5" strokeWidth={1.8} />
+          Equipo guardado en{" "}
+          {SEDE_LABEL[orden.sede_equipo_id] ?? orden.sede_equipo_id}
+          {orden.equipo_ubicacion_nota
+            ? ` · ${orden.equipo_ubicacion_nota}`
+            : ""}
+        </span>
+      )}
+
+      {!readOnly &&
+        (abierto ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <select
+              value={destino}
+              onChange={(e) => setDestino(e.target.value)}
+              disabled={guardando}
+              className="rounded-md border px-2 text-xs"
+              style={{
+                height: 34,
+                borderColor: "hsl(var(--border))",
+                backgroundColor: "hsl(var(--card))",
+                color: "hsl(var(--foreground))",
+              }}
+            >
+              {opciones.map((s) => (
+                <option key={s} value={s}>
+                  {s === orden.sede_id
+                    ? `Devolver a ${SEDE_LABEL[s]}`
+                    : SEDE_LABEL[s]}
+                </option>
+              ))}
+            </select>
+            {!vuelveASuSede && (
+              <input
+                value={nota}
+                onChange={(e) => setNota(e.target.value)}
+                disabled={guardando}
+                placeholder="¿Dónde exactamente? (opcional)"
+                className="rounded-md border px-2 text-xs"
+                style={{
+                  height: 34,
+                  width: 190,
+                  borderColor: "hsl(var(--border))",
+                  backgroundColor: "hsl(var(--card))",
+                  color: "hsl(var(--foreground))",
+                }}
+              />
+            )}
+            <button
+              onClick={confirmar}
+              disabled={guardando}
+              className="rounded-md px-2.5 text-xs font-semibold text-white disabled:opacity-50"
+              style={{ height: 34, backgroundColor: "hsl(var(--primary))" }}
+            >
+              {guardando ? "Guardando…" : "Guardar"}
+            </button>
+            <button
+              onClick={() => setAbierto(false)}
+              disabled={guardando}
+              className="rounded-md px-2 text-xs font-medium disabled:opacity-50"
+              style={{ height: 34, color: "hsl(var(--muted-foreground))" }}
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setAbierto(true)}
+            className="text-xs font-medium underline-offset-2 hover:underline"
+            style={{ color: "hsl(var(--primary))" }}
+          >
+            {enOtraSede
+              ? "Mover o traer de vuelta"
+              : "Guardar equipo en otra sede"}
+          </button>
+        ))}
+    </div>
+  );
 }
 
 /* Botón "Continuar" reutilizable: habilitado solo si gate cumplido y no readOnly. */
