@@ -284,8 +284,10 @@ export default function EnsambleNuevo() {
   };
 
   // QR de componentes: agrega el producto escaneado con su stock real en la sede.
+  // #C2-4: ya no cierra el escáner aquí — en modo continuo lo mantiene abierto
+  // el propio QRScanner para encadenar la siguiente lectura; el usuario lo
+  // cierra con el botón Cancelar/X del modal.
   const handleQRFound = async (productoId) => {
-    setScannerOpen(false);
     if (!sede) return;
     try {
       const [{ data: prod }, { data: inv }] = await Promise.all([
@@ -302,8 +304,12 @@ export default function EnsambleNuevo() {
           .eq("producto_id", productoId)
           .maybeSingle(),
       ]);
+      // Los rechazos van también por toast: en modo continuo el escáner tapa la
+      // pantalla completa y el texto fijo no se vería hasta cerrarlo.
       if (!prod) {
-        setErrorMsg("El producto escaneado no existe o está inactivo.");
+        const msg = "El producto escaneado no existe o está inactivo.";
+        setErrorMsg(msg);
+        avisarError(msg);
         return;
       }
       setErrorMsg("");
@@ -314,7 +320,9 @@ export default function EnsambleNuevo() {
         ubicacion_id: inv?.ubicacion_id ?? null,
       });
     } catch {
-      setErrorMsg("No se pudo leer el producto escaneado. Reintenta.");
+      const msg = "No se pudo leer el producto escaneado. Reintenta.";
+      setErrorMsg(msg);
+      avisarError(msg);
     }
   };
 
@@ -959,6 +967,7 @@ export default function EnsambleNuevo() {
         <QRScanner
           onFound={handleQRFound}
           onClose={() => setScannerOpen(false)}
+          continuo
         />
       )}
 

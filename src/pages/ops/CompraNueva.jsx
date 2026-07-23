@@ -125,8 +125,12 @@ export default function CompraNueva() {
   };
 
   // C-05: escaneo QR para agregar un producto al pedido (como en Ventas).
+  // #C2-1: antes un inactivo/inexistente o un error de red terminaban en el
+  // mismo `return` mudo — el operario veía "Código encontrado" y no pasaba
+  // nada. Ahora se distingue cada caso y se avisa (mismo criterio que
+  // VentaNueva #S1-19). No se cierra el escáner aquí: en modo continuo lo
+  // mantiene abierto el propio QRScanner para encadenar la siguiente lectura.
   const handleQRFound = useCallback(async (productoId) => {
-    setScannerOpen(false);
     try {
       const { data, error: e } = await supabase
         .from("productos")
@@ -135,11 +139,24 @@ export default function CompraNueva() {
         )
         .eq("id", productoId)
         .eq("activo", true)
-        .single();
-      if (e || !data) return;
+        .maybeSingle();
+      if (e) throw e;
+      if (!data) {
+        // Toast además del texto fijo: en modo continuo el escáner tapa toda
+        // la pantalla, así que el `setError` de abajo no se ve hasta cerrarlo.
+        const msg =
+          "Ese código no corresponde a un producto activo (no existe o está inactivo).";
+        setError(msg);
+        avisarError(msg);
+        return;
+      }
+      setError(null);
       agregarAlCarrito(data);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      avisarError(
+        err,
+        "No se pudo leer el producto escaneado. Revisa la conexión e intenta de nuevo.",
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -474,33 +491,43 @@ export default function CompraNueva() {
                 <div className="ib-aux">{carrito.length} en la orden</div>
               </div>
 
-              {/* Búsqueda */}
-              <div
-                className="flex h-11 items-center gap-2.5 rounded-[10px] border px-3.5"
-                style={{
-                  borderColor: "var(--n-150)",
-                  backgroundColor: "var(--n-0)",
-                }}
-              >
-                <Search
-                  className="h-4 w-4 shrink-0"
-                  strokeWidth={1.5}
-                  style={{ color: "var(--n-300)" }}
-                />
-                <input
-                  type="text"
-                  value={busqueda}
-                  onChange={handleBusquedaChange}
-                  placeholder="Buscar por nombre o referencia del catálogo…"
-                  className="flex-1 border-none bg-transparent text-[14px] outline-none"
-                  style={{ color: "var(--n-700)" }}
-                />
+              {/* Búsqueda. C2-3: el botón de escanear era de 32x32 (h-8 w-8);
+                  CLAUDE.md exige mínimo 48px por uso con guantes. Se saca del
+                  buscador a un botón hermano de 48x48, igual que en
+                  TraspasoNuevo/EnsambleNuevo, para no apretarlo dentro de una
+                  fila de 44px. */}
+              <div className="flex items-center gap-2">
+                <div
+                  className="flex h-12 flex-1 items-center gap-2.5 rounded-[10px] border px-3.5"
+                  style={{
+                    borderColor: "var(--n-150)",
+                    backgroundColor: "var(--n-0)",
+                  }}
+                >
+                  <Search
+                    className="h-4 w-4 shrink-0"
+                    strokeWidth={1.5}
+                    style={{ color: "var(--n-300)" }}
+                  />
+                  <input
+                    type="text"
+                    value={busqueda}
+                    onChange={handleBusquedaChange}
+                    placeholder="Buscar por nombre o referencia del catálogo…"
+                    className="flex-1 border-none bg-transparent text-[14px] outline-none"
+                    style={{ color: "var(--n-700)" }}
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => setScannerOpen(true)}
                   aria-label="Escanear código QR"
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                  style={{ color: "var(--p-700)" }}
+                  className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border transition-colors"
+                  style={{
+                    borderColor: "var(--n-150)",
+                    backgroundColor: "var(--n-0)",
+                    color: "var(--p-700)",
+                  }}
                 >
                   <ScanLine className="h-5 w-5" strokeWidth={1.8} />
                 </button>
@@ -1226,6 +1253,7 @@ export default function CompraNueva() {
         <QRScanner
           onFound={handleQRFound}
           onClose={() => setScannerOpen(false)}
+          continuo
         />
       )}
     </div>
