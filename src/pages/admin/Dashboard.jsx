@@ -1,17 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  Triangle,
   Clock,
   ArrowRight,
   RefreshCw,
   Package,
   Wrench,
   FileText,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  Boxes,
+  Users,
+  Coins,
+  Snowflake,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
-import StatusBadge from "../../components/ui/StatusBadge";
 import {
   periodoVentas,
   PERIODOS,
@@ -34,6 +39,9 @@ const FILAS_BLOQUE = 3;
 export default function Dashboard() {
   const navigate = useNavigate();
   const [kpis, setKpis] = useState(null);
+  // Métricas avanzadas (rentabilidad, cartera, inventario-capital, desempeño).
+  // RPC Admin-only, solo lectura. Si falla, las secciones avanzadas se ocultan.
+  const [adm, setAdm] = useState(null);
   // Detalle de los bloques estratégicos (SELECT de solo lectura, presentación).
   const [bloques, setBloques] = useState({ alertas: [], ot: [], cotz: [] });
   const [loading, setLoading] = useState(true);
@@ -147,25 +155,45 @@ export default function Dashboard() {
     }
   };
 
+  /**
+   * Métricas avanzadas del Admin (fn_dashboard_admin). Fallo silencioso: si la
+   * RPC no responde o el usuario no es Admin, las secciones avanzadas no se
+   * pintan y el resto del dashboard sigue funcionando.
+   */
+  const cargarAdmin = async () => {
+    try {
+      const { data, error } = await supabase.rpc("fn_dashboard_admin");
+      if (!mountedRef.current) return;
+      if (!error && data && !data.error) setAdm(data);
+    } catch {
+      /* silencioso */
+    }
+  };
+
   const cargarRef = useRef(cargar);
   cargarRef.current = cargar;
   const cargarBloquesRef = useRef(cargarBloques);
   cargarBloquesRef.current = cargarBloques;
+  const cargarAdminRef = useRef(cargarAdmin);
+  cargarAdminRef.current = cargarAdmin;
 
   const refrescar = () => {
     cargarRef.current();
     cargarBloquesRef.current();
+    cargarAdminRef.current();
   };
 
   useEffect(() => {
     cargarRef.current();
     cargarBloquesRef.current();
+    cargarAdminRef.current();
     let interval = null;
     const start = () => {
       if (interval) return;
       interval = setInterval(() => {
         cargarRef.current();
         cargarBloquesRef.current();
+        cargarAdminRef.current();
       }, 60_000);
     };
     const stop = () => {
@@ -179,6 +207,7 @@ export default function Dashboard() {
       else {
         cargarRef.current();
         cargarBloquesRef.current();
+        cargarAdminRef.current();
         start();
       }
     };
@@ -227,14 +256,20 @@ export default function Dashboard() {
   const serviciosMes = Number(k.ingresos_servicios_mes ?? 0);
   const egresosMes = Number(k.compras_mes ?? 0);
   const devolucionesMes = Number(k.devoluciones_mes ?? 0);
-  // Parte de `devoluciones_mes` valorizada a precio de catálogo (devoluciones
-  // sin venta asociada): se muestra para que se sepa qué porción es estimada.
-  const devolucionesEstimadas = Number(k.devoluciones_mes_sin_venta ?? 0);
 
   // Margen sobre lo REALMENTE recaudado, igual que el cierre:
   // mostrador + servicios (abonos de OT) − compras − devoluciones.
   const margenMes =
     ventasMostrador + serviciosMes - egresosMes - devolucionesMes;
+
+  // Margen bruto REAL (precio − costo) desde la RPC avanzada. Puede no haber
+  // cargado todavía (carga en paralelo): en ese caso la tarjeta muestra "…".
+  const admR = adm?.rentabilidad;
+  const margenBruto = admR ? Number(admR.margen_mes) : null;
+  const margenPctTop =
+    admR && Number(admR.ingreso_mes) > 0
+      ? (Number(admR.margen_mes) / Number(admR.ingreso_mes)) * 100
+      : null;
 
   // El delta comparaba SIEMPRE hoy vs ayer, aunque el KPI dijera "Semana" o
   // "Mes": se leía una caída de un día como si fuera del mes. Ahora compara
@@ -259,7 +294,6 @@ export default function Dashboard() {
       : null;
 
   const ventasPeriodo = periodoVentas(k, periodo);
-  const alertas = k.alertas ?? [];
   const actividad = k.actividad_reciente ?? [];
 
   return (
@@ -298,22 +332,14 @@ export default function Dashboard() {
           }
         />
         <Kpi
-          label="Egresos del mes"
-          value={formatCOP(egresosMes)}
+          label="Margen bruto del mes"
+          value={margenBruto != null ? formatCOP(margenBruto) : "…"}
+          hint="Ganancia real de lo vendido: precio de venta menos el costo (congelado al momento de vender). El detalle está abajo, en Rentabilidad."
           sub={
             <span style={{ color: "hsl(var(--muted-foreground))" }}>
-              compras del mes
-            </span>
-          }
-        />
-        <Kpi
-          label="Devoluciones del mes"
-          value={formatCOP(devolucionesMes)}
-          sub={
-            <span style={{ color: "hsl(var(--muted-foreground))" }}>
-              {devolucionesEstimadas > 0
-                ? `incluye ${formatCOP(devolucionesEstimadas)} estimados`
-                : "procesadas, a precio de venta"}
+              {margenPctTop != null
+                ? `${margenPctTop.toFixed(1)}% del ingreso`
+                : "precio − costo"}
             </span>
           }
         />
@@ -328,9 +354,19 @@ export default function Dashboard() {
           }
         />
         <Kpi
-          label="Margen del mes"
+          label="Egresos del mes"
+          value={formatCOP(egresosMes)}
+          sub={
+            <span style={{ color: "hsl(var(--muted-foreground))" }}>
+              compras del mes
+            </span>
+          }
+        />
+        <Kpi
+          label="Flujo neto del mes"
           value={formatCOP(margenMes)}
           danger={margenMes < 0}
+          hint="Flujo de caja: ventas + servicios − compras − devoluciones. NO es el margen de ganancia (ese es el Margen bruto)."
           sub={
             <span style={{ color: "hsl(var(--muted-foreground))" }}>
               ventas + serv. − compras − devol.
@@ -350,90 +386,9 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Atención requerida (alertas de stock reales) */}
-      <SectionCard>
-        <header
-          className="flex items-center justify-between border-b px-[18px] py-3"
-          style={{ borderColor: "hsl(var(--border))" }}
-        >
-          <div className="flex items-center gap-2.5">
-            <span
-              className="grid h-6 w-6 place-items-center rounded-md"
-              style={{
-                backgroundColor: "hsl(var(--destructive) / 0.1)",
-                color: "hsl(var(--destructive))",
-              }}
-            >
-              <Triangle
-                className="h-3.5 w-3.5"
-                fill="currentColor"
-                strokeWidth={1.5}
-              />
-            </span>
-            <span
-              className="text-[13.5px] font-semibold"
-              style={{ color: "hsl(var(--foreground))" }}
-            >
-              Atención requerida
-            </span>
-            {Number(k.stock_agotado_count) > 0 && (
-              <span
-                className="rounded-[3px] border px-1.5 py-px font-mono text-[11px] font-semibold"
-                style={{
-                  backgroundColor: "hsl(var(--destructive) / 0.1)",
-                  borderColor: "hsl(var(--destructive) / 0.4)",
-                  color: "hsl(var(--destructive))",
-                }}
-              >
-                {k.stock_agotado_count} agotado
-                {Number(k.stock_agotado_count) !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-          <span
-            className="font-mono text-[10.5px] tracking-[0.06em]"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Top {Math.min(alertas.length, 5)} de {k.alertas_count ?? 0} alertas
-          </span>
-        </header>
-
-        {alertas.length === 0 ? (
-          <p
-            className="px-[18px] py-6 text-center text-[13px]"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Sin alertas de stock activas ✓
-          </p>
-        ) : (
-          alertas
-            .slice(0, 5)
-            .map((a, i) => <AttRow key={a.inventario_id ?? i} alert={a} />)
-        )}
-
-        <footer
-          className="flex items-center justify-between border-t px-[18px] py-3 text-[12px]"
-          style={{
-            borderColor: "hsl(var(--border))",
-            backgroundColor: "hsl(var(--muted) / 0.3)",
-          }}
-        >
-          <span
-            className="font-mono text-[10.5px]"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            {Math.max(0, (k.alertas_count ?? 0) - 5)} alertas adicionales
-          </span>
-          <Link
-            to="/admin/alertas"
-            className="inline-flex items-center gap-1.5 font-medium"
-            style={{ color: "hsl(var(--primary))" }}
-          >
-            Ver todas las alertas ({k.alertas_count ?? 0})
-            <ArrowRight className="h-3 w-3" strokeWidth={1.5} />
-          </Link>
-        </footer>
-      </SectionCard>
+      {/* Secciones avanzadas (rentabilidad, cartera, capital, desempeño).
+          Solo se pintan si la RPC Admin respondió. */}
+      {adm && <BloquesAvanzados adm={adm} />}
 
       {/* Bloques estratégicos 2x2 + Actividad reciente */}
       <section className="grid grid-cols-1 gap-[18px] lg:grid-cols-2">
@@ -612,81 +567,618 @@ export default function Dashboard() {
           <BarChart data={k.ventas_por_sede ?? []} />
         </ChartCard>
       </section>
+    </div>
+  );
+}
 
-      {/* Top 5 productos del mes */}
-      <SectionCard>
-        <header
-          className="border-b px-[18px] py-3"
-          style={{ borderColor: "hsl(var(--border))" }}
+/* ── Bloques avanzados (rentabilidad, cartera, capital, desempeño) ─────── */
+function BloquesAvanzados({ adm }) {
+  const r = adm.rentabilidad ?? {};
+  const c = adm.cartera ?? {};
+  const inv = adm.inventario ?? {};
+  const d = adm.desempeno ?? {};
+
+  const margenPct =
+    Number(r.ingreso_mes) > 0
+      ? (Number(r.margen_mes) / Number(r.ingreso_mes)) * 100
+      : 0;
+  const utilidadNeta = Number(r.margen_mes ?? 0) - Number(r.gastos_mes ?? 0);
+  const descTot =
+    Number(r.descuentos_explicitos ?? 0) + Number(r.rebaja_en_linea ?? 0);
+  const posNeta = Number(c.cxc_total ?? 0) - Number(c.cxp_total ?? 0);
+  const capPct =
+    Number(inv.valor_total) > 0
+      ? (Number(inv.capital_sin_rotar_90d) / Number(inv.valor_total)) * 100
+      : 0;
+  const vDelta =
+    Number(d.ventas_prev_mtd) > 0
+      ? ((Number(d.ventas_mtd) - Number(d.ventas_prev_mtd)) /
+          Number(d.ventas_prev_mtd)) *
+        100
+      : null;
+  const mDelta =
+    Number(d.margen_prev_mtd) > 0
+      ? ((Number(d.margen_mtd) - Number(d.margen_prev_mtd)) /
+          Number(d.margen_prev_mtd)) *
+        100
+      : null;
+  const cats = r.margen_categoria ?? [];
+  const maxCat = Math.max(1, ...cats.map((x) => Number(x.utilidad)));
+  const topU = r.top_utilidad ?? [];
+  const dormido = inv.top_dormido ?? [];
+  const deudores = c.top_deudores ?? [];
+  const acreedores = c.top_acreedores ?? [];
+  const clientes = d.mejores_clientes ?? [];
+
+  return (
+    <div className="flex flex-col gap-[18px]">
+      {/* 1. Rentabilidad */}
+      <AdvCard
+        icon={Coins}
+        tone="--success"
+        title="Rentabilidad del mes"
+        subtitle="Precio de venta vs. costo real (congelado al momento de vender)"
+      >
+        <div
+          className="grid grid-cols-2 gap-px md:grid-cols-4"
+          style={{ backgroundColor: "hsl(var(--border))" }}
         >
-          <span
-            className="text-[13px] font-semibold"
-            style={{ color: "hsl(var(--foreground))" }}
+          <MiniStat
+            label="Margen bruto"
+            value={formatCOP(r.margen_mes)}
+            sub={`${margenPct.toFixed(1)}% del ingreso`}
+          />
+          <MiniStat
+            label="Utilidad neta aprox."
+            value={formatCOP(utilidadNeta)}
+            sub="margen − gastos caja menor"
+          />
+          <MiniStat
+            label="Descuentos dados"
+            value={formatCOP(descTot)}
+            sub="explícitos + rebaja en línea"
+          />
+          <MiniStat
+            label="Ventas bajo costo"
+            value={
+              Number(r.lineas_bajo_costo) === 0
+                ? "Ninguna ✓"
+                : `−${formatCOP(r.perdida_bajo_costo)}`
+            }
+            sub={`${r.lineas_bajo_costo} línea(s) por debajo del costo`}
+            danger={Number(r.lineas_bajo_costo) > 0}
+          />
+        </div>
+        <div
+          className="grid grid-cols-1 gap-px lg:grid-cols-2"
+          style={{ backgroundColor: "hsl(var(--border))" }}
+        >
+          <div
+            className="p-[18px]"
+            style={{ backgroundColor: "hsl(var(--card))" }}
           >
-            Top 5 productos del mes
-          </span>
-        </header>
-        <div className="p-[18px]">
-          {(k.top5_productos_mes ?? []).length === 0 ? (
-            <p
-              className="py-4 text-center text-[12.5px] italic"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Sin ventas este mes
-            </p>
-          ) : (
-            <ul className="space-y-2" role="list">
-              {(k.top5_productos_mes ?? []).map((p, i) => (
-                <li
+            <SubTitle>Top productos por utilidad</SubTitle>
+            {topU.length === 0 ? (
+              <Empty />
+            ) : (
+              topU.map((p, i) => (
+                <RankRow
                   key={p.referencia ?? i}
-                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2"
-                  style={{ backgroundColor: "hsl(var(--muted) / 0.3)" }}
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span
-                      className="grid h-6 w-6 shrink-0 place-items-center rounded font-mono text-xs font-bold"
-                      style={{
-                        backgroundColor: "hsl(var(--primary))",
-                        color: "hsl(var(--primary-foreground))",
-                      }}
-                    >
-                      {i + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <p
-                        className="truncate text-sm font-medium"
-                        style={{ color: "hsl(var(--foreground))" }}
+                  rank={i + 1}
+                  title={p.nombre}
+                  sub={p.categoria}
+                  right={
+                    <>
+                      <span
+                        className="font-semibold"
+                        style={{ color: "hsl(var(--success))" }}
                       >
-                        {p.nombre}
-                      </p>
-                      <p
-                        className="font-mono text-xs"
+                        {formatCOP(p.utilidad)}
+                      </span>
+                      <div
+                        className="text-[10px]"
                         style={{ color: "hsl(var(--muted-foreground))" }}
                       >
-                        {p.referencia}
-                      </p>
+                        {p.unidades} uds
+                      </div>
+                    </>
+                  }
+                />
+              ))
+            )}
+          </div>
+          <div
+            className="p-[18px]"
+            style={{ backgroundColor: "hsl(var(--card))" }}
+          >
+            <SubTitle>Utilidad por categoría</SubTitle>
+            <div className="space-y-2.5 pt-1">
+              {cats.map((x) => {
+                const mp =
+                  Number(x.ingreso) > 0
+                    ? (Number(x.utilidad) / Number(x.ingreso)) * 100
+                    : 0;
+                return (
+                  <div key={x.categoria}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span style={{ color: "hsl(var(--foreground))" }}>
+                        {x.categoria}
+                      </span>
+                      <span
+                        className="font-medium tabular-nums"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        {formatCOP(x.utilidad)} · {mp.toFixed(0)}%
+                      </span>
+                    </div>
+                    <div
+                      className="h-2 overflow-hidden rounded-full"
+                      style={{ backgroundColor: "hsl(var(--muted) / 0.4)" }}
+                    >
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${(Number(x.utilidad) / maxCat) * 100}%`,
+                          backgroundColor: "hsl(var(--success))",
+                        }}
+                      />
                     </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p
-                      className="text-sm font-bold tabular-nums"
-                      style={{ color: "hsl(var(--foreground))" }}
-                    >
-                      {p.unidades} uds
-                    </p>
-                    <p
-                      className="text-xs"
-                      style={{ color: "hsl(var(--muted-foreground))" }}
-                    >
-                      {formatCOP(p.total)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        {Number(r.lineas_sin_costo) > 0 && (
+          <div
+            className="px-[18px] py-2.5 text-[11.5px]"
+            style={{
+              backgroundColor: "hsl(var(--warning) / 0.08)",
+              color: "hsl(var(--warning))",
+            }}
+          >
+            ⓘ {r.lineas_sin_costo} línea(s) vendidas sin costo registrado: el
+            margen mostrado puede verse más alto de lo real.
+          </div>
+        )}
+      </AdvCard>
+
+      {/* Cartera + Inventario son las dos caras de "dónde está la plata": se
+          emparejan en pantallas anchas (xl). Con la sidebar, en pantallas
+          medianas van una debajo de otra para no quedar apretadas. */}
+      <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-2">
+        {/* 2. Cartera */}
+        <AdvCard
+          icon={Wallet}
+          tone="--info"
+          title="Salud de caja — cartera"
+          subtitle={`Posición neta: ${formatCOP(posNeta)} (te deben − debes)`}
+        >
+          <div
+            className="grid grid-cols-1 gap-px md:grid-cols-2"
+            style={{ backgroundColor: "hsl(var(--border))" }}
+          >
+            <CarteraCol
+              titulo="Por cobrar (te deben)"
+              total={c.cxc_total}
+              docs={c.cxc_docs}
+              b0={c.cxc_0_30}
+              b1={c.cxc_31_60}
+              b2={c.cxc_61mas}
+              tone="--success"
+              lista={deudores}
+              campo="cliente"
+              vacio="Nadie te debe ✓"
+            />
+            <CarteraCol
+              titulo="Por pagar (le debes a proveedores)"
+              total={c.cxp_total}
+              docs={c.cxp_docs}
+              b0={c.cxp_0_30}
+              b1={c.cxp_31_60}
+              b2={c.cxp_61mas}
+              tone="--destructive"
+              lista={acreedores}
+              campo="proveedor"
+              vacio="No debes nada ✓"
+            />
+          </div>
+        </AdvCard>
+
+        {/* 3. Inventario como capital */}
+        <AdvCard
+          icon={Boxes}
+          tone="--warning"
+          title="Inventario como capital"
+          subtitle="Cuánta plata está quieta en la bodega"
+        >
+          <div
+            className="grid grid-cols-2 gap-px md:grid-cols-3"
+            style={{ backgroundColor: "hsl(var(--border))" }}
+          >
+            <MiniStat
+              label="Valor total inventario"
+              value={formatCOP(inv.valor_total)}
+              sub="a costo promedio"
+            />
+            <MiniStat
+              label="Capital dormido (90+ días)"
+              value={formatCOP(inv.capital_sin_rotar_90d)}
+              sub={`${capPct.toFixed(0)}% del inventario · ${inv.productos_sin_rotar_90d} productos`}
+              danger={capPct >= 40}
+            />
+            <MiniStat
+              label="Sobrestock"
+              value={formatCOP(inv.valor_sobrestock)}
+              sub={`${inv.productos_sobrestock} productos sobre el máximo`}
+            />
+          </div>
+          <div
+            className="p-[18px]"
+            style={{ backgroundColor: "hsl(var(--card))" }}
+          >
+            <SubTitle>
+              <span className="inline-flex items-center gap-1.5">
+                <Snowflake className="h-3 w-3" strokeWidth={1.8} />
+                Más plata dormida (sin venderse hace 90+ días)
+              </span>
+            </SubTitle>
+            {dormido.length === 0 ? (
+              <Empty text="Todo el inventario rota ✓" />
+            ) : (
+              dormido.map((p, i) => (
+                <RankRow
+                  key={p.referencia ?? i}
+                  rank={i + 1}
+                  tone="--warning"
+                  title={p.nombre}
+                  sub={`${p.referencia} · ${p.cantidad} uds`}
+                  right={
+                    <>
+                      <span
+                        className="font-semibold"
+                        style={{ color: "hsl(var(--warning))" }}
+                      >
+                        {formatCOP(p.valor)}
+                      </span>
+                      <div
+                        className="text-[10px]"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        {p.dias == null ? "nunca vendido" : `${p.dias} días`}
+                      </div>
+                    </>
+                  }
+                />
+              ))
+            )}
+          </div>
+        </AdvCard>
+      </div>
+
+      {/* 4. Desempeño */}
+      <AdvCard
+        icon={TrendingUp}
+        tone="--primary"
+        title="Desempeño del mes"
+        subtitle={`Comparado con los primeros ${d.dias_transcurridos} días del mes pasado`}
+      >
+        <div
+          className="grid grid-cols-2 gap-px md:grid-cols-5"
+          style={{ backgroundColor: "hsl(var(--border))" }}
+        >
+          <MiniStat
+            label="Ventas (mes a la fecha)"
+            value={formatCOP(d.ventas_mtd)}
+            sub={
+              vDelta != null ? <DeltaInline delta={vDelta} /> : "sin referencia"
+            }
+          />
+          <MiniStat
+            label="Margen (mes a la fecha)"
+            value={formatCOP(d.margen_mtd)}
+            sub={
+              mDelta != null ? <DeltaInline delta={mDelta} /> : "sin referencia"
+            }
+          />
+          <MiniStat
+            label="Ticket promedio"
+            value={formatCOP(d.ticket_prom)}
+            sub="por venta de mostrador"
+          />
+          <MiniStat
+            label="Ventas"
+            value={Number(d.tickets_mes ?? 0).toLocaleString("es-CO")}
+            sub="tickets del mes"
+          />
+          <MiniStat
+            label="Clientes"
+            value={Number(d.clientes_mes ?? 0).toLocaleString("es-CO")}
+            sub="distintos este mes"
+          />
+        </div>
+        <div
+          className="p-[18px]"
+          style={{ backgroundColor: "hsl(var(--card))" }}
+        >
+          <SubTitle>
+            <span className="inline-flex items-center gap-1.5">
+              <Users className="h-3 w-3" strokeWidth={1.8} />
+              Mejores clientes del mes
+            </span>
+          </SubTitle>
+          {clientes.length === 0 ? (
+            <Empty />
+          ) : (
+            clientes.map((cl, i) => (
+              <RankRow
+                key={i}
+                rank={i + 1}
+                tone="--primary"
+                title={cl.cliente}
+                sub={`${cl.tickets} compra(s)`}
+                right={
+                  <span
+                    className="font-semibold"
+                    style={{ color: "hsl(var(--foreground))" }}
+                  >
+                    {formatCOP(cl.compras)}
+                  </span>
+                }
+              />
+            ))
           )}
         </div>
-      </SectionCard>
+      </AdvCard>
+    </div>
+  );
+}
+
+function AdvCard({ icon, tone, title, subtitle, children }) {
+  const Icon = icon;
+  return (
+    <SectionCard>
+      <header
+        className="flex items-center gap-2.5 border-b px-[18px] py-3"
+        style={{ borderColor: "hsl(var(--border))" }}
+      >
+        <span
+          className="grid h-6 w-6 place-items-center rounded-md"
+          style={{
+            backgroundColor: `hsl(var(${tone}) / 0.12)`,
+            color: `hsl(var(${tone}))`,
+          }}
+        >
+          <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />
+        </span>
+        <div className="flex min-w-0 flex-col">
+          <span
+            className="text-[13.5px] font-semibold leading-tight"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            {title}
+          </span>
+          {subtitle && (
+            <span
+              className="font-mono text-[10.5px]"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              {subtitle}
+            </span>
+          )}
+        </div>
+      </header>
+      <div
+        className="flex flex-col"
+        style={{ gap: 1, backgroundColor: "hsl(var(--border))" }}
+      >
+        {children}
+      </div>
+    </SectionCard>
+  );
+}
+
+function MiniStat({ label, value, sub, danger }) {
+  return (
+    <div
+      className="flex flex-col gap-1 p-[18px]"
+      style={{ backgroundColor: "hsl(var(--card))" }}
+    >
+      <span
+        className="font-mono text-[10px] font-medium uppercase tracking-[0.08em]"
+        style={{
+          color: danger
+            ? "hsl(var(--destructive))"
+            : "hsl(var(--muted-foreground))",
+        }}
+      >
+        {label}
+      </span>
+      <span
+        className="font-mono text-[19px] font-semibold leading-tight tracking-[-0.02em] tabular-nums"
+        style={{
+          color: danger ? "hsl(var(--destructive))" : "hsl(var(--foreground))",
+        }}
+      >
+        {value}
+      </span>
+      <span
+        className="flex flex-wrap items-center gap-1 text-[11px]"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
+        {sub}
+      </span>
+    </div>
+  );
+}
+
+function SubTitle({ children }) {
+  return (
+    <p
+      className="mb-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.08em]"
+      style={{ color: "hsl(var(--muted-foreground))" }}
+    >
+      {children}
+    </p>
+  );
+}
+
+function RankRow({ rank, tone = "--success", title, sub, right }) {
+  return (
+    <div
+      className="flex items-center justify-between gap-3 border-b py-2 last:border-b-0"
+      style={{ borderColor: "hsl(var(--border))" }}
+    >
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span
+          className="grid h-5 w-5 shrink-0 place-items-center rounded font-mono text-[10px] font-bold"
+          style={{
+            backgroundColor: `hsl(var(${tone}) / 0.14)`,
+            color: `hsl(var(${tone}))`,
+          }}
+        >
+          {rank}
+        </span>
+        <div className="min-w-0">
+          <p
+            className="truncate text-[12.5px] font-medium leading-tight"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            {title}
+          </p>
+          <p
+            className="truncate font-mono text-[10px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            {sub}
+          </p>
+        </div>
+      </div>
+      <div className="shrink-0 whitespace-nowrap text-right font-mono text-[11.5px]">
+        {right}
+      </div>
+    </div>
+  );
+}
+
+function DeltaInline({ delta }) {
+  const up = delta >= 0;
+  const Icon = up ? TrendingUp : TrendingDown;
+  return (
+    <span
+      className="inline-flex items-center gap-1 font-medium"
+      style={{
+        color: up ? "hsl(var(--success))" : "hsl(var(--destructive))",
+      }}
+    >
+      <Icon className="h-3 w-3" strokeWidth={2} /> {Math.abs(delta).toFixed(1)}%
+      vs mes pasado
+    </span>
+  );
+}
+
+function Empty({ text = "Sin datos" }) {
+  return (
+    <p
+      className="py-3 text-center text-[12px] italic"
+      style={{ color: "hsl(var(--muted-foreground))" }}
+    >
+      {text}
+    </p>
+  );
+}
+
+function AgingChip({ label, value, warn, danger }) {
+  const tone = danger
+    ? "--destructive"
+    : warn
+      ? "--warning"
+      : "--muted-foreground";
+  return (
+    <span
+      className="rounded border px-1.5 py-0.5 font-mono text-[10px]"
+      style={{ borderColor: "hsl(var(--border))", color: `hsl(var(${tone}))` }}
+    >
+      {label}: {formatCOP(value)}
+    </span>
+  );
+}
+
+function CarteraCol({
+  titulo,
+  total,
+  docs,
+  b0,
+  b1,
+  b2,
+  tone,
+  lista,
+  campo,
+  vacio,
+}) {
+  const empty = Number(total) === 0;
+  return (
+    <div
+      className="flex flex-col gap-3 p-[18px]"
+      style={{ backgroundColor: "hsl(var(--card))" }}
+    >
+      <div>
+        <p
+          className="font-mono text-[10px] font-medium uppercase tracking-[0.08em]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          {titulo}
+        </p>
+        <p
+          className="font-mono text-[20px] font-semibold tabular-nums"
+          style={{
+            color: empty ? "hsl(var(--muted-foreground))" : `hsl(var(${tone}))`,
+          }}
+        >
+          {formatCOP(total)}
+        </p>
+        <p
+          className="text-[11px]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          {docs} documento(s)
+        </p>
+      </div>
+      {!empty && (
+        <div className="flex flex-wrap gap-1.5">
+          <AgingChip label="0–30 d" value={b0} />
+          <AgingChip label="31–60 d" value={b1} warn />
+          <AgingChip label="+60 d" value={b2} danger />
+        </div>
+      )}
+      {empty ? (
+        <p
+          className="text-[12px] italic"
+          style={{ color: "hsl(var(--success))" }}
+        >
+          {vacio}
+        </p>
+      ) : (
+        <div className="pt-1">
+          {(lista ?? []).map((it, i) => (
+            <RankRow
+              key={i}
+              rank={i + 1}
+              tone={tone}
+              title={it[campo]}
+              sub={`${it.docs} doc(s)`}
+              right={
+                <span
+                  className="font-semibold"
+                  style={{ color: "hsl(var(--foreground))" }}
+                >
+                  {formatCOP(it.saldo)}
+                </span>
+              }
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -817,35 +1309,6 @@ function DeltaPill({ delta, etiqueta = "vs ayer" }) {
     >
       {positive ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}% {etiqueta}
     </span>
-  );
-}
-
-/* ── Fila de atención (alerta) ────────────────────────────────────────── */
-function AttRow({ alert }) {
-  const isDanger = alert.severity === "danger";
-  return (
-    <div
-      className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b px-[18px] py-3 text-[12.5px] last:border-b-0"
-      style={{ borderColor: "hsl(var(--border))" }}
-    >
-      <span
-        className="h-2 w-2 rounded-full"
-        style={{
-          backgroundColor: isDanger
-            ? "hsl(var(--destructive))"
-            : "hsl(var(--warning))",
-        }}
-      />
-      <div
-        className="min-w-0 truncate font-medium"
-        style={{ color: "hsl(var(--foreground))" }}
-      >
-        {alert.message}
-      </div>
-      <StatusBadge status={isDanger ? "danger" : "warning"}>
-        {isDanger ? "Agotado" : "Stock bajo"}
-      </StatusBadge>
-    </div>
   );
 }
 
