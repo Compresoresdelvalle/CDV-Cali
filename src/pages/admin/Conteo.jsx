@@ -1358,7 +1358,11 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
                               {item.nombre}
                             </p>
                             <ClasePill clase={item.clasificacion} />
-                            <UbicacionChip codigo={item.ubicacion_id} conMapa />
+                            <UbicacionChip
+                              codigo={item.ubicacion_id}
+                              conMapa
+                              mostrarVacio
+                            />
                           </div>
                           <p
                             className="font-mono text-[11px]"
@@ -1419,7 +1423,11 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
                             {item.nombre}
                           </p>
                           <ClasePill clase={item.clasificacion} />
-                          <UbicacionChip codigo={item.ubicacion_id} conMapa />
+                          <UbicacionChip
+                            codigo={item.ubicacion_id}
+                            conMapa
+                            mostrarVacio
+                          />
                         </div>
                         <p
                           className="font-mono text-xs"
@@ -1952,7 +1960,11 @@ function ModalNuevoConteo({
                 style={{ color: "hsl(var(--foreground))" }}
               >
                 {productoSel.nombre}
-                <UbicacionChip codigo={productoSel.ubicacion_id} conMapa />
+                <UbicacionChip
+                  codigo={productoSel.ubicacion_id}
+                  conMapa
+                  mostrarVacio
+                />
               </p>
               <p
                 className="font-mono text-xs"

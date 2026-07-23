@@ -169,9 +169,11 @@ export default function TraspasoNuevo() {
 
   // QR: agrega el producto escaneado si tiene stock (en cualquiera de los dos
   // bolsillos) en la sede de origen seleccionada.
+  // #C2-4: ya no cierra el escáner aquí — en modo continuo lo mantiene
+  // abierto el propio QRScanner para encadenar la siguiente lectura; el
+  // usuario lo cierra con el botón Cancelar/X del modal.
   const handleQRFound = useCallback(
     async (productoId) => {
-      setScannerOpen(false);
       if (!sedeOrigen) return;
       try {
         const [{ data: prod }, { data: inv }] = await Promise.all([
@@ -188,16 +190,20 @@ export default function TraspasoNuevo() {
             .eq("producto_id", productoId)
             .maybeSingle(),
         ]);
+        // Los rechazos van también por toast: en modo continuo el escáner tapa
+        // la pantalla completa y el texto fijo no se vería hasta cerrarlo.
         if (!prod) {
-          setError("El producto escaneado no existe o está inactivo.");
+          const msg = "El producto escaneado no existe o está inactivo.";
+          setError(msg);
+          avisarError(msg);
           return;
         }
         const stock = inv?.cantidad ?? 0;
         const stockInsumo = inv?.cantidad_insumo ?? 0;
         if (stock <= 0 && stockInsumo <= 0) {
-          setError(
-            `"${prod.nombre}" no tiene stock en ${sedeLabel(sedeOrigen)}.`,
-          );
+          const msg = `"${prod.nombre}" no tiene stock en ${sedeLabel(sedeOrigen)}.`;
+          setError(msg);
+          avisarError(msg);
           return;
         }
         setError(null);
@@ -208,7 +214,9 @@ export default function TraspasoNuevo() {
           ubicacion_id: inv?.ubicacion_id ?? null,
         });
       } catch {
-        setError("No se pudo leer el producto escaneado. Reintenta.");
+        const msg = "No se pudo leer el producto escaneado. Reintenta.";
+        setError(msg);
+        avisarError(msg);
       }
     },
     [sedeOrigen],
@@ -664,6 +672,7 @@ export default function TraspasoNuevo() {
         <QRScanner
           onFound={handleQRFound}
           onClose={() => setScannerOpen(false)}
+          continuo
         />
       )}
     </div>
