@@ -14,7 +14,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
-import { avisarOk, avisarError } from "../../lib/notify";
+import { avisarOk, avisarError, avisarInfo } from "../../lib/notify";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import QRScanner from "../../components/forms/QRScanner";
 
@@ -181,19 +181,39 @@ export default function EnsambleNuevo() {
     setAviso("");
     setCompSearch("");
     setCompResultados([]);
-    if (componentes.some((c) => c.id === p.id)) return;
-    setComponentes((cs) => [
-      ...cs,
-      {
-        id: p.id,
-        referencia: p.referencia,
-        nombre: p.nombre,
-        costo_unitario: p.costo_promedio ?? 0,
-        cantidad: 1,
-        insumo: p.insumo ?? 0,
-        venta: p.venta ?? 0,
-      },
-    ]);
+    // La comprobación de duplicado va DENTRO del setter funcional: es el único
+    // punto que ve el estado más reciente. El escáner en modo continuo puede
+    // disparar dos lecturas de la misma etiqueta (2 unidades, 2 cajas) antes
+    // de que React aplique el primer set; comprobar afuera (leyendo
+    // `componentes` del closure) deja pasar ambas y duplica el componente.
+    let yaEstaba = false;
+    setComponentes((cs) => {
+      if (cs.some((c) => c.id === p.id)) {
+        yaEstaba = true;
+        return cs;
+      }
+      return [
+        ...cs,
+        {
+          id: p.id,
+          referencia: p.referencia,
+          nombre: p.nombre,
+          costo_unitario: p.costo_promedio ?? 0,
+          cantidad: 1,
+          insumo: p.insumo ?? 0,
+          venta: p.venta ?? 0,
+        },
+      ];
+    });
+    // A diferencia de Ventas/Compras/Cotizaciones, re-escanear NO suma
+    // cantidad aquí (sería cambiar reglas de negocio que nadie pidió). Pero
+    // sí hay que avisar: sin esto el operario ve que "no pasa nada" y cree
+    // que escanear otra vez sumó una unidad.
+    if (yaEstaba) {
+      avisarInfo(
+        `"${p.nombre}" ya está en la receta. Ajusta la cantidad a mano si necesitas más.`,
+      );
+    }
   };
 
   const setCompCantidad = (id, val) => {
