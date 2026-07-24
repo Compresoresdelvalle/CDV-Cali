@@ -10,7 +10,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { applyKeywordSearch } from "../../lib/search";
-import { avisarOk, avisarError } from "../../lib/notify";
+import { avisarOk, avisarError, avisarInfo } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { sedeLabel } from "../../lib/traspasos-ui";
 import { useSedes } from "../../hooks/useSedes";
@@ -113,8 +113,14 @@ export default function TraspasoNuevo() {
   const agregarItem = (prod) => {
     setBusqueda("");
     setResultados([]);
+    // El chequeo de duplicado ya vive DENTRO del setter funcional (ve el
+    // estado más reciente, a salvo de la carrera del escáner en modo continuo).
+    let yaEstaba = false;
     setItems((prev) => {
-      if (prev.find((i) => i.producto_id === prod.id)) return prev;
+      if (prev.find((i) => i.producto_id === prod.id)) {
+        yaEstaba = true;
+        return prev;
+      }
       // Bolsillo por defecto: venta si hay; si solo hay insumo, insumo.
       const esInsumo = (prod.stock ?? 0) <= 0 && (prod.stock_insumo ?? 0) > 0;
       return [
@@ -131,6 +137,15 @@ export default function TraspasoNuevo() {
         },
       ];
     });
+    // A diferencia de Ventas/Compras/Cotizaciones, re-escanear NO suma
+    // cantidad aquí (sería cambiar reglas de negocio que nadie pidió). Pero
+    // sí hay que avisar: sin esto el operario ve que "no pasa nada" y cree
+    // que escanear otra vez sumó una unidad.
+    if (yaEstaba) {
+      avisarInfo(
+        `"${prod.nombre}" ya está en la lista. Ajusta la cantidad a mano si necesitas más.`,
+      );
+    }
   };
 
   const stockDelBolsillo = (i) =>

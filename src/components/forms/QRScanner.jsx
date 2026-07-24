@@ -2,9 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import QrScanner from "qr-scanner";
 import { supabase } from "../../lib/supabase";
 
-// Cuánto se muestra la confirmación/aviso de cada lectura en modo continuo antes
-// de volver a aceptar el siguiente código.
+// Cuánto se muestra la confirmación/aviso de cada lectura en modo continuo.
+// Ya NO bloquea la siguiente lectura (ver `procesandoRef` más abajo): solo
+// controla cuánto tiempo queda pintado el aviso encima del video.
 const PAUSA_CONTINUO_MS = 1000;
+
+// Tiempo máximo que se espera la consulta a `productos` antes de darla por
+// caída. Un try/catch no alcanza: solo atrapa una promesa que RECHAZA, y una
+// petición que se queda colgada (wifi intermitente de bodega, el paquete sale
+// y no vuelve nada) ni resuelve ni rechaza nunca. Sin este límite explícito,
+// `procesandoRef` quedaría en true para siempre y el escáner dejaría de
+// reaccionar a cualquier código el resto de la sesión, sin ningún aviso.
+const CONSULTA_PRODUCTO_TIMEOUT_MS = 8000;
 
 // Traduce el error real de getUserMedia (DOMException) a un mensaje accionable.
 // qr-scanner (igual que html5-qrcode antes) no nos entrega el DOMException
@@ -45,10 +54,16 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
   // `procesandoRef` reemplaza al viejo doble uso de `cancelled`: antes esa
   // variable servía tanto para "el componente se desmontó" como para "ya
   // encontré un código, ignora el resto" — y en modo continuo esas dos cosas
-  // deben poder ser falsas/verdaderas de forma independiente. Aquí
-  // `procesandoRef` SOLO significa "hay una lectura en curso (consultando o
-  // mostrando el aviso)"; el desmontaje se maneja con la variable local
-  // `desmontado` dentro del efecto.
+  // deben poder ser falsas/verdaderas de forma independiente. El desmontaje
+  // se maneja con la variable local `desmontado` dentro del efecto.
+  //
+  // `procesandoRef` SOLO significa "hay una consulta en vuelo": bloquea
+  // exclusivamente mientras se espera la respuesta del servidor, para no
+  // lanzar dos consultas a la vez. NO se mantiene en true durante la pausa
+  // visual del aviso (`PAUSA_CONTINUO_MS`) — si lo hiciera, un código
+  // DISTINTO leído mientras el aviso del anterior sigue en pantalla se
+  // descartaría en silencio: el bodeguero escaneando en cadena perdería
+  // ítems sin ningún aviso ni consulta (bug real detectado en auditoría).
   const procesandoRef = useRef(false);
   // Último texto decodificado y aceptado, para el anti-rebote en modo continuo
   // (la cámara decodifica el mismo QR muchas veces por segundo mientras el
@@ -60,7 +75,8 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
   // Frames seguidos en los que no se decodificó nada: así sabemos que el QR
   // ya salió del cuadro y se puede volver a aceptar el mismo código.
   const fallosRef = useRef(0);
-  // Timer que reanuda el escaneo tras la pausa visual en modo continuo.
+  // Timer que retira el aviso visual (no el escaneo, que nunca se pausó) tras
+  // PAUSA_CONTINUO_MS en modo continuo.
   const resumeTimerRef = useRef(null);
 
   // El escáner en modo continuo vive muchos segundos, pero el efecto que
@@ -125,8 +141,9 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
     const onDecoded = async (decodedText) => {
       if (desmontado) return;
       fallosRef.current = 0;
-      // Bloquea re-entradas mientras se procesa la lectura anterior (consulta
-      // en curso o mostrando el aviso/confirmación).
+      // Bloquea re-entradas SOLO mientras hay una consulta en vuelo (evita
+      // lanzar dos consultas a la vez). No bloquea durante la pausa visual
+      // del aviso: un código nuevo leído en ese momento sí debe consultarse.
       if (procesandoRef.current) return;
 
       const texto = decodedText.trim();
@@ -147,20 +164,37 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
 
       // No filtramos por activo aquí para poder distinguir "no existe" de
       // "existe pero está desactivado" y dar un mensaje claro al operador.
-      // El try/catch no es decorativo: si la consulta reventara (fetch abortado
-      // al perder la red), la excepción dejaría `procesandoRef` en true para
-      // siempre y el escáner quedaría mudo el resto de la sesión.
+      // El try/catch por sí solo no basta (ver comentario de
+      // CONSULTA_PRODUCTO_TIMEOUT_MS): por eso la consulta corre contra un
+      // Promise.race con un temporizador propio, que siempre se limpia en el
+      // `finally` sin importar quién ganó la carrera.
       let data = null;
       let error = null;
+      let timeoutId;
       try {
-        ({ data, error } = await supabase
-          .from("productos")
-          .select("id, activo")
-          .eq("referencia", texto)
-          .maybeSingle());
+        const timeout = new Promise((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error("timeout-consulta-producto")),
+            CONSULTA_PRODUCTO_TIMEOUT_MS,
+          );
+        });
+        ({ data, error } = await Promise.race([
+          supabase
+            .from("productos")
+            .select("id, activo")
+            .eq("referencia", texto)
+            .maybeSingle(),
+          timeout,
+        ]));
       } catch (e) {
         error = e;
+      } finally {
+        clearTimeout(timeoutId);
       }
+
+      // Se libera apenas termina el trabajo async (éxito, error o timeout),
+      // NO al final de la pausa visual: eso es lo que corrige el hallazgo A.
+      procesandoRef.current = false;
 
       if (desmontado) return;
 
@@ -202,9 +236,14 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
         setAviso({ tipo: "error", texto: mensaje });
       }
 
+      // Si ya había un timer corriendo de un aviso anterior, se cancela: como
+      // `procesandoRef` ya no bloquea durante la pausa visual, puede llegar
+      // una lectura nueva mientras el aviso previo seguía en pantalla. Sin
+      // este clearTimeout, ese timer viejo borraría el aviso RECIÉN puesto
+      // antes de que se cumpla su propia pausa.
+      clearTimeout(resumeTimerRef.current);
       resumeTimerRef.current = setTimeout(() => {
         if (desmontado) return;
-        procesandoRef.current = false;
         setAviso(null);
       }, PAUSA_CONTINUO_MS);
     };

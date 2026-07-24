@@ -16,7 +16,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate, formatCOP, safeError } from "../../lib/utils";
-import { avisarOk, avisarError } from "../../lib/notify";
+import { avisarOk, avisarError, avisarInfo } from "../../lib/notify";
 import { applyKeywordSearch } from "../../lib/search";
 import { SEDES } from "../../lib/constants";
 import { SEDE_LABELS } from "../../lib/traspasos-ui";
@@ -1171,6 +1171,17 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
       ? (progreso.items_contados / progreso.total_items) * 100
       : 0;
 
+  // Hallazgo B: BODEGA tiene ubicación asignada en ~48% de sus filas, pero
+  // CV/CHV/L3 están prácticamente en 0%. Si forzamos "Sin ubicar" siempre,
+  // en esas sedes el chip gris sale en cada fila de la cola y se vuelve
+  // ruido que el operario aprende a ignorar. Solo lo activamos si AL MENOS
+  // UNA fila de la cola YA cargada tiene ubicación: ahí sí vale la pena que
+  // resalte la que falta.
+  const haySedeConUbicaciones = useMemo(
+    () => cola.some((item) => !!item.ubicacion_id),
+    [cola],
+  );
+
   return (
     <div className="flex flex-col gap-5">
       {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
@@ -1363,7 +1374,7 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
                             <UbicacionChip
                               codigo={item.ubicacion_id}
                               conMapa
-                              mostrarVacio
+                              mostrarVacio={haySedeConUbicaciones}
                             />
                           </div>
                           <p
@@ -1428,7 +1439,7 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
                           <UbicacionChip
                             codigo={item.ubicacion_id}
                             conMapa
-                            mostrarVacio
+                            mostrarVacio={haySedeConUbicaciones}
                           />
                         </div>
                         <p
@@ -1822,9 +1833,12 @@ function ModalNuevoConteo({
       // inicializa en 0, ver el banner de `sinInventario` más abajo); acá
       // ADEMÁS avisamos con un toast porque tras escanear el operario ya se
       // movió al siguiente producto y podría no ver el aviso fijo del modal.
+      // Informativo, no error: contar en cero un producto que el sistema
+      // aún no tiene en esta sede es justo para lo que sirve el conteo
+      // cíclico, no un fallo de la operación.
       if (!tieneInventarioEnSede) {
-        avisarError(
-          `"${data.nombre}" no tiene inventario registrado en ${SEDE_LABELS[sedeConteo] ?? sedeConteo}. Se contará como 0.`,
+        avisarInfo(
+          `"${data.nombre}" no tenía inventario en ${SEDE_LABELS[sedeConteo] ?? sedeConteo}. Se contará desde 0.`,
         );
       }
     } catch (err) {
@@ -2020,11 +2034,13 @@ function ModalNuevoConteo({
                   style={{ color: "hsl(var(--foreground))" }}
                 >
                   {productoSel.nombre}
-                  <UbicacionChip
-                    codigo={productoSel.ubicacion_id}
-                    conMapa
-                    mostrarVacio
-                  />
+                  {/* Hallazgo B: este modal se abre tanto desde la cola del
+                    plan (que sabe si la sede usa ubicaciones) como desde la
+                    búsqueda manual de "Nuevo conteo" (cualquier sede, sin ese
+                    contexto). Sin una forma confiable de saber aquí si la
+                    sede en cuestión usa ubicaciones, se deja SIN mostrarVacio:
+                    mejor no mostrar el chip gris que mostrarlo siempre. */}
+                  <UbicacionChip codigo={productoSel.ubicacion_id} conMapa />
                 </p>
                 <p
                   className="font-mono text-xs"

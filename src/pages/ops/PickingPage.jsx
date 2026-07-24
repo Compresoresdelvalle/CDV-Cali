@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { X, Check, SkipForward, ScanLine } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
@@ -286,6 +286,18 @@ export default function PickingPage() {
   const loc = item?.ubicacion;
   const ubicCode = loc ? `${loc.pasillo}-${loc.estante}-${loc.nivel}` : "—";
 
+  // El chip "Sin ubicar" solo informa donde la sede SÍ ubica productos (hoy
+  // BODEGA); en CV/CHV/L3, que casi no usan ubicaciones, saldría en cada
+  // ítem y el operario aprendería a ignorarlo. Se auto-ajusta por traspaso:
+  // si al menos un ítem de esta lista tiene ubicación, mostrar el chip
+  // vacío en los demás es información real; si ninguno la tiene, el chip
+  // desaparece — y vuelve a aparecer solo el día que esa sede empiece a
+  // ubicar, sin tocar código.
+  const alMenosUnaUbicacion = useMemo(
+    () => items.some((i) => i.ubicacion_id),
+    [items],
+  );
+
   // El veredicto de una verificación pertenece al ítem que estaba en pantalla
   // en ese momento. Sin este efecto, si el operario escaneaba mal, marcaba
   // "Recogido" (avanza de ítem) y volvía a escanear el nuevo producto, el
@@ -294,6 +306,15 @@ export default function PickingPage() {
   useEffect(() => {
     setResultadoScan(null);
   }, [index]);
+
+  // Ref al id del ítem vigente (no al índice: la lista puede reordenarse).
+  // handleScanVerificacion la usa para saber, cuando una consulta async
+  // resuelve, si el operario ya saltó a otro ítem mientras esperaba — con
+  // señal débil de bodega la respuesta puede llegar después de "Saltar".
+  const itemActualIdRef = useRef(null);
+  useEffect(() => {
+    itemActualIdRef.current = item?.id ?? null;
+  }, [item?.id]);
 
   // Ir directo a otro ítem de la lista cuando el escáner detecta que el
   // producto en mano corresponde a un ítem distinto al que se está mostrando.
@@ -334,6 +355,10 @@ export default function PickingPage() {
         tipo: "otro-item",
         index: otroIndex,
         producto: items[otroIndex].producto,
+        // Si no hubo línea pendiente, es porque TODAS las líneas de ese
+        // producto (puede repetirse sin UNIQUE) ya se recogieron — no hay
+        // nada a lo que "saltar", solo informar que ya está hecho.
+        yaRecogido: pendienteIndex === -1,
       });
       return;
     }
@@ -342,14 +367,25 @@ export default function PickingPage() {
     // escaneó de verdad — es el corazón de esta función. El QRScanner ya
     // validó que el producto existe y está activo; solo falta traer
     // nombre/referencia para mostrarlos en el aviso.
+    // Se captura el id del ítem vigente ANTES del await: la consulta puede
+    // tardar (señal débil de bodega) y el operario puede pulsar "Saltar"
+    // mientras viaja. Si al resolver el ítem ya cambió, el aviso pertenece a
+    // un producto que ya no está en pantalla — se descarta en silencio para
+    // no pintarlo sobre un ítem que no tiene nada que ver.
+    const itemIdAlEscanear = item.id;
     try {
       const { data } = await supabase
         .from("productos")
         .select("nombre, referencia")
         .eq("id", productoId)
         .maybeSingle();
+      if (itemActualIdRef.current !== itemIdAlEscanear) return;
       setResultadoScan({ tipo: "mismatch", producto: data });
     } catch (e) {
+      // Guarda ANTES de avisar: si el operario ya saltó de ítem, ni el toast
+      // ni el resultado deben salir — quedarían huérfanos de un producto que
+      // ya no está en pantalla (ver el comentario de más arriba).
+      if (itemActualIdRef.current !== itemIdAlEscanear) return;
       safeError(e, "No se pudo identificar el producto escaneado");
       setResultadoScan({ tipo: "mismatch", producto: null });
     }
@@ -374,7 +410,11 @@ export default function PickingPage() {
         {item && (
           <span className="pk-loc hidden items-center gap-1.5 sm:inline-flex">
             {ubicCode}
-            <UbicacionChip codigo={item.ubicacion_id} conMapa mostrarVacio />
+            <UbicacionChip
+              codigo={item.ubicacion_id}
+              conMapa
+              mostrarVacio={alMenosUnaUbicacion}
+            />
           </span>
         )}
       </header>
@@ -500,7 +540,7 @@ export default function PickingPage() {
                 <UbicacionChip
                   codigo={item.ubicacion_id}
                   conMapa
-                  mostrarVacio
+                  mostrarVacio={alMenosUnaUbicacion}
                 />
               </p>
               {estadoItem.picking_completado && (
@@ -573,19 +613,33 @@ export default function PickingPage() {
                     color: "var(--info-700)",
                   }}
                 >
-                  <p>
-                    Ese producto es el ítem{" "}
-                    <strong>{resultadoScan.index + 1}</strong> de esta lista:{" "}
-                    <strong>{resultadoScan.producto?.referencia}</strong> ·{" "}
-                    {resultadoScan.producto?.nombre}
-                  </p>
-                  <button
-                    type="button"
-                    className="mt-2 font-semibold underline underline-offset-4"
-                    onClick={() => irAItem(resultadoScan.index)}
-                  >
-                    Ir a ese ítem
-                  </button>
+                  {resultadoScan.yaRecogido ? (
+                    // Ambas líneas de este producto ya se recogieron: no hay
+                    // nada pendiente a lo que "saltar", solo confirmar.
+                    <p>
+                      Ese producto (
+                      <strong>{resultadoScan.producto?.referencia}</strong> ·{" "}
+                      {resultadoScan.producto?.nombre}) ya fue recogido en esta
+                      lista.
+                    </p>
+                  ) : (
+                    <>
+                      <p>
+                        Ese producto es el ítem{" "}
+                        <strong>{resultadoScan.index + 1}</strong> de esta
+                        lista:{" "}
+                        <strong>{resultadoScan.producto?.referencia}</strong> ·{" "}
+                        {resultadoScan.producto?.nombre}
+                      </p>
+                      <button
+                        type="button"
+                        className="mt-2 font-semibold underline underline-offset-4"
+                        onClick={() => irAItem(resultadoScan.index)}
+                      >
+                        Ir a ese ítem
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
