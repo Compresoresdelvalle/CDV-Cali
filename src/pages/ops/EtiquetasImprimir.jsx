@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { sanitizeSearch, safeError } from "../../lib/utils";
-import { avisarOk, avisarError } from "../../lib/notify";
+import { avisarOk, avisarError, avisarInfo } from "../../lib/notify";
 import { useDebounce } from "../../hooks/useDebounce";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import PageHeader from "../../components/layout/PageHeader";
@@ -41,6 +41,16 @@ const MAX_ETIQUETAS_SIN_CONFIRMAR = 300;
 const ETIQUETAS_POR_HOJA = 32;
 
 const SELECT_COLS = "id, referencia, nombre, categoria";
+
+// ── Selección persistida en localStorage ─────────────────────────────────
+// El etiquetado de la bodega se hace por tandas a lo largo de días: si se
+// recarga la página o el navegador mata la pestaña por memoria, no se debe
+// perder el trabajo de haber marcado decenas de productos uno a uno.
+const SELECCION_STORAGE_KEY = "cdv_etiquetas_seleccion_v1";
+// Una selección de hace semanas es más confusa que útil (y más probable que
+// tenga referencias/nombres desactualizados): pasado este plazo se descarta
+// sin más, en vez de restaurarla.
+const SELECCION_MAX_EDAD_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Sin referencia (null / vacía / solo espacios) no se puede generar un QR
  * que identifique el producto — mismo criterio que `prepararProductos` en
@@ -84,6 +94,15 @@ export default function EtiquetasImprimir() {
   // ── Selección (sobrevive a cambios de búsqueda/categoría) ───────────────
   const [seleccion, setSeleccion] = useState(() => new Map());
   const [detalleAbierto, setDetalleAbierto] = useState(false);
+  // No se persiste en localStorage hasta que el intento de restaurar (al
+  // montar) haya terminado: sin esta bandera, el efecto de guardado vería la
+  // selección vacía inicial ANTES de que la restauración llegara, y borraría
+  // lo guardado por una carrera pura de timing.
+  const restauracionResueltaRef = useRef(false);
+
+  // ── Seleccionar TODOS los resultados del filtro (no solo lo cargado) ────
+  const [seleccionandoTodos, setSeleccionandoTodos] = useState(false);
+  const seleccionarTodosEnCursoRef = useRef(false);
 
   // ── Formato + generación ─────────────────────────────────────────────────
   const [formato, setFormato] = useState("hoja"); // "hoja" | "individual"
@@ -135,6 +154,25 @@ export default function EtiquetasImprimir() {
     };
   }, []);
 
+  /* ── Filtros de búsqueda + categoría ──────────────────────────────────────
+   * Compartido entre la lista paginada y "seleccionar todos los del filtro":
+   * si cada uno construyera su propio `.eq`/`.or` por separado, un día se
+   * desalinearían y "seleccionar todos" marcaría productos que la lista
+   * visible no muestra (o al revés). */
+  const aplicarFiltrosProductos = useCallback(
+    (q) => {
+      let query = q.eq("activo", true);
+      const needle = sanitizeSearch(busquedaAplicada.trim());
+      if (needle)
+        query = query.or(
+          `nombre.ilike.%${needle}%,referencia.ilike.%${needle}%`,
+        );
+      if (categoriaFiltro) query = query.eq("categoria", categoriaFiltro);
+      return query;
+    },
+    [busquedaAplicada, categoriaFiltro],
+  );
+
   /* ── Búsqueda de productos ────────────────────────────────────────────── */
   const fetchProductos = useCallback(
     async (append) => {
@@ -147,15 +185,9 @@ export default function EtiquetasImprimir() {
       setError(null);
       try {
         const offset = append ? pageRef.current * PAGE_SIZE : 0;
-        let q = supabase
-          .from("productos")
-          .select(SELECT_COLS, { count: "exact" })
-          .eq("activo", true);
-
-        const needle = sanitizeSearch(busquedaAplicada.trim());
-        if (needle)
-          q = q.or(`nombre.ilike.%${needle}%,referencia.ilike.%${needle}%`);
-        if (categoriaFiltro) q = q.eq("categoria", categoriaFiltro);
+        let q = aplicarFiltrosProductos(
+          supabase.from("productos").select(SELECT_COLS, { count: "exact" }),
+        );
 
         q = q
           .order("nombre", { ascending: true })
@@ -193,7 +225,7 @@ export default function EtiquetasImprimir() {
         }
       }
     },
-    [busquedaAplicada, categoriaFiltro],
+    [aplicarFiltrosProductos],
   );
 
   useEffect(() => {
@@ -220,6 +252,158 @@ export default function EtiquetasImprimir() {
       observer.disconnect();
     };
   }, [loadMore]);
+
+  /* ── Restaurar selección guardada (al abrir la pantalla) ──────────────────
+   * Lo guardado es una FOTO del catálogo de ese momento: entre una sesión y
+   * otra alguien pudo renombrar el producto, cambiarle la referencia (hay un
+   * Excel de correcciones en camino) o desactivarlo. Restaurar a ciegas
+   * imprimiría etiquetas con datos viejos que el escáner ya no reconoce, así
+   * que antes de restaurar se vuelve a consultar cada producto por id y se
+   * descarta lo que ya no sirva. */
+  useEffect(() => {
+    let vigente = true;
+    (async () => {
+      let guardado = null;
+      try {
+        const raw = localStorage.getItem(SELECCION_STORAGE_KEY);
+        if (raw) guardado = JSON.parse(raw);
+      } catch {
+        guardado = null; // JSON corrupto o localStorage inaccesible: nada que restaurar
+      }
+
+      const items = Array.isArray(guardado?.items) ? guardado.items : [];
+      const savedAt =
+        typeof guardado?.savedAt === "number" ? guardado.savedAt : 0;
+      const vencida = !savedAt || Date.now() - savedAt > SELECCION_MAX_EDAD_MS;
+
+      if (items.length === 0 || vencida) {
+        // Una selección de hace semanas es más confusa que útil: se borra y
+        // se arranca limpio, en vez de restaurarla.
+        if (guardado) {
+          try {
+            localStorage.removeItem(SELECCION_STORAGE_KEY);
+          } catch {
+            /* si tampoco se puede borrar, no hay nada más que hacer */
+          }
+        }
+        restauracionResueltaRef.current = true;
+        return;
+      }
+
+      try {
+        const ids = [
+          ...new Set(items.map((it) => it?.id).filter((id) => id != null)),
+        ];
+        const frescos = new Map();
+        // Consulta por lotes: PostgREST tope las filas y un `in` con cientos
+        // de ids de una sola vez es pesado.
+        const LOTE = 200;
+        for (let i = 0; i < ids.length; i += LOTE) {
+          const lote = ids.slice(i, i + LOTE);
+          const { data, error: err } = await supabase
+            .from("productos")
+            .select("id, referencia, nombre, activo")
+            .in("id", lote);
+          if (err) throw err;
+          if (!vigente) return;
+          (data ?? []).forEach((p) => frescos.set(p.id, p));
+        }
+
+        let descartados = 0;
+        const next = new Map();
+        items.forEach((it) => {
+          const p = frescos.get(it?.id);
+          if (!p || !p.activo || !tieneReferencia(p)) {
+            // Ya no existe, está inactivo o se quedó sin referencia: no se
+            // restaura en silencio, se cuenta para avisarle al usuario.
+            descartados += 1;
+            return;
+          }
+          const cantidad = Math.min(
+            MAX_COPIAS,
+            Math.max(1, Math.round(Number(it.cantidad) || 1)),
+          );
+          // Referencia y nombre son los de la BASE ahora, no los guardados:
+          // la cantidad elegida sí se respeta.
+          next.set(p.id, {
+            id: p.id,
+            referencia: p.referencia,
+            nombre: p.nombre,
+            cantidad,
+          });
+        });
+
+        if (!vigente) return;
+        restauracionResueltaRef.current = true;
+        if (next.size > 0) {
+          setSeleccion(next);
+          avisarInfo(
+            `Se recuperó la selección anterior: ${next.size} producto${
+              next.size === 1 ? "" : "s"
+            }.`,
+          );
+        }
+        if (descartados > 0) {
+          const razon =
+            descartados === 1
+              ? "ya no existe, está inactivo o se quedó sin referencia"
+              : "ya no existen, están inactivos o se quedaron sin referencia";
+          avisarInfo(
+            `Se quitaron ${descartados} producto${
+              descartados === 1 ? "" : "s"
+            } de la selección recuperada: ${razon}.`,
+          );
+        }
+      } catch (err) {
+        // Fallo consultando la base (sin conexión, etc.): no se toca lo que
+        // YA está en localStorage (así el próximo intento de restaurar tiene
+        // algo de dónde partir), pero SÍ se marca la restauración como
+        // resuelta — si no, el efecto de guardado de abajo se queda
+        // bloqueado el resto de la sesión (la bandera nunca llega a true) y
+        // cualquier producto que el operario marque a mano de aquí en
+        // adelante tampoco se guardaría, por un problema que ya pasó.
+        if (!vigente) return;
+        restauracionResueltaRef.current = true;
+        avisarError(
+          err,
+          "No se pudo recuperar la selección anterior (se sigue guardando la nueva selección que hagas)",
+        );
+      }
+    })();
+    return () => {
+      vigente = false;
+    };
+    // Solo al montar: la restauración es un evento único de apertura de
+    // pantalla, no algo que deba repetirse si cambian búsqueda/categoría.
+  }, []);
+
+  /* ── Guardar selección en localStorage (debounced) ────────────────────────
+   * No se dispara en cada tecla: `seleccion` solo cambia al marcar/desmarcar
+   * o al confirmar una cantidad, y encima se debounce 600ms para no bloquear
+   * la interfaz si el operario está marcando varios productos seguidos. */
+  const seleccionParaGuardar = useDebounce(seleccion, 600);
+  useEffect(() => {
+    // Mientras no termine el intento de restaurar (efecto de arriba), no se
+    // guarda nada: si se guardara ahora, el Map vacío inicial pisaría la
+    // selección que todavía se está restaurando, por una carrera de timing.
+    if (!restauracionResueltaRef.current) return;
+    try {
+      if (seleccionParaGuardar.size === 0) {
+        localStorage.removeItem(SELECCION_STORAGE_KEY);
+      } else {
+        localStorage.setItem(
+          SELECCION_STORAGE_KEY,
+          JSON.stringify({
+            savedAt: Date.now(),
+            items: [...seleccionParaGuardar.values()],
+          }),
+        );
+      }
+    } catch {
+      // localStorage lleno o deshabilitado (pasa en móvil): se ignora y se
+      // sigue trabajando en memoria, como antes de esta función.
+    }
+  }, [seleccionParaGuardar]);
 
   /* ── Selección ─────────────────────────────────────────────────────────── */
   const toggle = (p) => {
@@ -297,6 +481,14 @@ export default function EtiquetasImprimir() {
     if (!ok) return;
     setSeleccion(new Map());
     setResultado(null);
+    // No esperar el efecto debounced: se limpia ya mismo para que un cierre
+    // de pestaña inmediato después de vaciar no deje la selección vieja
+    // guardada.
+    try {
+      localStorage.removeItem(SELECCION_STORAGE_KEY);
+    } catch {
+      /* nada que hacer si tampoco se puede borrar */
+    }
   };
 
   const seleccionArr = useMemo(() => [...seleccion.values()], [seleccion]);
@@ -428,6 +620,96 @@ export default function EtiquetasImprimir() {
       );
     } catch (err) {
       avisarError(err, "No se pudo generar el PDF de etiquetas");
+    }
+  };
+
+  /* ── Seleccionar TODOS los resultados del filtro (no solo lo cargado) ─────
+   * El scroll infinito solo trae de a 40: para marcar los 300 resultados de
+   * una categoría, esto trae los ids del servidor con los MISMOS filtros que
+   * la lista (vía `aplicarFiltrosProductos`), paginando, y sin pisar lo que
+   * el operario ya hubiera seleccionado o ajustado. */
+  const seleccionarTodosFiltro = async () => {
+    if (seleccionandoTodos || generando) return;
+    if (seleccionarTodosEnCursoRef.current) return;
+    // Mismo guard que usa `obtenerResultado`: si el diálogo de "generación
+    // grande" ya está abierto, no se abre un segundo confirm() encima — se
+    // pisarían entre sí (el hook solo sostiene un diálogo a la vez).
+    if (confirmandoRef.current) return;
+    seleccionarTodosEnCursoRef.current = true;
+    setSeleccionandoTodos(true);
+    try {
+      const filas = [];
+      const LOTE = 1000; // tope de filas por página de PostgREST
+      let pagina = 0;
+      // Cota defensiva: el catálogo activo tiene ~2.000-3.000 productos, así
+      // que 10 páginas (10.000 filas) sobra de lejos para no quedar en un
+      // loop si algo raro pasara con el conteo.
+      while (pagina < 10) {
+        const { data, error: err } = await aplicarFiltrosProductos(
+          supabase.from("productos").select("id, referencia, nombre"),
+        )
+          .order("id", { ascending: true })
+          .range(pagina * LOTE, pagina * LOTE + LOTE - 1);
+        if (err) throw err;
+        const lote = data ?? [];
+        filas.push(...lote);
+        if (lote.length < LOTE) break;
+        pagina += 1;
+      }
+
+      const conReferencia = filas.filter(tieneReferencia);
+      const sinReferencia = filas.length - conReferencia.length;
+
+      if (conReferencia.length === 0) {
+        avisarInfo(
+          "Ninguno de los productos del filtro actual tiene referencia para etiquetar.",
+        );
+        return;
+      }
+
+      // Mismo umbral y mismo mecanismo de confirmación que ya usa la
+      // generación de PDF grande: no se inventa un segundo diálogo.
+      if (conReferencia.length > MAX_ETIQUETAS_SIN_CONFIRMAR) {
+        confirmandoRef.current = true;
+        const ok = await confirm({
+          titulo: "Seleccionar muchos productos",
+          mensaje:
+            `Vas a marcar ${conReferencia.length} productos del filtro actual` +
+            " (1 copia cada uno, se puede ajustar después). ¿Continuar?",
+          confirmLabel: "Seleccionar de todas formas",
+        });
+        confirmandoRef.current = false;
+        if (!montadoRef.current) return;
+        if (!ok) return;
+      }
+
+      // Se SUMA a lo ya seleccionado: no se reemplaza ni se pisa la cantidad
+      // que el operario ya hubiera ajustado a mano.
+      setSeleccion((prev) => {
+        const next = new Map(prev);
+        conReferencia.forEach((p) => {
+          if (!next.has(p.id))
+            next.set(p.id, {
+              id: p.id,
+              referencia: p.referencia,
+              nombre: p.nombre,
+              cantidad: 1,
+            });
+        });
+        return next;
+      });
+
+      avisarOk(
+        `${conReferencia.length} producto${conReferencia.length === 1 ? "" : "s"} del filtro seleccionado${conReferencia.length === 1 ? "" : "s"}` +
+          (sinReferencia > 0
+            ? ` · ${sinReferencia} sin referencia (no se pudieron marcar)`
+            : ""),
+      );
+    } catch (err) {
+      avisarError(err, "No se pudieron traer los productos del filtro");
+    } finally {
+      if (montadoRef.current) setSeleccionandoTodos(false);
+      seleccionarTodosEnCursoRef.current = false;
     }
   };
 
@@ -697,6 +979,26 @@ export default function EtiquetasImprimir() {
           <Check className="h-3.5 w-3.5" strokeWidth={2} />
           {todosVisiblesOn ? "Quitar lo visible" : "Seleccionar lo visible"}
         </button>
+
+        {/* Solo aporta si queda algo por cargar: con todo ya en pantalla,
+            "Seleccionar lo visible" de arriba ya cubre el caso. */}
+        {hasMore && total != null && total > 0 && (
+          <button
+            onClick={seleccionarTodosFiltro}
+            disabled={seleccionandoTodos || generando}
+            className="inline-flex h-12 items-center gap-1.5 rounded-md border px-3.5 text-[12.5px] font-semibold cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+            style={{
+              borderColor: "hsl(var(--border))",
+              backgroundColor: "hsl(var(--card))",
+              color: "hsl(var(--foreground))",
+            }}
+          >
+            <Check className="h-3.5 w-3.5" strokeWidth={2} />
+            {seleccionandoTodos
+              ? "Buscando…"
+              : `Seleccionar los ${total} del filtro`}
+          </button>
+        )}
       </div>
 
       {!loading && (
