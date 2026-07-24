@@ -9,9 +9,11 @@
  *   ✓ Error al omitir items (validación de entrada)
  *   ✓ Vendedor solo puede vender en su sede (RLS implícita via fn)
  */
+/* global process */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { invokeAs, loginAs } from "../helpers/auth.js";
+import { invokeAs } from "../helpers/auth.js";
+import { integrationEnvNoDisponible } from "../helpers/env-check.js";
 import {
   getProducto,
   cleanupVentas,
@@ -21,7 +23,9 @@ import {
 
 const FN = "registrar-venta";
 
-describe("registrar-venta", () => {
+// Requiere los usuarios ficticios de prueba (pedro...) — ver
+// tests/helpers/env-check.js. Se salta entero si esta base no los tiene.
+describe.skipIf(integrationEnvNoDisponible())("registrar-venta", () => {
   let adminClient;
   let stockAntes = {};
 

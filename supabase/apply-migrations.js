@@ -8,9 +8,9 @@
  * The service_role key is found in:
  *   Supabase Dashboard > Project Settings > API > service_role (secret)
  */
+/* global process */
 
-import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -27,9 +27,9 @@ if (!SERVICE_ROLE_KEY) {
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-  auth: { persistSession: false },
-});
+// Las migraciones se aplican con `fetch` contra el endpoint REST (ver abajo),
+// no con el cliente de supabase-js: por eso aquí solo hacen falta la URL y la
+// llave, no un cliente.
 
 const migrations = [
   "20260404000001_fase1_01_extensions_enums_tables.sql",
@@ -37,11 +37,6 @@ const migrations = [
   "20260404000003_fase1_03_seed_data.sql",
   "20260404000004_fase1_04_rls_policies.sql",
 ];
-
-async function runSQL(sql) {
-  const { error } = await supabase.rpc("exec_sql", { sql_text: sql });
-  if (error) throw error;
-}
 
 async function applyMigrations() {
   console.log("Applying Phase 1 migrations to Supabase...\n");
@@ -78,13 +73,17 @@ async function applyMigrations() {
 
   console.log("All migrations applied. Running verification...\n");
 
-  // Verification queries
-  const verifySQL = readFileSync(
-    join(__dirname, "migrations", "20260404000005_fase1_05_verify.sql"),
-    "utf8",
-  );
+  // La verificación no se ejecuta desde aquí: se corre a mano en el editor SQL
+  // del panel de Supabase. Antes este bloque leía el archivo a una variable que
+  // nunca se usaba; esa lectura muerta servía sin querer de comprobación de que
+  // el archivo existiera, así que se deja explícita en vez de accidental —
+  // apuntar al operador a una ruta que no existe es peor que no decir nada.
+  const VERIFY_SQL = "20260404000005_fase1_05_verify.sql";
+  if (!existsSync(join(__dirname, "migrations", VERIFY_SQL))) {
+    console.warn(`  AVISO: no se encontró migrations/${VERIFY_SQL}`);
+  }
   console.log("Verification SQL written to:");
-  console.log("  supabase/migrations/20260404000005_fase1_05_verify.sql");
+  console.log(`  supabase/migrations/${VERIFY_SQL}`);
   console.log(
     "\nRun it in the Supabase Dashboard SQL Editor to confirm results.",
   );

@@ -61,6 +61,7 @@ import Auditoria from "./pages/admin/Auditoria";
 import Usuarios from "./pages/admin/Usuarios";
 import Conteo from "./pages/admin/Conteo";
 import Cuentas from "./pages/admin/Cuentas";
+import EtiquetasImprimir from "./pages/ops/EtiquetasImprimir";
 
 // Placeholder genérico para módulos aún no implementados
 function Placeholder({ name }) {
@@ -431,6 +432,17 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin", "Bodeguero"]}>
                 <Cierres />
+              </RoleGuard>
+            }
+          />
+          {/* Etiquetas QR — Admin y Bodeguero. Aparte de Inventario a propósito:
+              esa vista es producto×sede y aquí la selección debe sobrevivir al
+              cambio de filtros sin duplicar el mismo producto por cada sede. */}
+          <Route
+            path="etiquetas"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <EtiquetasImprimir />
               </RoleGuard>
             }
           />

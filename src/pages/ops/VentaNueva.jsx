@@ -202,9 +202,11 @@ export default function VentaNueva() {
     }
   }, 500);
 
+  // #C2-4: ya no cierra el escáner aquí — en modo continuo lo mantiene
+  // abierto el propio QRScanner para encadenar la siguiente lectura; el
+  // usuario lo cierra con el botón Cancelar/X del modal.
   const handleQRFound = useCallback(
     async (productoId) => {
-      setScannerOpen(false);
       try {
         const [{ data: prod }, { data: inv }] = await Promise.all([
           supabase
@@ -225,9 +227,12 @@ export default function VentaNueva() {
         // producto exista y sea vendible.
         // #S1-19: si no es vendible/no existe, decirlo en vez de no hacer nada.
         if (!prod) {
-          setError(
-            "Ese código no corresponde a un producto vendible (puede ser un insumo o estar inactivo).",
-          );
+          // Toast además del texto fijo: en modo continuo el escáner tapa toda
+          // la pantalla y el `setError` no se vería hasta cerrarlo.
+          const msg =
+            "Ese código no corresponde a un producto vendible (puede ser un insumo o estar inactivo).";
+          setError(msg);
+          avisarError(msg);
           return;
         }
         setError(null);
@@ -240,6 +245,11 @@ export default function VentaNueva() {
         );
       }
     },
+    // `agregarAlCarrito` se define más abajo y se recrea en cada render;
+    // incluirlo aquí solo recrearía el handler sin aportar nada, porque todo
+    // lo que lee (la sede) ya está en la dependencia. Mismo criterio que
+    // CompraNueva.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [sedeConsulta],
   );
 
@@ -1335,6 +1345,7 @@ export default function VentaNueva() {
         <QRScanner
           onFound={handleQRFound}
           onClose={() => setScannerOpen(false)}
+          continuo
         />
       )}
 

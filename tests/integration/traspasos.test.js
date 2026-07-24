@@ -16,8 +16,9 @@
  *   ✓ Error: traspaso inexistente
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { invokeAs, loginAs } from "../helpers/auth.js";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { invokeAs } from "../helpers/auth.js";
+import { integrationEnvNoDisponible } from "../helpers/env-check.js";
 import {
   getProducto,
   crearTraspaso,
@@ -29,321 +30,330 @@ import {
 
 const FN = "procesar-traspaso";
 
-describe("procesar-traspaso — flujo completo", () => {
-  let adminClient;
-  let traspaso;
-  let detalles;
-  let stockOrigenAntes;
-  let stockDestinoAntes;
-  let productoData;
+// Requiere los usuarios ficticios de prueba (pedro, carlos, maria, juan...)
+// — ver tests/helpers/env-check.js. Se salta entero si esta base no los tiene.
+describe.skipIf(integrationEnvNoDisponible())(
+  "procesar-traspaso — flujo completo",
+  () => {
+    let adminClient;
+    let traspaso;
+    let detalles;
+    let stockOrigenAntes;
+    let stockDestinoAntes;
+    let productoData;
 
-  beforeAll(async () => {
-    adminClient = await getAdminClient();
-    await resetStockPruebas(adminClient);
+    beforeAll(async () => {
+      adminClient = await getAdminClient();
+      await resetStockPruebas(adminClient);
 
-    // Producto: FA-2236 en BOD-PRINCIPAL (origen)
-    const invOrigen = await getProducto(
-      adminClient,
-      "FA-2236",
-      "BOD-PRINCIPAL",
-    );
-    const invDestino = await getProducto(
-      adminClient,
-      "FA-2236",
-      "ALM-01",
-    ).catch(() => ({ cantidad: 0 }));
-    productoData = await getProductoId(adminClient, "FA-2236");
+      // Producto: FA-2236 en BOD-PRINCIPAL (origen)
+      const invOrigen = await getProducto(
+        adminClient,
+        "FA-2236",
+        "BOD-PRINCIPAL",
+      );
+      const invDestino = await getProducto(
+        adminClient,
+        "FA-2236",
+        "ALM-01",
+      ).catch(() => ({ cantidad: 0 }));
+      productoData = await getProductoId(adminClient, "FA-2236");
 
-    stockOrigenAntes = invOrigen.cantidad;
-    stockDestinoAntes = invDestino.cantidad ?? 0;
+      stockOrigenAntes = invOrigen.cantidad;
+      stockDestinoAntes = invDestino.cantidad ?? 0;
 
-    // Crear traspaso de prueba
-    const result = await crearTraspaso(adminClient, {
-      origenId: "BOD-PRINCIPAL",
-      destinoId: "ALM-01",
-      items: [
-        {
-          producto_id: productoData.id,
-          referencia: "FA-2236",
-          cantidad: 2,
-        },
-      ],
+      // Crear traspaso de prueba
+      const result = await crearTraspaso(adminClient, {
+        origenId: "BOD-PRINCIPAL",
+        destinoId: "ALM-01",
+        items: [
+          {
+            producto_id: productoData.id,
+            referencia: "FA-2236",
+            cantidad: 2,
+          },
+        ],
+      });
+
+      traspaso = result.traspaso;
+      detalles = result.detalles;
     });
 
-    traspaso = result.traspaso;
-    detalles = result.detalles;
-  });
-
-  afterAll(async () => {
-    await cleanupTraspasos(adminClient);
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // PASO 1: borrador → picking (Pedro inicia)
-  // ─────────────────────────────────────────────────────────────
-
-  it("1. iniciar_picking: cambia estado a picking y asigna picker", async () => {
-    const { status, data } = await invokeAs(FN, "pedro", {
-      traspaso_id: traspaso.id,
-      accion: "iniciar_picking",
+    afterAll(async () => {
+      await cleanupTraspasos(adminClient);
     });
 
-    expect(status).toBe(200);
-    const estado = data.data?.estado ?? data.estado;
-    expect(estado).toBe("picking");
+    // ─────────────────────────────────────────────────────────────
+    // PASO 1: borrador → picking (Pedro inicia)
+    // ─────────────────────────────────────────────────────────────
 
-    // Verificar en BD
-    const { data: t } = await adminClient
-      .from("traspasos")
-      .select("estado, picker_id")
-      .eq("id", traspaso.id)
-      .single();
+    it("1. iniciar_picking: cambia estado a picking y asigna picker", async () => {
+      const { status, data } = await invokeAs(FN, "pedro", {
+        traspaso_id: traspaso.id,
+        accion: "iniciar_picking",
+      });
 
-    expect(t.estado).toBe("picking");
-    expect(t.picker_id).toBeTruthy();
-  });
+      expect(status).toBe(200);
+      const estado = data.data?.estado ?? data.estado;
+      expect(estado).toBe("picking");
 
-  it("1b. iniciar_picking segunda vez debe fallar (ya no es borrador)", async () => {
-    const { status, data } = await invokeAs(FN, "pedro", {
-      traspaso_id: traspaso.id,
-      accion: "iniciar_picking",
+      // Verificar en BD
+      const { data: t } = await adminClient
+        .from("traspasos")
+        .select("estado, picker_id")
+        .eq("id", traspaso.id)
+        .single();
+
+      expect(t.estado).toBe("picking");
+      expect(t.picker_id).toBeTruthy();
     });
 
-    expect(status).toBe(400);
-    expect(data.error).toBeTruthy();
-  });
+    it("1b. iniciar_picking segunda vez debe fallar (ya no es borrador)", async () => {
+      const { status, data } = await invokeAs(FN, "pedro", {
+        traspaso_id: traspaso.id,
+        accion: "iniciar_picking",
+      });
 
-  // ─────────────────────────────────────────────────────────────
-  // PASO 2: actualizar_items (Pedro registra picking)
-  // ─────────────────────────────────────────────────────────────
-
-  it("2. actualizar_items: guarda cantidad_enviada y picking_completado", async () => {
-    const detalle = detalles[0];
-
-    const { status, data } = await invokeAs(FN, "pedro", {
-      traspaso_id: traspaso.id,
-      accion: "actualizar_items",
-      items: [
-        {
-          detalle_id: detalle.id,
-          cantidad_enviada: 2,
-          picking_completado: true,
-        },
-      ],
+      expect(status).toBe(400);
+      expect(data.error).toBeTruthy();
     });
 
-    expect(status).toBe(200);
+    // ─────────────────────────────────────────────────────────────
+    // PASO 2: actualizar_items (Pedro registra picking)
+    // ─────────────────────────────────────────────────────────────
 
-    // Verificar en BD
-    const { data: d } = await adminClient
-      .from("detalle_traspaso")
-      .select("cantidad_enviada, picking_completado")
-      .eq("id", detalle.id)
-      .single();
+    it("2. actualizar_items: guarda cantidad_enviada y picking_completado", async () => {
+      const detalle = detalles[0];
 
-    expect(d.cantidad_enviada).toBe(2);
-    expect(d.picking_completado).toBe(true);
-  });
+      const { status } = await invokeAs(FN, "pedro", {
+        traspaso_id: traspaso.id,
+        accion: "actualizar_items",
+        items: [
+          {
+            detalle_id: detalle.id,
+            cantidad_enviada: 2,
+            picking_completado: true,
+          },
+        ],
+      });
 
-  // ─────────────────────────────────────────────────────────────
-  // PASO 3: verificar (debe ser usuario diferente a picker)
-  // ─────────────────────────────────────────────────────────────
+      expect(status).toBe(200);
 
-  it("3a. verificar con el mismo picker debe fallar", async () => {
-    const { status, data } = await invokeAs(FN, "pedro", {
-      traspaso_id: traspaso.id,
-      accion: "verificar",
+      // Verificar en BD
+      const { data: d } = await adminClient
+        .from("detalle_traspaso")
+        .select("cantidad_enviada, picking_completado")
+        .eq("id", detalle.id)
+        .single();
+
+      expect(d.cantidad_enviada).toBe(2);
+      expect(d.picking_completado).toBe(true);
     });
 
-    expect(status).toBe(400);
-    expect(data.error).toMatch(/mismo|verificador|picker/i);
-  });
+    // ─────────────────────────────────────────────────────────────
+    // PASO 3: verificar (debe ser usuario diferente a picker)
+    // ─────────────────────────────────────────────────────────────
 
-  it("3b. verificar con usuario diferente (Carlos) — cambia a verificado", async () => {
-    const { status, data } = await invokeAs(FN, "carlos", {
-      traspaso_id: traspaso.id,
-      accion: "verificar",
+    it("3a. verificar con el mismo picker debe fallar", async () => {
+      const { status, data } = await invokeAs(FN, "pedro", {
+        traspaso_id: traspaso.id,
+        accion: "verificar",
+      });
+
+      expect(status).toBe(400);
+      expect(data.error).toMatch(/mismo|verificador|picker/i);
     });
 
-    expect(status).toBe(200);
-    const estado = data.data?.estado ?? data.estado;
-    expect(estado).toBe("verificado");
+    it("3b. verificar con usuario diferente (Carlos) — cambia a verificado", async () => {
+      const { status, data } = await invokeAs(FN, "carlos", {
+        traspaso_id: traspaso.id,
+        accion: "verificar",
+      });
 
-    const { data: t } = await adminClient
-      .from("traspasos")
-      .select("estado")
-      .eq("id", traspaso.id)
-      .single();
+      expect(status).toBe(200);
+      const estado = data.data?.estado ?? data.estado;
+      expect(estado).toBe("verificado");
 
-    expect(t.estado).toBe("verificado");
-  });
+      const { data: t } = await adminClient
+        .from("traspasos")
+        .select("estado")
+        .eq("id", traspaso.id)
+        .single();
 
-  // ─────────────────────────────────────────────────────────────
-  // PASO 4: enviar — verificado → en_transito
-  // ─────────────────────────────────────────────────────────────
-
-  it("4. enviar: cambia a en_transito y descuenta stock en origen", async () => {
-    const { status, data } = await invokeAs(FN, "carlos", {
-      traspaso_id: traspaso.id,
-      accion: "enviar",
+      expect(t.estado).toBe("verificado");
     });
 
-    expect(status).toBe(200);
-    const estado = data.data?.estado ?? data.estado;
-    expect(estado).toBe("en_transito");
+    // ─────────────────────────────────────────────────────────────
+    // PASO 4: enviar — verificado → en_transito
+    // ─────────────────────────────────────────────────────────────
 
-    // Verificar descuento en origen
-    const invOrigen = await getProducto(
-      adminClient,
-      "FA-2236",
-      "BOD-PRINCIPAL",
-    );
-    expect(invOrigen.cantidad).toBe(stockOrigenAntes - 2);
-  });
+    it("4. enviar: cambia a en_transito y descuenta stock en origen", async () => {
+      const { status, data } = await invokeAs(FN, "carlos", {
+        traspaso_id: traspaso.id,
+        accion: "enviar",
+      });
 
-  // ─────────────────────────────────────────────────────────────
-  // PASO 5: recibir — en_transito → recibido
-  // ─────────────────────────────────────────────────────────────
+      expect(status).toBe(200);
+      const estado = data.data?.estado ?? data.estado;
+      expect(estado).toBe("en_transito");
 
-  it("5. recibir: confirma recepción con cantidades correctas → estado recibido", async () => {
-    const detalle = detalles[0];
-
-    const { status, data } = await invokeAs(FN, "maria", {
-      traspaso_id: traspaso.id,
-      accion: "recibir",
-      items: [
-        {
-          detalle_id: detalle.id,
-          cantidad_recibida: 2, // Igual a enviada → sin diferencia
-        },
-      ],
+      // Verificar descuento en origen
+      const invOrigen = await getProducto(
+        adminClient,
+        "FA-2236",
+        "BOD-PRINCIPAL",
+      );
+      expect(invOrigen.cantidad).toBe(stockOrigenAntes - 2);
     });
 
-    expect(status).toBe(200);
-    const estado = data.data?.estado ?? data.estado;
-    const hayDif = data.data?.hay_diferencia ?? data.hay_diferencia;
-    expect(estado).toBe("recibido");
-    expect(hayDif).toBe(false);
+    // ─────────────────────────────────────────────────────────────
+    // PASO 5: recibir — en_transito → recibido
+    // ─────────────────────────────────────────────────────────────
 
-    // Stock destino aumenta
-    const invDestino = await getProducto(
-      adminClient,
-      "FA-2236",
-      "ALM-01",
-    ).catch(() => ({ cantidad: 0 }));
-    // Solo validamos que el trigger actuó (la cantidad no decrece)
-    expect(invDestino.cantidad).toBeGreaterThanOrEqual(stockDestinoAntes);
-  });
-});
+    it("5. recibir: confirma recepción con cantidades correctas → estado recibido", async () => {
+      const detalle = detalles[0];
+
+      const { status, data } = await invokeAs(FN, "maria", {
+        traspaso_id: traspaso.id,
+        accion: "recibir",
+        items: [
+          {
+            detalle_id: detalle.id,
+            cantidad_recibida: 2, // Igual a enviada → sin diferencia
+          },
+        ],
+      });
+
+      expect(status).toBe(200);
+      const estado = data.data?.estado ?? data.estado;
+      const hayDif = data.data?.hay_diferencia ?? data.hay_diferencia;
+      expect(estado).toBe("recibido");
+      expect(hayDif).toBe(false);
+
+      // Stock destino aumenta
+      const invDestino = await getProducto(
+        adminClient,
+        "FA-2236",
+        "ALM-01",
+      ).catch(() => ({ cantidad: 0 }));
+      // Solo validamos que el trigger actuó (la cantidad no decrece)
+      expect(invDestino.cantidad).toBeGreaterThanOrEqual(stockDestinoAntes);
+    });
+  },
+);
 
 // ─────────────────────────────────────────────────────────────
 // Suite separada: recibir con diferencia
 // ─────────────────────────────────────────────────────────────
 
-describe("procesar-traspaso — recibir con diferencia", () => {
-  let adminClient;
-  let traspaso;
-  let detalles;
-  let productoData;
+describe.skipIf(integrationEnvNoDisponible())(
+  "procesar-traspaso — recibir con diferencia",
+  () => {
+    let adminClient;
+    let traspaso;
+    let detalles;
+    let productoData;
 
-  beforeAll(async () => {
-    adminClient = await getAdminClient();
-    await resetStockPruebas(adminClient);
-    productoData = await getProductoId(adminClient, "MG-AP-10");
+    beforeAll(async () => {
+      adminClient = await getAdminClient();
+      await resetStockPruebas(adminClient);
+      productoData = await getProductoId(adminClient, "MG-AP-10");
 
-    // Crear y avanzar un traspaso hasta en_transito
-    const result = await crearTraspaso(adminClient, {
-      origenId: "BOD-PRINCIPAL",
-      destinoId: "ALM-02",
-      items: [
-        { producto_id: productoData.id, referencia: "MG-AP-10", cantidad: 3 },
-      ],
-    });
-    traspaso = result.traspaso;
-    detalles = result.detalles;
+      // Crear y avanzar un traspaso hasta en_transito
+      const result = await crearTraspaso(adminClient, {
+        origenId: "BOD-PRINCIPAL",
+        destinoId: "ALM-02",
+        items: [
+          { producto_id: productoData.id, referencia: "MG-AP-10", cantidad: 3 },
+        ],
+      });
+      traspaso = result.traspaso;
+      detalles = result.detalles;
 
-    // Avanzar hasta en_transito usando Pedro como picker, Carlos como verificador
-    await invokeAs(FN, "pedro", {
-      traspaso_id: traspaso.id,
-      accion: "iniciar_picking",
-    });
-    await invokeAs(FN, "pedro", {
-      traspaso_id: traspaso.id,
-      accion: "actualizar_items",
-      items: [
-        {
-          detalle_id: detalles[0].id,
-          cantidad_enviada: 3,
-          picking_completado: true,
-        },
-      ],
-    });
-    await invokeAs(FN, "carlos", {
-      traspaso_id: traspaso.id,
-      accion: "verificar",
-    });
-    await invokeAs(FN, "carlos", {
-      traspaso_id: traspaso.id,
-      accion: "enviar",
-    });
-  });
-
-  afterAll(async () => {
-    await cleanupTraspasos(adminClient);
-  });
-
-  it("recibir menos unidades de las enviadas → estado con_diferencia", async () => {
-    const { status, data } = await invokeAs(FN, "juan", {
-      traspaso_id: traspaso.id,
-      accion: "recibir",
-      items: [{ detalle_id: detalles[0].id, cantidad_recibida: 2 }], // Enviaron 3, llegan 2
+      // Avanzar hasta en_transito usando Pedro como picker, Carlos como verificador
+      await invokeAs(FN, "pedro", {
+        traspaso_id: traspaso.id,
+        accion: "iniciar_picking",
+      });
+      await invokeAs(FN, "pedro", {
+        traspaso_id: traspaso.id,
+        accion: "actualizar_items",
+        items: [
+          {
+            detalle_id: detalles[0].id,
+            cantidad_enviada: 3,
+            picking_completado: true,
+          },
+        ],
+      });
+      await invokeAs(FN, "carlos", {
+        traspaso_id: traspaso.id,
+        accion: "verificar",
+      });
+      await invokeAs(FN, "carlos", {
+        traspaso_id: traspaso.id,
+        accion: "enviar",
+      });
     });
 
-    expect(status).toBe(200);
-    const estado = data.data?.estado ?? data.estado;
-    const hayDif = data.data?.hay_diferencia ?? data.hay_diferencia;
-    expect(estado).toBe("con_diferencia");
-    expect(hayDif).toBe(true);
-  });
-});
+    afterAll(async () => {
+      await cleanupTraspasos(adminClient);
+    });
+
+    it("recibir menos unidades de las enviadas → estado con_diferencia", async () => {
+      const { status, data } = await invokeAs(FN, "juan", {
+        traspaso_id: traspaso.id,
+        accion: "recibir",
+        items: [{ detalle_id: detalles[0].id, cantidad_recibida: 2 }], // Enviaron 3, llegan 2
+      });
+
+      expect(status).toBe(200);
+      const estado = data.data?.estado ?? data.estado;
+      const hayDif = data.data?.hay_diferencia ?? data.hay_diferencia;
+      expect(estado).toBe("con_diferencia");
+      expect(hayDif).toBe(true);
+    });
+  },
+);
 
 // ─────────────────────────────────────────────────────────────
 // Suite separada: errores de validación
 // ─────────────────────────────────────────────────────────────
 
-describe("procesar-traspaso — validaciones de entrada", () => {
-  let adminClient;
-
-  beforeAll(async () => {
-    adminClient = await getAdminClient();
-  });
-
-  it("acción inválida retorna error 400", async () => {
-    const { status, data } = await invokeAs(FN, "pedro", {
-      traspaso_id: "00000000-0000-0000-0000-000000000001",
-      accion: "accion_que_no_existe",
+describe.skipIf(integrationEnvNoDisponible())(
+  "procesar-traspaso — validaciones de entrada",
+  () => {
+    beforeAll(async () => {
+      await getAdminClient();
     });
 
-    expect(status).toBe(400);
-    expect(data.error).toBeTruthy();
-  });
+    it("acción inválida retorna error 400", async () => {
+      const { status, data } = await invokeAs(FN, "pedro", {
+        traspaso_id: "00000000-0000-0000-0000-000000000001",
+        accion: "accion_que_no_existe",
+      });
 
-  it("traspaso inexistente retorna error", async () => {
-    const { status, data } = await invokeAs(FN, "pedro", {
-      traspaso_id: "00000000-0000-0000-0000-000000000000",
-      accion: "iniciar_picking",
+      expect(status).toBe(400);
+      expect(data.error).toBeTruthy();
     });
 
-    expect(status).toBe(400);
-    expect(data.error).toBeTruthy();
-  });
+    it("traspaso inexistente retorna error", async () => {
+      const { status, data } = await invokeAs(FN, "pedro", {
+        traspaso_id: "00000000-0000-0000-0000-000000000000",
+        accion: "iniciar_picking",
+      });
 
-  it("falta traspaso_id retorna error 400", async () => {
-    const { status, data } = await invokeAs(FN, "pedro", {
-      accion: "iniciar_picking",
+      expect(status).toBe(400);
+      expect(data.error).toBeTruthy();
     });
 
-    expect(status).toBe(400);
-    expect(data.error).toBeTruthy();
-  });
-});
+    it("falta traspaso_id retorna error 400", async () => {
+      const { status, data } = await invokeAs(FN, "pedro", {
+        accion: "iniciar_picking",
+      });
+
+      expect(status).toBe(400);
+      expect(data.error).toBeTruthy();
+    });
+  },
+);

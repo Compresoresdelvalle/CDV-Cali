@@ -1,12 +1,24 @@
 import { useEffect, useRef, useState } from "react";
-import { Html5Qrcode } from "html5-qrcode";
+import QrScanner from "qr-scanner";
 import { supabase } from "../../lib/supabase";
 
-const SCANNER_ID = "qr-scanner-viewport";
+// Cuánto se muestra la confirmación/aviso de cada lectura en modo continuo.
+// Ya NO bloquea la siguiente lectura (ver `procesandoRef` más abajo): solo
+// controla cuánto tiempo queda pintado el aviso encima del video.
+const PAUSA_CONTINUO_MS = 1000;
+
+// Tiempo máximo que se espera la consulta a `productos` antes de darla por
+// caída. Un try/catch no alcanza: solo atrapa una promesa que RECHAZA, y una
+// petición que se queda colgada (wifi intermitente de bodega, el paquete sale
+// y no vuelve nada) ni resuelve ni rechaza nunca. Sin este límite explícito,
+// `procesandoRef` quedaría en true para siempre y el escáner dejaría de
+// reaccionar a cualquier código el resto de la sesión, sin ningún aviso.
+const CONSULTA_PRODUCTO_TIMEOUT_MS = 8000;
 
 // Traduce el error real de getUserMedia (DOMException) a un mensaje accionable.
-// html5-qrcode convierte sus errores en string y pierde `err.name`; por eso
-// pedimos el permiso de cámara nosotros mismos para obtener el error original.
+// qr-scanner (igual que html5-qrcode antes) no nos entrega el DOMException
+// original desde su propio arranque de cámara; por eso seguimos pidiendo el
+// permiso nosotros mismos para obtener `err.name` sin filtrar por la librería.
 function traducirError(err) {
   const name = err?.name;
   if (name === "NotAllowedError" || name === "SecurityError")
@@ -22,67 +34,218 @@ function traducirError(err) {
   return "No se pudo acceder a la cámara. Pulsa Reintentar.";
 }
 
-export default function QRScanner({ onFound, onClose }) {
+// continuo=true habilita el "modo escaneo en cadena": tras cada lectura válida
+// no se cierra el modal ni se detiene la cámara, para no pagar 1-2s de arranque
+// por cada línea de una compra/traspaso de muchos ítems.
+export default function QRScanner({ onFound, onClose, continuo = false }) {
+  const videoRef = useRef(null);
   const scannerRef = useRef(null);
   const [status, setStatus] = useState("starting");
   const [errorMsg, setErrorMsg] = useState("");
   const [intento, setIntento] = useState(0);
+  const [linternaDisponible, setLinternaDisponible] = useState(false);
+  const [linternaOn, setLinternaOn] = useState(false);
+
+  // Estado propio del modo continuo: contador de la sesión y aviso breve
+  // (éxito o error) que se superpone al video sin detener el escaneo.
+  const [contador, setContador] = useState(0);
+  const [aviso, setAviso] = useState(null); // { tipo: "ok" | "error", texto }
+
+  // `procesandoRef` reemplaza al viejo doble uso de `cancelled`: antes esa
+  // variable servía tanto para "el componente se desmontó" como para "ya
+  // encontré un código, ignora el resto" — y en modo continuo esas dos cosas
+  // deben poder ser falsas/verdaderas de forma independiente. El desmontaje
+  // se maneja con la variable local `desmontado` dentro del efecto.
+  //
+  // `procesandoRef` SOLO significa "hay una consulta en vuelo": bloquea
+  // exclusivamente mientras se espera la respuesta del servidor, para no
+  // lanzar dos consultas a la vez. NO se mantiene en true durante la pausa
+  // visual del aviso (`PAUSA_CONTINUO_MS`) — si lo hiciera, un código
+  // DISTINTO leído mientras el aviso del anterior sigue en pantalla se
+  // descartaría en silencio: el bodeguero escaneando en cadena perdería
+  // ítems sin ningún aviso ni consulta (bug real detectado en auditoría).
+  const procesandoRef = useRef(false);
+  // Último texto decodificado y aceptado, para el anti-rebote en modo continuo
+  // (la cámara decodifica el mismo QR muchas veces por segundo mientras el
+  // operario todavía lo tiene enfocado). Solo se libera cuando el código sale
+  // del cuadro (ver `fallosRef`), NO por tiempo: como agregar el mismo
+  // producto otra vez suma una unidad al carrito, soltarlo por temporizador
+  // haría que dejar el celular apuntando a la etiqueta sumara unidades solo.
+  const ultimoTextoRef = useRef(null);
+  // Frames seguidos en los que no se decodificó nada: así sabemos que el QR
+  // ya salió del cuadro y se puede volver a aceptar el mismo código.
+  const fallosRef = useRef(0);
+  // Timer que retira el aviso visual (no el escaneo, que nunca se pausó) tras
+  // PAUSA_CONTINUO_MS en modo continuo.
+  const resumeTimerRef = useRef(null);
+
+  // El escáner en modo continuo vive muchos segundos, pero el efecto que
+  // registra el callback de lectura solo corre al montar: guardamos `onFound`
+  // en un ref para llamar SIEMPRE al handler del último render. Sin esto, toda
+  // la cadena de lecturas usaría el handler capturado al abrir el modal, con
+  // el estado de la pantalla congelado en ese instante (p. ej. la lista de
+  // componentes de Ensambles, que dejaría de detectar repetidos).
+  const onFoundRef = useRef(onFound);
+  useEffect(() => {
+    onFoundRef.current = onFound;
+  });
 
   useEffect(() => {
-    let cancelled = false;
+    let desmontado = false;
     let scanner = null;
 
-    // Detiene y limpia el scanner de forma SEGURA.
-    // OJO: html5-qrcode `stop()` lanza una excepción SÍNCRONA (no una promesa
-    // rechazable) si el scanner todavía no está escaneando — un `.catch()`
-    // encadenado NO atrapa un throw síncrono, hay que envolverlo en try/catch.
+    // Cada intento (mount o Reintentar) arranca una lectura limpia: si venía
+    // bloqueado de un intento anterior, aquí se libera.
+    procesandoRef.current = false;
+    ultimoTextoRef.current = null;
+    fallosRef.current = 0;
+    clearTimeout(resumeTimerRef.current);
+
+    // Detiene y libera el scanner de forma SEGURA. `destroy()` desregistra sus
+    // listeners, apaga la linterna si estaba encendida y detiene la cámara y el
+    // worker; a diferencia del viejo stop()/clear() de html5-qrcode, no hace
+    // falta try/catch por excepción síncrona: destroy() es idempotente y no
+    // lanza si el scanner nunca llegó a iniciar la cámara.
     const detener = (sc) => {
       if (!sc) return;
       try {
-        const p = sc.stop();
-        if (p && typeof p.then === "function") {
-          p.catch(() => {}).finally(() => {
-            try {
-              sc.clear();
-            } catch {
-              /* ignore */
-            }
-          });
-          return;
-        }
-      } catch {
-        /* el scanner no estaba escaneando — ignorar */
-      }
-      try {
-        sc.clear();
+        sc.destroy();
       } catch {
         /* ignore */
       }
     };
 
+    // qr-scanner llama a `onDecodeError` en CADA frame en el que no encuentra
+    // código: es la única señal de que el QR ya salió del cuadro.
+    //
+    // El umbral se mide en frames seguidos SIN decodificar. A 10 fps (ver
+    // `maxScansPerSecond` más abajo), exigir 10 equivale a un segundo entero
+    // sin ver ninguna etiqueta. Se eligió alto a propósito: con un umbral
+    // corto (3 frames = 0,3s) bastaba un reflejo o un temblor de mano para que
+    // la etiqueta "desapareciera" un instante estando todavía enfrente, se
+    // liberara el anti-rebote y el mismo producto se sumara dos veces al
+    // carrito. Equivocarse hacia el lado lento solo obliga a apartar la cámara
+    // un segundo para repetir un producto; equivocarse hacia el lado rápido
+    // mete unidades fantasma en una compra.
+    const FRAMES_SIN_CODIGO_PARA_LIBERAR = 10;
+
+    const onNoDecoded = () => {
+      if (!continuo || desmontado || ultimoTextoRef.current === null) return;
+      fallosRef.current += 1;
+      if (fallosRef.current >= FRAMES_SIN_CODIGO_PARA_LIBERAR) {
+        fallosRef.current = 0;
+        ultimoTextoRef.current = null;
+      }
+    };
+
     const onDecoded = async (decodedText) => {
-      if (cancelled) return;
-      cancelled = true;
-      setStatus("found");
-      detener(scanner);
+      if (desmontado) return;
+      fallosRef.current = 0;
+      // Bloquea re-entradas SOLO mientras hay una consulta en vuelo (evita
+      // lanzar dos consultas a la vez). No bloquea durante la pausa visual
+      // del aviso: un código nuevo leído en ese momento sí debe consultarse.
+      if (procesandoRef.current) return;
+
+      const texto = decodedText.trim();
+
+      // Anti-rebote: en modo continuo, mientras el mismo código siga en cuadro
+      // la cámara lo vuelve a decodificar varias veces por segundo. Ignorar
+      // repeticiones del último código aceptado.
+      if (continuo && texto === ultimoTextoRef.current) return;
+
+      procesandoRef.current = true;
+      if (continuo) ultimoTextoRef.current = texto;
+
+      if (!continuo) {
+        // Modo clásico: una sola lectura y se cierra la cámara de inmediato.
+        setStatus("found");
+        detener(scanner);
+      }
 
       // No filtramos por activo aquí para poder distinguir "no existe" de
       // "existe pero está desactivado" y dar un mensaje claro al operador.
-      const { data } = await supabase
-        .from("productos")
-        .select("id, activo")
-        .eq("referencia", decodedText.trim())
-        .maybeSingle();
-
-      if (data?.id && data.activo) {
-        onFound(data.id);
-      } else if (data?.id && !data.activo) {
-        setStatus("error");
-        setErrorMsg(`Este producto está desactivado: ${decodedText}`);
-      } else {
-        setStatus("error");
-        setErrorMsg(`Referencia no encontrada: ${decodedText}`);
+      // El try/catch por sí solo no basta (ver comentario de
+      // CONSULTA_PRODUCTO_TIMEOUT_MS): por eso la consulta corre contra un
+      // Promise.race con un temporizador propio, que siempre se limpia en el
+      // `finally` sin importar quién ganó la carrera.
+      let data = null;
+      let error = null;
+      let timeoutId;
+      try {
+        const timeout = new Promise((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error("timeout-consulta-producto")),
+            CONSULTA_PRODUCTO_TIMEOUT_MS,
+          );
+        });
+        ({ data, error } = await Promise.race([
+          supabase
+            .from("productos")
+            .select("id, activo")
+            .eq("referencia", texto)
+            .maybeSingle(),
+          timeout,
+        ]));
+      } catch (e) {
+        error = e;
+      } finally {
+        clearTimeout(timeoutId);
       }
+
+      // Se libera apenas termina el trabajo async (éxito, error o timeout),
+      // NO al final de la pausa visual: eso es lo que corrige el hallazgo A.
+      procesandoRef.current = false;
+
+      if (desmontado) return;
+
+      let mensaje = null;
+      let encontrado = false;
+      if (error) {
+        // BUG real corregido: antes se descartaba `error` y una falla de red
+        // (sin señal en el fondo de la bodega) terminaba mostrando "Referencia
+        // no encontrada", culpando a la etiqueta cuando el problema era la
+        // conexión. Mismo criterio y mensaje que VentaNueva.jsx (#S1-19).
+        mensaje =
+          "No se pudo consultar el producto. Revisa la conexión e intenta de nuevo.";
+      } else if (data?.id && data.activo) {
+        encontrado = true;
+      } else if (data?.id && !data.activo) {
+        mensaje = `Este producto está desactivado: ${texto}`;
+      } else {
+        mensaje = `Referencia no encontrada: ${texto}`;
+      }
+
+      if (!continuo) {
+        if (encontrado) {
+          onFoundRef.current(data.id);
+        } else {
+          setStatus("error");
+          setErrorMsg(mensaje);
+        }
+        return;
+      }
+
+      // --- Desde aquí, modo continuo ---
+      // Un "no encontrada" o un error de red NO debe matar la sesión: se
+      // muestra el aviso y se sigue escaneando.
+      if (encontrado) {
+        onFoundRef.current(data.id);
+        setContador((n) => n + 1);
+        setAviso({ tipo: "ok", texto });
+      } else {
+        setAviso({ tipo: "error", texto: mensaje });
+      }
+
+      // Si ya había un timer corriendo de un aviso anterior, se cancela: como
+      // `procesandoRef` ya no bloquea durante la pausa visual, puede llegar
+      // una lectura nueva mientras el aviso previo seguía en pantalla. Sin
+      // este clearTimeout, ese timer viejo borraría el aviso RECIÉN puesto
+      // antes de que se cumpla su propia pausa.
+      clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = setTimeout(() => {
+        if (desmontado) return;
+        setAviso(null);
+      }, PAUSA_CONTINUO_MS);
     };
 
     // StrictMode (dev) monta→desmonta→monta el componente de forma síncrona.
@@ -93,7 +256,7 @@ export default function QRScanner({ onFound, onClose }) {
       // La cámara necesita un contexto seguro (HTTPS/localhost) y soporte de
       // mediaDevices en el navegador.
       if (!navigator.mediaDevices?.getUserMedia) {
-        if (!cancelled) {
+        if (!desmontado) {
           setStatus("error");
           setErrorMsg(
             location.protocol !== "https:" && location.hostname !== "localhost"
@@ -106,57 +269,94 @@ export default function QRScanner({ onFound, onClose }) {
 
       // Pedir permiso de cámara EXPLÍCITAMENTE: esto dispara el prompt del
       // navegador (si el permiso está sin decidir) y nos da el error REAL
-      // — html5-qrcode lo convierte en string y se pierde `err.name`.
-      // El stream de prueba se libera enseguida; html5-qrcode abrirá el suyo.
+      // — qr-scanner tampoco nos entrega el DOMException original.
+      // El stream de prueba se libera enseguida; qr-scanner abrirá el suyo.
       try {
         const probe = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment" },
         });
         probe.getTracks().forEach((t) => t.stop());
       } catch (err) {
-        if (cancelled) return;
+        if (desmontado) return;
         setStatus("error");
         setErrorMsg(traducirError(err));
         return;
       }
-      if (cancelled) return;
+      if (desmontado) return;
 
-      // Con el permiso ya concedido, arrancar html5-qrcode.
+      // Con el permiso ya concedido, arrancar qr-scanner sobre el <video> del
+      // render. qr-scanner es solo QR por diseño (usa el BarcodeDetector
+      // nativo cuando existe y su propio worker cuando no) — a diferencia de
+      // html5-qrcode no hace falta restringir formatos: nunca decodifica
+      // códigos de barras 1D de fábrica, así que no hay filtro que mantener.
       try {
-        scanner = new Html5Qrcode(SCANNER_ID);
+        scanner = new QrScanner(
+          videoRef.current,
+          (result) => onDecoded(result.data),
+          {
+            onDecodeError: onNoDecoded,
+            preferredCamera: "environment",
+            maxScansPerSecond: 10,
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+            returnDetailedScanResult: true,
+          },
+        );
         scannerRef.current = scanner;
       } catch (err) {
-        if (!cancelled) {
+        if (!desmontado) {
           setStatus("error");
           setErrorMsg(traducirError(err));
         }
         return;
       }
       scanner
-        .start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 240, height: 240 } },
-          onDecoded,
-          () => {},
-        )
-        .then(() => {
+        .start()
+        .then(async () => {
           // Si se desmontó mientras la cámara arrancaba, detener de inmediato.
-          if (cancelled) detener(scanner);
-          else setStatus("scanning");
+          if (desmontado) {
+            detener(scanner);
+            return;
+          }
+          setStatus("scanning");
+          // Detectar soporte de linterna (torch). No todos los navegadores lo
+          // exponen (iOS Safari típicamente no) — si falla, el botón
+          // simplemente no se pinta, nunca debe reventar el escáner.
+          try {
+            const soportaFlash = await scanner.hasFlash();
+            if (!desmontado) setLinternaDisponible(soportaFlash);
+          } catch {
+            /* sin soporte de torch: el botón no se pinta */
+          }
         })
         .catch((err) => {
-          if (cancelled) return;
+          if (desmontado) return;
           setStatus("error");
           setErrorMsg(traducirError(err));
         });
     }, 0);
 
     return () => {
-      cancelled = true;
+      desmontado = true;
       clearTimeout(timer);
+      clearTimeout(resumeTimerRef.current);
       detener(scanner);
     };
   }, [intento]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Enciende/apaga la linterna del track activo. Es un extra: si el
+  // dispositivo o navegador no coopera, se falla en silencio y no se rompe
+  // el escaneo.
+  const alternarLinterna = async () => {
+    const sc = scannerRef.current;
+    if (!sc) return;
+    try {
+      await sc.toggleFlash();
+      setLinternaOn(sc.isFlashOn());
+    } catch {
+      /* la linterna es un extra: si falla, seguimos sin ella */
+    }
+  };
 
   return (
     <div
@@ -202,26 +402,62 @@ export default function QRScanner({ onFound, onClose }) {
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors cursor-pointer"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "hsl(var(--muted))";
-              e.currentTarget.style.color = "hsl(var(--foreground))";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "";
-              e.currentTarget.style.color = "hsl(var(--muted-foreground))";
-            }}
-            aria-label="Cerrar escáner"
-          >
-            <CloseIcon />
-          </button>
+          <div className="flex items-center gap-1">
+            {status === "scanning" && linternaDisponible && (
+              <button
+                onClick={alternarLinterna}
+                className="w-12 h-12 flex items-center justify-center rounded-xl transition-colors cursor-pointer"
+                style={{
+                  color: linternaOn
+                    ? "hsl(var(--warning))"
+                    : "hsl(var(--muted-foreground))",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "hsl(var(--muted))";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "";
+                }}
+                aria-label={
+                  linternaOn ? "Apagar linterna" : "Encender linterna"
+                }
+                title={linternaOn ? "Apagar linterna" : "Encender linterna"}
+              >
+                <FlashIcon on={linternaOn} />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="w-12 h-12 flex items-center justify-center rounded-xl transition-colors cursor-pointer"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "hsl(var(--muted))";
+                e.currentTarget.style.color = "hsl(var(--foreground))";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "";
+                e.currentTarget.style.color = "hsl(var(--muted-foreground))";
+              }}
+              aria-label="Cerrar escáner"
+            >
+              <CloseIcon />
+            </button>
+          </div>
         </div>
 
         <div className="relative bg-black" style={{ height: 300 }}>
-          <div id={SCANNER_ID} className="w-full h-full" />
+          {/* El id lo usa el E2E para saber que el visor está montado. Antes
+              colgaba de un <div> contenedor que html5-qrcode rellenaba solo;
+              con qr-scanner el visor ES el <video>, así que el id se mudó aquí
+              en vez de dejar el test apuntando a un elemento que ya no existe. */}
+          <video
+            id="qr-scanner-viewport"
+            ref={videoRef}
+            className="w-full h-full"
+            style={{ objectFit: "cover" }}
+            muted
+            playsInline
+          />
 
           {status === "starting" && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60">
@@ -245,6 +481,51 @@ export default function QRScanner({ onFound, onClose }) {
               </div>
             </div>
           )}
+
+          {/* Modo continuo: contador de la sesión, siempre visible mientras se escanea. */}
+          {continuo && status === "scanning" && (
+            <div
+              className="absolute top-2 right-2 px-2.5 py-1 rounded-full text-xs font-semibold"
+              style={{
+                backgroundColor: "hsl(var(--card) / 0.9)",
+                color: "hsl(var(--foreground))",
+              }}
+            >
+              {contador} escaneado{contador === 1 ? "" : "s"}
+            </div>
+          )}
+
+          {/* Modo continuo: confirmación/aviso breve por cada lectura, sin
+              detener la cámara ni cerrar el modal. */}
+          {continuo && aviso && (
+            <div
+              className="absolute inset-0 flex items-center justify-center px-4 text-center"
+              style={{
+                backgroundColor:
+                  aviso.tipo === "ok"
+                    ? "hsl(var(--success) / 0.85)"
+                    : "hsl(var(--destructive) / 0.85)",
+              }}
+            >
+              <div className="flex flex-col items-center gap-2 text-white">
+                {aviso.tipo === "ok" && (
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: "rgba(255,255,255,0.2)" }}
+                  >
+                    <CheckIcon />
+                  </div>
+                )}
+                {/* "Leído" y no "Agregado": el escáner solo sabe que la
+                    referencia existe y está activa; quien decide si entra al
+                    carrito es la pantalla (puede rechazarla por insumo, por
+                    sede o por falta de stock, y avisa con su propio toast). */}
+                <p className="text-sm font-medium">
+                  {aviso.tipo === "ok" ? `Leído: ${aviso.texto}` : aviso.texto}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {status === "error" && (
@@ -265,6 +546,8 @@ export default function QRScanner({ onFound, onClose }) {
               onClick={() => {
                 setErrorMsg("");
                 setStatus("starting");
+                setLinternaDisponible(false);
+                setLinternaOn(false);
                 setIntento((n) => n + 1);
               }}
               className="w-full py-2.5 rounded-xl text-sm font-semibold cursor-pointer min-h-[44px]"
@@ -275,6 +558,13 @@ export default function QRScanner({ onFound, onClose }) {
             >
               Reintentar
             </button>
+            <p
+              className="text-xs text-center"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              También puedes cerrar el escáner y escribir la referencia en el
+              buscador.
+            </p>
           </div>
         )}
 
@@ -362,6 +652,24 @@ function CheckIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function FlashIcon({ on }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill={on ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" />
     </svg>
   );
 }

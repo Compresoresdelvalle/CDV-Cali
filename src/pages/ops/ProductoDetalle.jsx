@@ -603,6 +603,7 @@ export default function ProductoDetalle() {
                               codigo={inv.ubicacion_id}
                               className="mt-1.5"
                               conMapa
+                              mostrarVacio
                             />
                           )}
                         </td>

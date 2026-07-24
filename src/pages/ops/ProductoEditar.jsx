@@ -56,12 +56,37 @@ export default function ProductoEditar() {
       });
       if (!ok) return;
     }
+
+    // A3: la referencia es lo que va dentro del QR y lo que el escáner busca
+    // con .eq() exacto. A diferencia de crear (fn_crear_producto normaliza),
+    // aquí es un UPDATE directo: si no la normalizamos, un espacio invisible
+    // al final deja el producto imposible de encontrar escaneando, para siempre.
+    let referenciaNueva;
+    if (Object.prototype.hasOwnProperty.call(payload, "referencia")) {
+      referenciaNueva = String(payload.referencia ?? "").trim();
+      if (!referenciaNueva) {
+        setErrorMsg("La referencia no puede quedar vacía");
+        avisarError("La referencia no puede quedar vacía");
+        return;
+      }
+      const referenciaVieja = String(producto.referencia ?? "");
+      if (referenciaNueva !== referenciaVieja) {
+        const ok = await confirm({
+          titulo: "Cambiar referencia",
+          mensaje: `La referencia pasará de "${referenciaVieja}" a "${referenciaNueva}". Todas las etiquetas QR ya impresas de este producto dejarán de servir (el escáner mostrará "Referencia no encontrada") y habrá que reimprimirlas. ¿Confirmar?`,
+          confirmLabel: "Guardar cambios",
+        });
+        if (!ok) return;
+      }
+    }
+
     setSubmitting(true);
     setErrorMsg("");
     try {
       // `proveedor_inicial` no es columna de productos (solo aplica al crear).
       const { proveedor_inicial: _omit, ...campos } = payload;
       void _omit;
+      if (referenciaNueva !== undefined) campos.referencia = referenciaNueva;
       const { error } = await supabase
         .from("productos")
         .update(campos)

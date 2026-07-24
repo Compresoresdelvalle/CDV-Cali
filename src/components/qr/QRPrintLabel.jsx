@@ -9,18 +9,37 @@ import { QRCodeSVG } from "qrcode.react";
  *   referencia: string
  *   nombre:     string
  */
+// Escapa caracteres especiales antes de interpolar en el HTML de la etiqueta.
+// El catálogo se alimenta copiando y pegando de catálogos de proveedor, así que
+// un nombre o referencia con <, >, &, " o ' puede romper el documento (o vaciar
+// la etiqueta) cuando se inyecta crudo con document.write. Blindaje preventivo.
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export default function QRPrintLabel({ referencia, nombre }) {
   const handlePrint = () => {
-    // Generar SVG del QR como HTML estático
+    // Generar SVG del QR como HTML estático.
+    // Nivel de corrección 'H' (30% de tolerancia a daño, contra 15% de 'M'):
+    // la etiqueta vive pegada en la bodega expuesta a grasa, polvo y roces.
+    // El QR impreso mide lo mismo (24mm fijos en el CSS de abajo); con una
+    // referencia de más de 7 caracteres sube de versión 1 a 2, o sea módulos
+    // algo más pequeños (~0,8mm), que siguen siendo de sobra legibles.
+    // El value NO se escapa: es lo que el escáner debe leer.
     const svgMarkup = renderToStaticMarkup(
-      <QRCodeSVG value={referencia} size={150} level="M" marginSize={2} />,
+      <QRCodeSVG value={referencia} size={150} level="H" marginSize={2} />,
     );
 
     const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Etiqueta QR — ${referencia}</title>
+  <title>Etiqueta QR — ${escapeHtml(referencia)}</title>
   <style>
     @page {
       size: 50mm 30mm;
@@ -50,8 +69,8 @@ export default function QRPrintLabel({ referencia, nombre }) {
 <body>
   <div class="qr">${svgMarkup}</div>
   <div class="info">
-    <p class="ref">${referencia}</p>
-    <p class="nom">${nombre}</p>
+    <p class="ref">${escapeHtml(referencia)}</p>
+    <p class="nom">${escapeHtml(nombre)}</p>
     <p class="brand">Compresores del Valle</p>
   </div>
   <script>window.onload = () => { window.print(); window.close(); }</${"script"}>

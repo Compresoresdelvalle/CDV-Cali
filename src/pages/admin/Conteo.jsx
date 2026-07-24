@@ -11,19 +11,22 @@ import {
   RefreshCw,
   ListChecks,
   EyeOff,
+  ScanLine,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatDate, formatCOP, safeError } from "../../lib/utils";
-import { avisarOk, avisarError } from "../../lib/notify";
+import { avisarOk, avisarError, avisarInfo } from "../../lib/notify";
 import { applyKeywordSearch } from "../../lib/search";
 import { SEDES } from "../../lib/constants";
 import { SEDE_LABELS } from "../../lib/traspasos-ui";
 import { useFiltros } from "../../hooks/useFiltros";
+import { useSedeUsaUbicaciones } from "../../hooks/useSedeUsaUbicaciones";
 import BarraFiltros from "../../components/filtros/BarraFiltros";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import MapaBodega from "../../components/inventario/MapaBodega";
+import QRScanner from "../../components/forms/QRScanner";
 import {
   diferenciaToken,
   clasePillStyle,
@@ -1169,6 +1172,16 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
       ? (progreso.items_contados / progreso.total_items) * 100
       : 0;
 
+  // Hallazgo B: BODEGA tiene ubicación asignada en ~48% de sus filas, pero
+  // CV/CHV/L3 están prácticamente en 0%. Si forzamos "Sin ubicar" siempre,
+  // en esas sedes el chip gris sale en cada fila de la cola y se vuelve
+  // ruido que el operario aprende a ignorar. Antes esto se aproximaba con
+  // "¿alguna fila de la cola YA CARGADA tiene ubicación?", pero una cola que
+  // por casualidad trajera solo productos sin ubicar hacía desaparecer el
+  // chip aunque la sede sí ubique. Se usa la respuesta real y compartida,
+  // reactiva a la sede vigente (el Admin puede cambiarla en el selector).
+  const haySedeConUbicaciones = useSedeUsaUbicaciones(sede);
+
   return (
     <div className="flex flex-col gap-5">
       {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
@@ -1358,7 +1371,11 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
                               {item.nombre}
                             </p>
                             <ClasePill clase={item.clasificacion} />
-                            <UbicacionChip codigo={item.ubicacion_id} conMapa />
+                            <UbicacionChip
+                              codigo={item.ubicacion_id}
+                              conMapa
+                              mostrarVacio={haySedeConUbicaciones}
+                            />
                           </div>
                           <p
                             className="font-mono text-[11px]"
@@ -1419,7 +1436,11 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
                             {item.nombre}
                           </p>
                           <ClasePill clase={item.clasificacion} />
-                          <UbicacionChip codigo={item.ubicacion_id} conMapa />
+                          <UbicacionChip
+                            codigo={item.ubicacion_id}
+                            conMapa
+                            mostrarVacio={haySedeConUbicaciones}
+                          />
                         </div>
                         <p
                           className="font-mono text-xs"
@@ -1664,10 +1685,19 @@ function ModalNuevoConteo({
   const [observaciones, setObservaciones] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Escáner del camino B (búsqueda manual): solo aplica antes de tener
+  // producto seleccionado, así que no colisiona con `productoSel`.
+  const [scannerOpen, setScannerOpen] = useState(false);
   // Bloque D1: asignar ubicación física desde el modal de conteo (opcional,
   // no bloquea el registro del conteo). Solo Admin/Bodeguero.
   const puedeAsignarUbicacion =
     perfil?.rol === "Admin" || perfil?.rol === "Bodeguero";
+  // Hallazgo B: este modal se abre tanto desde la cola del plan como desde
+  // la búsqueda manual de "Nuevo conteo", que antes no tenía ninguna forma
+  // de saber si la sede en cuestión usa ubicaciones (se dejaba sin
+  // mostrarVacio). Ahora usa la misma respuesta real y compartida, por la
+  // sede que se está contando en el modal (reactiva a cambiarSede).
+  const sedeUsaUbicaciones = useSedeUsaUbicaciones(sedeConteo);
   const [ubicacionesSede, setUbicacionesSede] = useState([]);
   const [asignandoUbicacion, setAsignandoUbicacion] = useState(false);
   useEffect(() => {
@@ -1780,6 +1810,48 @@ function ModalNuevoConteo({
     setResultados([]);
   };
 
+  // Escanear deja el producto seleccionado EXACTAMENTE como si viniera de la
+  // lista del buscador: se reutiliza `seleccionar` (misma forma de objeto,
+  // mismo cálculo de stock por sede) en vez de duplicar esa lógica. `onFound`
+  // solo trae el id, así que se hace la consulta mínima con el mismo shape
+  // que la búsqueda (`inventario` como array) para no romper `seleccionar`.
+  const onQRFound = async (productoId) => {
+    setScannerOpen(false);
+    try {
+      const { data, error } = await supabase
+        .from("productos")
+        .select(
+          `id, referencia, nombre, vendible, inventario:inventario(id, cantidad, cantidad_insumo, sede_id, ubicacion_id)`,
+        )
+        .eq("id", productoId)
+        .eq("activo", true)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        avisarError("No se pudo cargar el producto escaneado.");
+        return;
+      }
+      const tieneInventarioEnSede = (data.inventario ?? []).some(
+        (i) => i.sede_id === sedeConteo,
+      );
+      seleccionar(data);
+      // El buscador ya deja contar igual sin inventario en la sede (se
+      // inicializa en 0, ver el banner de `sinInventario` más abajo); acá
+      // ADEMÁS avisamos con un toast porque tras escanear el operario ya se
+      // movió al siguiente producto y podría no ver el aviso fijo del modal.
+      // Informativo, no error: contar en cero un producto que el sistema
+      // aún no tiene en esta sede es justo para lo que sirve el conteo
+      // cíclico, no un fallo de la operación.
+      if (!tieneInventarioEnSede) {
+        avisarInfo(
+          `"${data.nombre}" no tenía inventario en ${SEDE_LABELS[sedeConteo] ?? sedeConteo}. Se contará desde 0.`,
+        );
+      }
+    } catch (err) {
+      avisarError(err, "No se pudo cargar el producto escaneado");
+    }
+  };
+
   const guardar = async () => {
     if (!productoSel) {
       setError("Selecciona un producto");
@@ -1815,308 +1887,334 @@ function ModalNuevoConteo({
   const difToken = diferenciaToken(dif);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-      onClick={onClose}
-    >
+    <>
       <div
-        onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl border p-5 sm:max-w-md sm:rounded-2xl"
-        style={{
-          backgroundColor: "hsl(var(--card))",
-          borderColor: "hsl(var(--border))",
-        }}
+        className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
+        style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        onClick={onClose}
       >
-        <h2
-          className="mb-4 text-lg font-semibold"
-          style={{ color: "hsl(var(--foreground))" }}
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl border p-5 sm:max-w-md sm:rounded-2xl"
+          style={{
+            backgroundColor: "hsl(var(--card))",
+            borderColor: "hsl(var(--border))",
+          }}
         >
-          Nuevo conteo cíclico
-        </h2>
-
-        {error && <Banner type="destructive">{error}</Banner>}
-
-        {/* #35: sede a contar — el Admin elige cualquiera; otros, la suya.
-            Prellenado desde el plan: la sede ya viene resuelta, sin selector. */}
-        {!prellenado && (
-          <div className="mb-3">
-            <label
-              className="mb-1 block text-xs font-medium"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Sede a contar
-            </label>
-            {esAdmin ? (
-              <select
-                value={sedeConteo}
-                onChange={(e) => cambiarSede(e.target.value)}
-                className="h-12 w-full rounded-lg border px-3 text-sm"
-                style={surfaceInputStyle}
-              >
-                {Object.values(SEDES).map((s) => (
-                  <option key={s} value={s}>
-                    {SEDE_LABELS[s] ?? s}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div
-                className="flex h-12 items-center rounded-lg border px-3 text-sm"
-                style={{ ...surfaceInputStyle, opacity: 0.8 }}
-              >
-                {SEDE_LABELS[sedeConteo] ?? sedeConteo}
-              </div>
-            )}
-          </div>
-        )}
-        {prellenado && (
-          <p
-            className="mb-3 text-xs"
-            style={{ color: "hsl(var(--muted-foreground))" }}
+          <h2
+            className="mb-4 text-lg font-semibold"
+            style={{ color: "hsl(var(--foreground))" }}
           >
-            Sede: <strong>{SEDE_LABELS[sedeConteo] ?? sedeConteo}</strong>
-          </p>
-        )}
+            Nuevo conteo cíclico
+          </h2>
 
-        {!productoSel ? (
-          <div className="space-y-3">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar producto por nombre o referencia (mín 2 letras)…"
-              className="h-12 w-full rounded-lg border px-3 text-sm"
-              style={surfaceInputStyle}
-            />
-            {buscando && (
-              <p
-                className="text-xs"
+          {error && <Banner type="destructive">{error}</Banner>}
+
+          {/* #35: sede a contar — el Admin elige cualquiera; otros, la suya.
+            Prellenado desde el plan: la sede ya viene resuelta, sin selector. */}
+          {!prellenado && (
+            <div className="mb-3">
+              <label
+                className="mb-1 block text-xs font-medium"
                 style={{ color: "hsl(var(--muted-foreground))" }}
               >
-                Buscando…
-              </p>
-            )}
-            {resultados.length > 0 && (
-              <ul
-                className="max-h-60 overflow-y-auto overflow-hidden rounded-lg border"
-                style={{ borderColor: "hsl(var(--border))" }}
-              >
-                {resultados.map((p) => (
-                  <li key={p.id}>
-                    <button
-                      onClick={() => seleccionar(p)}
-                      className="w-full cursor-pointer px-3 py-2.5 text-left transition-colors"
-                      style={{
-                        backgroundColor: "hsl(var(--card))",
-                        borderBottom: "1px solid hsl(var(--border) / 0.5)",
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.backgroundColor =
-                          "hsl(var(--muted) / 0.4)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.backgroundColor =
-                          "hsl(var(--card))")
-                      }
-                    >
-                      <p
-                        className="text-sm font-medium"
-                        style={{ color: "hsl(var(--foreground))" }}
-                      >
-                        {p.nombre}
-                      </p>
-                      <p
-                        className="font-mono text-xs"
-                        style={{ color: "hsl(var(--muted-foreground))" }}
-                      >
-                        {p.referencia}
-                      </p>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div
-              className="rounded-lg border p-3"
-              style={{
-                backgroundColor: "hsl(var(--muted) / 0.3)",
-                borderColor: "hsl(var(--primary))",
-              }}
-            >
-              <p
-                className="flex items-center gap-1.5 text-sm font-semibold"
-                style={{ color: "hsl(var(--foreground))" }}
-              >
-                {productoSel.nombre}
-                <UbicacionChip codigo={productoSel.ubicacion_id} conMapa />
-              </p>
-              <p
-                className="font-mono text-xs"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                {productoSel.referencia}
-              </p>
-              {!prellenado && (
-                <button
-                  onClick={() => setProductoSel(null)}
-                  className="mt-1 cursor-pointer text-xs underline"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  Cambiar
-                </button>
-              )}
-            </div>
-
-            {/* Bloque D1: sin bloquear el conteo, Admin/Bodeguero pueden
-                asignar la ubicación física si el producto aún no tiene. */}
-            {puedeAsignarUbicacion && !productoSel.sinInventario && (
-              <Field label="Asignar ubicación (opcional)">
+                Sede a contar
+              </label>
+              {esAdmin ? (
                 <select
-                  value={productoSel.ubicacion_id ?? ""}
-                  onChange={(e) => asignarUbicacion(e.target.value)}
-                  disabled={asignandoUbicacion}
-                  className="h-12 w-full rounded-lg border px-3 text-sm disabled:opacity-60"
+                  value={sedeConteo}
+                  onChange={(e) => cambiarSede(e.target.value)}
+                  className="h-12 w-full rounded-lg border px-3 text-sm"
                   style={surfaceInputStyle}
                 >
-                  <option value="">Sin ubicación</option>
-                  {ubicacionesSede.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.id} — {u.descripcion}
+                  {Object.values(SEDES).map((s) => (
+                    <option key={s} value={s}>
+                      {SEDE_LABELS[s] ?? s}
                     </option>
                   ))}
                 </select>
-              </Field>
-            )}
-
-            {productoSel.ubicacion_id && (
-              <div className="flex justify-center py-1">
-                <MapaBodega ubicacionId={productoSel.ubicacion_id} compact />
-              </div>
-            )}
-
-            {ciego && (
-              <p
-                className="text-xs italic"
-                style={{ color: "hsl(var(--muted-foreground))" }}
-              >
-                Conteo ciego: el stock del sistema se oculta hasta registrar.
-              </p>
-            )}
-
-            {productoSel.sinInventario && (
-              <div
-                className="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
-                style={{
-                  backgroundColor: "hsl(var(--warning) / 0.1)",
-                  borderColor: "hsl(var(--warning) / 0.4)",
-                  color: "hsl(var(--foreground))",
-                }}
-              >
-                <AlertTriangle
-                  className="mt-0.5 h-4 w-4 shrink-0"
-                  strokeWidth={2}
-                  style={{ color: "hsl(var(--warning))" }}
-                />
-                <span>
-                  Esta sede aún no tenía este producto. Se inicializará en{" "}
-                  <strong>0</strong> y se contará con el físico que registres.
-                </span>
-              </div>
-            )}
-
-            <div className={ciego ? "" : "grid grid-cols-2 gap-3"}>
-              {!ciego && (
-                <Field label="Stock sistema">
-                  <input
-                    type="number"
-                    value={stockSistema}
-                    disabled
-                    className="h-12 w-full rounded-lg border px-3 text-sm tabular-nums"
-                    style={{ ...surfaceInputStyle, opacity: 0.7 }}
-                  />
-                </Field>
+              ) : (
+                <div
+                  className="flex h-12 items-center rounded-lg border px-3 text-sm"
+                  style={{ ...surfaceInputStyle, opacity: 0.8 }}
+                >
+                  {SEDE_LABELS[sedeConteo] ?? sedeConteo}
+                </div>
               )}
-              <Field label="Stock físico contado *">
+            </div>
+          )}
+          {prellenado && (
+            <p
+              className="mb-3 text-xs"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              Sede: <strong>{SEDE_LABELS[sedeConteo] ?? sedeConteo}</strong>
+            </p>
+          )}
+
+          {!productoSel ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
                 <input
-                  type="number"
-                  min="0"
-                  value={stockFisico}
-                  onChange={(e) => setStockFisico(e.target.value)}
-                  autoFocus
-                  className="h-12 w-full rounded-lg border px-3 text-sm font-bold tabular-nums"
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar producto por nombre o referencia (mín 2 letras)…"
+                  className="h-12 min-w-0 flex-1 rounded-lg border px-3 text-sm"
                   style={surfaceInputStyle}
                 />
-              </Field>
-            </div>
-
-            {/* Conteo ciego: NO se muestra el stock del sistema ni la
-                diferencia — el RPC la calcula server-side igual. */}
-            {!ciego && stockFisico !== "" && (
-              <div
-                className="rounded-lg border p-3 text-center"
-                style={{
-                  backgroundColor: `hsl(var(${difToken}) / 0.1)`,
-                  borderColor: `hsl(var(${difToken}))`,
-                }}
-              >
+                {/* Escaneo del camino B: con miles de referencias parecidas
+                  (bushings, racores, niples), teclear mientras se sostiene la
+                  mercancía es lento y propenso a elegir mal. */}
+                <button
+                  type="button"
+                  onClick={() => setScannerOpen(true)}
+                  aria-label="Escanear código QR del producto"
+                  title="Escanear código QR"
+                  className="flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-lg border"
+                  style={surfaceInputStyle}
+                >
+                  <ScanLine className="h-5 w-5" strokeWidth={1.75} />
+                </button>
+              </div>
+              {buscando && (
                 <p
                   className="text-xs"
                   style={{ color: "hsl(var(--muted-foreground))" }}
                 >
-                  Diferencia
+                  Buscando…
+                </p>
+              )}
+              {resultados.length > 0 && (
+                <ul
+                  className="max-h-60 overflow-y-auto overflow-hidden rounded-lg border"
+                  style={{ borderColor: "hsl(var(--border))" }}
+                >
+                  {resultados.map((p) => (
+                    <li key={p.id}>
+                      <button
+                        onClick={() => seleccionar(p)}
+                        className="w-full cursor-pointer px-3 py-2.5 text-left transition-colors"
+                        style={{
+                          backgroundColor: "hsl(var(--card))",
+                          borderBottom: "1px solid hsl(var(--border) / 0.5)",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.backgroundColor =
+                            "hsl(var(--muted) / 0.4)")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.backgroundColor =
+                            "hsl(var(--card))")
+                        }
+                      >
+                        <p
+                          className="text-sm font-medium"
+                          style={{ color: "hsl(var(--foreground))" }}
+                        >
+                          {p.nombre}
+                        </p>
+                        <p
+                          className="font-mono text-xs"
+                          style={{ color: "hsl(var(--muted-foreground))" }}
+                        >
+                          {p.referencia}
+                        </p>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div
+                className="rounded-lg border p-3"
+                style={{
+                  backgroundColor: "hsl(var(--muted) / 0.3)",
+                  borderColor: "hsl(var(--primary))",
+                }}
+              >
+                <p
+                  className="flex items-center gap-1.5 text-sm font-semibold"
+                  style={{ color: "hsl(var(--foreground))" }}
+                >
+                  {productoSel.nombre}
+                  <UbicacionChip
+                    codigo={productoSel.ubicacion_id}
+                    conMapa
+                    mostrarVacio={sedeUsaUbicaciones}
+                  />
                 </p>
                 <p
-                  className="text-2xl font-bold tabular-nums"
-                  style={{ color: `hsl(var(${difToken}))` }}
+                  className="font-mono text-xs"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
                 >
-                  {dif > 0 ? "+" : ""}
-                  {dif} uds
+                  {productoSel.referencia}
                 </p>
+                {!prellenado && (
+                  <button
+                    onClick={() => setProductoSel(null)}
+                    className="mt-1 cursor-pointer text-xs underline"
+                    style={{ color: "hsl(var(--muted-foreground))" }}
+                  >
+                    Cambiar
+                  </button>
+                )}
               </div>
-            )}
 
-            <Field label="Observaciones">
-              <textarea
-                rows={2}
-                value={observaciones}
-                onChange={(e) => setObservaciones(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                style={surfaceInputStyle}
-              />
-            </Field>
+              {/* Bloque D1: sin bloquear el conteo, Admin/Bodeguero pueden
+                asignar la ubicación física si el producto aún no tiene. */}
+              {puedeAsignarUbicacion && !productoSel.sinInventario && (
+                <Field label="Asignar ubicación (opcional)">
+                  <select
+                    value={productoSel.ubicacion_id ?? ""}
+                    onChange={(e) => asignarUbicacion(e.target.value)}
+                    disabled={asignandoUbicacion}
+                    className="h-12 w-full rounded-lg border px-3 text-sm disabled:opacity-60"
+                    style={surfaceInputStyle}
+                  >
+                    <option value="">Sin ubicación</option>
+                    {ubicacionesSede.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.id} — {u.descripcion}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
 
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={onClose}
-                disabled={saving}
-                className="h-12 flex-1 cursor-pointer rounded-lg border text-sm font-medium disabled:opacity-50"
-                style={{
-                  borderColor: "hsl(var(--border))",
-                  color: "hsl(var(--muted-foreground))",
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={guardar}
-                disabled={saving || stockFisico === ""}
-                className="h-12 flex-1 cursor-pointer rounded-lg text-sm font-medium disabled:opacity-50"
-                style={{
-                  backgroundColor: "hsl(var(--primary))",
-                  color: "hsl(var(--primary-foreground))",
-                }}
-              >
-                {saving ? "Guardando…" : "Registrar conteo"}
-              </button>
+              {productoSel.ubicacion_id && (
+                <div className="flex justify-center py-1">
+                  <MapaBodega ubicacionId={productoSel.ubicacion_id} compact />
+                </div>
+              )}
+
+              {ciego && (
+                <p
+                  className="text-xs italic"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                >
+                  Conteo ciego: el stock del sistema se oculta hasta registrar.
+                </p>
+              )}
+
+              {productoSel.sinInventario && (
+                <div
+                  className="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
+                  style={{
+                    backgroundColor: "hsl(var(--warning) / 0.1)",
+                    borderColor: "hsl(var(--warning) / 0.4)",
+                    color: "hsl(var(--foreground))",
+                  }}
+                >
+                  <AlertTriangle
+                    className="mt-0.5 h-4 w-4 shrink-0"
+                    strokeWidth={2}
+                    style={{ color: "hsl(var(--warning))" }}
+                  />
+                  <span>
+                    Esta sede aún no tenía este producto. Se inicializará en{" "}
+                    <strong>0</strong> y se contará con el físico que registres.
+                  </span>
+                </div>
+              )}
+
+              <div className={ciego ? "" : "grid grid-cols-2 gap-3"}>
+                {!ciego && (
+                  <Field label="Stock sistema">
+                    <input
+                      type="number"
+                      value={stockSistema}
+                      disabled
+                      className="h-12 w-full rounded-lg border px-3 text-sm tabular-nums"
+                      style={{ ...surfaceInputStyle, opacity: 0.7 }}
+                    />
+                  </Field>
+                )}
+                <Field label="Stock físico contado *">
+                  <input
+                    type="number"
+                    min="0"
+                    value={stockFisico}
+                    onChange={(e) => setStockFisico(e.target.value)}
+                    autoFocus
+                    className="h-12 w-full rounded-lg border px-3 text-sm font-bold tabular-nums"
+                    style={surfaceInputStyle}
+                  />
+                </Field>
+              </div>
+
+              {/* Conteo ciego: NO se muestra el stock del sistema ni la
+                diferencia — el RPC la calcula server-side igual. */}
+              {!ciego && stockFisico !== "" && (
+                <div
+                  className="rounded-lg border p-3 text-center"
+                  style={{
+                    backgroundColor: `hsl(var(${difToken}) / 0.1)`,
+                    borderColor: `hsl(var(${difToken}))`,
+                  }}
+                >
+                  <p
+                    className="text-xs"
+                    style={{ color: "hsl(var(--muted-foreground))" }}
+                  >
+                    Diferencia
+                  </p>
+                  <p
+                    className="text-2xl font-bold tabular-nums"
+                    style={{ color: `hsl(var(${difToken}))` }}
+                  >
+                    {dif > 0 ? "+" : ""}
+                    {dif} uds
+                  </p>
+                </div>
+              )}
+
+              <Field label="Observaciones">
+                <textarea
+                  rows={2}
+                  value={observaciones}
+                  onChange={(e) => setObservaciones(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  style={surfaceInputStyle}
+                />
+              </Field>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={onClose}
+                  disabled={saving}
+                  className="h-12 flex-1 cursor-pointer rounded-lg border text-sm font-medium disabled:opacity-50"
+                  style={{
+                    borderColor: "hsl(var(--border))",
+                    color: "hsl(var(--muted-foreground))",
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={guardar}
+                  disabled={saving || stockFisico === ""}
+                  className="h-12 flex-1 cursor-pointer rounded-lg text-sm font-medium disabled:opacity-50"
+                  style={{
+                    backgroundColor: "hsl(var(--primary))",
+                    color: "hsl(var(--primary-foreground))",
+                  }}
+                >
+                  {saving ? "Guardando…" : "Registrar conteo"}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+      {/* No continuo: contar es de a un producto, y el modal debe cerrarse al
+        encontrarlo para escribir la cantidad contada. */}
+      {scannerOpen && (
+        <QRScanner onFound={onQRFound} onClose={() => setScannerOpen(false)} />
+      )}
+    </>
   );
 }
 

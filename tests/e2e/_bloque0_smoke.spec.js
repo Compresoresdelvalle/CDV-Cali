@@ -4,6 +4,7 @@
  * de prueba en venta, y creación de cliente que aparece en la lista.
  * PIN por env: TEST_ADMIN_PIN
  */
+/* global process */
 import { test, expect } from "@playwright/test";
 
 const ADMIN = { nombre: "Admin", pin: process.env.TEST_ADMIN_PIN || "" };

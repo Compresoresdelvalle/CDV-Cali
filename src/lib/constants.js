@@ -80,6 +80,7 @@ export const ROLE_MODULES = {
     "Devoluciones",
     "Productos",
     "Clientes",
+    "Etiquetas",
     "→ Panel Admin",
   ],
   Bodeguero: [
@@ -91,6 +92,7 @@ export const ROLE_MODULES = {
     "Devoluciones",
     "Herramientas",
     "Productos",
+    "Etiquetas",
     "Cierre",
   ],
   Vendedor: [
@@ -125,6 +127,7 @@ export const MODULE_ICONS = {
   Garantías: "🛡️",
   Recibos: "🧾",
   Clientes: "👤",
+  Etiquetas: "🖨️",
   Cierre: "🧮",
   "→ Panel Admin": "📊",
 };
@@ -144,6 +147,7 @@ export const MODULE_ROUTES = {
   Garantías: "/ops/garantias",
   Recibos: "/ops/recibos",
   Clientes: "/ops/clientes",
+  Etiquetas: "/ops/etiquetas",
   Cierre: "/ops/cierre",
   "→ Panel Admin": "/admin",
 };
