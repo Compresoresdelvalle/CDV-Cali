@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { X, Check, SkipForward } from "lucide-react";
+import { X, Check, SkipForward, ScanLine } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
+import { useSedeUsaUbicaciones } from "../../hooks/useSedeUsaUbicaciones";
 import UbicacionChip from "../../components/ui/UbicacionChip";
+import QRScanner from "../../components/forms/QRScanner";
 import { avisarOk, avisarError } from "../../lib/notify";
 
 /**
@@ -32,6 +34,14 @@ export default function PickingPage() {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
   const autoSaveRef = useRef(null);
+
+  // Escáner de VERIFICACIÓN (no de búsqueda): el producto esperado ya se
+  // conoce, el escaneo solo confirma si lo que el operario tiene en la mano
+  // es lo que la pantalla pide. `resultadoScan` guarda el veredicto del
+  // último escaneo contra el ítem ACTUAL — ver el efecto de abajo, que lo
+  // limpia al cambiar de ítem para que un aviso no se arrastre a otro producto.
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [resultadoScan, setResultadoScan] = useState(null);
 
   /* ── Cargar datos ─────────────────────────────────────────── */
   useEffect(() => {
@@ -277,6 +287,109 @@ export default function PickingPage() {
   const loc = item?.ubicacion;
   const ubicCode = loc ? `${loc.pasillo}-${loc.estante}-${loc.nivel}` : "—";
 
+  // El chip "Sin ubicar" solo informa donde la sede SÍ ubica productos (hoy
+  // BODEGA); en CV/CHV/L3, que casi no usan ubicaciones, saldría en cada
+  // ítem y el operario aprendería a ignorarlo. Antes esto se aproximaba con
+  // "¿algún ítem de esta lista tiene ubicación?", pero un traspaso que por
+  // casualidad solo llevara productos sin ubicar hacía desaparecer el chip
+  // aunque la sede origen SÍ ubique — justo cuando avisar era más útil. Se
+  // reemplaza por la respuesta real y compartida (existe al menos un
+  // producto ubicado en esa sede), cacheada por sede.
+  const sedeUsaUbicaciones = useSedeUsaUbicaciones(traspaso?.sede_origen_id);
+
+  // El veredicto de una verificación pertenece al ítem que estaba en pantalla
+  // en ese momento. Sin este efecto, si el operario escaneaba mal, marcaba
+  // "Recogido" (avanza de ítem) y volvía a escanear el nuevo producto, el
+  // aviso viejo seguía visible un instante mezclado con el nuevo — confuso
+  // justo en la pantalla cuya función es dar certeza.
+  useEffect(() => {
+    setResultadoScan(null);
+  }, [index]);
+
+  // Ref al id del ítem vigente (no al índice: la lista puede reordenarse).
+  // handleScanVerificacion la usa para saber, cuando una consulta async
+  // resuelve, si el operario ya saltó a otro ítem mientras esperaba — con
+  // señal débil de bodega la respuesta puede llegar después de "Saltar".
+  const itemActualIdRef = useRef(null);
+  useEffect(() => {
+    itemActualIdRef.current = item?.id ?? null;
+  }, [item?.id]);
+
+  // Ir directo a otro ítem de la lista cuando el escáner detecta que el
+  // producto en mano corresponde a un ítem distinto al que se está mostrando.
+  const irAItem = (idx) => {
+    setResultadoScan(null);
+    setIndex(idx);
+  };
+
+  // Escáner de VERIFICACIÓN: juzga el código leído contra `item` (el ítem
+  // actual), NO busca productos nuevos. Se define aquí, después de calcular
+  // `item`, para no depender de él antes de su inicialización.
+  const handleScanVerificacion = async (productoId) => {
+    setScannerOpen(false);
+    if (!item) return;
+
+    if (productoId === item.producto_id) {
+      setResultadoScan({ tipo: "match" });
+      return;
+    }
+
+    // ¿El producto escaneado es OTRO ítem de esta misma lista? Caso real:
+    // el operario recoge en el orden que le resulta cómodo, no en el de la
+    // pantalla. Esto NO es un error — es información útil para saltar.
+    //
+    // Un mismo producto puede aparecer en dos líneas del traspaso (no hay
+    // UNIQUE por producto en detalle_traspaso). Se prefiere la línea que
+    // todavía está pendiente: mandar al operario a una que ya recogió lo
+    // dejaría mirando "Ya marcado como recogido" con la pieza en la mano.
+    const pendienteIndex = items.findIndex(
+      (i) => i.producto_id === productoId && !local[i.id]?.picking_completado,
+    );
+    const otroIndex =
+      pendienteIndex !== -1
+        ? pendienteIndex
+        : items.findIndex((i) => i.producto_id === productoId);
+    if (otroIndex !== -1) {
+      setResultadoScan({
+        tipo: "otro-item",
+        index: otroIndex,
+        producto: items[otroIndex].producto,
+        // Si no hubo línea pendiente, es porque TODAS las líneas de ese
+        // producto (puede repetirse sin UNIQUE) ya se recogieron — no hay
+        // nada a lo que "saltar", solo informar que ya está hecho.
+        yaRecogido: pendienteIndex === -1,
+      });
+      return;
+    }
+
+    // No es el esperado ni pertenece a esta lista: hay que decir QUÉ se
+    // escaneó de verdad — es el corazón de esta función. El QRScanner ya
+    // validó que el producto existe y está activo; solo falta traer
+    // nombre/referencia para mostrarlos en el aviso.
+    // Se captura el id del ítem vigente ANTES del await: la consulta puede
+    // tardar (señal débil de bodega) y el operario puede pulsar "Saltar"
+    // mientras viaja. Si al resolver el ítem ya cambió, el aviso pertenece a
+    // un producto que ya no está en pantalla — se descarta en silencio para
+    // no pintarlo sobre un ítem que no tiene nada que ver.
+    const itemIdAlEscanear = item.id;
+    try {
+      const { data } = await supabase
+        .from("productos")
+        .select("nombre, referencia")
+        .eq("id", productoId)
+        .maybeSingle();
+      if (itemActualIdRef.current !== itemIdAlEscanear) return;
+      setResultadoScan({ tipo: "mismatch", producto: data });
+    } catch (e) {
+      // Guarda ANTES de avisar: si el operario ya saltó de ítem, ni el toast
+      // ni el resultado deben salir — quedarían huérfanos de un producto que
+      // ya no está en pantalla (ver el comentario de más arriba).
+      if (itemActualIdRef.current !== itemIdAlEscanear) return;
+      safeError(e, "No se pudo identificar el producto escaneado");
+      setResultadoScan({ tipo: "mismatch", producto: null });
+    }
+  };
+
   if (loading) return <LoadingView />;
 
   return (
@@ -296,7 +409,11 @@ export default function PickingPage() {
         {item && (
           <span className="pk-loc hidden items-center gap-1.5 sm:inline-flex">
             {ubicCode}
-            <UbicacionChip codigo={item.ubicacion_id} conMapa />
+            <UbicacionChip
+              codigo={item.ubicacion_id}
+              conMapa
+              mostrarVacio={sedeUsaUbicaciones}
+            />
           </span>
         )}
       </header>
@@ -419,13 +536,110 @@ export default function PickingPage() {
 
               <p className="pk-loc-inline flex items-center gap-1.5">
                 Ubicación:<span className="code">{ubicCode}</span>
-                <UbicacionChip codigo={item.ubicacion_id} conMapa />
+                <UbicacionChip
+                  codigo={item.ubicacion_id}
+                  conMapa
+                  mostrarVacio={sedeUsaUbicaciones}
+                />
               </p>
               {estadoItem.picking_completado && (
                 <span className="pill pill-success">
                   <span className="dot" />
                   Ya marcado como recogido
                 </span>
+              )}
+
+              {/* Escáner de VERIFICACIÓN, no de búsqueda: el producto esperado
+                  ya se conoce, esto solo confirma que lo que el operario tiene
+                  en la mano es lo que la pantalla pide. Ayuda opcional — nunca
+                  bloquea el botón "Recogido" de abajo. */}
+              <button
+                type="button"
+                className="pk-scan-btn"
+                onClick={() => setScannerOpen(true)}
+              >
+                <ScanLine className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                Verificar con escáner
+              </button>
+
+              {resultadoScan?.tipo === "match" && (
+                <div
+                  className="w-full max-w-[420px] rounded-lg border px-4 py-3 text-center text-[14px] font-semibold"
+                  style={{
+                    backgroundColor: "var(--succ-50)",
+                    borderColor: "var(--succ-border)",
+                    color: "var(--succ-700)",
+                  }}
+                >
+                  ✓ Coincide — {item.producto?.referencia} ·{" "}
+                  {item.producto?.nombre}
+                </div>
+              )}
+
+              {resultadoScan?.tipo === "mismatch" && (
+                <div
+                  className="w-full max-w-[420px] rounded-lg border px-4 py-3 text-[14px]"
+                  style={{
+                    backgroundColor: "var(--dang-50)",
+                    borderColor: "var(--dang-border)",
+                    color: "var(--dang-700)",
+                  }}
+                >
+                  <p className="font-bold">⚠ Producto equivocado</p>
+                  <p className="mt-1">
+                    Escaneaste:{" "}
+                    <strong>
+                      {resultadoScan.producto?.referencia ??
+                        "referencia desconocida"}
+                    </strong>{" "}
+                    ·{" "}
+                    {resultadoScan.producto?.nombre ??
+                      "producto no identificado"}
+                  </p>
+                  <p className="mt-1">
+                    Se esperaba: <strong>{item.producto?.referencia}</strong> ·{" "}
+                    {item.producto?.nombre}
+                  </p>
+                </div>
+              )}
+
+              {resultadoScan?.tipo === "otro-item" && (
+                <div
+                  className="w-full max-w-[420px] rounded-lg border px-4 py-3 text-[14px]"
+                  style={{
+                    backgroundColor: "var(--info-50)",
+                    borderColor: "var(--info-border)",
+                    color: "var(--info-700)",
+                  }}
+                >
+                  {resultadoScan.yaRecogido ? (
+                    // Ambas líneas de este producto ya se recogieron: no hay
+                    // nada pendiente a lo que "saltar", solo confirmar.
+                    <p>
+                      Ese producto (
+                      <strong>{resultadoScan.producto?.referencia}</strong> ·{" "}
+                      {resultadoScan.producto?.nombre}) ya fue recogido en esta
+                      lista.
+                    </p>
+                  ) : (
+                    <>
+                      <p>
+                        Ese producto es el ítem{" "}
+                        <strong>{resultadoScan.index + 1}</strong> de esta
+                        lista:{" "}
+                        <strong>{resultadoScan.producto?.referencia}</strong> ·{" "}
+                        {resultadoScan.producto?.nombre}
+                      </p>
+                      <button
+                        type="button"
+                        className="mt-2 font-semibold underline underline-offset-4"
+                        onClick={() => irAItem(resultadoScan.index)}
+                      >
+                        Ir a ese ítem
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -439,12 +653,24 @@ export default function PickingPage() {
             <button
               className="pk-btn pk-btn-pick"
               onClick={() => marcarRecogido(item.id)}
+              style={
+                resultadoScan?.tipo === "match"
+                  ? { boxShadow: "0 0 0 3px var(--succ-border)" }
+                  : undefined
+              }
             >
               <Check className="h-[18px] w-[18px]" strokeWidth={2.5} />
               Recogido
             </button>
           </div>
         </>
+      )}
+
+      {scannerOpen && (
+        <QRScanner
+          onFound={handleScanVerificacion}
+          onClose={() => setScannerOpen(false)}
+        />
       )}
     </div>
   );

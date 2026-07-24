@@ -1268,6 +1268,164 @@ function PasoDiagnostico({ orden, ro, ctx, continuar, updateOrden }) {
   );
 }
 
+/* ── Stock de los repuestos cotizados ───────────────────────────────────── */
+
+/**
+ * Inventario de los repuestos del borrador, en la sede de la OT y en las demás.
+ *
+ * Existe porque el stock solo se veía en el desplegable del buscador, y ese
+ * desplegable se borra en cuanto se toca el producto (ver `agregar`). De ahí en
+ * adelante la vendedora cotizaba a ciegas y el problema aparecía dos pasos
+ * después, al descargar, con la cotización ya aprobada por el cliente y a veces
+ * con anticipo recibido (reporte de la clienta, OT 149).
+ *
+ * Se consultan TODAS las sedes en una sola llamada —el borrador tiene pocas
+ * líneas— porque así se responden las dos preguntas que importan: cuánto hay
+ * aquí y, si no alcanza, a qué sede pedirle un traspaso.
+ */
+const MAPA_VACIO = new Map();
+
+function useStockSedes(productoIds, sedeId) {
+  const clave = productoIds.join(",");
+  const [estado, setEstado] = useState({ mapa: new Map(), cargado: false });
+  // Convertir a insumo o descargar media cotización cambia estos números; sin
+  // esto los chips quedarían mostrando el stock de antes de la operación.
+  const [refresco, setRefresco] = useState(0);
+  const recargar = useCallback(() => setRefresco((n) => n + 1), []);
+
+  // Sin líneas o sin sede no hay nada que consultar: se resuelve al devolver,
+  // no dentro del efecto (un setState síncrono ahí encadena renders).
+  const vacio = !clave || !sedeId;
+
+  useEffect(() => {
+    if (vacio) return;
+    const ids = clave.split(",");
+    let vivo = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from("inventario")
+        .select("producto_id, sede_id, cantidad, cantidad_insumo")
+        .in("producto_id", ids);
+      if (!vivo) return;
+      if (error) {
+        // Que falle el dato de stock no puede tumbar la cotización: se omiten
+        // los chips y el paso 5 sigue validando contra la BD como siempre.
+        console.error("[useStockSedes]", error);
+        setEstado({ mapa: new Map(), cargado: false });
+        return;
+      }
+      const mapa = new Map();
+      (data ?? []).forEach((r) => {
+        const e = mapa.get(r.producto_id) ?? { venta: 0, insumo: 0, otras: [] };
+        if (r.sede_id === sedeId) {
+          e.venta = Number(r.cantidad) || 0;
+          e.insumo = Number(r.cantidad_insumo) || 0;
+        } else {
+          // En las OTRAS sedes cuentan los dos bolsillos: un traspaso puede
+          // mover tanto venta como insumo (`detalle_traspaso.es_insumo`), así
+          // que mirar solo `cantidad` diría "no hay en ninguna sede" con
+          // unidades apartadas disponibles al lado.
+          const total =
+            (Number(r.cantidad) || 0) + (Number(r.cantidad_insumo) || 0);
+          if (total > 0) e.otras.push({ sede_id: r.sede_id, cantidad: total });
+        }
+        mapa.set(r.producto_id, e);
+      });
+      mapa.forEach((e) => e.otras.sort((a, b) => b.cantidad - a.cantidad));
+      setEstado({ mapa, cargado: true });
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [clave, sedeId, refresco, vacio]);
+
+  return vacio
+    ? { mapa: MAPA_VACIO, cargado: true, recargar }
+    : { ...estado, recargar };
+}
+
+/** "Bodega Principal (6) · Almacén CV (17)" — a quién pedirle el traspaso. */
+const listarOtrasSedes = (otras = []) =>
+  otras
+    .map((o) => `${SEDE_LABEL[o.sede_id] ?? o.sede_id} (${o.cantidad})`)
+    .join(" · ");
+
+/**
+ * Cuánto falta apartar para poder descargar una línea, y si eso se puede
+ * resolver dentro de la sede o hace falta un traspaso.
+ *
+ * La OT consume `cantidad_insumo`, nunca `cantidad` (stock de venta): por eso
+ * "hay 7 unidades" y "no se puede descargar" son ciertas a la vez, que es justo
+ * lo que confunde al operario.
+ */
+const evaluarStockLinea = (info, cantidad) => {
+  const venta = info?.venta ?? 0;
+  const insumo = info?.insumo ?? 0;
+  const faltaApartar = Math.max((Number(cantidad) || 0) - insumo, 0);
+  return {
+    venta,
+    insumo,
+    otras: info?.otras ?? [],
+    faltaApartar,
+    // Convertir venta → insumo solo es posible si la sede tiene ese stock de
+    // venta; si no, ofrecer el botón es mandar al operario a un callejón sin
+    // salida, porque el RPC va a rechazarlo igual.
+    alcanzaConVenta: faltaApartar <= venta,
+  };
+};
+
+/**
+ * Chip de stock + aviso de una línea de la cotización.
+ *
+ * Tres situaciones, y en las tres se dice el porqué y el siguiente paso:
+ *   - el insumo apartado alcanza  → solo el chip;
+ *   - falta apartar y hay venta   → aviso naranja: al descargar habrá que
+ *     convertir (el botón sigue siendo manual, a propósito);
+ *   - no alcanza ni con la venta  → aviso rojo con las sedes donde sí hay,
+ *     porque la salida real es un traspaso, no el botón de convertir.
+ */
+function StockLinea({ info, cantidad, sedeId, cargado }) {
+  if (!cargado) return null;
+  const { venta, insumo, otras, faltaApartar, alcanzaConVenta } =
+    evaluarStockLinea(info, cantidad);
+  const faltanUnidades = faltaApartar - venta;
+
+  return (
+    <div className="mt-1.5 space-y-1">
+      <span
+        className="inline-block rounded px-1.5 py-0.5 font-mono text-[11px]"
+        style={{
+          backgroundColor: "hsl(var(--muted) / 0.6)",
+          color: "hsl(var(--muted-foreground))",
+        }}
+      >
+        {sedeId}: {venta} venta · {insumo} insumo
+      </span>
+
+      {faltaApartar > 0 && (
+        <p
+          className="flex items-start gap-1.5 rounded px-1.5 py-1 text-[11px] leading-snug"
+          style={{
+            backgroundColor: alcanzaConVenta
+              ? "hsl(var(--warning) / 0.12)"
+              : "hsl(var(--destructive) / 0.12)",
+            color: "hsl(var(--foreground))",
+          }}
+        >
+          <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+          <span>
+            {alcanzaConVenta
+              ? `${insumo === 0 ? "No hay unidades apartadas" : `Solo hay ${insumo} apartada(s)`} para reparación: al descargar tendrás que convertir ${faltaApartar} de venta a insumo.`
+              : otras.length
+                ? `En ${sedeId} no alcanza, faltan ${faltanUnidades}. Hay en ${listarOtrasSedes(otras)}: pide un traspaso antes de descargar.`
+                : `Faltan ${faltanUnidades} y las otras sedes tampoco tienen. Hay que comprarlo.`}
+          </span>
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* ── PASO 3 · Cotización (borrador) ─────────────────────────────────────── */
 function PasoCotizacion({
   orden,
@@ -1284,6 +1442,16 @@ function PasoCotizacion({
   const [buscando, setBuscando] = useState(false);
   const [mano, setMano] = useState(String(orden.costo_mano_obra ?? 0));
   const [desc, setDesc] = useState(String(orden.descuento_valor ?? 0));
+
+  // Stock de cada repuesto cotizado, para no dejarla cotizar a ciegas.
+  const idsDraft = useMemo(
+    () => draft.map((l) => l.producto_id).sort(),
+    [draft],
+  );
+  const { mapa: stockSedes, cargado: stockCargado } = useStockSedes(
+    idsDraft,
+    orden.sede_id,
+  );
 
   const persistirDraft = async (nuevo) => {
     if (ro) return;
@@ -1556,79 +1724,89 @@ function PasoCotizacion({
           {draft.map((l) => (
             <li
               key={l.producto_id}
-              className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
+              className="rounded-lg border px-3 py-2.5"
               style={card}
             >
-              <div className="min-w-0 flex-1">
-                <p
-                  className="truncate text-sm font-medium"
-                  style={{ color: "hsl(var(--foreground))" }}
-                >
-                  {l.nombre}
-                </p>
-                <p
-                  className="font-mono text-xs"
-                  style={{ color: "hsl(var(--muted-foreground))" }}
-                >
-                  {l.referencia} · {formatCOP(l.precio)}
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={ro}
-                  onClick={() => cambiarCantidad(l.producto_id, -1)}
-                  className="grid h-9 w-9 place-items-center rounded-lg border disabled:opacity-50"
-                  style={{
-                    borderColor: "hsl(var(--border))",
-                    color: "hsl(var(--foreground))",
-                  }}
-                  aria-label="Disminuir"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-                {/* Editable: con muchos repuestos, llegar a 12 a punta de "+"
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="truncate text-sm font-medium"
+                    style={{ color: "hsl(var(--foreground))" }}
+                  >
+                    {l.nombre}
+                  </p>
+                  <p
+                    className="font-mono text-xs"
+                    style={{ color: "hsl(var(--muted-foreground))" }}
+                  >
+                    {l.referencia} · {formatCOP(l.precio)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={ro}
+                    onClick={() => cambiarCantidad(l.producto_id, -1)}
+                    className="grid h-9 w-9 place-items-center rounded-lg border disabled:opacity-50"
+                    style={{
+                      borderColor: "hsl(var(--border))",
+                      color: "hsl(var(--foreground))",
+                    }}
+                    aria-label="Disminuir"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  {/* Editable: con muchos repuestos, llegar a 12 a punta de "+"
                     no es viable (reporte de la clienta). Mismo comportamiento
                     que el carrito de Ventas. */}
-                <input
-                  type="number"
-                  min="1"
-                  inputMode="numeric"
-                  disabled={ro}
-                  value={l.cantidad}
-                  onChange={(e) => fijarCantidad(l.producto_id, e.target.value)}
-                  onFocus={(e) => e.target.select()}
-                  aria-label={`Cantidad de ${l.nombre ?? "repuesto"}`}
-                  className="h-9 w-14 rounded-lg border bg-transparent text-center font-mono text-sm font-semibold tabular-nums outline-none disabled:opacity-50"
-                  style={{
-                    borderColor: "hsl(var(--border))",
-                    color: "hsl(var(--foreground))",
-                  }}
-                />
-                <button
-                  type="button"
-                  disabled={ro}
-                  onClick={() => cambiarCantidad(l.producto_id, 1)}
-                  className="grid h-9 w-9 place-items-center rounded-lg border disabled:opacity-50"
-                  style={{
-                    borderColor: "hsl(var(--border))",
-                    color: "hsl(var(--foreground))",
-                  }}
-                  aria-label="Aumentar"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  disabled={ro}
-                  onClick={() => quitar(l.producto_id)}
-                  className="grid h-9 w-9 place-items-center rounded-lg disabled:opacity-50"
-                  style={{ color: "hsl(var(--destructive))" }}
-                  aria-label="Quitar"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                  <input
+                    type="number"
+                    min="1"
+                    inputMode="numeric"
+                    disabled={ro}
+                    value={l.cantidad}
+                    onChange={(e) =>
+                      fijarCantidad(l.producto_id, e.target.value)
+                    }
+                    onFocus={(e) => e.target.select()}
+                    aria-label={`Cantidad de ${l.nombre ?? "repuesto"}`}
+                    className="h-9 w-14 rounded-lg border bg-transparent text-center font-mono text-sm font-semibold tabular-nums outline-none disabled:opacity-50"
+                    style={{
+                      borderColor: "hsl(var(--border))",
+                      color: "hsl(var(--foreground))",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={ro}
+                    onClick={() => cambiarCantidad(l.producto_id, 1)}
+                    className="grid h-9 w-9 place-items-center rounded-lg border disabled:opacity-50"
+                    style={{
+                      borderColor: "hsl(var(--border))",
+                      color: "hsl(var(--foreground))",
+                    }}
+                    aria-label="Aumentar"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={ro}
+                    onClick={() => quitar(l.producto_id)}
+                    className="grid h-9 w-9 place-items-center rounded-lg disabled:opacity-50"
+                    style={{ color: "hsl(var(--destructive))" }}
+                    aria-label="Quitar"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
+              <StockLinea
+                info={stockSedes.get(l.producto_id)}
+                cantidad={l.cantidad}
+                sedeId={orden.sede_id}
+                cargado={stockCargado}
+              />
             </li>
           ))}
         </ul>
@@ -1983,7 +2161,8 @@ function PasoTrabajo({
   // sin tocar el inventario.
   const noAutoriza = orden.estado_autorizacion === "no_autorizado";
   const [descargando, setDescargando] = useState(false);
-  const [conv, setConv] = useState(null); // { producto_id, faltante }
+  // { producto_id, nombre, faltante, venta, insumo, otras, alcanzaConVenta }
+  const [conv, setConv] = useState(null);
   const [trabajo, setTrabajo] = useState(
     orden.trabajo_realizado ??
       (noAutoriza
@@ -1992,6 +2171,18 @@ function PasoTrabajo({
   );
   const [terminando, setTerminando] = useState(false);
   const esperando = orden.estado === "esperando_repuesto";
+
+  // Mismo stock que en el paso 3: justo antes de pulsar "Descargar" tiene que
+  // seguir a la vista qué línea va a exigir conversión y cuál no se puede.
+  const idsDraft = useMemo(
+    () => (draft ?? []).map((l) => l.producto_id).sort(),
+    [draft],
+  );
+  const {
+    mapa: stockSedes,
+    cargado: stockCargado,
+    recargar: recargarStock,
+  } = useStockSedes(idsDraft, orden.sede_id);
 
   // Habilitar "Marcar como terminado": editable y con descripción. Si el cliente
   // autorizó, además no deben quedar repuestos pendientes en el borrador; si NO
@@ -2055,24 +2246,71 @@ function PasoTrabajo({
           costo_unitario: l.costo,
         });
         if (error) {
-          // Insumo insuficiente → ofrecer conversión y abortar, dejando esta
-          // línea (y las siguientes) pendientes en el draft. Se convierte solo
-          // el DÉFICIT (cantidad − insumo disponible), no la cantidad completa,
-          // para no exigir más stock de venta del necesario.
+          // Insumo insuficiente → abortar, dejando esta línea (y las siguientes)
+          // pendientes en el draft. Se convierte solo el DÉFICIT (cantidad −
+          // insumo disponible), no la cantidad completa, para no exigir más
+          // stock de venta del necesario.
+          //
+          // Se consulta el inventario del producto en TODAS las sedes, no solo
+          // en la de la OT: si aquí no hay stock de venta que convertir, el
+          // botón "Convertir venta → insumo" va a fallar igual y ofrecerlo deja
+          // al operario sin salida (reporte de la clienta, OT 149). En ese caso
+          // la salida real es un traspaso, y hay que decirle desde dónde.
           if ((error.message ?? "").toLowerCase().includes("insumo")) {
-            const { data: invRow } = await supabase
+            const { data: filas, error: errStock } = await supabase
               .from("inventario")
-              .select("cantidad_insumo")
-              .eq("producto_id", l.producto_id)
-              .eq("sede_id", orden.sede_id)
-              .maybeSingle();
-            const insumoDisp = Number(invRow?.cantidad_insumo) || 0;
+              .select("sede_id, cantidad, cantidad_insumo")
+              .eq("producto_id", l.producto_id);
+            // Si no se pudo leer el inventario NO se puede afirmar nada: decir
+            // "no hay en ninguna sede" por una consulta caída sería mandarlos a
+            // comprar algo que quizá tienen al lado. Se cae al mensaje del
+            // trigger, que sí es cierto.
+            if (errStock) {
+              console.error("[descargar] stock:", errStock);
+              setConv(null);
+              avisarError(error, "Stock de insumo insuficiente");
+              setDescargando(false);
+              return;
+            }
+            const aqui = (filas ?? []).find((r) => r.sede_id === orden.sede_id);
+            const { venta, insumo, faltaApartar } = evaluarStockLinea(
+              {
+                venta: Number(aqui?.cantidad) || 0,
+                insumo: Number(aqui?.cantidad_insumo) || 0,
+              },
+              l.cantidad,
+            );
+            // Mínimo 1: si el insert falló pese a que el insumo parecía
+            // alcanzar (otro usuario lo consumió entremedio), igual hay que
+            // apartar al menos una unidad. Se ofrece convertir solo si esa
+            // cantidad exacta cabe en el stock de venta.
+            const faltante = Math.max(faltaApartar, 1);
+            const alcanzaConVenta = faltante <= venta;
+            // Los dos bolsillos cuentan para un traspaso (ver `useStockSedes`).
+            const otras = (filas ?? [])
+              .filter((r) => r.sede_id !== orden.sede_id)
+              .map((r) => ({
+                sede_id: r.sede_id,
+                cantidad:
+                  (Number(r.cantidad) || 0) + (Number(r.cantidad_insumo) || 0),
+              }))
+              .filter((r) => r.cantidad > 0)
+              .sort((a, b) => b.cantidad - a.cantidad);
             setConv({
               producto_id: l.producto_id,
-              faltante: Math.max(Number(l.cantidad) - insumoDisp, 1),
               nombre: l.nombre,
+              faltante,
+              venta,
+              insumo,
+              otras,
+              alcanzaConVenta,
             });
-            avisarError(error, "Stock de insumo insuficiente");
+            avisarError(
+              alcanzaConVenta
+                ? error
+                : `${l.nombre ?? "El repuesto"} no se puede descargar: no hay unidades suficientes en ${SEDE_LABEL[orden.sede_id] ?? orden.sede_id}.`,
+              "Stock de insumo insuficiente",
+            );
             setDescargando(false);
             return;
           }
@@ -2086,6 +2324,7 @@ function PasoTrabajo({
     } catch (err) {
       avisarError(err, "No se pudo descargar el inventario");
     } finally {
+      recargarStock();
       setDescargando(false);
     }
   };
@@ -2154,30 +2393,35 @@ function PasoTrabajo({
             style={{ borderColor: "hsl(var(--border))" }}
           >
             {draft.map((l) => (
-              <li
-                key={l.producto_id}
-                className="flex items-center justify-between gap-3 px-4 py-2.5"
-              >
-                <div className="min-w-0">
-                  <p
-                    className="truncate text-sm font-medium"
+              <li key={l.producto_id} className="px-4 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p
+                      className="truncate text-sm font-medium"
+                      style={{ color: "hsl(var(--foreground))" }}
+                    >
+                      {l.nombre}
+                    </p>
+                    <p
+                      className="font-mono text-xs"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      {l.referencia}
+                    </p>
+                  </div>
+                  <span
+                    className="font-mono text-sm tabular-nums"
                     style={{ color: "hsl(var(--foreground))" }}
                   >
-                    {l.nombre}
-                  </p>
-                  <p
-                    className="font-mono text-xs"
-                    style={{ color: "hsl(var(--muted-foreground))" }}
-                  >
-                    {l.referencia}
-                  </p>
+                    ×{l.cantidad}
+                  </span>
                 </div>
-                <span
-                  className="font-mono text-sm tabular-nums"
-                  style={{ color: "hsl(var(--foreground))" }}
-                >
-                  ×{l.cantidad}
-                </span>
+                <StockLinea
+                  info={stockSedes.get(l.producto_id)}
+                  cantidad={l.cantidad}
+                  sedeId={orden.sede_id}
+                  cargado={stockCargado}
+                />
               </li>
             ))}
           </ul>
@@ -2191,22 +2435,65 @@ function PasoTrabajo({
         </p>
       )}
 
-      {/* Conversión venta→insumo */}
+      {/* Por qué no se pudo descargar, y qué hacer al respecto.
+          Si la sede tiene stock de venta, la salida es convertir (manual, con
+          su movimiento de auditoría). Si no lo tiene, convertir es imposible:
+          se explica el porqué y se indica a qué sede pedirle el traspaso, en
+          vez de ofrecer un botón que va a fallar. */}
       {conv && (
         <div
           className="space-y-2 rounded-lg border px-4 py-3"
           style={{
-            backgroundColor: "hsl(var(--warning) / 0.1)",
-            borderColor: "hsl(var(--warning) / 0.3)",
+            backgroundColor: conv.alcanzaConVenta
+              ? "hsl(var(--warning) / 0.1)"
+              : "hsl(var(--destructive) / 0.1)",
+            borderColor: conv.alcanzaConVenta
+              ? "hsl(var(--warning) / 0.3)"
+              : "hsl(var(--destructive) / 0.3)",
           }}
         >
-          <p className="text-sm" style={{ color: "hsl(var(--foreground))" }}>
-            <strong>{conv.nombre}</strong> no tiene insumo suficiente. Convierte
-            stock de venta a insumo para poder descargarlo.
-          </p>
-          <PrimaryButton onClick={convertir} style={{ width: "100%" }}>
-            {TX.convertirInsumo}
-          </PrimaryButton>
+          {conv.alcanzaConVenta ? (
+            <>
+              <p
+                className="text-sm"
+                style={{ color: "hsl(var(--foreground))" }}
+              >
+                <strong>{conv.nombre}</strong>{" "}
+                {conv.insumo === 0
+                  ? "no tiene unidades apartadas para reparación"
+                  : `solo tiene ${conv.insumo} apartada(s) para reparación`}{" "}
+                en {SEDE_LABEL[orden.sede_id] ?? orden.sede_id}. Una orden
+                descuenta del stock apartado, no del de venta: hay{" "}
+                <strong>{conv.venta} de venta</strong> y faltan{" "}
+                <strong>{conv.faltante}</strong> por apartar. Conviértelas para
+                poder descargarlo.
+              </p>
+              <PrimaryButton onClick={convertir} style={{ width: "100%" }}>
+                {TX.convertirInsumo}
+              </PrimaryButton>
+            </>
+          ) : (
+            <p className="text-sm" style={{ color: "hsl(var(--foreground))" }}>
+              <strong>{conv.nombre}</strong> no se puede descargar en{" "}
+              {SEDE_LABEL[orden.sede_id] ?? orden.sede_id}: se necesitan{" "}
+              <strong>{conv.faltante}</strong> y solo hay{" "}
+              <strong>{conv.venta}</strong>. Por eso tampoco se puede convertir
+              a insumo, porque no hay qué convertir.{" "}
+              {conv.otras?.length ? (
+                <>
+                  Hay unidades en{" "}
+                  <strong>{listarOtrasSedes(conv.otras)}</strong>: solicita un
+                  traspaso y vuelve a descargar. Si no puedes esperar, quita el
+                  repuesto de la cotización en el paso Cotización.
+                </>
+              ) : (
+                <>
+                  Las otras sedes tampoco tienen unidades: hay que comprarlo, o
+                  quitar el repuesto de la cotización en el paso Cotización.
+                </>
+              )}
+            </p>
+          )}
         </div>
       )}
 

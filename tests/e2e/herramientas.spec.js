@@ -258,12 +258,6 @@ test.describe("Herramientas — Admin (Carlos)", () => {
     // Submit without filling name
     await page.locator('button:has-text("Crear")').click();
 
-    // Error message should appear OR browser native validation fires
-    const errorVisible = await page
-      .locator("text=El nombre es obligatorio")
-      .isVisible()
-      .catch(() => false);
-
     // If browser native validation, the input would be invalid — either way no crash
     expect(true).toBe(true); // page must not crash
   });

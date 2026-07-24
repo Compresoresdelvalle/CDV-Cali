@@ -26,6 +26,7 @@ import {
   Calculator,
   Search,
   X,
+  QrCode,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { ROLE_MODULES, MODULE_ROUTES } from "../../lib/constants";
@@ -61,12 +62,14 @@ const MODULE_ICONS = {
   Herramientas: Wrench,
   Clientes: Users,
   Cierre: Calculator,
+  Etiquetas: QrCode,
 };
 
 /** Cada módulo se ubica en una sección del sidebar (estilo Lovable). */
 const MODULE_SECTION = {
   Inventario: "Catálogo y stock",
   Productos: "Catálogo y stock",
+  Etiquetas: "Catálogo y stock",
   Ventas: "Operación comercial",
   Cotizaciones: "Operación comercial",
   Recibos: "Operación comercial",

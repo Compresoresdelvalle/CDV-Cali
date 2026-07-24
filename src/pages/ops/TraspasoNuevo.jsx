@@ -10,7 +10,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { applyKeywordSearch } from "../../lib/search";
-import { avisarOk, avisarError } from "../../lib/notify";
+import { avisarOk, avisarError, avisarInfo } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import { sedeLabel } from "../../lib/traspasos-ui";
 import { useSedes } from "../../hooks/useSedes";
@@ -113,8 +113,14 @@ export default function TraspasoNuevo() {
   const agregarItem = (prod) => {
     setBusqueda("");
     setResultados([]);
+    // El chequeo de duplicado ya vive DENTRO del setter funcional (ve el
+    // estado más reciente, a salvo de la carrera del escáner en modo continuo).
+    let yaEstaba = false;
     setItems((prev) => {
-      if (prev.find((i) => i.producto_id === prod.id)) return prev;
+      if (prev.find((i) => i.producto_id === prod.id)) {
+        yaEstaba = true;
+        return prev;
+      }
       // Bolsillo por defecto: venta si hay; si solo hay insumo, insumo.
       const esInsumo = (prod.stock ?? 0) <= 0 && (prod.stock_insumo ?? 0) > 0;
       return [
@@ -131,6 +137,15 @@ export default function TraspasoNuevo() {
         },
       ];
     });
+    // A diferencia de Ventas/Compras/Cotizaciones, re-escanear NO suma
+    // cantidad aquí (sería cambiar reglas de negocio que nadie pidió). Pero
+    // sí hay que avisar: sin esto el operario ve que "no pasa nada" y cree
+    // que escanear otra vez sumó una unidad.
+    if (yaEstaba) {
+      avisarInfo(
+        `"${prod.nombre}" ya está en la lista. Ajusta la cantidad a mano si necesitas más.`,
+      );
+    }
   };
 
   const stockDelBolsillo = (i) =>
@@ -169,9 +184,11 @@ export default function TraspasoNuevo() {
 
   // QR: agrega el producto escaneado si tiene stock (en cualquiera de los dos
   // bolsillos) en la sede de origen seleccionada.
+  // #C2-4: ya no cierra el escáner aquí — en modo continuo lo mantiene
+  // abierto el propio QRScanner para encadenar la siguiente lectura; el
+  // usuario lo cierra con el botón Cancelar/X del modal.
   const handleQRFound = useCallback(
     async (productoId) => {
-      setScannerOpen(false);
       if (!sedeOrigen) return;
       try {
         const [{ data: prod }, { data: inv }] = await Promise.all([
@@ -188,16 +205,20 @@ export default function TraspasoNuevo() {
             .eq("producto_id", productoId)
             .maybeSingle(),
         ]);
+        // Los rechazos van también por toast: en modo continuo el escáner tapa
+        // la pantalla completa y el texto fijo no se vería hasta cerrarlo.
         if (!prod) {
-          setError("El producto escaneado no existe o está inactivo.");
+          const msg = "El producto escaneado no existe o está inactivo.";
+          setError(msg);
+          avisarError(msg);
           return;
         }
         const stock = inv?.cantidad ?? 0;
         const stockInsumo = inv?.cantidad_insumo ?? 0;
         if (stock <= 0 && stockInsumo <= 0) {
-          setError(
-            `"${prod.nombre}" no tiene stock en ${sedeLabel(sedeOrigen)}.`,
-          );
+          const msg = `"${prod.nombre}" no tiene stock en ${sedeLabel(sedeOrigen)}.`;
+          setError(msg);
+          avisarError(msg);
           return;
         }
         setError(null);
@@ -208,7 +229,9 @@ export default function TraspasoNuevo() {
           ubicacion_id: inv?.ubicacion_id ?? null,
         });
       } catch {
-        setError("No se pudo leer el producto escaneado. Reintenta.");
+        const msg = "No se pudo leer el producto escaneado. Reintenta.";
+        setError(msg);
+        avisarError(msg);
       }
     },
     [sedeOrigen],
@@ -664,6 +687,7 @@ export default function TraspasoNuevo() {
         <QRScanner
           onFound={handleQRFound}
           onClose={() => setScannerOpen(false)}
+          continuo
         />
       )}
     </div>

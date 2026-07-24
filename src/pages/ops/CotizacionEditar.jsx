@@ -238,23 +238,43 @@ export default function CotizacionEditar() {
     buscarDebounced(val);
   };
 
+  // #C2-1: antes un insumo, un inactivo o un error de red terminaban en el
+  // mismo `return` mudo — el operario veía "Código encontrado" y no pasaba
+  // nada. Ahora se distingue cada caso y se avisa (mismo criterio que
+  // VentaNueva #S1-19). No se cierra el escáner aquí: en modo continuo lo
+  // mantiene abierto el propio QRScanner para encadenar la siguiente lectura.
   const handleQRFound = useCallback(async (productoId) => {
-    setScannerOpen(false);
     try {
       const { data, error: err } = await supabase
         .from("productos")
         .select(
-          "id, nombre, referencia, precio_venta, unidad_medida, categoria, marca",
+          "id, nombre, referencia, precio_venta, unidad_medida, categoria, marca, activo, vendible",
         )
         .eq("id", productoId)
-        .eq("activo", true)
-        // COT-H: mismo filtro que en la búsqueda — no cotizar insumos.
-        .eq("vendible", true)
-        .single();
-      if (err || !data) return;
+        .maybeSingle();
+      if (err) throw err;
+      // Toast además del texto fijo: en modo continuo el escáner tapa toda la
+      // pantalla, así que el `setError` no se ve hasta cerrarlo.
+      if (!data || !data.activo) {
+        const msg =
+          "Ese código no corresponde a un producto activo (no existe o está inactivo).";
+        setError(msg);
+        avisarError(msg);
+        return;
+      }
+      if (!data.vendible) {
+        const msg = "Este producto no es vendible/cotizable (es un insumo).";
+        setError(msg);
+        avisarError(msg);
+        return;
+      }
+      setError(null);
       agregarAlCarrito(data);
-    } catch {
-      /* ignore */
+    } catch (e) {
+      avisarError(
+        e,
+        "No se pudo leer el producto escaneado. Revisa la conexión e intenta de nuevo.",
+      );
     }
   }, []);
 
@@ -1039,6 +1059,7 @@ export default function CotizacionEditar() {
         <QRScanner
           onFound={handleQRFound}
           onClose={() => setScannerOpen(false)}
+          continuo
         />
       )}
     </div>
