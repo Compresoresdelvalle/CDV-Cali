@@ -148,7 +148,24 @@ function dibujarEtiqueta(
     doc.setFontSize(6);
     doc.setTextColor(60, 60, 60);
     // Recorta a 3 líneas (~50 chars reales de nombre entran holgado en 3).
-    const nombreLines = doc.splitTextToSize(String(nombre), textW).slice(0, 3);
+    const todasLasLineas = doc.splitTextToSize(String(nombre), textW);
+    const nombreLines = todasLasLineas.slice(0, 3);
+    // Si el nombre no cupo entero, la última línea visible avisa con "…" en
+    // vez de cortar en silencio: el operario debe saber que falta texto y no
+    // confundir el recorte con el nombre completo. Se recorta carácter a
+    // carácter hasta que el texto + puntos quepa en el ancho disponible, para
+    // no desbordar la etiqueta.
+    if (todasLasLineas.length > 3) {
+      const ELLIPSIS = "…";
+      let ultimaLinea = nombreLines[2];
+      while (
+        ultimaLinea.length > 0 &&
+        doc.getTextWidth(ultimaLinea + ELLIPSIS) > textW
+      ) {
+        ultimaLinea = ultimaLinea.slice(0, -1).trimEnd();
+      }
+      nombreLines[2] = ultimaLinea + ELLIPSIS;
+    }
     doc.text(nombreLines, textX, ty);
   }
 
@@ -220,8 +237,18 @@ export async function generarEtiquetasPDF({
   const total = validos.reduce((acc, p) => acc + p.cantidad, 0);
 
   const esIndividual = formato === "individual";
+  // `orientation: "landscape"` NO es opcional: en vertical (el default) jsPDF
+  // reordena el formato para que el lado corto sea el ancho, y [50, 30] se
+  // convierte en una página de 30×50. La etiqueta se dibujaba entonces sobre
+  // una hoja girada: el texto se salía por el borde derecho y sobraban 20mm en
+  // blanco abajo. Se detectó renderizando el PDF, no leyendo el código.
   const doc = esIndividual
-    ? new jsPDF({ unit: "mm", format: [LABEL_W, LABEL_H], compress: true })
+    ? new jsPDF({
+        unit: "mm",
+        orientation: "landscape",
+        format: [LABEL_W, LABEL_H],
+        compress: true,
+      })
     : new jsPDF({
         unit: "mm",
         format: [LAYOUT.pageWidth, LAYOUT.pageHeight],
@@ -252,7 +279,10 @@ export async function generarEtiquetasPDF({
 
     for (let i = 0; i < producto.cantidad; i++) {
       if (esIndividual) {
-        if (!primeraEtiqueta) doc.addPage([LABEL_W, LABEL_H]);
+        // Misma orientación que la primera página: sin el segundo argumento,
+        // addPage vuelve a girar el formato y solo la primera etiqueta saldría
+        // bien.
+        if (!primeraEtiqueta) doc.addPage([LABEL_W, LABEL_H], "landscape");
         dibujarEtiqueta(doc, 0, 0, {
           referencia: producto.referencia,
           nombre: producto.nombre,
