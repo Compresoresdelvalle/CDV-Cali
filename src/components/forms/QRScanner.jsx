@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import QrScanner from "qr-scanner";
 import { supabase } from "../../lib/supabase";
-
-const SCANNER_ID = "qr-scanner-viewport";
 
 // Cuánto se muestra la confirmación/aviso de cada lectura en modo continuo antes
 // de volver a aceptar el siguiente código.
 const PAUSA_CONTINUO_MS = 1000;
 
 // Traduce el error real de getUserMedia (DOMException) a un mensaje accionable.
-// html5-qrcode convierte sus errores en string y pierde `err.name`; por eso
-// pedimos el permiso de cámara nosotros mismos para obtener el error original.
+// qr-scanner (igual que html5-qrcode antes) no nos entrega el DOMException
+// original desde su propio arranque de cámara; por eso seguimos pidiendo el
+// permiso nosotros mismos para obtener `err.name` sin filtrar por la librería.
 function traducirError(err) {
   const name = err?.name;
   if (name === "NotAllowedError" || name === "SecurityError")
@@ -30,6 +29,7 @@ function traducirError(err) {
 // no se cierra el modal ni se detiene la cámara, para no pagar 1-2s de arranque
 // por cada línea de una compra/traspaso de muchos ítems.
 export default function QRScanner({ onFound, onClose, continuo = false }) {
+  const videoRef = useRef(null);
   const scannerRef = useRef(null);
   const [status, setStatus] = useState("starting");
   const [errorMsg, setErrorMsg] = useState("");
@@ -85,45 +85,32 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
     fallosRef.current = 0;
     clearTimeout(resumeTimerRef.current);
 
-    // Detiene y limpia el scanner de forma SEGURA.
-    // OJO: html5-qrcode `stop()` lanza una excepción SÍNCRONA (no una promesa
-    // rechazable) si el scanner todavía no está escaneando — un `.catch()`
-    // encadenado NO atrapa un throw síncrono, hay que envolverlo en try/catch.
+    // Detiene y libera el scanner de forma SEGURA. `destroy()` desregistra sus
+    // listeners, apaga la linterna si estaba encendida y detiene la cámara y el
+    // worker; a diferencia del viejo stop()/clear() de html5-qrcode, no hace
+    // falta try/catch por excepción síncrona: destroy() es idempotente y no
+    // lanza si el scanner nunca llegó a iniciar la cámara.
     const detener = (sc) => {
       if (!sc) return;
       try {
-        const p = sc.stop();
-        if (p && typeof p.then === "function") {
-          p.catch(() => {}).finally(() => {
-            try {
-              sc.clear();
-            } catch {
-              /* ignore */
-            }
-          });
-          return;
-        }
-      } catch {
-        /* el scanner no estaba escaneando — ignorar */
-      }
-      try {
-        sc.clear();
+        sc.destroy();
       } catch {
         /* ignore */
       }
     };
 
-    // html5-qrcode llama a este callback en CADA frame en el que no encuentra
+    // qr-scanner llama a `onDecodeError` en CADA frame en el que no encuentra
     // código: es la única señal de que el QR ya salió del cuadro.
     //
-    // El umbral se mide en frames seguidos SIN decodificar. A 10 fps, exigir 10
-    // equivale a un segundo entero sin ver ninguna etiqueta. Se eligió alto a
-    // propósito: con un umbral corto (3 frames = 0,3s) bastaba un reflejo o un
-    // temblor de mano para que la etiqueta "desapareciera" un instante estando
-    // todavía enfrente, se liberara el anti-rebote y el mismo producto se
-    // sumara dos veces al carrito. Equivocarse hacia el lado lento solo obliga
-    // a apartar la cámara un segundo para repetir un producto; equivocarse
-    // hacia el lado rápido mete unidades fantasma en una compra.
+    // El umbral se mide en frames seguidos SIN decodificar. A 10 fps (ver
+    // `maxScansPerSecond` más abajo), exigir 10 equivale a un segundo entero
+    // sin ver ninguna etiqueta. Se eligió alto a propósito: con un umbral
+    // corto (3 frames = 0,3s) bastaba un reflejo o un temblor de mano para que
+    // la etiqueta "desapareciera" un instante estando todavía enfrente, se
+    // liberara el anti-rebote y el mismo producto se sumara dos veces al
+    // carrito. Equivocarse hacia el lado lento solo obliga a apartar la cámara
+    // un segundo para repetir un producto; equivocarse hacia el lado rápido
+    // mete unidades fantasma en una compra.
     const FRAMES_SIN_CODIGO_PARA_LIBERAR = 10;
 
     const onNoDecoded = () => {
@@ -243,8 +230,8 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
 
       // Pedir permiso de cámara EXPLÍCITAMENTE: esto dispara el prompt del
       // navegador (si el permiso está sin decidir) y nos da el error REAL
-      // — html5-qrcode lo convierte en string y se pierde `err.name`.
-      // El stream de prueba se libera enseguida; html5-qrcode abrirá el suyo.
+      // — qr-scanner tampoco nos entrega el DOMException original.
+      // El stream de prueba se libera enseguida; qr-scanner abrirá el suyo.
       try {
         const probe = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment" },
@@ -258,22 +245,24 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
       }
       if (desmontado) return;
 
-      // Con el permiso ya concedido, arrancar html5-qrcode.
+      // Con el permiso ya concedido, arrancar qr-scanner sobre el <video> del
+      // render. qr-scanner es solo QR por diseño (usa el BarcodeDetector
+      // nativo cuando existe y su propio worker cuando no) — a diferencia de
+      // html5-qrcode no hace falta restringir formatos: nunca decodifica
+      // códigos de barras 1D de fábrica, así que no hay filtro que mantener.
       try {
-        // `formatsToSupport` va en el CONSTRUCTOR (Html5QrcodeFullConfig), no
-        // en `start()` — ahí es donde la librería arma el decodificador
-        // interno (ver getSupportedFormats en html5-qrcode.js). Se restringe
-        // a QR_CODE porque la app solo sabe buscar por referencia: sin este
-        // filtro, html5-qrcode también intenta decodificar ~17 formatos de
-        // código de barras 1D (EAN, UPC, CODE_128...) y cualquier etiqueta de
-        // fábrica ajena solo produce un falso "Referencia no encontrada",
-        // además de gastar CPU/batería de más a 10fps en tablets baratas.
-        // El día que se quiera soportar códigos de barras de fábrica, es aquí
-        // donde se amplía la lista.
-        scanner = new Html5Qrcode(SCANNER_ID, {
-          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-          verbose: false,
-        });
+        scanner = new QrScanner(
+          videoRef.current,
+          (result) => onDecoded(result.data),
+          {
+            onDecodeError: onNoDecoded,
+            preferredCamera: "environment",
+            maxScansPerSecond: 10,
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+            returnDetailedScanResult: true,
+          },
+        );
         scannerRef.current = scanner;
       } catch (err) {
         if (!desmontado) {
@@ -283,13 +272,8 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
         return;
       }
       scanner
-        .start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 240, height: 240 } },
-          onDecoded,
-          onNoDecoded,
-        )
-        .then(() => {
+        .start()
+        .then(async () => {
           // Si se desmontó mientras la cámara arrancaba, detener de inmediato.
           if (desmontado) {
             detener(scanner);
@@ -300,11 +284,8 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
           // exponen (iOS Safari típicamente no) — si falla, el botón
           // simplemente no se pinta, nunca debe reventar el escáner.
           try {
-            const soportaTorch = scanner
-              .getRunningTrackCameraCapabilities()
-              .torchFeature()
-              .isSupported();
-            setLinternaDisponible(!!soportaTorch);
+            const soportaFlash = await scanner.hasFlash();
+            if (!desmontado) setLinternaDisponible(soportaFlash);
           } catch {
             /* sin soporte de torch: el botón no se pinta */
           }
@@ -331,11 +312,8 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
     const sc = scannerRef.current;
     if (!sc) return;
     try {
-      const torch = sc.getRunningTrackCameraCapabilities().torchFeature();
-      if (!torch.isSupported()) return;
-      const nuevoEstado = !linternaOn;
-      await torch.apply(nuevoEstado);
-      setLinternaOn(nuevoEstado);
+      await sc.toggleFlash();
+      setLinternaOn(sc.isFlashOn());
     } catch {
       /* la linterna es un extra: si falla, seguimos sin ella */
     }
@@ -429,7 +407,18 @@ export default function QRScanner({ onFound, onClose, continuo = false }) {
         </div>
 
         <div className="relative bg-black" style={{ height: 300 }}>
-          <div id={SCANNER_ID} className="w-full h-full" />
+          {/* El id lo usa el E2E para saber que el visor está montado. Antes
+              colgaba de un <div> contenedor que html5-qrcode rellenaba solo;
+              con qr-scanner el visor ES el <video>, así que el id se mudó aquí
+              en vez de dejar el test apuntando a un elemento que ya no existe. */}
+          <video
+            id="qr-scanner-viewport"
+            ref={videoRef}
+            className="w-full h-full"
+            style={{ objectFit: "cover" }}
+            muted
+            playsInline
+          />
 
           {status === "starting" && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60">
