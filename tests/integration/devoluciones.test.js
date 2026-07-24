@@ -15,9 +15,11 @@
  *   - proveedor → RESTA stock, no requiere venta
  *   tipo_movimiento ENUM incluye 'devolucion' (no 'DevolucionCliente')
  */
+/* global process */
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { invokeAs } from "../helpers/auth.js";
+import { integrationEnvNoDisponible } from "../helpers/env-check.js";
 import {
   getProducto,
   getAdminClient,
@@ -26,7 +28,9 @@ import {
 
 const FN = "registrar-devolucion";
 
-describe("registrar-devolucion", () => {
+// Requiere los usuarios ficticios de prueba (pedro...) — ver
+// tests/helpers/env-check.js. Se salta entero si esta base no los tiene.
+describe.skipIf(integrationEnvNoDisponible())("registrar-devolucion", () => {
   let adminClient;
   let productoId;
 

@@ -16,6 +16,7 @@
  * Sesiones en caché para evitar rate-limiting de Supabase Auth cuando
  * múltiples suites de test se ejecutan en el mismo proceso.
  */
+/* global process */
 
 import { createClient } from "@supabase/supabase-js";
 

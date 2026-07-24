@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { X, Check, SkipForward, ScanLine } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { safeError } from "../../lib/utils";
+import { useSedeUsaUbicaciones } from "../../hooks/useSedeUsaUbicaciones";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import QRScanner from "../../components/forms/QRScanner";
 import { avisarOk, avisarError } from "../../lib/notify";
@@ -288,15 +289,13 @@ export default function PickingPage() {
 
   // El chip "Sin ubicar" solo informa donde la sede SÍ ubica productos (hoy
   // BODEGA); en CV/CHV/L3, que casi no usan ubicaciones, saldría en cada
-  // ítem y el operario aprendería a ignorarlo. Se auto-ajusta por traspaso:
-  // si al menos un ítem de esta lista tiene ubicación, mostrar el chip
-  // vacío en los demás es información real; si ninguno la tiene, el chip
-  // desaparece — y vuelve a aparecer solo el día que esa sede empiece a
-  // ubicar, sin tocar código.
-  const alMenosUnaUbicacion = useMemo(
-    () => items.some((i) => i.ubicacion_id),
-    [items],
-  );
+  // ítem y el operario aprendería a ignorarlo. Antes esto se aproximaba con
+  // "¿algún ítem de esta lista tiene ubicación?", pero un traspaso que por
+  // casualidad solo llevara productos sin ubicar hacía desaparecer el chip
+  // aunque la sede origen SÍ ubique — justo cuando avisar era más útil. Se
+  // reemplaza por la respuesta real y compartida (existe al menos un
+  // producto ubicado en esa sede), cacheada por sede.
+  const sedeUsaUbicaciones = useSedeUsaUbicaciones(traspaso?.sede_origen_id);
 
   // El veredicto de una verificación pertenece al ítem que estaba en pantalla
   // en ese momento. Sin este efecto, si el operario escaneaba mal, marcaba
@@ -413,7 +412,7 @@ export default function PickingPage() {
             <UbicacionChip
               codigo={item.ubicacion_id}
               conMapa
-              mostrarVacio={alMenosUnaUbicacion}
+              mostrarVacio={sedeUsaUbicaciones}
             />
           </span>
         )}
@@ -540,7 +539,7 @@ export default function PickingPage() {
                 <UbicacionChip
                   codigo={item.ubicacion_id}
                   conMapa
-                  mostrarVacio={alMenosUnaUbicacion}
+                  mostrarVacio={sedeUsaUbicaciones}
                 />
               </p>
               {estadoItem.picking_completado && (

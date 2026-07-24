@@ -17,6 +17,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { invokeAs } from "../helpers/auth.js";
+import { integrationEnvNoDisponible } from "../helpers/env-check.js";
 import {
   getProducto,
   cleanupVentas,
@@ -27,7 +28,9 @@ import {
 
 const FN = "convertir-cotizacion";
 
-describe("convertir-cotizacion", () => {
+// Requiere los usuarios ficticios de prueba (carlos, maria...) — ver
+// tests/helpers/env-check.js. Se salta entero si esta base no los tiene.
+describe.skipIf(integrationEnvNoDisponible())("convertir-cotizacion", () => {
   let adminClient;
   let cotizacionId;
   let stockAntes;

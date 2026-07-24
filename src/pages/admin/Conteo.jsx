@@ -21,6 +21,7 @@ import { applyKeywordSearch } from "../../lib/search";
 import { SEDES } from "../../lib/constants";
 import { SEDE_LABELS } from "../../lib/traspasos-ui";
 import { useFiltros } from "../../hooks/useFiltros";
+import { useSedeUsaUbicaciones } from "../../hooks/useSedeUsaUbicaciones";
 import BarraFiltros from "../../components/filtros/BarraFiltros";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import UbicacionChip from "../../components/ui/UbicacionChip";
@@ -1174,13 +1175,12 @@ function PlanConteoTab({ perfil, isAdmin, refreshKey, onAbrirConteo }) {
   // Hallazgo B: BODEGA tiene ubicación asignada en ~48% de sus filas, pero
   // CV/CHV/L3 están prácticamente en 0%. Si forzamos "Sin ubicar" siempre,
   // en esas sedes el chip gris sale en cada fila de la cola y se vuelve
-  // ruido que el operario aprende a ignorar. Solo lo activamos si AL MENOS
-  // UNA fila de la cola YA cargada tiene ubicación: ahí sí vale la pena que
-  // resalte la que falta.
-  const haySedeConUbicaciones = useMemo(
-    () => cola.some((item) => !!item.ubicacion_id),
-    [cola],
-  );
+  // ruido que el operario aprende a ignorar. Antes esto se aproximaba con
+  // "¿alguna fila de la cola YA CARGADA tiene ubicación?", pero una cola que
+  // por casualidad trajera solo productos sin ubicar hacía desaparecer el
+  // chip aunque la sede sí ubique. Se usa la respuesta real y compartida,
+  // reactiva a la sede vigente (el Admin puede cambiarla en el selector).
+  const haySedeConUbicaciones = useSedeUsaUbicaciones(sede);
 
   return (
     <div className="flex flex-col gap-5">
@@ -1692,6 +1692,12 @@ function ModalNuevoConteo({
   // no bloquea el registro del conteo). Solo Admin/Bodeguero.
   const puedeAsignarUbicacion =
     perfil?.rol === "Admin" || perfil?.rol === "Bodeguero";
+  // Hallazgo B: este modal se abre tanto desde la cola del plan como desde
+  // la búsqueda manual de "Nuevo conteo", que antes no tenía ninguna forma
+  // de saber si la sede en cuestión usa ubicaciones (se dejaba sin
+  // mostrarVacio). Ahora usa la misma respuesta real y compartida, por la
+  // sede que se está contando en el modal (reactiva a cambiarSede).
+  const sedeUsaUbicaciones = useSedeUsaUbicaciones(sedeConteo);
   const [ubicacionesSede, setUbicacionesSede] = useState([]);
   const [asignandoUbicacion, setAsignandoUbicacion] = useState(false);
   useEffect(() => {
@@ -2034,13 +2040,11 @@ function ModalNuevoConteo({
                   style={{ color: "hsl(var(--foreground))" }}
                 >
                   {productoSel.nombre}
-                  {/* Hallazgo B: este modal se abre tanto desde la cola del
-                    plan (que sabe si la sede usa ubicaciones) como desde la
-                    búsqueda manual de "Nuevo conteo" (cualquier sede, sin ese
-                    contexto). Sin una forma confiable de saber aquí si la
-                    sede en cuestión usa ubicaciones, se deja SIN mostrarVacio:
-                    mejor no mostrar el chip gris que mostrarlo siempre. */}
-                  <UbicacionChip codigo={productoSel.ubicacion_id} conMapa />
+                  <UbicacionChip
+                    codigo={productoSel.ubicacion_id}
+                    conMapa
+                    mostrarVacio={sedeUsaUbicaciones}
+                  />
                 </p>
                 <p
                   className="font-mono text-xs"
