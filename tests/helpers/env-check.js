@@ -44,7 +44,8 @@ const PROBE_CREDS = { email: "carlos@compresores.local", password: "0001" };
 export const MOTIVO_SIN_FIXTURES =
   "Tests de integración omitidos: requieren los usuarios de prueba " +
   "(carlos, pedro, maria, juan, ana, luis), que no existen en esta base. " +
-  "La única base es producción y no se crean cuentas de prueba en ella.";
+  "La única base es producción y no se crean cuentas de prueba en ella.\n" +
+  `Si acabas de apuntar .env.local a una base con esos usuarios y sigue saliendo este aviso, el sondeo está cacheado ${CACHE_TTL_MS / 1000}s: espera un momento o borra ${CACHE_FILE}.`;
 
 let _memo = null; // memoiza dentro del mismo archivo, evita releer el disco varias veces
 
@@ -54,6 +55,14 @@ function leerCache() {
     const raw = JSON.parse(readFileSync(CACHE_FILE, "utf-8"));
     if (typeof raw.timestamp !== "number") return null;
     if (Date.now() - raw.timestamp > CACHE_TTL_MS) return null;
+    // El veredicto vale para UNA base concreta. El archivo de caché vive en la
+    // carpeta temporal del usuario, compartida por toda la máquina: sin esta
+    // comparación, dos worktrees del mismo repo apuntando a bases distintas
+    // (el día que exista un proyecto de pruebas) se pisarían el resultado —
+    // el de producción heredaría el "sí hay fixtures" del otro e intentaría
+    // loguearse como carlos/pedro contra producción, poniéndose rojo justo
+    // como se quería evitar.
+    if (raw.url !== process.env.VITE_SUPABASE_URL) return null;
     return raw;
   } catch {
     return null; // cache corrupto o ilegible: se vuelve a sondear
@@ -64,7 +73,11 @@ function escribirCache(resultado) {
   try {
     writeFileSync(
       CACHE_FILE,
-      JSON.stringify({ ...resultado, timestamp: Date.now() }),
+      JSON.stringify({
+        ...resultado,
+        url: process.env.VITE_SUPABASE_URL,
+        timestamp: Date.now(),
+      }),
       "utf-8",
     );
   } catch {
@@ -80,15 +93,25 @@ async function sondearLogin() {
     return { available: false, reason: MOTIVO_SIN_FIXTURES };
   }
 
-  const client = createClient(url, anonKey);
-  const { error } = await client.auth.signInWithPassword(PROBE_CREDS);
+  // El try/catch no es decorativo: un fallo de red devuelve `{error}` y se
+  // maneja abajo, pero una URL mal formada (un typo al editar .env.local que
+  // deje el valor sin https:// o con una comilla colgada) hace que
+  // `createClient` lance una excepción SÍNCRONA. Sin capturarla, se propaga
+  // hasta el setup de Vitest y tumba la corrida entera con un error críptico,
+  // en vez de degradarse a "no hay entorno de fixtures".
+  try {
+    const client = createClient(url, anonKey);
+    const { error } = await client.auth.signInWithPassword(PROBE_CREDS);
 
-  if (error) {
+    if (error) {
+      return { available: false, reason: MOTIVO_SIN_FIXTURES };
+    }
+
+    await client.auth.signOut();
+    return { available: true, reason: "" };
+  } catch {
     return { available: false, reason: MOTIVO_SIN_FIXTURES };
   }
-
-  await client.auth.signOut();
-  return { available: true, reason: "" };
 }
 
 /**

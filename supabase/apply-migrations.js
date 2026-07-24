@@ -10,7 +10,7 @@
  */
 /* global process */
 
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -73,11 +73,17 @@ async function applyMigrations() {
 
   console.log("All migrations applied. Running verification...\n");
 
-  // La verificación no se ejecuta desde aquí: se corre a mano en el editor
-  // SQL del panel de Supabase. Antes este bloque leía el archivo a una
-  // variable que nunca se usaba, así que solo se imprime la ruta.
+  // La verificación no se ejecuta desde aquí: se corre a mano en el editor SQL
+  // del panel de Supabase. Antes este bloque leía el archivo a una variable que
+  // nunca se usaba; esa lectura muerta servía sin querer de comprobación de que
+  // el archivo existiera, así que se deja explícita en vez de accidental —
+  // apuntar al operador a una ruta que no existe es peor que no decir nada.
+  const VERIFY_SQL = "20260404000005_fase1_05_verify.sql";
+  if (!existsSync(join(__dirname, "migrations", VERIFY_SQL))) {
+    console.warn(`  AVISO: no se encontró migrations/${VERIFY_SQL}`);
+  }
   console.log("Verification SQL written to:");
-  console.log("  supabase/migrations/20260404000005_fase1_05_verify.sql");
+  console.log(`  supabase/migrations/${VERIFY_SQL}`);
   console.log(
     "\nRun it in the Supabase Dashboard SQL Editor to confirm results.",
   );
