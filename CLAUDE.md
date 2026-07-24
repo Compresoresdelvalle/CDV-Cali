@@ -18,7 +18,12 @@ App de gestión de inventarios y operaciones para empresa colombiana de compreso
 - **Base de datos:** Supabase (PostgreSQL + Realtime + Auth + Edge Functions)
 - **Auth:** 12 usuarios reales en Supabase Auth — PIN de 4 dígitos como password
 - **Hosting:** Cloudflare
-- **QR:** qrcode.react (generar) + html5-qrcode (escanear con cámara)
+- **QR:** qrcode.react (generar) + qr-scanner (escanear con cámara). Se migró desde
+  html5-qrcode el 2026-07-23: estaba sin mantenimiento desde 2023 y se apoyaba en
+  zxing-js, también abandonado. qr-scanner usa el `BarcodeDetector` nativo cuando
+  existe (Android Chrome) y su propio Web Worker cuando no (iPad, que sigue sin
+  soportarlo). Lee solo QR, a propósito: la app identifica productos por
+  `productos.referencia`, no por código de barras de fábrica.
 
 ## Sistema de Diseño (REGLAS OBLIGATORIAS)
 
