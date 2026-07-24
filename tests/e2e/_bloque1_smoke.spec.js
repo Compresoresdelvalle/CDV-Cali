@@ -16,6 +16,7 @@
  * Correr (PowerShell):
  *   $env:TEST_ADMIN_PIN="<tu-pin>"; npx playwright test tests/e2e/_bloque1_smoke.spec.js --project=chromium
  */
+/* global process */
 import { test, expect } from "@playwright/test";
 
 const ADMIN = { nombre: "Admin", pin: process.env.TEST_ADMIN_PIN || "" };

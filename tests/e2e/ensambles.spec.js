@@ -139,11 +139,6 @@ test.describe("Ensambles — Admin (Carlos)", () => {
   }) => {
     await page.goto("/ops/ensambles/nuevo");
 
-    // El formulario vive en el <main> — scope fuera del header de navegación
-    const main = page
-      .locator("main, #root > div > div > main, .app-content")
-      .first();
-
     // Input con placeholder exacto del componente EnsambleNuevo
     const searchInput = page
       .locator(

@@ -26,12 +26,8 @@ async function crearOTMinima(page, suffix) {
   await page.getByPlaceholder("Ej. Juan Pérez").fill(`${PREFIX}${suffix}`);
   // Teléfono (placeholder "3001234567")
   await page.getByPlaceholder("3001234567").fill("3001234567");
-  // Equipo descripción (puede ser textbox/textarea con label "Descripción del equipo")
-  const equipoTextarea = page
-    .locator("textarea, input")
-    .filter({ has: page.locator(":scope") })
-    .first();
-  // Más seguro: por label "Descripción del equipo *" o similar
+  // Equipo descripción: se busca por label ("Descripción del equipo *"), que es
+  // más estable que rastrear el textarea por posición.
   const desc = page.getByLabel(/descripción del equipo/i).first();
   if (await desc.isVisible({ timeout: 1000 }).catch(() => false)) {
     await desc.fill("Compresor E2E");

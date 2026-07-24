@@ -18,49 +18,6 @@ import { loginUI } from "./helpers";
 
 const PREFIX = "E2E_F11_";
 
-/** Helper: crea una cotización con datos mínimos vía UI. Retorna número de cotización. */
-async function crearCotizacionMinima(page, suffix, opts = {}) {
-  await page.goto("/ops/cotizaciones/nueva");
-  await page.waitForLoadState("networkidle");
-
-  // Cliente (label "Nombre" o placeholder libre)
-  const clienteInput = page
-    .getByRole("textbox", { name: /cliente|nombre/i })
-    .first();
-  await clienteInput.fill(`${PREFIX}${suffix}`);
-
-  // Buscar y agregar 1 producto al carrito
-  const search = page.getByPlaceholder(/buscar|nombre|referencia/i).first();
-  await search.fill("a");
-  await page.waitForTimeout(800);
-  // Click el primer resultado del buscador
-  const firstResult = page
-    .locator('button, [role="button"]')
-    .filter({ hasText: /\$|COP/ })
-    .first();
-  if (await firstResult.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await firstResult.click();
-  }
-  await page.waitForTimeout(500);
-
-  // Aplicar IVA si se especificó
-  if (opts.iva !== undefined) {
-    const ivaInput = page
-      .getByRole("spinbutton")
-      .filter({ has: page.locator(":scope") })
-      .last(); // el último number input es IVA
-    await ivaInput.fill(String(opts.iva));
-  }
-
-  // Botón "Crear cotización" / "Guardar"
-  await page
-    .getByRole("button", { name: /crear cotizaci|guardar cotizaci|registrar/i })
-    .first()
-    .click();
-  // Esperar redirect a historial
-  await page.waitForURL(/\/ops\/cotizaciones(\?|$)/, { timeout: 15000 });
-}
-
 test.describe("Fase 11 — Cotizaciones happy", () => {
   test.setTimeout(60000);
 

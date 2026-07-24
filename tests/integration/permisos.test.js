@@ -8,11 +8,12 @@
  *   ✓ Vendedor de sede A NO puede vender en sede B (fn valida sede)
  *   ✓ Usuario no autenticado es rechazado en todas las Edge Functions
  */
+/* global process */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { invokeAs } from "../helpers/auth.js";
+import { integrationEnvNoDisponible } from "../helpers/env-check.js";
 import {
-  getProducto,
   crearTraspaso,
   cleanupTraspasos,
   cleanupVentas,
@@ -28,7 +29,11 @@ const FNS = {
   cotizacion: "convertir-cotizacion",
 };
 
-describe("permisos — rol Vendedor", () => {
+// Estas tres suites requieren los usuarios ficticios de prueba (maria,
+// pedro, carlos...) — ver tests/helpers/env-check.js. La suite de
+// "usuario no autenticado" (más abajo) NO necesita fixtures y sigue
+// corriendo siempre.
+describe.skipIf(integrationEnvNoDisponible())("permisos — rol Vendedor", () => {
   let adminClient;
   let productoId;
 
@@ -73,108 +78,114 @@ describe("permisos — rol Vendedor", () => {
   });
 });
 
-describe("permisos — picker ≠ verificador en traspaso", () => {
-  let adminClient;
-  let traspaso;
-  let detalles;
-  let productoData;
+describe.skipIf(integrationEnvNoDisponible())(
+  "permisos — picker ≠ verificador en traspaso",
+  () => {
+    let adminClient;
+    let traspaso;
+    let detalles;
+    let productoData;
 
-  beforeAll(async () => {
-    adminClient = await getAdminClient();
-    productoData = await getProductoId(adminClient, "MN-150");
+    beforeAll(async () => {
+      adminClient = await getAdminClient();
+      productoData = await getProductoId(adminClient, "MN-150");
 
-    const result = await crearTraspaso(adminClient, {
-      origenId: "BOD-PRINCIPAL",
-      destinoId: "ALM-01",
-      items: [
-        { producto_id: productoData.id, referencia: "MN-150", cantidad: 1 },
-      ],
-    });
-    traspaso = result.traspaso;
-    detalles = result.detalles;
+      const result = await crearTraspaso(adminClient, {
+        origenId: "BOD-PRINCIPAL",
+        destinoId: "ALM-01",
+        items: [
+          { producto_id: productoData.id, referencia: "MN-150", cantidad: 1 },
+        ],
+      });
+      traspaso = result.traspaso;
+      detalles = result.detalles;
 
-    // Pedro inicia picking
-    await invokeAs(FNS.traspaso, "pedro", {
-      traspaso_id: traspaso.id,
-      accion: "iniciar_picking",
-    });
+      // Pedro inicia picking
+      await invokeAs(FNS.traspaso, "pedro", {
+        traspaso_id: traspaso.id,
+        accion: "iniciar_picking",
+      });
 
-    // Pedro completa el picking
-    await invokeAs(FNS.traspaso, "pedro", {
-      traspaso_id: traspaso.id,
-      accion: "actualizar_items",
-      items: [
-        {
-          detalle_id: detalles[0].id,
-          cantidad_enviada: 1,
-          picking_completado: true,
-        },
-      ],
-    });
-  });
-
-  afterAll(async () => {
-    await cleanupTraspasos(adminClient);
-  });
-
-  it("Pedro (picker) NO puede verificar su propio traspaso", async () => {
-    const { status, data } = await invokeAs(FNS.traspaso, "pedro", {
-      traspaso_id: traspaso.id,
-      accion: "verificar",
+      // Pedro completa el picking
+      await invokeAs(FNS.traspaso, "pedro", {
+        traspaso_id: traspaso.id,
+        accion: "actualizar_items",
+        items: [
+          {
+            detalle_id: detalles[0].id,
+            cantidad_enviada: 1,
+            picking_completado: true,
+          },
+        ],
+      });
     });
 
-    expect(status).toBe(400);
-    expect(data.error).toMatch(/mismo|verificador|picker/i);
-  });
-
-  it("Carlos (diferente a picker) SÍ puede verificar", async () => {
-    const { status, data } = await invokeAs(FNS.traspaso, "carlos", {
-      traspaso_id: traspaso.id,
-      accion: "verificar",
+    afterAll(async () => {
+      await cleanupTraspasos(adminClient);
     });
 
-    expect(status).toBe(200);
-    const estado = data.data?.estado ?? data.estado;
-    expect(estado).toBe("verificado");
-  });
-});
+    it("Pedro (picker) NO puede verificar su propio traspaso", async () => {
+      const { status, data } = await invokeAs(FNS.traspaso, "pedro", {
+        traspaso_id: traspaso.id,
+        accion: "verificar",
+      });
 
-describe("permisos — rol Bodeguero puede devolver", () => {
-  let adminClient;
-  let productoId;
-
-  beforeAll(async () => {
-    adminClient = await getAdminClient();
-    const prod = await getProductoId(adminClient, "MG-AP-10");
-    productoId = prod.id;
-  });
-
-  it("Bodeguero (Pedro) puede registrar devolución de cliente", async () => {
-    const { status, data } = await invokeAs(FNS.devolucion, "pedro", {
-      tipo: "cliente",
-      producto_id: productoId,
-      sede_id: "BOD-PRINCIPAL",
-      cantidad: 1,
-      motivo: "TEST: permiso bodeguero devolucion",
+      expect(status).toBe(400);
+      expect(data.error).toMatch(/mismo|verificador|picker/i);
     });
 
-    expect(status).toBe(200);
-    expect(data.ok ?? data.data?.ok ?? true).toBeTruthy();
-  });
+    it("Carlos (diferente a picker) SÍ puede verificar", async () => {
+      const { status, data } = await invokeAs(FNS.traspaso, "carlos", {
+        traspaso_id: traspaso.id,
+        accion: "verificar",
+      });
 
-  it("Bodeguero (Pedro) puede registrar devolución de proveedor", async () => {
-    const { status, data } = await invokeAs(FNS.devolucion, "pedro", {
-      tipo: "proveedor",
-      producto_id: productoId,
-      sede_id: "BOD-PRINCIPAL",
-      cantidad: 1,
-      motivo: "TEST: permiso bodeguero devolucion proveedor",
+      expect(status).toBe(200);
+      const estado = data.data?.estado ?? data.estado;
+      expect(estado).toBe("verificado");
+    });
+  },
+);
+
+describe.skipIf(integrationEnvNoDisponible())(
+  "permisos — rol Bodeguero puede devolver",
+  () => {
+    let adminClient;
+    let productoId;
+
+    beforeAll(async () => {
+      adminClient = await getAdminClient();
+      const prod = await getProductoId(adminClient, "MG-AP-10");
+      productoId = prod.id;
     });
 
-    expect(status).toBe(200);
-    expect(data.ok ?? data.data?.ok ?? true).toBeTruthy();
-  });
-});
+    it("Bodeguero (Pedro) puede registrar devolución de cliente", async () => {
+      const { status, data } = await invokeAs(FNS.devolucion, "pedro", {
+        tipo: "cliente",
+        producto_id: productoId,
+        sede_id: "BOD-PRINCIPAL",
+        cantidad: 1,
+        motivo: "TEST: permiso bodeguero devolucion",
+      });
+
+      expect(status).toBe(200);
+      expect(data.ok ?? data.data?.ok ?? true).toBeTruthy();
+    });
+
+    it("Bodeguero (Pedro) puede registrar devolución de proveedor", async () => {
+      const { status, data } = await invokeAs(FNS.devolucion, "pedro", {
+        tipo: "proveedor",
+        producto_id: productoId,
+        sede_id: "BOD-PRINCIPAL",
+        cantidad: 1,
+        motivo: "TEST: permiso bodeguero devolucion proveedor",
+      });
+
+      expect(status).toBe(200);
+      expect(data.ok ?? data.data?.ok ?? true).toBeTruthy();
+    });
+  },
+);
 
 describe("permisos — usuario no autenticado", () => {
   const edgeFns = Object.values(FNS);

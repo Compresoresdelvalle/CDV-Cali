@@ -87,7 +87,7 @@ async function goToFirstOrden(page) {
   );
   await expect(submitBtn).toBeVisible({ timeout: 5_000 });
 
-  const [response] = await Promise.all([
+  await Promise.all([
     page.waitForResponse(
       (res) =>
         res.url().includes("ordenes_servicio") &&

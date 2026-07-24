@@ -101,7 +101,9 @@ async function goToFirstOrCreateOrden(page) {
   );
   await expect(submitBtn).toBeVisible({ timeout: 5_000 });
 
-  const [res] = await Promise.all([
+  // Se espera la respuesta del POST, no su contenido: lo que importa es que la
+  // orden llegó al servidor antes de seguir con la navegación de abajo.
+  await Promise.all([
     page.waitForResponse(
       (r) =>
         r.url().includes("ordenes_servicio") && r.request().method() === "POST",
@@ -878,9 +880,6 @@ test.describe("Stress 10 — Eliminar repuesto: reposición de stock", () => {
       });
       return;
     }
-
-    // Obtener nombre del producto a agregar
-    const productName = await firstResult.textContent();
 
     // Agregar repuesto
     await firstResult.click();
