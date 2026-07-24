@@ -29,6 +29,16 @@ const PAGE_SIZE = 40;
 // El tope viene del propio generador: así el operario ve el mismo límite ANTES
 // de generar, en vez de que la librería le recorte la cantidad en silencio.
 const MAX_COPIAS = MAX_COPIAS_POR_PRODUCTO;
+// El tope de MAX_COPIAS es POR PRODUCTO; esto es el tope al TOTAL de etiquetas
+// de la corrida (todos los productos × sus copias). Por encima de esto no se
+// bloquea, solo se confirma: alguien podría de verdad necesitar una corrida
+// grande, pero no debería lanzarla sin saber cuánto va a tardar.
+const MAX_ETIQUETAS_SIN_CONFIRMAR = 300;
+// Mismo número que GRID_COLS*GRID_ROWS en etiquetasPDF.js (4×8 = 32 etiquetas
+// por hoja carta). Se duplica aquí solo para el mensaje de confirmación: no
+// vale la pena exportarlo del generador por un cálculo aproximado de "cuántas
+// hojas van a salir".
+const ETIQUETAS_POR_HOJA = 32;
 
 const SELECT_COLS = "id, referencia, nombre, categoria";
 
@@ -82,6 +92,17 @@ export default function EtiquetasImprimir() {
   const [resultado, setResultado] = useState(null);
   const [firmaResultado, setFirmaResultado] = useState("");
   const [omitidosOcultos, setOmitidosOcultos] = useState(false);
+
+  // Bandera de montaje: la generación de cientos de QR tarda, y si el
+  // operario navega a otra pantalla a mitad de camino no debe intentarse un
+  // setState sobre un componente ya desmontado (mismo criterio que `vigente`
+  // más abajo, aplicado aquí porque la generación vive fuera de un efecto).
+  const montadoRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      montadoRef.current = false;
+    };
+  }, []);
 
   /* ── Categorías del catálogo activo (para el filtro atajo) ───────────── */
   useEffect(() => {
@@ -263,7 +284,10 @@ export default function EtiquetasImprimir() {
   };
 
   const vaciarSeleccion = async () => {
-    if (seleccion.size === 0) return;
+    // Con la generación corriendo, vaciar acá escondería el progreso (el
+    // contador y la barra dependen de que haya selección) sin detener nada:
+    // el botón ya se deshabilita en el JSX, esto es el cierre del lado datos.
+    if (seleccion.size === 0 || generando) return;
     const ok = await confirm({
       titulo: "Vaciar selección",
       mensaje: `Se quitarán los ${seleccion.size} productos seleccionados. Esto no se puede deshacer.`,
@@ -297,10 +321,45 @@ export default function EtiquetasImprimir() {
   // la ventana exacta que pregunta la auditoría (doble clic == doble PDF) sin
   // depender de que React ya haya repintado el disabled.
   const generacionEnCursoRef = useRef(null);
+  // Solo cubre la ventana en que el diálogo de "generación grande" está
+  // abierto: antes de esa confirmación no hay ninguna generación registrada
+  // que bloquee un segundo clic.
+  const confirmandoRef = useRef(false);
 
   const obtenerResultado = async () => {
     if (resultado && firmaResultado === firmaActual) return resultado;
     if (generacionEnCursoRef.current) return generacionEnCursoRef.current;
+
+    // Tope defensivo al TOTAL (no al de por producto): una corrida enorme
+    // congela el navegador generando cientos de QR. No se bloquea, se avisa
+    // y se deja decidir — el mismo mecanismo de confirmación que ya usa
+    // "Vaciar selección".
+    if (totalEtiquetas > MAX_ETIQUETAS_SIN_CONFIRMAR) {
+      // El guard de `generacionEnCursoRef` todavía no aplica aquí: se registra
+      // más abajo, cuando ya se está generando. Sin esta bandera, pulsar el
+      // otro botón mientras el diálogo está abierto lo volvería a lanzar y
+      // pisaría el estado del hook de confirmación, dejando la primera espera
+      // colgada para siempre (el primer botón se quedaría "congelado").
+      if (confirmandoRef.current) return null;
+      confirmandoRef.current = true;
+      const hojas =
+        formato === "individual"
+          ? totalEtiquetas
+          : Math.ceil(totalEtiquetas / ETIQUETAS_POR_HOJA);
+      const ok = await confirm({
+        titulo: "Generación grande de etiquetas",
+        mensaje:
+          `Vas a generar ${totalEtiquetas} etiquetas` +
+          (formato === "individual"
+            ? ` (${hojas} página${hojas === 1 ? "" : "s"} de rollo).`
+            : ` (~${hojas} hoja${hojas === 1 ? "" : "s"} carta).`) +
+          " Puede tardar y usar bastante memoria del navegador. ¿Continuar?",
+        confirmLabel: "Generar de todas formas",
+      });
+      confirmandoRef.current = false;
+      if (!montadoRef.current) return null;
+      if (!ok) return null;
+    }
 
     setOmitidosOcultos(false);
     setGenerando(true);
@@ -316,14 +375,17 @@ export default function EtiquetasImprimir() {
         const r = await generarEtiquetasPDF({
           productos,
           formato,
-          onProgress: (hechas, totalGen) =>
-            setProgreso({ hechas, total: totalGen }),
+          onProgress: (hechas, totalGen) => {
+            if (montadoRef.current) setProgreso({ hechas, total: totalGen });
+          },
         });
-        setResultado(r);
-        setFirmaResultado(firmaActual);
+        if (montadoRef.current) {
+          setResultado(r);
+          setFirmaResultado(firmaActual);
+        }
         return r;
       } finally {
-        setGenerando(false);
+        if (montadoRef.current) setGenerando(false);
         generacionEnCursoRef.current = null;
       }
     })();
@@ -335,6 +397,7 @@ export default function EtiquetasImprimir() {
   const handleDescargar = async () => {
     try {
       const r = await obtenerResultado();
+      if (!r) return; // el operario canceló la confirmación de corrida grande
       r.download();
       avisarOk(
         `${r.total} etiqueta${r.total === 1 ? "" : "s"} generada${r.total === 1 ? "" : "s"}` +
@@ -350,7 +413,19 @@ export default function EtiquetasImprimir() {
   const handleAbrir = async () => {
     try {
       const r = await obtenerResultado();
+      if (!r) return; // el operario canceló la confirmación de corrida grande
       r.print();
+      // print() abre una pestaña nueva y manda a imprimir ahí; si el
+      // navegador bloquea la ventana emergente, cae a descargar el PDF en
+      // silencio (mismo contrato que ventaPOS.js). Sin este aviso el
+      // operario en tablet no se entera de ninguno de los dos casos.
+      avisarOk(
+        `${r.total} etiqueta${r.total === 1 ? "" : "s"} lista${r.total === 1 ? "" : "s"}` +
+          " · se abrió una pestaña para imprimir (si el navegador bloqueó la ventana, el PDF se descargó en su lugar)" +
+          (r.omitidos.length
+            ? ` · ${r.omitidos.length} producto${r.omitidos.length === 1 ? "" : "s"} sin etiqueta`
+            : ""),
+      );
     } catch (err) {
       avisarError(err, "No se pudo generar el PDF de etiquetas");
     }
@@ -363,7 +438,15 @@ export default function EtiquetasImprimir() {
 
   return (
     <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
+      // pb extra cuando hay selección: el panel de abajo queda FIJO (ver más
+      // abajo) y ya no reserva su espacio en el flujo normal — sin este
+      // colchón, el final de la lista quedaría tapado detrás del panel. Con
+      // "Ver selección" abierto el panel crece (lista de detalle + tope de
+      // MAX_COPIAS), así que el colchón también crece o el detalle tapa los
+      // últimos productos de la lista al hacer scroll hasta el final.
+      className={`p-4 sm:p-6 space-y-4 animate-fade-in ${
+        totalProductos > 0 ? (detalleAbierto ? "pb-[44rem]" : "pb-[28rem]") : ""
+      }`}
       style={{ backgroundColor: "hsl(var(--background))" }}
     >
       <PageHeader
@@ -387,13 +470,21 @@ export default function EtiquetasImprimir() {
         </div>
       )}
 
-      {/* ── Panel de selección + generación ──────────────────────────────── */}
+      {/* ── Panel de selección + generación ──────────────────────────────────
+          FALLA 8: fijo abajo (no arriba del scroll) para que el contador y
+          los botones sigan visibles con ~2.000 productos de scroll infinito.
+          Offset igual al que usa RecepcionTraspaso.jsx sobre el bottom-nav
+          móvil, más la safe-area del gesto inferior; en desktop no hay
+          bottom-nav así que baja hasta el borde. max-height + scroll propio
+          para que, si se abre "Ver selección" con muchos productos, el panel
+          no se coma la pantalla entera. */}
       {totalProductos > 0 && (
         <section
-          className="space-y-4 rounded-xl border p-4"
+          className="fixed inset-x-3 z-40 mx-auto max-w-3xl space-y-4 overflow-y-auto rounded-xl border p-4 shadow-lg bottom-[calc(5rem+0.75rem+env(safe-area-inset-bottom))] lg:inset-x-6 lg:bottom-4"
           style={{
             borderColor: "hsl(var(--primary) / 0.3)",
-            backgroundColor: "hsl(var(--primary) / 0.06)",
+            backgroundColor: "hsl(var(--card))",
+            maxHeight: "70vh",
           }}
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -429,7 +520,8 @@ export default function EtiquetasImprimir() {
               </button>
               <button
                 onClick={vaciarSeleccion}
-                className="inline-flex h-11 items-center gap-1.5 rounded-md border px-3.5 text-[12.5px] font-medium cursor-pointer"
+                disabled={generando}
+                className="inline-flex h-11 items-center gap-1.5 rounded-md border px-3.5 text-[12.5px] font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 style={{
                   borderColor: "hsl(var(--destructive) / 0.35)",
                   color: "hsl(var(--destructive))",
@@ -447,6 +539,7 @@ export default function EtiquetasImprimir() {
               items={seleccionArr}
               onCantidad={setCantidad}
               onQuitar={quitar}
+              generando={generando}
             />
           )}
 
@@ -462,12 +555,14 @@ export default function EtiquetasImprimir() {
               <FormatoOpcion
                 seleccionado={formato === "hoja"}
                 onClick={() => setFormato("hoja")}
+                disabled={generando}
                 titulo="Hoja carta (grilla)"
                 descripcion="32 etiquetas por hoja tamaño carta — para mandar a una imprenta o imprimir en una impresora normal."
               />
               <FormatoOpcion
                 seleccionado={formato === "individual"}
                 onClick={() => setFormato("individual")}
+                disabled={generando}
                 titulo="Etiqueta individual"
                 descripcion="Una etiqueta por página, del tamaño del rollo — para impresora térmica de etiquetas."
               />
@@ -591,7 +686,7 @@ export default function EtiquetasImprimir() {
 
         <button
           onClick={toggleVisibles}
-          disabled={visiblesSeleccionables.length === 0}
+          disabled={visiblesSeleccionables.length === 0 || generando}
           className="inline-flex h-12 items-center gap-1.5 rounded-md border px-3.5 text-[12.5px] font-semibold cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           style={{
             borderColor: "hsl(var(--border))",
@@ -632,6 +727,7 @@ export default function EtiquetasImprimir() {
                   cantidad={seleccion.get(p.id)?.cantidad ?? 1}
                   onToggle={() => toggle(p)}
                   onCantidad={(v) => setCantidad(p.id, v)}
+                  generando={generando}
                 />
               </li>
             ))}
@@ -663,6 +759,7 @@ export default function EtiquetasImprimir() {
                     cantidad={seleccion.get(p.id)?.cantidad ?? 1}
                     onToggle={() => toggle(p)}
                     onCantidad={(v) => setCantidad(p.id, v)}
+                    generando={generando}
                   />
                 ))}
               </tbody>
@@ -706,7 +803,14 @@ function CheckBox({ checked, onClick, ariaLabel, deshabilitado }) {
       role="checkbox"
       aria-checked={checked}
       aria-label={ariaLabel}
-      onClick={onClick}
+      onClick={(e) => {
+        // La fila/tarjeta completa también selecciona (FALLA 1): sin este
+        // stopPropagation, el click en el checkbox burbujea al contenedor y
+        // el toggle se dispara dos veces (selecciona y de inmediato
+        // deselecciona).
+        e.stopPropagation();
+        onClick();
+      }}
       disabled={deshabilitado}
       className="grid h-5 w-5 shrink-0 place-items-center rounded-[4px] border transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
       style={{
@@ -720,16 +824,38 @@ function CheckBox({ checked, onClick, ariaLabel, deshabilitado }) {
   );
 }
 
-function QtyStepper({ value, onChange, size = "sm" }) {
-  const h = size === "lg" ? "h-11 w-11" : "h-9 w-9";
+/* 48px mínimo SIEMPRE (regla de guantes) — mismo patrón que QtyBtn en
+ * PickingPage.jsx (width/height:48 en vez de una clase Tailwind, para no
+ * depender de que h-12/w-12 midan exactamente 48px con el reset del proyecto). */
+function QtyStepper({ value, onChange, disabled = false }) {
+  // Texto local del input: mientras se escribe puede quedar vacío o a medio
+  // teclear ("2" antes de completar "25"). Si cada tecla disparara onChange
+  // con el clamp de arriba, borrar el dígito único repinta "1" al instante y
+  // el operario nunca logra teclear un número de dos cifras (FALLA 4). Se
+  // valida/acota recién al salir del campo o al confirmar con Enter.
+  const [texto, setTexto] = useState(String(value));
+
+  useEffect(() => {
+    setTexto(String(value));
+  }, [value]);
+
+  const confirmar = () => {
+    const n = Math.min(MAX_COPIAS, Math.max(1, Math.round(Number(texto) || 1)));
+    setTexto(String(n));
+    if (n !== value) onChange(n);
+  };
+
   return (
     <div className="flex items-center gap-1.5">
       <button
         type="button"
-        onClick={() => onChange(value - 1)}
+        onClick={() => onChange(Math.max(1, value - 1))}
+        disabled={disabled}
         aria-label="Restar una copia"
-        className={`grid ${h} shrink-0 place-items-center rounded-md border cursor-pointer`}
+        className="grid shrink-0 place-items-center rounded-md border cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         style={{
+          width: 48,
+          height: 48,
           borderColor: "hsl(var(--border))",
           color: "hsl(var(--foreground))",
         }}
@@ -739,13 +865,23 @@ function QtyStepper({ value, onChange, size = "sm" }) {
       <input
         type="number"
         inputMode="numeric"
-        value={value}
+        value={texto}
         min={1}
         max={MAX_COPIAS}
-        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        onChange={(e) => setTexto(e.target.value)}
+        onBlur={confirmar}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            confirmar();
+            e.currentTarget.blur();
+          }
+        }}
         aria-label="Cantidad de copias"
-        className="h-9 w-14 rounded-md border text-center text-sm outline-none"
+        className="rounded-md border text-center text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
         style={{
+          width: 56,
+          height: 48,
           borderColor: "hsl(var(--border))",
           backgroundColor: "hsl(var(--card))",
           color: "hsl(var(--foreground))",
@@ -753,10 +889,13 @@ function QtyStepper({ value, onChange, size = "sm" }) {
       />
       <button
         type="button"
-        onClick={() => onChange(value + 1)}
+        onClick={() => onChange(Math.min(MAX_COPIAS, value + 1))}
+        disabled={disabled}
         aria-label="Sumar una copia"
-        className={`grid ${h} shrink-0 place-items-center rounded-md border cursor-pointer`}
+        className="grid shrink-0 place-items-center rounded-md border cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         style={{
+          width: 48,
+          height: 48,
           borderColor: "hsl(var(--border))",
           color: "hsl(var(--foreground))",
         }}
@@ -767,12 +906,19 @@ function QtyStepper({ value, onChange, size = "sm" }) {
   );
 }
 
-function FormatoOpcion({ seleccionado, onClick, titulo, descripcion }) {
+function FormatoOpcion({
+  seleccionado,
+  onClick,
+  disabled = false,
+  titulo,
+  descripcion,
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex-1 rounded-lg border p-3 text-left transition-colors cursor-pointer"
+      disabled={disabled}
+      className="flex-1 rounded-lg border p-3 text-left transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
       style={{
         borderColor: seleccionado
           ? "hsl(var(--primary))"
@@ -815,7 +961,7 @@ function FormatoOpcion({ seleccionado, onClick, titulo, descripcion }) {
   );
 }
 
-function DetalleSeleccion({ items, onCantidad, onQuitar }) {
+function DetalleSeleccion({ items, onCantidad, onQuitar, generando = false }) {
   if (items.length === 0) return null;
   return (
     <div
@@ -849,11 +995,13 @@ function DetalleSeleccion({ items, onCantidad, onQuitar }) {
               <QtyStepper
                 value={p.cantidad}
                 onChange={(v) => onCantidad(p.id, v)}
+                disabled={generando}
               />
               <button
                 onClick={() => onQuitar(p.id)}
+                disabled={generando}
                 aria-label={`Quitar ${p.nombre} de la selección`}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-md cursor-pointer"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-md cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 style={{ color: "hsl(var(--destructive))" }}
               >
                 <X className="h-4 w-4" strokeWidth={2} />
@@ -937,9 +1085,10 @@ function Th({ children, width, right }) {
   );
 }
 
-function Td({ children, right }) {
+function Td({ children, right, onClick }) {
   return (
     <td
+      onClick={onClick}
       className={
         "border-b px-3 py-2.5 align-middle text-sm " +
         (right ? "text-right" : "")
@@ -957,14 +1106,26 @@ function FilaProducto({
   cantidad,
   onToggle,
   onCantidad,
+  generando = false,
 }) {
   const habilitado = tieneReferencia(p);
+  // FALLA 1: toda la fila selecciona, no solo el checkbox de 20px. Bloqueada
+  // también mientras se genera (FALLA 7): cambiar la selección a mitad de
+  // camino desincroniza el contador de arriba de la barra de progreso.
+  const puedeTocar = habilitado && !generando;
+  const [hover, setHover] = useState(false);
   return (
     <tr
+      onClick={() => puedeTocar && onToggle()}
+      onMouseEnter={() => puedeTocar && setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
         backgroundColor: seleccionado
           ? "hsl(var(--primary) / 0.06)"
-          : "transparent",
+          : hover
+            ? "hsl(var(--muted) / 0.35)"
+            : "transparent",
+        cursor: puedeTocar ? "pointer" : "default",
       }}
     >
       <Td>
@@ -972,7 +1133,7 @@ function FilaProducto({
           checked={seleccionado}
           onClick={onToggle}
           ariaLabel={`Seleccionar ${p.nombre}`}
-          deshabilitado={!habilitado}
+          deshabilitado={!puedeTocar}
         />
       </Td>
       <Td>
@@ -1009,10 +1170,14 @@ function FilaProducto({
           {p.categoria ?? "—"}
         </span>
       </Td>
-      <Td right>
+      <Td right onClick={(e) => e.stopPropagation()}>
         {seleccionado ? (
           <div className="flex justify-end">
-            <QtyStepper value={cantidad} onChange={onCantidad} />
+            <QtyStepper
+              value={cantidad}
+              onChange={onCantidad}
+              disabled={generando}
+            />
           </div>
         ) : (
           <span style={{ color: "hsl(var(--muted-foreground))" }}>—</span>
@@ -1028,16 +1193,25 @@ function TarjetaProducto({
   cantidad,
   onToggle,
   onCantidad,
+  generando = false,
 }) {
   const habilitado = tieneReferencia(p);
+  const puedeTocar = habilitado && !generando;
+  const [hover, setHover] = useState(false);
   return (
     <div
+      onClick={() => puedeTocar && onToggle()}
+      onMouseEnter={() => puedeTocar && setHover(true)}
+      onMouseLeave={() => setHover(false)}
       className="w-full rounded-xl border px-4 py-3.5"
       style={{
         borderColor: "hsl(var(--border))",
         backgroundColor: seleccionado
           ? "hsl(var(--primary) / 0.06)"
-          : "hsl(var(--card))",
+          : hover
+            ? "hsl(var(--muted) / 0.3)"
+            : "hsl(var(--card))",
+        cursor: puedeTocar ? "pointer" : "default",
       }}
     >
       <div className="flex items-start gap-3">
@@ -1045,7 +1219,7 @@ function TarjetaProducto({
           checked={seleccionado}
           onClick={onToggle}
           ariaLabel={`Seleccionar ${p.nombre}`}
-          deshabilitado={!habilitado}
+          deshabilitado={!puedeTocar}
         />
         <div className="min-w-0 flex-1">
           <p
@@ -1073,6 +1247,7 @@ function TarjetaProducto({
       </div>
       {seleccionado && (
         <div
+          onClick={(e) => e.stopPropagation()}
           className="mt-3 flex items-center justify-between gap-2 border-t pt-3"
           style={{ borderColor: "hsl(var(--border))" }}
         >
@@ -1082,7 +1257,11 @@ function TarjetaProducto({
           >
             Copias
           </span>
-          <QtyStepper value={cantidad} onChange={onCantidad} size="lg" />
+          <QtyStepper
+            value={cantidad}
+            onChange={onCantidad}
+            disabled={generando}
+          />
         </div>
       )}
     </div>
