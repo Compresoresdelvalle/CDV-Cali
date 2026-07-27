@@ -354,7 +354,10 @@ export default function DevolucionHistorial() {
             <ul className="md:hidden space-y-2.5" role="list">
               {devoluciones.map((d) => (
                 <li key={d.id}>
-                  <DevolucionCard devolucion={d} />
+                  <DevolucionCard
+                    devolucion={d}
+                    onSelect={() => navigate(`/ops/devoluciones/${d.id}`)}
+                  />
                 </li>
               ))}
             </ul>
@@ -385,7 +388,11 @@ export default function DevolucionHistorial() {
                   </thead>
                   <tbody>
                     {devoluciones.map((d) => (
-                      <DevolucionFila key={d.id} devolucion={d} />
+                      <DevolucionFila
+                        key={d.id}
+                        devolucion={d}
+                        onSelect={() => navigate(`/ops/devoluciones/${d.id}`)}
+                      />
                     ))}
                   </tbody>
                 </table>
@@ -468,11 +475,18 @@ function Td({ children, right }) {
   );
 }
 
-function DevolucionFila({ devolucion: d }) {
+function DevolucionFila({ devolucion: d, onSelect }) {
   const tipo = devolucionTipoPill(d.reingresa_stock);
   const signo = devolucionSigno(d.reingresa_stock);
   return (
-    <tr className="h-14">
+    <tr
+      className="h-14 cursor-pointer"
+      onClick={onSelect}
+      onMouseEnter={(e) =>
+        (e.currentTarget.style.backgroundColor = "var(--n-25)")
+      }
+      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
+    >
       <Td>
         <span
           className="font-mono text-[12.5px] font-medium"
@@ -555,11 +569,13 @@ function DevolucionFila({ devolucion: d }) {
   );
 }
 
-function DevolucionCard({ devolucion: d }) {
+function DevolucionCard({ devolucion: d, onSelect }) {
   const tipo = devolucionTipoPill(d.reingresa_stock);
   const signo = devolucionSigno(d.reingresa_stock);
   return (
-    <div
+    <button
+      type="button"
+      onClick={onSelect}
       className="w-full rounded-[10px] border px-4 py-3.5 text-left shadow-sm"
       style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-0)" }}
     >
@@ -611,7 +627,7 @@ function DevolucionCard({ devolucion: d }) {
           </span>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
