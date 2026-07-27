@@ -1264,7 +1264,11 @@ function Seg({ options, value, onChange }) {
 function Kpi({ label, value, sub, last, danger, hint }) {
   return (
     <div
-      className={`flex flex-col gap-1.5 pr-7 md:pl-7 md:first:pl-0 ${
+      // `min-w-0` es clave: sin él, un ítem de grilla no encoge por debajo de
+      // su contenido (min-width:auto), así que un valor grande como
+      // "$ 443.189.627" ensanchaba su columna y desbordaba/pisaba las vecinas
+      // (los KPIs se veían superpuestos sobre las líneas divisorias).
+      className={`flex min-w-0 flex-col gap-1.5 pr-5 md:pl-5 md:first:pl-0 ${
         last ? "" : "md:border-r md:border-dashed"
       }`}
       style={last ? undefined : { borderColor: "hsl(var(--border))" }}
@@ -1284,7 +1288,11 @@ function Kpi({ label, value, sub, last, danger, hint }) {
         {hint && <span aria-hidden="true"> ⓘ</span>}
       </div>
       <div
-        className="font-mono text-[22px] font-semibold leading-tight tracking-[-0.02em] tabular-nums"
+        // Tamaño responsivo: en la tira de 6 columnas (lg) cada KPI tiene poco
+        // ancho, y montos de cientos de millones a 22px no caben. Baja a 18px
+        // ahí. `break-words` deja que un valor extremo (miles de millones)
+        // envuelva en vez de desbordar.
+        className="break-words font-mono text-[20px] font-semibold leading-tight tracking-[-0.02em] tabular-nums lg:text-[18px]"
         style={{
           color: danger ? "hsl(var(--destructive))" : "hsl(var(--foreground))",
         }}

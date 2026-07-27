@@ -89,9 +89,15 @@ export default function Cuentas() {
 
   // Dos juegos de filtros: las vistas no son simétricas (cliente_nombre/sede_id
   // contra proveedor/sede_destino_id), y así cada pestaña recuerda lo suyo.
-  const fCobrar = useFiltros({
-    clave: "cuentas-cobrar",
-    campos: [
+  //
+  // `campos` DEBE ir memoizado. useFiltros deriva de él `visibles` -> `aplicar`
+  // -> y la pantalla mete `f.aplicar` en las dependencias de `cargar`. Con un
+  // array literal nuevo en cada render, `aplicar` cambia de referencia siempre,
+  // `cargar` también, y el useEffect([cargar]) se dispara en bucle infinito:
+  // la carga nunca se asienta y la pantalla queda congelada en "…". Es la misma
+  // trampa que ya advierten CotizacionHistorial y DevolucionHistorial.
+  const camposCobrar = useMemo(
+    () => [
       {
         id: "q",
         tipo: "texto",
@@ -114,11 +120,12 @@ export default function Cuentas() {
         opciones: SEDES_OPCIONES,
       },
     ],
-  });
+    [],
+  );
+  const fCobrar = useFiltros({ clave: "cuentas-cobrar", campos: camposCobrar });
 
-  const fPagar = useFiltros({
-    clave: "cuentas-pagar",
-    campos: [
+  const camposPagar = useMemo(
+    () => [
       {
         id: "q",
         tipo: "texto",
@@ -141,7 +148,9 @@ export default function Cuentas() {
         opciones: SEDES_OPCIONES,
       },
     ],
-  });
+    [],
+  );
+  const fPagar = useFiltros({ clave: "cuentas-pagar", campos: camposPagar });
 
   const f = esCobrar ? fCobrar : fPagar;
   const fOtra = esCobrar ? fPagar : fCobrar;
