@@ -95,9 +95,14 @@ export default function Alertas() {
   const [stockLoading, setStockLoading] = useState(true);
   const { sedes } = useSedes();
 
-  const fStock = useFiltros({
-    clave: "alertas-stock",
-    campos: [
+  // `campos` DEBE ir memoizado. Con un array literal nuevo en cada render,
+  // useFiltros deriva de él valores inestables y cualquier efecto que dependa
+  // de f.valoresAplicados / f.aplicar se dispararía en bucle (fue justo lo que
+  // congeló Cuentas). Aquí hoy no loopea porque no hay campo de texto, pero
+  // memoizar lo blinda para el día que se agregue uno. Depende de `sedes`
+  // porque las opciones de sede salen de ahí.
+  const camposStock = useMemo(
+    () => [
       {
         id: "sede",
         tipo: "opciones",
@@ -122,7 +127,9 @@ export default function Alertas() {
         porDefecto: "AB",
       },
     ],
-  });
+    [sedes],
+  );
+  const fStock = useFiltros({ clave: "alertas-stock", campos: camposStock });
 
   useEffect(() => {
     mountedRef.current = true;
