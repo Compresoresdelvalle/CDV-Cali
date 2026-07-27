@@ -168,9 +168,21 @@ export default function DevolucionHistorial() {
       const totalReal = count ?? 0;
       setTotal(totalReal);
       setHasMore((currentPage + 1) * PAGE_SIZE < totalReal);
-    } catch {
-      if (f.esReqVigente(myReq))
-        setErrorMsg("No se pudieron cargar las devoluciones. Reintenta.");
+    } catch (e) {
+      if (f.esReqVigente(myReq)) {
+        // Se SURFACEA la causa real (código/mensaje de PostgREST o de red). Antes
+        // el aviso era genérico y la consola quedaba muda, así que un fallo real
+        // (400 de PostgREST, 401, "Failed to fetch"...) no dejaba rastro para
+        // diagnosticar. Ahora el operario ve el porqué y queda en consola.
+        const detalle = [e?.code, e?.message].filter(Boolean).join(" · ");
+        // eslint-disable-next-line no-console
+        console.error("[devoluciones] no cargó:", e);
+        setErrorMsg(
+          detalle
+            ? `No se pudieron cargar las devoluciones. (${detalle})`
+            : "No se pudieron cargar las devoluciones.",
+        );
+      }
     } finally {
       if (f.esReqVigente(myReq)) setLoading(false);
     }
@@ -300,14 +312,27 @@ export default function DevolucionHistorial() {
         {errorMsg && (
           <div
             role="alert"
-            className="mb-3 rounded-[10px] border px-4 py-3 text-sm"
+            className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border px-4 py-3 text-sm"
             style={{
               backgroundColor: "var(--dang-50)",
               borderColor: "var(--dang-border)",
               color: "var(--dang-700)",
             }}
           >
-            {errorMsg}
+            <span className="min-w-0">{errorMsg}</span>
+            {/* Botón de verdad: antes el texto decía "Reintenta" pero no había
+                forma de reintentar sin recargar toda la página. */}
+            <button
+              onClick={() => cargarDevoluciones(true)}
+              disabled={loading}
+              className="shrink-0 rounded-[8px] border px-3 py-1.5 text-[13px] font-semibold disabled:opacity-50"
+              style={{
+                borderColor: "var(--dang-border)",
+                color: "var(--dang-700)",
+              }}
+            >
+              {loading ? "Reintentando…" : "Reintentar"}
+            </button>
           </div>
         )}
 
