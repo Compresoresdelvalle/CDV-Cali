@@ -64,8 +64,8 @@ export default function DevolucionHistorial() {
         id: "q",
         tipo: "texto",
         label: "Buscar",
-        // Sin `columnas`: el texto se aplica a mano (ver `aplicarTexto`), porque
-        // nombre y referencia del producto viven en otra tabla y hay que
+        // Sin `columnas`: el texto se aplica a mano dentro de `cargarDevoluciones`,
+        // porque nombre y referencia del producto viven en otra tabla y hay que
         // resolverlos a `producto_id` antes de poder cruzarlos con `motivo`.
         debounce: 400,
       },
@@ -105,47 +105,52 @@ export default function DevolucionHistorial() {
     return ids;
   };
 
-  /**
-   * Búsqueda SERVER-SIDE. Antes filtraba en memoria sobre la página cargada, así
-   * que el operario veía "sin resultados" sobre devoluciones que sí existían.
-   *
-   * `numero` es integer: un ilike contra él revienta en Postgres, así que un
-   * término numérico puro busca ESA devolución. Para el resto, cada palabra debe
-   * aparecer en el motivo, en las observaciones o en el producto.
-   */
-  const aplicarTexto = async (query, raw) => {
-    if (!raw) return query;
-    const n = esNumeroPuro(raw);
-    if (n != null) return query.eq("numero", n);
-    const ids = await buscarProductoIds(raw);
-    let q = query;
-    for (const term of keywordTerms(raw)) {
-      const ors = [`motivo.ilike.%${term}%`, `observaciones.ilike.%${term}%`];
-      // Sin empates no se agrega la cláusula: `in.()` vacío es sintaxis inválida.
-      if (ids.length) ors.push(`producto_id.in.(${ids.join(",")})`);
-      q = q.or(ors.join(","));
-    }
-    return q;
-  };
-
-  /** Tipo + recorte por sede de los no-Admin + filtros de la barra. */
-  const aplicarBase = async (query) => {
-    let out = query.eq("reingresa_stock", reingresa);
-    if (!esAdmin) out = out.eq("sede_id", perfil?.sede_id);
-    out = f.aplicar(out);
-    return aplicarTexto(out, texto);
-  };
-
   const cargarDevoluciones = async (reset = false) => {
     const myReq = f.nuevoReqId();
     setLoading(true);
     setErrorMsg(null);
     const currentPage = reset ? 0 : page;
     try {
-      let query = supabase.from("devoluciones").select(COLS, {
-        count: "exact",
-      });
-      query = await aplicarBase(query);
+      // El ÚNICO paso async al armar la consulta es resolver el texto de
+      // búsqueda por nombre/referencia a ids de producto. Se hace ANTES de tocar
+      // el query builder: NUNCA se debe `await` un builder a medio armar, porque
+      // el builder de supabase-js es "thenable" y el `await` lo EJECUTA — devuelve
+      // {data,error,count} en vez del builder, y el siguiente `.order()` revienta
+      // con "order is not a function". Ese era el bug de "no cargan las
+      // devoluciones". `numero` es integer: un término numérico puro busca ESA
+      // devolución (un ilike contra integer revienta en Postgres).
+      const n = texto ? esNumeroPuro(texto) : null;
+      const productoIds =
+        texto && n == null ? await buscarProductoIds(texto) : null;
+
+      let query = supabase
+        .from("devoluciones")
+        .select(COLS, { count: "exact" })
+        .eq("reingresa_stock", reingresa);
+      // Los no-Admin quedan atados a su sede (la RLS igual lo fuerza).
+      if (!esAdmin) query = query.eq("sede_id", perfil?.sede_id);
+      // Filtros de la barra (fecha, sede si es Admin).
+      query = f.aplicar(query);
+
+      // Texto a mano: nombre y referencia del producto viven en otra tabla y hay
+      // que resolverlos a `producto_id` antes de cruzarlos con motivo/observaciones.
+      if (texto) {
+        if (n != null) {
+          query = query.eq("numero", n);
+        } else {
+          for (const term of keywordTerms(texto)) {
+            const ors = [
+              `motivo.ilike.%${term}%`,
+              `observaciones.ilike.%${term}%`,
+            ];
+            // Sin empates no se agrega: `in.()` vacío es sintaxis inválida.
+            if (productoIds?.length)
+              ors.push(`producto_id.in.(${productoIds.join(",")})`);
+            query = query.or(ors.join(","));
+          }
+        }
+      }
+
       query = query
         // Desempate obligatorio: sin él, el "Cargar más" puede repetir o
         // saltar devoluciones que comparten la misma fecha.
