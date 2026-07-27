@@ -34,6 +34,7 @@ import GarantiaVentaDetalle from "./pages/ops/Garantias/GarantiaVentaDetalle";
 import NotasCredito from "./pages/admin/NotasCredito";
 import DevolucionHistorial from "./pages/ops/DevolucionHistorial";
 import DevolucionNueva from "./pages/ops/DevolucionNueva";
+import DevolucionDetalle from "./pages/ops/DevolucionDetalle";
 import TraspasoHistorial from "./pages/ops/TraspasoHistorial";
 import TraspasoNuevo from "./pages/ops/TraspasoNuevo";
 import TraspasoDetalle from "./pages/ops/TraspasoDetalle";
@@ -381,6 +382,14 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin", "Bodeguero"]}>
                 <DevolucionNueva />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="devoluciones/:id"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <DevolucionDetalle />
               </RoleGuard>
             }
           />

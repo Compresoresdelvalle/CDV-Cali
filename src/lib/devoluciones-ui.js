@@ -46,6 +46,8 @@ export function devolucionEstadoClass(estado) {
   switch (estado) {
     case "procesada":
       return "s-pill s-comp";
+    case "anulada":
+      return "s-pill s-rec";
     case "rechazada":
       return "s-pill s-rec";
     case "aprobada":
@@ -72,6 +74,8 @@ export function devolucionEstadoLabel(estado) {
       return "Rechazada";
     case "procesada":
       return "Procesada";
+    case "anulada":
+      return "Anulada";
     default:
       return estado ?? "—";
   }
