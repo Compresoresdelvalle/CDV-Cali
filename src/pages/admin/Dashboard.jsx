@@ -1274,7 +1274,13 @@ function Kpi({ label, value, sub, last, danger, hint }) {
       style={last ? undefined : { borderColor: "hsl(var(--border))" }}
     >
       <div
-        className="font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
+        // `min-h` de 2 líneas: los títulos tienen largos distintos ("Ventas · hoy"
+        // vs "Margen bruto del mes"), unos caben en un renglón y otros en dos. Sin
+        // una altura común, el valor de cada KPI arrancaba a distinta altura y la
+        // tira se veía despareja. Reservando 2 líneas para TODOS, los valores
+        // quedan alineados. En lg se reduce el interletrado para que los títulos
+        // largos quepan mejor.
+        className="min-h-[2.6em] font-mono text-[10.5px] font-medium uppercase leading-[1.3] tracking-[0.08em] lg:tracking-[0.03em]"
         style={{
           color: danger
             ? "hsl(var(--destructive))"
@@ -1285,7 +1291,9 @@ function Kpi({ label, value, sub, last, danger, hint }) {
         title={hint || undefined}
       >
         {label}
-        {hint && <span aria-hidden="true"> ⓘ</span>}
+        {/* ` ` (espacio duro) pega el ⓘ a la última palabra: si no, el
+            ícono se iba solo a un segundo renglón y se veía descolgado. */}
+        {hint && <span aria-hidden="true">{" "}ⓘ</span>}
       </div>
       <div
         // Tamaño responsivo: en la tira de 6 columnas (lg) cada KPI tiene poco
