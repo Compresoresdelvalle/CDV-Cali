@@ -1268,7 +1268,7 @@ function Kpi({ label, value, sub, last, danger, hint }) {
       // su contenido (min-width:auto), así que un valor grande como
       // "$ 443.189.627" ensanchaba su columna y desbordaba/pisaba las vecinas
       // (los KPIs se veían superpuestos sobre las líneas divisorias).
-      className={`flex min-w-0 flex-col gap-1.5 pr-5 md:pl-5 md:first:pl-0 ${
+      className={`flex min-w-0 flex-col gap-1.5 pr-5 md:pl-5 md:first:pl-0 lg:pr-3.5 lg:pl-3.5 lg:first:pl-0 ${
         last ? "" : "md:border-r md:border-dashed"
       }`}
       style={last ? undefined : { borderColor: "hsl(var(--border))" }}
@@ -1289,10 +1289,11 @@ function Kpi({ label, value, sub, last, danger, hint }) {
       </div>
       <div
         // Tamaño responsivo: en la tira de 6 columnas (lg) cada KPI tiene poco
-        // ancho, y montos de cientos de millones a 22px no caben. Baja a 18px
-        // ahí. `break-words` deja que un valor extremo (miles de millones)
-        // envuelva en vez de desbordar.
-        className="break-words font-mono text-[20px] font-semibold leading-tight tracking-[-0.02em] tabular-nums lg:text-[18px]"
+        // ancho, y montos de cientos de millones a 20px partían a dos líneas y
+        // se veían feos. En lg baja a 15px y `whitespace-nowrap` fuerza una sola
+        // línea; con el `min-w-0` + padding reducido del contenedor, hasta el
+        // mayor ("$ 443.172.967") entra completo sin desbordar.
+        className="whitespace-nowrap font-mono text-[20px] font-semibold leading-tight tracking-[-0.02em] tabular-nums md:text-[18px] lg:text-[15px]"
         style={{
           color: danger ? "hsl(var(--destructive))" : "hsl(var(--foreground))",
         }}
