@@ -16,6 +16,7 @@ import { avisarOk, avisarError } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import QRScanner from "../../components/forms/QRScanner";
+import NumeroInput from "../../components/forms/NumeroInput";
 
 const IVA_DEFAULT = 19;
 const IVA_PRESETS = [0, 19];
@@ -657,15 +658,11 @@ export default function CompraNueva() {
                                 >
                                   −
                                 </QtyBtn>
-                                <input
-                                  type="number"
-                                  min="1"
+                                <NumeroInput
+                                  min={1}
                                   value={item.cantidad}
-                                  onChange={(e) =>
-                                    setCantidadDirecta(
-                                      item.producto_id,
-                                      e.target.value,
-                                    )
+                                  onChange={(n) =>
+                                    setCantidadDirecta(item.producto_id, n)
                                   }
                                   className="w-12 rounded-lg border py-1 text-center font-mono text-sm font-semibold outline-none"
                                   style={{
@@ -684,16 +681,12 @@ export default function CompraNueva() {
                               </div>
                             </td>
                             <td className="text-right">
-                              <input
-                                type="number"
-                                min="0"
+                              <NumeroInput
+                                min={0}
                                 step="100"
                                 value={item.costo_unitario}
-                                onChange={(e) =>
-                                  setCostoDirecto(
-                                    item.producto_id,
-                                    e.target.value,
-                                  )
+                                onChange={(n) =>
+                                  setCostoDirecto(item.producto_id, n)
                                 }
                                 className="w-32 rounded-lg border px-3 py-1.5 text-right font-mono text-sm outline-none"
                                 style={{
@@ -782,15 +775,11 @@ export default function CompraNueva() {
                             >
                               −
                             </QtyBtn>
-                            <input
-                              type="number"
-                              min="1"
+                            <NumeroInput
+                              min={1}
                               value={item.cantidad}
-                              onChange={(e) =>
-                                setCantidadDirecta(
-                                  item.producto_id,
-                                  e.target.value,
-                                )
+                              onChange={(n) =>
+                                setCantidadDirecta(item.producto_id, n)
                               }
                               className="w-14 rounded-lg border py-1.5 text-center font-mono text-sm font-semibold outline-none"
                               style={{
@@ -814,16 +803,12 @@ export default function CompraNueva() {
                             >
                               $
                             </span>
-                            <input
-                              type="number"
-                              min="0"
+                            <NumeroInput
+                              min={0}
                               step="100"
                               value={item.costo_unitario}
-                              onChange={(e) =>
-                                setCostoDirecto(
-                                  item.producto_id,
-                                  e.target.value,
-                                )
+                              onChange={(n) =>
+                                setCostoDirecto(item.producto_id, n)
                               }
                               className="w-28 rounded-lg border px-2 py-1.5 font-mono text-sm outline-none"
                               style={{
@@ -978,14 +963,11 @@ export default function CompraNueva() {
                 <label className="text-sm" style={{ color: "var(--n-500)" }}>
                   Descuento $
                 </label>
-                <input
-                  type="number"
-                  min="0"
+                <NumeroInput
+                  min={0}
                   step="1000"
                   value={descuentoValor}
-                  onChange={(e) =>
-                    setDescuentoValor(Math.max(0, Number(e.target.value) || 0))
-                  }
+                  onChange={(n) => setDescuentoValor(Math.max(0, n))}
                   className="finput"
                   style={{ width: 140, textAlign: "center" }}
                   aria-label="Descuento en pesos"

@@ -16,6 +16,7 @@ import { sedeLabel } from "../../lib/traspasos-ui";
 import { useSedes } from "../../hooks/useSedes";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import QRScanner from "../../components/forms/QRScanner";
+import NumeroInput from "../../components/forms/NumeroInput";
 
 const TIPOS = [
   { v: "normal", label: "Normal" },
@@ -779,12 +780,11 @@ function CantidadCtrl({ item, max, onChange }) {
       >
         −
       </QtyBtn>
-      <input
-        type="number"
+      <NumeroInput
         min={1}
         max={max}
         value={item.cantidad_solicitada}
-        onChange={(e) => onChange(item.producto_id, e.target.value)}
+        onChange={(n) => onChange(item.producto_id, n)}
         className="w-14 rounded-lg border py-1.5 text-center font-mono text-sm font-semibold outline-none"
         style={{
           borderColor: "var(--n-150)",
