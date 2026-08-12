@@ -304,7 +304,10 @@ const ESTADO_TONO = {
   abierta: "info",
   diagnostico: "info",
   cotizada: "primary",
-  autorizada: "primary",
+  // 'autorizada' es el NOMBRE del paso de autorización, no significa que el
+  // cliente ya autorizó. Por defecto se muestra como "pendiente" (ámbar); la
+  // etiqueta precisa por OT la da estadoEstiloOT() según estado_autorizacion.
+  autorizada: "warning",
   en_proceso: "warning",
   esperando_repuesto: "warning",
   completada: "success",
@@ -319,7 +322,11 @@ export const ESTADO_LABEL = {
   abierta: "Recepción",
   diagnostico: "Diagnóstico",
   cotizada: "Cotizada",
-  autorizada: "Autorizada",
+  // Ver nota en ESTADO_TONO: cotizar NO es autorizar. El cliente reportó que
+  // "al cotizar queda como Autorizada" y confundía. La etiqueta por defecto es
+  // "Pendiente por autorizar"; solo cuando estado_autorizacion='autorizado'
+  // (vía estadoEstiloOT) se muestra "Autorizada".
+  autorizada: "Pendiente por autorizar",
   en_proceso: "En proceso",
   esperando_repuesto: "Esperando repuesto",
   completada: "Lista p/ recoger",
@@ -338,6 +345,38 @@ export function estadoEstilo(estado) {
     border: `hsl(var(--${t}) / 0.3)`,
     dot: `hsl(var(--${t}))`,
     label: ESTADO_LABEL[estado] || estado || "—",
+  };
+}
+
+/**
+ * Píldora de estado PRECISA para una OT concreta. Igual que `estadoEstilo`,
+ * salvo el paso de autorización: `estado='autorizada'` es solo el nombre del
+ * paso, no significa que el cliente autorizó. La etiqueta real depende de
+ * `estado_autorizacion`:
+ *   - 'autorizado'    → "Autorizada" (azul)
+ *   - 'no_autorizado' → "No autorizada" (rojo)
+ *   - otro/pendiente  → "Pendiente por autorizar" (ámbar)
+ * Para el resto de estados se comporta idéntico a `estadoEstilo`.
+ */
+export function estadoEstiloOT(orden) {
+  const estado = orden?.estado;
+  if (estado !== "autorizada") return estadoEstilo(estado);
+  const ea = orden?.estado_autorizacion;
+  let t = "warning";
+  let label = "Pendiente por autorizar";
+  if (ea === "autorizado") {
+    t = "primary";
+    label = "Autorizada";
+  } else if (ea === "no_autorizado") {
+    t = "destructive";
+    label = "No autorizada";
+  }
+  return {
+    bg: `hsl(var(--${t}) / 0.12)`,
+    fg: `hsl(var(--${t}))`,
+    border: `hsl(var(--${t}) / 0.3)`,
+    dot: `hsl(var(--${t}))`,
+    label,
   };
 }
 

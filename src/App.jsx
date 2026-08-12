@@ -35,6 +35,7 @@ import NotasCredito from "./pages/admin/NotasCredito";
 import DevolucionHistorial from "./pages/ops/DevolucionHistorial";
 import DevolucionNueva from "./pages/ops/DevolucionNueva";
 import DevolucionDetalle from "./pages/ops/DevolucionDetalle";
+import CierreOps from "./pages/ops/CierreOps";
 import TraspasoHistorial from "./pages/ops/TraspasoHistorial";
 import TraspasoNuevo from "./pages/ops/TraspasoNuevo";
 import TraspasoDetalle from "./pages/ops/TraspasoDetalle";
@@ -435,12 +436,13 @@ export default function App() {
               </RoleGuard>
             }
           />
-          {/* Cierre solo-lectura para Bodega/caja (Admin lo genera en /admin/cierres). */}
+          {/* Cierre solo-lectura: Vendedor ve SOLO su sede (vista enfocada);
+              Bodega ve el detalle completo. Admin lo genera en /admin/cierres. */}
           <Route
             path="cierre"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
-                <Cierres />
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
+                <CierreOps />
               </RoleGuard>
             }
           />

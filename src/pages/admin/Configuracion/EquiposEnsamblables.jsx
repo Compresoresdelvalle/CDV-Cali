@@ -33,6 +33,11 @@ export default function EquiposEnsamblables() {
   const [editando, setEditando] = useState(null); // solo EDITAR un ensamblable existente
   const [nuevoOpen, setNuevoOpen] = useState(false); // modal "Nuevo equipo"
   const [saving, setSaving] = useState(false);
+  // Buscador + filtro: con muchos ensamblables la lista completa es inmanejable.
+  // Se filtra en memoria sobre lo ya cargado (son pocos cientos, no vale la pena
+  // server-side) por nombre/referencia y por estado activo/inactivo.
+  const [q, setQ] = useState("");
+  const [filtro, setFiltro] = useState("todos"); // 'todos' | 'activos' | 'inactivos'
   const mountedRef = useRef(true);
   const savingRef = useRef(false);
   const { confirm, ConfirmDialog } = useConfirm();
@@ -150,6 +155,17 @@ export default function EquiposEnsamblables() {
 
   const activos = equipos.filter((e) => e.activo).length;
 
+  // Lista visible = búsqueda (nombre/referencia, sin mayúsculas) + filtro de
+  // estado. `equipos` se conserva intacto para los conteos totales.
+  const norm = (s) => (s ?? "").toString().toLowerCase();
+  const qn = norm(q).trim();
+  const equiposFiltrados = equipos.filter((e) => {
+    if (filtro === "activos" && !e.activo) return false;
+    if (filtro === "inactivos" && e.activo) return false;
+    if (!qn) return true;
+    return norm(e.nombre).includes(qn) || norm(e.referencia).includes(qn);
+  });
+
   return (
     <div className="flex flex-col gap-4">
       {errorMsg && <Banner type="destructive">{errorMsg}</Banner>}
@@ -168,7 +184,11 @@ export default function EquiposEnsamblables() {
           className="text-xs"
           style={{ color: "hsl(var(--muted-foreground))" }}
         >
-          {loading ? "Cargando…" : `${equipos.length} equipos`}
+          {loading
+            ? "Cargando…"
+            : qn || filtro !== "todos"
+              ? `${equiposFiltrados.length} de ${equipos.length} equipos`
+              : `${equipos.length} equipos`}
         </p>
         <button
           onClick={() => setNuevoOpen(true)}
@@ -182,6 +202,71 @@ export default function EquiposEnsamblables() {
           Nuevo equipo
         </button>
       </div>
+
+      {/* ── Buscador + filtro de estado ─────────────────────────────── */}
+      {!loading && equipos.length > 0 && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div
+            className="flex h-11 flex-1 items-center gap-2.5 rounded-lg border px-3"
+            style={{
+              borderColor: "hsl(var(--border))",
+              backgroundColor: "hsl(var(--background))",
+            }}
+          >
+            <Search
+              className="h-4 w-4 shrink-0"
+              strokeWidth={1.6}
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            />
+            <input
+              type="text"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar por nombre o referencia…"
+              className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
+              style={{ color: "hsl(var(--foreground))" }}
+            />
+            {q && (
+              <button
+                onClick={() => setQ("")}
+                aria-label="Limpiar búsqueda"
+                className="shrink-0 text-lg leading-none cursor-pointer"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <div className="flex gap-1.5">
+            {[
+              { v: "todos", t: "Todos" },
+              { v: "activos", t: "Activos" },
+              { v: "inactivos", t: "Inactivos" },
+            ].map((f) => {
+              const on = filtro === f.v;
+              return (
+                <button
+                  key={f.v}
+                  type="button"
+                  onClick={() => setFiltro(f.v)}
+                  className="h-11 rounded-lg border px-3 text-[12.5px] font-medium cursor-pointer transition-colors"
+                  style={{
+                    borderColor: on
+                      ? "hsl(var(--primary))"
+                      : "hsl(var(--border))",
+                    backgroundColor: on ? "hsl(var(--primary))" : "transparent",
+                    color: on
+                      ? "hsl(var(--primary-foreground))"
+                      : "hsl(var(--foreground))",
+                  }}
+                >
+                  {f.t}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-2">
@@ -198,6 +283,11 @@ export default function EquiposEnsamblables() {
         </div>
       ) : equipos.length === 0 ? (
         <Empty icon="📦">Sin equipos ensamblables. Agrega el primero.</Empty>
+      ) : equiposFiltrados.length === 0 ? (
+        <Empty icon="🔎">
+          Sin resultados para{qn ? ` "${q.trim()}"` : " el filtro"}. Prueba con
+          otro texto o cambia el filtro.
+        </Empty>
       ) : (
         <section
           className="overflow-hidden rounded-[10px] border"
@@ -229,7 +319,7 @@ export default function EquiposEnsamblables() {
                 </tr>
               </thead>
               <tbody>
-                {equipos.map((e) => (
+                {equiposFiltrados.map((e) => (
                   <tr
                     key={e.id}
                     className="border-t align-middle"
@@ -286,7 +376,7 @@ export default function EquiposEnsamblables() {
 
           {/* Mobile cards */}
           <ul className="divide-y md:hidden" role="list">
-            {equipos.map((e) => (
+            {equiposFiltrados.map((e) => (
               <li
                 key={e.id}
                 className="px-4 py-3.5"

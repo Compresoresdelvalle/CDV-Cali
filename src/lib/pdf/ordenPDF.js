@@ -119,9 +119,19 @@ export function generarOrdenPDF({
   doc.text(`Fecha: ${fecha}`, LAYOUT.pageWidth - LAYOUT.margenDer, y + 5, {
     align: "right",
   });
+  // 'autorizada' es solo el nombre del paso de autorización: la etiqueta real
+  // depende de estado_autorizacion (cotizar no es autorizar). Igual que
+  // estadoEstiloOT en la app.
+  const estadoLabel =
+    orden.estado === "autorizada"
+      ? orden.estado_autorizacion === "autorizado"
+        ? "Autorizada"
+        : orden.estado_autorizacion === "no_autorizado"
+          ? "No autorizada"
+          : "Pendiente por autorizar"
+      : (ESTADO_LABEL[orden.estado] ?? orden.estado ?? "—");
   doc.text(
-    `Estado: ${ESTADO_LABEL[orden.estado] ?? orden.estado ?? "—"}` +
-      (esGarantia ? "  ·  GARANTÍA" : ""),
+    `Estado: ${estadoLabel}` + (esGarantia ? "  ·  GARANTÍA" : ""),
     LAYOUT.pageWidth - LAYOUT.margenDer,
     y + 10,
     { align: "right" },
@@ -469,6 +479,34 @@ export function generarOrdenPDF({
       y += 6;
     }
     y += 4;
+  }
+
+  // ── Nota de responsabilidad (30 días) ────────────────────────────────
+  // Aviso obligatorio en TODA OT (recepción y documento final): el equipo
+  // dejado más de 30 días deja de ser responsabilidad del taller. Pedido de la
+  // clienta; antes no se imprimía en ninguna orden. Recuadro rojo destacado.
+  {
+    const ROJO = [185, 28, 28]; // #B91C1C
+    const ROJO_FONDO = [254, 242, 242]; // #FEF2F2
+    const notaTxt =
+      "NOTA: Pasados 30 días, no se responde por el equipo dejado en nuestras instalaciones, sin excepción alguna.";
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    const notaLines = doc.splitTextToSize(notaTxt, LAYOUT.contentWidth - 8);
+    const boxH = notaLines.length * 4.3 + 6;
+    if (y > LAYOUT.pageHeight - (boxH + 34)) {
+      doc.addPage();
+      y = LAYOUT.margenSup;
+    }
+    doc.setFillColor(...ROJO_FONDO);
+    doc.setDrawColor(...ROJO);
+    doc.setLineWidth(0.4);
+    doc.rect(LAYOUT.margenIzq, y, LAYOUT.contentWidth, boxH, "FD");
+    doc.setTextColor(...ROJO);
+    doc.text(notaLines, LAYOUT.pageWidth / 2, y + 5, { align: "center" });
+    y += boxH + 4;
+    doc.setTextColor(...COLORES.textoOscuro);
+    doc.setLineWidth(0.3);
   }
 
   // ── Firmas ───────────────────────────────────────────────────────────
