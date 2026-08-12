@@ -660,6 +660,7 @@ export default function CompraNueva() {
                                 </QtyBtn>
                                 <NumeroInput
                                   min={1}
+                                  max={100000}
                                   value={item.cantidad}
                                   onChange={(n) =>
                                     setCantidadDirecta(item.producto_id, n)
@@ -683,6 +684,7 @@ export default function CompraNueva() {
                             <td className="text-right">
                               <NumeroInput
                                 min={0}
+                                max={99999999}
                                 step="100"
                                 value={item.costo_unitario}
                                 onChange={(n) =>
@@ -777,6 +779,7 @@ export default function CompraNueva() {
                             </QtyBtn>
                             <NumeroInput
                               min={1}
+                              max={100000}
                               value={item.cantidad}
                               onChange={(n) =>
                                 setCantidadDirecta(item.producto_id, n)
@@ -805,6 +808,7 @@ export default function CompraNueva() {
                             </span>
                             <NumeroInput
                               min={0}
+                              max={99999999}
                               step="100"
                               value={item.costo_unitario}
                               onChange={(n) =>

@@ -22,6 +22,9 @@ begin
   -- Vendedor: solo su sede, sin importar lo que pida el parámetro.
   if v_rol = 'Vendedor' then
     p_sede := get_my_sede_id();
+    if p_sede is null then
+      raise exception 'Tu usuario no tiene una sede asignada. Contacta al administrador.';
+    end if;
   end if;
   if p_desde is null or p_hasta is null then
     raise exception 'Debe indicar fecha desde y hasta';

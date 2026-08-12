@@ -8,7 +8,7 @@ import {
   Info,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import { formatCOP, safeError } from "../../lib/utils";
 import { useAuthStore } from "../../stores/authStore";
 import { PRESETS_FECHA } from "../../lib/filtros";
 import { SEDE_LABEL } from "../../lib/ot-flujo";
@@ -32,6 +32,15 @@ const METODO_LABEL = {
   transferencia: "Transferencia",
   tarjeta: "Tarjeta",
   otro: "Otro",
+};
+
+// `egresos_detalle[].fecha` viene SOLO-FECHA ('YYYY-MM-DD'). No usar formatDate
+// (hace `new Date(...)`, que la interpreta como medianoche UTC y en Bogotá la
+// corre un día atrás con una hora falsa). Se parte el string a mano.
+const fmtFecha = (s) => {
+  if (!s) return "—";
+  const [y, m, d] = String(s).slice(0, 10).split("-");
+  return y && m && d ? `${d}/${m}/${y}` : String(s);
 };
 
 export default function CierreCajaVendedor() {
@@ -265,7 +274,7 @@ export default function CierreCajaVendedor() {
                   cols={["Fecha", "Proveedor / concepto", "Método", "Total"]}
                   right={[false, false, false, true]}
                   filas={egresos.map((e) => [
-                    formatDate(e.fecha),
+                    fmtFecha(e.fecha),
                     e.proveedor || e.concepto || "—",
                     (METODO_LABEL[e.metodo] ?? e.metodo ?? "—") +
                       (e.es_caja_menor ? " · caja menor" : ""),
