@@ -20,6 +20,7 @@ import BarraFiltros from "../../components/filtros/BarraFiltros";
 import PageHeader from "../../components/layout/PageHeader";
 import {
   estadoEstilo,
+  estadoEstiloOT,
   ESTADO_LABEL,
   pasoActual,
   otCerrada,
@@ -375,8 +376,11 @@ function ViewToggle({ view, setView }) {
 
 /* ─────────────────────────── Píldora de estado ────────────────────────── */
 
-function EstadoPill({ estado }) {
-  const s = estadoEstilo(estado);
+function EstadoPill({ estado, orden }) {
+  // Con la orden completa se usa la etiqueta PRECISA (distingue "Pendiente por
+  // autorizar" de "Autorizada" según estado_autorizacion). Sin ella (encabezados
+  // de grupo) cae al genérico por estado.
+  const s = orden ? estadoEstiloOT(orden) : estadoEstilo(estado);
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold"
@@ -542,7 +546,7 @@ function OrdenFila({ orden: o, onClick }) {
         </div>
       </Td>
       <Td>
-        <EstadoPill estado={o.estado} />
+        <EstadoPill orden={o} />
       </Td>
       <Td>
         {o._propia ? (
@@ -614,7 +618,7 @@ function OrdenCard({ orden: o, onClick }) {
               {o.numero}
             </span>
             {o._vencida && <VencidaBadge />}
-            <EstadoPill estado={o.estado} />
+            <EstadoPill orden={o} />
           </div>
           <p
             className="truncate text-sm font-medium leading-tight"

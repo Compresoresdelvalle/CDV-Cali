@@ -48,7 +48,7 @@ import {
   calcularMontos,
   gateCumplido,
   mensajeGate,
-  estadoEstilo,
+  estadoEstiloOT,
   SEDE_LABEL,
   METODO_PAGO,
   puedeManipular,
@@ -389,7 +389,7 @@ export default function OrdenDetalle() {
     );
   }
 
-  const est = estadoEstilo(orden.estado);
+  const est = estadoEstiloOT(orden);
 
   /* ── Imprimir constancia de recepción ───────────────────────────────── */
   // Checklist real de recepción (qué trajo el equipo) para la constancia.

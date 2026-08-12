@@ -108,6 +108,7 @@ export const ROLE_MODULES = {
     "Herramientas",
     "Productos",
     "Clientes",
+    "Cierre",
   ],
   Tecnico: ["Órdenes", "Ensambles", "Herramientas"],
 };
