@@ -75,7 +75,10 @@ export default function DevolucionDetalle() {
   const esCambio = (dev?.motivo ?? "")
     .toLowerCase()
     .startsWith("cambio desde venta");
-  const anulable = esAdmin && dev?.estado === "procesada";
+  // No se ofrece "Anular" en devoluciones de un cambio: el backend las rechaza
+  // (se revierten anulando la venta del cambio) y el banner ya lo explica.
+  // Mostrar el botón sería ofrecer una acción que va a fallar.
+  const anulable = esAdmin && dev?.estado === "procesada" && !esCambio;
 
   const anular = async () => {
     const ok = await confirm({
