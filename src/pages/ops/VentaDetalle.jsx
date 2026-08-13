@@ -27,6 +27,10 @@ import {
   construirHistorialVenta,
 } from "../../lib/ventas-ui";
 
+// Referencia estable para "sin abonos": permite que setCredito con este mismo
+// objeto haga bail-out en React (Object.is) y no regenere el recibo en balde.
+const CREDITO_VACIO = { abonosCotiz: 0, cobros: [] };
+
 export default function VentaDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -48,7 +52,7 @@ export default function VentaDetalle() {
   const [imprimiendo, setImprimiendo] = useState(false);
   const [reciboUrl, setReciboUrl] = useState(null);
   // B10: saldo de una venta a crédito (abonos de cotización + cobros directos).
-  const [credito, setCredito] = useState({ abonosCotiz: 0, cobros: [] });
+  const [credito, setCredito] = useState(CREDITO_VACIO);
 
   // #17: un ÚNICO documento PDF (ventaPOS) alimenta el preview Y la impresión,
   // así lo que se ve en pantalla es exactamente lo que se imprime.
@@ -59,8 +63,9 @@ export default function VentaDetalle() {
       items,
       pagos,
       vendedor: venta.vendedor?.nombre ?? "—",
+      credito,
     });
-  }, [venta, items, pagos]);
+  }, [venta, items, pagos, credito]);
 
   // URL del blob para el <iframe> de preview (se libera al cambiar/desmontar).
   useEffect(() => {
@@ -179,7 +184,13 @@ export default function VentaDetalle() {
       const abonosCotiz = (cots ?? [])
         .flatMap((c) => c.abonos_cotizacion ?? [])
         .reduce((s, a) => s + Number(a.monto ?? 0), 0);
-      setCredito({ abonosCotiz, cobros: cobros ?? [] });
+      const listaCobros = cobros ?? [];
+      // Sin abonos → referencia estable (no dispara regeneración del recibo).
+      setCredito(
+        abonosCotiz > 0 || listaCobros.length > 0
+          ? { abonosCotiz, cobros: listaCobros }
+          : CREDITO_VACIO,
+      );
     };
     cargarCredito();
   }, [id]);
