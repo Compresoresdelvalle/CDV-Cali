@@ -308,7 +308,9 @@ export default function DevolucionNueva() {
     pasoProducto &&
     cantidad >= 1 &&
     !guardando &&
-    (tipo === "proveedor" || !!ventaSeleccionada);
+    (tipo === "proveedor" || !!ventaSeleccionada) &&
+    // Si el reembolso está activo, exige un monto > 0.
+    !(tipo === "cliente" && hayReembolso && Number(montoReembolso) <= 0);
 
   return (
     <div className="flex h-full flex-col animate-fade-in">

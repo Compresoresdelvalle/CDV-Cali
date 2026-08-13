@@ -87,31 +87,32 @@ export default function DevolucionDetalle() {
   const esCambio = (dev?.motivo ?? "")
     .toLowerCase()
     .startsWith("cambio desde venta");
-  // No se ofrece "Anular" en devoluciones de un cambio (el backend las rechaza),
-  // ni en las del flujo nuevo con reembolso o destino chatarra/no_reingresa: la
-  // anulación actual solo revierte con seguridad un reingreso simple a stock. Las
-  // que mueven dinero o chatarra se revierten por otra vía (pendiente).
-  const anulable =
-    esAdmin &&
-    dev?.estado === "procesada" &&
-    !esCambio &&
-    (dev?.destino_stock ?? "vendible") === "vendible" &&
-    !(Number(dev?.monto_reembolso) > 0);
+  // No se ofrece "Anular" en devoluciones de un cambio (el backend las rechaza y
+  // el banner ya lo explica). El resto (incluidas las de reembolso, chatarra o
+  // no_reingresa) sí se puede anular: fn_anular_devolucion revierte el stock
+  // según el destino y, al quedar 'anulada', el cierre deja de contar el reembolso.
+  const anulable = esAdmin && dev?.estado === "procesada" && !esCambio;
 
   const anular = async () => {
+    const prod = dev.producto?.nombre ?? "el producto";
+    const nom = dev.sede?.nombre ?? dev.sede_id;
+    // Parte de stock según cómo entró la devolución.
+    const parteStock = !esCliente
+      ? `Se repondrán ${dev.cantidad} unidad(es) de "${prod}" en ${nom} (revierte la salida a proveedor).`
+      : dev.destino_stock === "vendible"
+        ? `Se quitarán del stock de ${nom} las ${dev.cantidad} unidad(es) de "${prod}" que habían vuelto.`
+        : dev.destino_stock === "chatarra"
+          ? `Se quitarán ${dev.cantidad} unidad(es) de chatarra de "${prod}".`
+          : `No hay stock que revertir.`;
+    const parteReembolso =
+      reembolso > 0
+        ? ` También se revertirá el reembolso de ${formatCOP(
+            reembolso,
+          )} (dejará de contar en la caja).`
+        : "";
     const ok = await confirm({
       titulo: `Anular devolución #${dev.numero}`,
-      mensaje: dev.reingresa_stock
-        ? `Se revertirá el reingreso de ${dev.cantidad} unidad(es) de "${
-            dev.producto?.nombre ?? "el producto"
-          }" al inventario de ${
-            dev.sede?.nombre ?? dev.sede_id
-          }. Queda registrado y no se puede deshacer.`
-        : `Se repondrán ${dev.cantidad} unidad(es) de "${
-            dev.producto?.nombre ?? "el producto"
-          }" al inventario de ${
-            dev.sede?.nombre ?? dev.sede_id
-          } (revierte la salida a proveedor). Queda registrado y no se puede deshacer.`,
+      mensaje: `${parteStock}${parteReembolso} Queda registrado y no se puede deshacer.`,
       confirmLabel: "Sí, anular",
       danger: true,
     });
@@ -298,9 +299,7 @@ export default function DevolucionDetalle() {
             <span
               className="font-mono text-[20px] font-semibold tabular-nums"
               style={{
-                color: dev.reingresa_stock
-                  ? "var(--succ-700)"
-                  : "var(--warn-700)",
+                color: esCliente ? "var(--succ-700)" : "var(--warn-700)",
               }}
             >
               {signo}
@@ -354,9 +353,13 @@ export default function DevolucionDetalle() {
         {/* Impacto en inventario */}
         <Card icon={Boxes} titulo="Impacto en inventario" full>
           <p className="text-[12.5px]" style={{ color: "var(--n-500)" }}>
-            {dev.reingresa_stock
-              ? "Devolución de cliente: reingresó el producto al stock."
-              : "Devolución a proveedor: sacó el producto del stock."}
+            {!esCliente
+              ? "Devolución a proveedor: salió del stock."
+              : dev.destino_stock === "vendible"
+                ? "Devolución de cliente: el producto volvió al stock vendible."
+                : dev.destino_stock === "chatarra"
+                  ? "Devolución de cliente: el producto entró como chatarra (no vendible)."
+                  : "Devolución de cliente: el producto no reingresó al inventario."}
           </p>
           {movs.length === 0 ? (
             <p className="mt-2 text-[12.5px]" style={{ color: "var(--n-400)" }}>
