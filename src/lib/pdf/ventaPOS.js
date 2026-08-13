@@ -35,6 +35,7 @@ export function generarVentaPOS({
   items = [],
   pagos = [],
   vendedor = "—",
+  credito = { abonosCotiz: 0, cobros: [] },
 }) {
   // Altura: medición real de los ítems (pass 1) para que nombres largos que
   // envuelven a varias líneas no desborden la tirilla.
@@ -66,9 +67,33 @@ export function generarVentaPOS({
   const pagosAlto = pagos.length > 0 ? pagos.length * 4 + 4 : 0;
   // #S1-05: la marca de "ANULADA" agrega una línea de encabezado.
   const anulAlto = venta.anulada ? 6 : 0;
-  // header ~58 + items + obs + cuenta + pagos + anulada + totales ~50 + footer ~25
+
+  // Abonos a la venta (crédito): abonos de cotización + cobros directos
+  // (pagos_cuenta). Cuando la venta tiene abonos, la tirilla muestra el desglose
+  // y el saldo pendiente, así el mismo recibo sirve de comprobante del abono.
+  const cobrosAbono = credito?.cobros ?? [];
+  const abonoCotiz = Number(credito?.abonosCotiz ?? 0);
+  const abonadoTotal =
+    abonoCotiz + cobrosAbono.reduce((s, a) => s + Number(a.monto ?? 0), 0);
+  // Solo en ventas a CRÉDITO: en una venta de contado un abono de cotización ya
+  // está pagado, así que mostrar un "saldo pendiente" sería falso.
+  const esCredito = /cr[eé]dito/i.test(String(venta.metodo_pago ?? ""));
+  const hayAbonos = abonadoTotal > 0 && esCredito;
+  const nAbonos = cobrosAbono.length + (abonoCotiz > 0 ? 1 : 0);
+  // Reserva ≥ alto real del bloque: línea+header (~9.8) + n·3.6 + Abonado+SALDO (~9.8).
+  const abonosAlto = hayAbonos ? nAbonos * 3.6 + 22 : 0;
+
+  // header ~58 + items + obs + cuenta + pagos + anulada + abonos + totales ~50 + footer ~25
   const altura = Math.max(
-    58 + itemsAlto + obsAlto + ctaAlto + pagosAlto + anulAlto + 50 + 25,
+    58 +
+      itemsAlto +
+      obsAlto +
+      ctaAlto +
+      pagosAlto +
+      anulAlto +
+      abonosAlto +
+      50 +
+      25,
     120,
   );
 
@@ -263,6 +288,45 @@ export function generarVentaPOS({
     const obs = doc.splitTextToSize(`Obs: ${venta.observaciones}`, CW);
     doc.text(obs, MX, y);
     y += obs.length * 3.4 + 1;
+    doc.setFontSize(7);
+  }
+
+  // ── Abonos y saldo pendiente (venta a crédito con abonos) ────────────
+  if (hayAbonos) {
+    y += 2;
+    doc.line(MX, y, W - MX, y);
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.text("ABONOS", MX, y);
+    y += 3.8;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.8);
+    if (abonoCotiz > 0) {
+      doc.text("Abono de cotización", MX, y);
+      doc.text(formatCOP(abonoCotiz), W - MX, y, { align: "right" });
+      y += 3.6;
+    }
+    for (const a of cobrosAbono) {
+      const fAb = a.fecha
+        ? new Date(a.fecha).toLocaleDateString("es-CO", {
+            timeZone: "America/Bogota",
+            day: "2-digit",
+            month: "2-digit",
+            year: "2-digit",
+          })
+        : "";
+      const met = a.metodo_pago ? ` ${a.metodo_pago}` : "";
+      doc.text(`${fAb}${met}`.trim() || "Abono", MX, y);
+      doc.text(formatCOP(Number(a.monto ?? 0)), W - MX, y, { align: "right" });
+      y += 3.6;
+    }
+    y += 1;
+    doc.setFontSize(7.5);
+    fila("Abonado:", formatCOP(abonadoTotal));
+    const saldoPend = Math.max(0, total - abonadoTotal);
+    doc.setFontSize(9);
+    fila("SALDO PENDIENTE:", formatCOP(saldoPend), true);
     doc.setFontSize(7);
   }
 
