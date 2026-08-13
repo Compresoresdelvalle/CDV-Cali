@@ -30,6 +30,7 @@ import {
   Pill,
   TipoBadge,
 } from "../../components/traspasos/TraspasoBits";
+import RemisionTraslado from "../../components/traspasos/RemisionTraslado";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { avisarOk, avisarError } from "../../lib/notify";
 
@@ -80,7 +81,7 @@ export default function TraspasoDetalle() {
           supabase
             .from("detalle_traspaso")
             .select(
-              `*, producto:producto_id(nombre, referencia, unidad_medida, precio_venta),
+              `*, producto:producto_id(nombre, referencia, unidad_medida, precio_venta, tipo),
                ubicacion:ubicacion_origen_id(pasillo, estante, nivel, prioridad_picking)`,
             )
             .eq("traspaso_id", id)
@@ -254,6 +255,12 @@ export default function TraspasoDetalle() {
 
   return (
     <div className="flex h-full flex-col gap-4 px-4 pb-14 pt-5 sm:px-7 sm:pt-6 animate-fade-in">
+      {/* Remisión imprimible (oculta en pantalla; solo aparece al imprimir) */}
+      <RemisionTraslado
+        traspaso={traspaso}
+        items={items}
+        valorMercancia={valorMercancia}
+      />
       <button
         onClick={() => navigate("/ops/traspasos")}
         className="inline-flex w-fit items-center gap-1.5 text-[12.5px] font-medium transition-colors"
