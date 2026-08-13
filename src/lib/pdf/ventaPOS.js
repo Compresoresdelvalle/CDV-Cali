@@ -68,19 +68,19 @@ export function generarVentaPOS({
   // #S1-05: la marca de "ANULADA" agrega una línea de encabezado.
   const anulAlto = venta.anulada ? 6 : 0;
 
-  // Abonos a la venta (crédito): abonos de cotización + cobros directos
-  // (pagos_cuenta). Cuando la venta tiene abonos, la tirilla muestra el desglose
-  // y el saldo pendiente, así el mismo recibo sirve de comprobante del abono.
+  // Cuando una venta a CRÉDITO tiene abonos, la tirilla muestra el desglose de
+  // abonos + saldo pendiente, así el mismo recibo sirve de comprobante del abono.
   const cobrosAbono = credito?.cobros ?? [];
   const abonoCotiz = Number(credito?.abonosCotiz ?? 0);
   const abonadoTotal =
     abonoCotiz + cobrosAbono.reduce((s, a) => s + Number(a.monto ?? 0), 0);
-  // Solo en ventas a CRÉDITO: en una venta de contado un abono de cotización ya
-  // está pagado, así que mostrar un "saldo pendiente" sería falso.
-  const esCredito = /cr[eé]dito/i.test(String(venta.metodo_pago ?? ""));
+  // Método exacto 'Crédito' (igual que la pantalla y el CHECK de la BD). El
+  // bloque solo se muestra si HAY abonos: un recibo sin abonos no lo lleva, y
+  // los recibos de OT (que no traen este contexto) no mostrarían un saldo falso.
+  const esCredito = String(venta.metodo_pago ?? "") === "Crédito";
   const hayAbonos = abonadoTotal > 0 && esCredito;
   const nAbonos = cobrosAbono.length + (abonoCotiz > 0 ? 1 : 0);
-  // Reserva ≥ alto real del bloque: línea+header (~9.8) + n·3.6 + Abonado+SALDO (~9.8).
+  // Reserva ≥ alto real: línea+header (~9.8) + n·3.6 + Abonado+SALDO (~9.8).
   const abonosAlto = hayAbonos ? nAbonos * 3.6 + 22 : 0;
 
   // header ~58 + items + obs + cuenta + pagos + anulada + abonos + totales ~50 + footer ~25

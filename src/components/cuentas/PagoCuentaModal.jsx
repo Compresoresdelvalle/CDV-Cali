@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { X, Trash2, Wallet, CheckCircle2 } from "lucide-react";
+import { X, Trash2, Wallet, CheckCircle2, Printer } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import {
@@ -7,6 +7,7 @@ import {
   METODOS_ELECTRONICOS,
   cuentaBancariaLabel,
 } from "../../lib/cuentas-ui";
+import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
 
 /**
  * Modal para registrar cobros (CxC) o pagos (CxP) contra una venta/compra a
@@ -38,6 +39,10 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
   const [err, setErr] = useState("");
   const [anularId, setAnularId] = useState(null); // id del cobro/pago a anular
   const [motivoAnular, setMotivoAnular] = useState("");
+  const [imprimiendo, setImprimiendo] = useState(false); // recibo POS (solo CxC)
+  const [reciboData, setReciboData] = useState(null); // venta+detalle prefetch
+  const [reciboError, setReciboError] = useState(false); // falló el prefetch
+  const [reintentoRecibo, setReintentoRecibo] = useState(0); // dispara recarga
 
   const cargar = useCallback(async () => {
     const { data, error } = await supabase
@@ -138,6 +143,71 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
       setErr(safeError(e, "No se pudo anular el movimiento"));
     } finally {
       setAnulando(false);
+    }
+  };
+
+  // Prefetch de la venta + su detalle (solo CxC) al abrir el modal, para poder
+  // imprimir de forma SÍNCRONA en el click: si el window.open ocurriera tras un
+  // await, el navegador lo bloquearía (popup) y caería a "descargar".
+  useEffect(() => {
+    if (!esCobro) return;
+    let vivo = true;
+    setReciboError(false);
+    (async () => {
+      const [
+        { data: venta, error: eV },
+        { data: items, error: eI },
+        { data: pagosVenta },
+      ] = await Promise.all([
+        supabase
+          .from("ventas")
+          .select("*, vendedor:vendedor_id(nombre)")
+          .eq("id", cuenta.refId)
+          .single(),
+        supabase
+          .from("detalle_venta")
+          .select("*, producto:producto_id(nombre, referencia, unidad_medida)")
+          .eq("venta_id", cuenta.refId),
+        supabase
+          .from("pagos_venta")
+          .select("id, metodo_pago, monto, cuenta_bancaria")
+          .eq("venta_id", cuenta.refId)
+          .order("id", { ascending: true }),
+      ]);
+      if (!vivo) return;
+      // Si falla la venta o su detalle, no habilitamos impresión (mejor sin
+      // recibo que uno sin ítems) y marcamos error para poder reintentar.
+      if (eV || eI || !venta) {
+        setReciboData(null);
+        setReciboError(true);
+        return;
+      }
+      setReciboData({
+        venta,
+        items: items ?? [],
+        pagos: pagosVenta ?? [],
+        vendedor: venta.vendedor?.nombre ?? "—",
+      });
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [esCobro, cuenta.refId, reintentoRecibo]);
+
+  // Imprime SÍNCRONO (dentro del gesto de click). Usa los cobros ya cargados
+  // (`pagos`) + los abonos de cotización, así refleja el abono recién registrado.
+  const imprimirRecibo = () => {
+    if (imprimiendo || !reciboData) return;
+    setImprimiendo(true);
+    try {
+      generarVentaPOS({
+        ...reciboData,
+        credito: { abonosCotiz, cobros: pagos },
+      }).print();
+    } catch (e) {
+      setErr(safeError(e, "No se pudo generar el recibo"));
+    } finally {
+      setTimeout(() => setImprimiendo(false), 1200);
     }
   };
 
@@ -256,6 +326,36 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                   token={saldo > 0 ? "--destructive" : "--success"}
                 />
               </div>
+
+              {esCobro && (
+                <button
+                  onClick={
+                    reciboError
+                      ? () => setReintentoRecibo((n) => n + 1)
+                      : imprimirRecibo
+                  }
+                  disabled={imprimiendo || (!reciboData && !reciboError)}
+                  className="mb-4 flex h-12 w-full items-center justify-center gap-2 rounded-[10px] border text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                  style={{
+                    borderColor: reciboError
+                      ? "hsl(var(--destructive) / 0.5)"
+                      : "hsl(var(--border))",
+                    backgroundColor: "hsl(var(--card))",
+                    color: reciboError
+                      ? "hsl(var(--destructive))"
+                      : "hsl(var(--foreground))",
+                  }}
+                >
+                  <Printer className="h-4 w-4" strokeWidth={2} />
+                  {imprimiendo
+                    ? "Generando…"
+                    : reciboError
+                      ? "Reintentar recibo"
+                      : reciboData
+                        ? "Imprimir recibo"
+                        : "Cargando…"}
+                </button>
+              )}
 
               {esCobro && abonosCotiz > 0 && (
                 <p

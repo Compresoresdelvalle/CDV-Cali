@@ -161,9 +161,9 @@ export default function VentaDetalle() {
     cargarVinculos();
   }, [id]);
 
-  // B10: carga abonos de la cotización de origen + cobros directos (pagos_cuenta)
-  // para CUALQUIER venta. Se desacopla de metodo_pago: una venta convertida desde
-  // una cotización con abonos debe mostrar esos abonos aunque sea 'efectivo'. Solo
+  // B10: carga abonos de la cotización de origen + cobros directos (pagos_cuenta).
+  // El bloque "Saldo a crédito" y el recibo solo los muestran en ventas a CRÉDITO
+  // (en una de contado ya están pagados: un saldo pendiente ahí sería falso). Solo
   // lectura; el cobro del saldo se gestiona en Panel Admin → Cuentas. Falla en
   // silencio si no hay permisos de lectura.
   useEffect(() => {
@@ -683,87 +683,84 @@ export default function VentaDetalle() {
             </div>
           </div>
 
-          {/* B10: saldo / abonos. Se muestra para ventas a crédito Y para ventas
-              convertidas desde una cotización con abonos (aunque sean 'efectivo'),
-              para que los abonos no desaparezcan tras la conversión. */}
-          {!venta.anulada &&
-            (venta.metodo_pago === "Crédito" ||
-              credito.abonosCotiz > 0 ||
-              credito.cobros.length > 0) && (
-              <div className="iblock">
-                <div className="ib-head">
-                  <div className="ib-ico warn">
-                    <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
-                  </div>
-                  <div className="ib-title">Saldo a crédito</div>
-                  <div className="ib-aux">Cuenta por cobrar</div>
+          {/* Saldo / abonos: SOLO ventas a crédito. Una venta de contado, aunque
+              venga de una cotización con abono, ya está pagada — mostrar ahí un
+              "saldo pendiente" sería falso. Coincide con el recibo impreso. */}
+          {!venta.anulada && venta.metodo_pago === "Crédito" && (
+            <div className="iblock">
+              <div className="ib-head">
+                <div className="ib-ico warn">
+                  <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
                 </div>
+                <div className="ib-title">Saldo a crédito</div>
+                <div className="ib-aux">Cuenta por cobrar</div>
+              </div>
 
-                {(() => {
-                  const cobrosTotal = credito.cobros.reduce(
-                    (s, c) => s + Number(c.monto ?? 0),
-                    0,
-                  );
-                  const abonado = credito.abonosCotiz + cobrosTotal;
-                  const saldoCred = Math.max(0, totalCalc - abonado);
-                  return (
-                    <>
-                      {credito.cobros.length > 0 &&
-                        credito.cobros.map((c) => (
-                          <div key={c.id} className="pay-row">
-                            <span className="pdate">{formatDate(c.fecha)}</span>
-                            <span
-                              className={`pay-pill ${metodoPagoClass(c.metodo_pago)}`}
-                            >
-                              <span className="dot" />
-                              {c.metodo_pago}
-                            </span>
-                            <span className="pamt">{formatCOP(c.monto)}</span>
-                          </div>
-                        ))}
-                      <div className="totals">
-                        {credito.abonosCotiz > 0 && (
-                          <div className="ln">
-                            <span>Abonos de cotización</span>
-                            <span className="v">
-                              −{formatCOP(credito.abonosCotiz)}
-                            </span>
-                          </div>
-                        )}
-                        {cobrosTotal > 0 && (
-                          <div className="ln">
-                            <span>Cobros registrados</span>
-                            <span className="v">−{formatCOP(cobrosTotal)}</span>
-                          </div>
-                        )}
-                        <div className="ln tot">
-                          <span>Saldo pendiente</span>
+              {(() => {
+                const cobrosTotal = credito.cobros.reduce(
+                  (s, c) => s + Number(c.monto ?? 0),
+                  0,
+                );
+                const abonado = credito.abonosCotiz + cobrosTotal;
+                const saldoCred = Math.max(0, totalCalc - abonado);
+                return (
+                  <>
+                    {credito.cobros.length > 0 &&
+                      credito.cobros.map((c) => (
+                        <div key={c.id} className="pay-row">
+                          <span className="pdate">{formatDate(c.fecha)}</span>
                           <span
-                            className="v"
-                            style={{
-                              color:
-                                saldoCred > 0
-                                  ? "var(--dang-700)"
-                                  : "var(--success-700, var(--n-900))",
-                            }}
+                            className={`pay-pill ${metodoPagoClass(c.metodo_pago)}`}
                           >
-                            {formatCOP(saldoCred)}
+                            <span className="dot" />
+                            {c.metodo_pago}
+                          </span>
+                          <span className="pamt">{formatCOP(c.monto)}</span>
+                        </div>
+                      ))}
+                    <div className="totals">
+                      {credito.abonosCotiz > 0 && (
+                        <div className="ln">
+                          <span>Abonos de cotización</span>
+                          <span className="v">
+                            −{formatCOP(credito.abonosCotiz)}
                           </span>
                         </div>
+                      )}
+                      {cobrosTotal > 0 && (
+                        <div className="ln">
+                          <span>Cobros registrados</span>
+                          <span className="v">−{formatCOP(cobrosTotal)}</span>
+                        </div>
+                      )}
+                      <div className="ln tot">
+                        <span>Saldo pendiente</span>
+                        <span
+                          className="v"
+                          style={{
+                            color:
+                              saldoCred > 0
+                                ? "var(--dang-700)"
+                                : "var(--success-700, var(--n-900))",
+                          }}
+                        >
+                          {formatCOP(saldoCred)}
+                        </span>
                       </div>
-                      <div
-                        className="mt-2 font-mono text-[11px]"
-                        style={{ color: "var(--n-500)" }}
-                      >
-                        {saldoCred > 0
-                          ? "Los cobros se registran en Panel Admin → Cuentas por cobrar."
-                          : "Cuenta saldada."}
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-            )}
+                    </div>
+                    <div
+                      className="mt-2 font-mono text-[11px]"
+                      style={{ color: "var(--n-500)" }}
+                    >
+                      {saldoCred > 0
+                        ? "Los cobros se registran en Panel Admin → Cuentas por cobrar."
+                        : "Cuenta saldada."}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Vinculaciones del ciclo comercial */}
           <div className="iblock info-tint">
