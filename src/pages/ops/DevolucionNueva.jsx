@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeftCircle,
@@ -11,6 +11,10 @@ import {
   Package,
   ClipboardList,
   Receipt,
+  Boxes,
+  Recycle,
+  XCircle,
+  Wallet,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -18,7 +22,15 @@ import { sanitizeSearch, formatCOP, formatDate } from "../../lib/utils";
 import { esNumeroPuro } from "../../lib/filtros";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../../components/ui/UbicacionChip";
+import NumeroInput from "../../components/forms/NumeroInput";
 import { avisarOk, avisarError } from "../../lib/notify";
+
+const METODOS_REEMBOLSO = [
+  { v: "efectivo", l: "Efectivo" },
+  { v: "transferencia", l: "Transferencia" },
+  { v: "tarjeta", l: "Tarjeta" },
+  { v: "otro", l: "Otro" },
+];
 
 export default function DevolucionNueva() {
   const navigate = useNavigate();
@@ -40,9 +52,34 @@ export default function DevolucionNueva() {
   const [buscandoVenta, setBuscandoVenta] = useState(false);
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
 
+  // Destino del producto devuelto (solo cliente) y reembolso al cliente.
+  const [destino, setDestino] = useState("vendible"); // vendible | chatarra | no_reingresa
+  const [hayReembolso, setHayReembolso] = useState(false);
+  const [montoReembolso, setMontoReembolso] = useState(0);
+  const [metodoReembolso, setMetodoReembolso] = useState("efectivo");
+  const [cuentaReembolso, setCuentaReembolso] = useState("");
+  const [cuentas, setCuentas] = useState([]);
+
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
   const guardandoRef = useRef(false);
+
+  // Proveedor es tarea de bodega: las vendedoras solo hacen devolución de cliente.
+  const esBodega = perfil?.rol === "Admin" || perfil?.rol === "Bodeguero";
+
+  useEffect(() => {
+    // Reembolso solo por transferencia/tarjeta necesita cuenta.
+    supabase
+      .from("cuentas_bancarias")
+      .select("id, banco, tipo, numero, titular")
+      .eq("activo", true)
+      .then(({ data }) => setCuentas(data ?? []));
+  }, []);
+
+  // Si una vendedora entra, se fuerza el tipo a cliente (no ve proveedor).
+  useEffect(() => {
+    if (!esBodega && tipo !== "cliente") setTipo("cliente");
+  }, [esBodega, tipo]);
 
   const buscarProductos = useCallback(
     async (q) => {
@@ -177,29 +214,54 @@ export default function DevolucionNueva() {
       setError("Busca y selecciona la venta original.");
       return;
     }
+    if (tipo === "cliente" && hayReembolso && Number(montoReembolso) <= 0) {
+      setError("Escribe el monto del reembolso o apaga el reembolso.");
+      return;
+    }
     // Guard síncrono contra doble-submit (el `disabled` no es inmediato).
     if (guardandoRef.current) return;
     guardandoRef.current = true;
     setError(null);
     setGuardando(true);
     try {
-      const { data, error: rpcErr } = await supabase.rpc(
-        "fn_registrar_devolucion",
-        {
-          p_tipo: tipo,
-          p_producto_id: productoSeleccionado.id,
-          p_sede_id: perfil?.sede_id,
-          p_cantidad: cantidad,
-          p_motivo: motivo.trim() || "Sin motivo especificado",
-          p_venta_id: tipo === "cliente" ? ventaSeleccionada?.id : null,
-        },
-      );
+      let data, rpcErr;
+      if (tipo === "cliente") {
+        // Nuevo flujo: destino del producto + reembolso (egreso con fecha de hoy).
+        const monto = hayReembolso ? Number(montoReembolso) || 0 : 0;
+        ({ data, error: rpcErr } = await supabase.rpc(
+          "fn_registrar_devolucion_cliente",
+          {
+            p_payload: {
+              venta_id: ventaSeleccionada?.id,
+              producto_id: productoSeleccionado.id,
+              cantidad,
+              motivo: motivo.trim() || null,
+              destino_stock: destino,
+              monto_reembolso: monto,
+              metodo_reembolso: monto > 0 ? metodoReembolso : null,
+              cuenta_reembolso:
+                monto > 0 && metodoReembolso !== "efectivo"
+                  ? cuentaReembolso || null
+                  : null,
+            },
+          },
+        ));
+      } else {
+        ({ data, error: rpcErr } = await supabase.rpc(
+          "fn_registrar_devolucion",
+          {
+            p_tipo: tipo,
+            p_producto_id: productoSeleccionado.id,
+            p_sede_id: perfil?.sede_id,
+            p_cantidad: cantidad,
+            p_motivo: motivo.trim() || "Sin motivo especificado",
+            p_venta_id: null,
+          },
+        ));
+      }
       if (rpcErr) throw new Error(rpcErr.message);
       if (!data?.numero) throw new Error("Respuesta inesperada del servidor.");
-      const delta = tipo === "cliente" ? `+${cantidad}` : `-${cantidad}`;
-      avisarOk(
-        `Devolución #${data.numero} registrada. Stock ajustado: ${delta} unidades.`,
-      );
+      avisarOk(`Devolución #${data.numero} registrada.`);
       // Reset form
       setProductoSeleccionado(null);
       setBusqueda("");
@@ -207,6 +269,11 @@ export default function DevolucionNueva() {
       setMotivo("");
       setVentaSeleccionada(null);
       setBusquedaVenta("");
+      setDestino("vendible");
+      setHayReembolso(false);
+      setMontoReembolso(0);
+      setMetodoReembolso("efectivo");
+      setCuentaReembolso("");
     } catch (e) {
       avisarError(e, "Error al registrar la devolución");
     } finally {
@@ -219,7 +286,7 @@ export default function DevolucionNueva() {
     tipo === "cliente"
       ? {
           eyebrow: "Devolución de cliente",
-          desc: "Reingresa stock al inventario tras validar el estado físico.",
+          desc: "Reingresa el producto (o a chatarra) y registra el reembolso al cliente si aplica.",
           signo: "+",
           tone: "var(--succ-700)",
         }
@@ -288,7 +355,7 @@ export default function DevolucionNueva() {
         >
           {[
             { value: "cliente", label: "Cliente" },
-            { value: "proveedor", label: "Proveedor" },
+            ...(esBodega ? [{ value: "proveedor", label: "Proveedor" }] : []),
           ].map((t) => {
             const on = tipo === t.value;
             return (
@@ -645,6 +712,160 @@ export default function DevolucionNueva() {
               </div>
             </div>
 
+            {/* Destino del producto + reembolso (solo cliente) */}
+            {tipo === "cliente" && (
+              <div className="iblock flex flex-col gap-3.5">
+                <div className="ib-head">
+                  <div className="ib-ico">
+                    <Boxes className="h-3.5 w-3.5" strokeWidth={2} />
+                  </div>
+                  <div className="ib-title">
+                    Destino del producto y reembolso
+                  </div>
+                </div>
+
+                <Field label="¿Qué pasa con el producto?" req>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      {
+                        v: "vendible",
+                        l: "Vuelve a stock",
+                        sub: "Producto bueno",
+                        Ico: Boxes,
+                      },
+                      {
+                        v: "chatarra",
+                        l: "Defectuoso → chatarra",
+                        sub: "No se revende",
+                        Ico: Recycle,
+                      },
+                      {
+                        v: "no_reingresa",
+                        l: "No reingresa",
+                        sub: "No vuelve físicamente",
+                        Ico: XCircle,
+                      },
+                    ].map((o) => {
+                      const on = destino === o.v;
+                      return (
+                        <button
+                          key={o.v}
+                          type="button"
+                          onClick={() => setDestino(o.v)}
+                          className="flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors"
+                          style={{
+                            borderColor: on ? "var(--p-600)" : "var(--n-150)",
+                            backgroundColor: on ? "var(--p-50)" : "var(--n-0)",
+                          }}
+                        >
+                          <o.Ico
+                            className="h-4 w-4 shrink-0"
+                            strokeWidth={1.9}
+                            style={{
+                              color: on ? "var(--p-700)" : "var(--n-500)",
+                            }}
+                          />
+                          <span className="min-w-0">
+                            <span
+                              className="block text-[13px] font-medium"
+                              style={{ color: "var(--n-950)" }}
+                            >
+                              {o.l}
+                            </span>
+                            <span
+                              className="block text-[11px]"
+                              style={{ color: "var(--n-500)" }}
+                            >
+                              {o.sub}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+
+                <label className="flex cursor-pointer items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={hayReembolso}
+                    onChange={(e) => setHayReembolso(e.target.checked)}
+                    className="h-4 w-4 cursor-pointer"
+                  />
+                  <span
+                    className="text-[13px] font-medium"
+                    style={{ color: "var(--n-950)" }}
+                  >
+                    Se le devuelve dinero al cliente
+                  </span>
+                </label>
+
+                {hayReembolso && (
+                  <div className="flex flex-col gap-3.5">
+                    <div className="flex flex-wrap gap-3">
+                      <Field label="Monto del reembolso" req>
+                        <div className="fprefix">
+                          <span className="pre">$</span>
+                          <NumeroInput
+                            min={0}
+                            value={montoReembolso}
+                            onChange={setMontoReembolso}
+                            placeholder="0"
+                          />
+                        </div>
+                      </Field>
+                      <Field label="Método" req>
+                        <select
+                          value={metodoReembolso}
+                          onChange={(e) => setMetodoReembolso(e.target.value)}
+                          className="fselect"
+                        >
+                          {METODOS_REEMBOLSO.map((m) => (
+                            <option key={m.v} value={m.v}>
+                              {m.l}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    </div>
+                    {metodoReembolso !== "efectivo" && (
+                      <Field label="Cuenta (opcional)">
+                        <select
+                          value={cuentaReembolso}
+                          onChange={(e) => setCuentaReembolso(e.target.value)}
+                          className="fselect"
+                        >
+                          <option value="">— Ninguna —</option>
+                          {cuentas.map((c) => {
+                            const lbl = [c.banco, c.numero]
+                              .filter(Boolean)
+                              .join(" · ");
+                            return (
+                              <option key={c.id} value={lbl}>
+                                {lbl}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </Field>
+                    )}
+                    <div
+                      className="flex items-center gap-2 rounded-md px-3 py-2 text-[11.5px]"
+                      style={{
+                        backgroundColor: "var(--warn-50, var(--n-25))",
+                        color: "var(--warn-700)",
+                      }}
+                    >
+                      <Wallet className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        El reembolso queda como egreso en la caja de HOY.
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {error && (
               <div
                 className="rounded-[10px] border px-4 py-3"
@@ -680,13 +901,39 @@ export default function DevolucionNueva() {
                 >
                   {productoSeleccionado.referencia}
                 </p>
-                <div className="cart-line tot">
-                  <span>Ajuste de stock</span>
-                  <span className="v" style={{ color: tipoInfo.tone }}>
-                    {tipoInfo.signo}
-                    {cantidad} ud.
-                  </span>
-                </div>
+                {tipo === "cliente" ? (
+                  <>
+                    <div className="cart-line">
+                      <span>Producto</span>
+                      <span className="v" style={{ color: "var(--n-700)" }}>
+                        {destino === "vendible"
+                          ? `+${cantidad} a stock`
+                          : destino === "chatarra"
+                            ? `${cantidad} a chatarra`
+                            : "No reingresa"}
+                      </span>
+                    </div>
+                    {hayReembolso && Number(montoReembolso) > 0 && (
+                      <div className="cart-line tot">
+                        <span>Reembolso · caja hoy</span>
+                        <span
+                          className="v"
+                          style={{ color: "var(--warn-700)" }}
+                        >
+                          −{formatCOP(Number(montoReembolso))}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="cart-line tot">
+                    <span>Ajuste de stock</span>
+                    <span className="v" style={{ color: tipoInfo.tone }}>
+                      {tipoInfo.signo}
+                      {cantidad} ud.
+                    </span>
+                  </div>
+                )}
                 <button
                   onClick={registrar}
                   disabled={!puedeRegistrar}

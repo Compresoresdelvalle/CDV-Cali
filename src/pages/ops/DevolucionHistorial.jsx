@@ -123,10 +123,15 @@ export default function DevolucionHistorial() {
       const productoIds =
         texto && n == null ? await buscarProductoIds(texto) : null;
 
+      // Cliente vs proveedor por venta_id: cliente SIEMPRE tiene venta origen,
+      // proveedor nunca. `reingresa_stock` ya no distingue (una devolución de
+      // cliente puede no reingresar: chatarra o no_reingresa).
       let query = supabase
         .from("devoluciones")
-        .select(COLS, { count: "exact" })
-        .eq("reingresa_stock", reingresa);
+        .select(COLS, { count: "exact" });
+      query = reingresa
+        ? query.not("venta_id", "is", null)
+        : query.is("venta_id", null);
       // Los no-Admin quedan atados a su sede (la RLS igual lo fuerza).
       if (!esAdmin) query = query.eq("sede_id", perfil?.sede_id);
       // Filtros de la barra (fecha, sede si es Admin).
@@ -476,8 +481,8 @@ function Td({ children, right }) {
 }
 
 function DevolucionFila({ devolucion: d, onSelect }) {
-  const tipo = devolucionTipoPill(d.reingresa_stock);
-  const signo = devolucionSigno(d.reingresa_stock);
+  const tipo = devolucionTipoPill(!!d.venta_id);
+  const signo = devolucionSigno(!!d.venta_id);
   return (
     <tr
       className="h-14 cursor-pointer"
@@ -526,7 +531,7 @@ function DevolucionFila({ devolucion: d, onSelect }) {
       <Td>
         {/* La tabla real solo vincula venta_id (devoluciones de cliente). Para
             proveedor no existe OC ligada en el modelo actual → guion honesto. */}
-        {d.reingresa_stock && d.venta?.numero ? (
+        {d.venta?.numero ? (
           <span className="link-pill v">V-{d.venta.numero}</span>
         ) : (
           <span style={{ color: "var(--n-300)" }}>—</span>
@@ -550,7 +555,7 @@ function DevolucionFila({ devolucion: d, onSelect }) {
         <span
           className="font-mono font-semibold tabular-nums"
           style={{
-            color: d.reingresa_stock ? "var(--succ-700)" : "var(--warn-700)",
+            color: d.venta_id ? "var(--succ-700)" : "var(--warn-700)",
           }}
         >
           {signo}
@@ -570,8 +575,8 @@ function DevolucionFila({ devolucion: d, onSelect }) {
 }
 
 function DevolucionCard({ devolucion: d, onSelect }) {
-  const tipo = devolucionTipoPill(d.reingresa_stock);
-  const signo = devolucionSigno(d.reingresa_stock);
+  const tipo = devolucionTipoPill(!!d.venta_id);
+  const signo = devolucionSigno(!!d.venta_id);
   return (
     <button
       type="button"
@@ -605,7 +610,7 @@ function DevolucionCard({ devolucion: d, onSelect }) {
           >
             {d.producto?.nombre ?? "—"}
           </p>
-          {d.reingresa_stock && d.venta?.numero && (
+          {d.venta?.numero && (
             <p className="mt-1">
               <span className="link-pill v">V-{d.venta.numero}</span>
             </p>
@@ -619,7 +624,7 @@ function DevolucionCard({ devolucion: d, onSelect }) {
           <span
             className="font-mono text-[18px] font-semibold tabular-nums"
             style={{
-              color: d.reingresa_stock ? "var(--succ-700)" : "var(--warn-700)",
+              color: d.venta_id ? "var(--succ-700)" : "var(--warn-700)",
             }}
           >
             {signo}

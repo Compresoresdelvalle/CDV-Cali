@@ -9,7 +9,7 @@ import {
   User,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { formatDate, safeError } from "../../lib/utils";
+import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { avisarOk, avisarError } from "../../lib/notify";
 import { useAuthStore } from "../../stores/authStore";
@@ -24,7 +24,19 @@ import {
 // PostgREST). Tres embeds a `usuarios` (registró / anuló) se desambiguan por la
 // columna. `sede:sede_id` trae el nombre legible de la sede.
 const COLS =
-  "id, numero, fecha, reingresa_stock, cantidad, motivo, observaciones, estado, venta_id, sede_id, anulado_at, motivo_anulacion, producto:producto_id(nombre, referencia), registrador:registrado_por(nombre), anulador:anulado_por(nombre), venta:venta_id(numero), sede:sede_id(nombre)";
+  "id, numero, fecha, reingresa_stock, cantidad, motivo, observaciones, estado, venta_id, sede_id, destino_stock, monto_reembolso, metodo_reembolso, cuenta_reembolso, anulado_at, motivo_anulacion, producto:producto_id(nombre, referencia), registrador:registrado_por(nombre), anulador:anulado_por(nombre), venta:venta_id(numero), sede:sede_id(nombre)";
+
+const DESTINO_LABEL = {
+  vendible: "Volvió a stock",
+  chatarra: "Defectuoso (chatarra)",
+  no_reingresa: "No reingresó",
+};
+const METODO_LABEL = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia",
+  tarjeta: "Tarjeta",
+  otro: "Otro",
+};
 
 export default function DevolucionDetalle() {
   const { id } = useParams();
@@ -75,10 +87,16 @@ export default function DevolucionDetalle() {
   const esCambio = (dev?.motivo ?? "")
     .toLowerCase()
     .startsWith("cambio desde venta");
-  // No se ofrece "Anular" en devoluciones de un cambio: el backend las rechaza
-  // (se revierten anulando la venta del cambio) y el banner ya lo explica.
-  // Mostrar el botón sería ofrecer una acción que va a fallar.
-  const anulable = esAdmin && dev?.estado === "procesada" && !esCambio;
+  // No se ofrece "Anular" en devoluciones de un cambio (el backend las rechaza),
+  // ni en las del flujo nuevo con reembolso o destino chatarra/no_reingresa: la
+  // anulación actual solo revierte con seguridad un reingreso simple a stock. Las
+  // que mueven dinero o chatarra se revierten por otra vía (pendiente).
+  const anulable =
+    esAdmin &&
+    dev?.estado === "procesada" &&
+    !esCambio &&
+    (dev?.destino_stock ?? "vendible") === "vendible" &&
+    !(Number(dev?.monto_reembolso) > 0);
 
   const anular = async () => {
     const ok = await confirm({
@@ -156,9 +174,14 @@ export default function DevolucionDetalle() {
     );
   }
 
-  const tipo = devolucionTipoPill(dev.reingresa_stock);
-  const signo = devolucionSigno(dev.reingresa_stock);
+  // Cliente vs proveedor se determina por la venta origen (cliente SIEMPRE tiene
+  // venta; proveedor nunca). `reingresa_stock` ya no sirve para esto: en el flujo
+  // nuevo una devolución de cliente puede no reingresar (chatarra / no reingresa).
+  const esCliente = !!dev.venta_id;
+  const tipo = devolucionTipoPill(esCliente);
+  const signo = devolucionSigno(esCliente);
   const anulada = dev.estado === "anulada";
+  const reembolso = Number(dev.monto_reembolso) || 0;
 
   return (
     <div className="mx-auto w-full max-w-[1000px] px-4 py-5 sm:px-7 sm:py-6">
@@ -289,10 +312,26 @@ export default function DevolucionDetalle() {
         {/* Origen y registro */}
         <Card icon={User} titulo="Origen">
           <Fila label="Tipo" valor={tipo.label} />
-          {dev.reingresa_stock && (
+          {esCliente && (
             <Fila
               label="Venta origen"
               valor={dev.venta?.numero ? `V-${dev.venta.numero}` : "—"}
+            />
+          )}
+          {esCliente && (
+            <Fila
+              label="Destino"
+              valor={DESTINO_LABEL[dev.destino_stock] ?? "—"}
+            />
+          )}
+          {reembolso > 0 && (
+            <Fila
+              label="Reembolso"
+              valor={`${formatCOP(reembolso)} · ${
+                METODO_LABEL[dev.metodo_reembolso] ??
+                dev.metodo_reembolso ??
+                "—"
+              }`}
             />
           )}
           <Fila label="Sede" valor={dev.sede?.nombre ?? dev.sede_id} />

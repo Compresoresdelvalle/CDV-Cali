@@ -373,7 +373,7 @@ export default function App() {
           <Route
             path="devoluciones"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <DevolucionHistorial />
               </RoleGuard>
             }
@@ -381,7 +381,7 @@ export default function App() {
           <Route
             path="devoluciones/nueva"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <DevolucionNueva />
               </RoleGuard>
             }
@@ -389,7 +389,7 @@ export default function App() {
           <Route
             path="devoluciones/:id"
             element={
-              <RoleGuard roles={["Admin", "Bodeguero"]}>
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <DevolucionDetalle />
               </RoleGuard>
             }
