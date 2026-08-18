@@ -131,7 +131,10 @@ export default function ReposicionButton({ count, perfil, mobile = false }) {
           className="absolute right-0 z-50 mt-2 w-[340px] overflow-hidden rounded-xl border shadow-lg"
           style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-200)" }}
         >
-          <div className="flex border-b" style={{ borderColor: "var(--n-150)" }}>
+          <div
+            className="flex border-b"
+            style={{ borderColor: "var(--n-150)" }}
+          >
             {TABS.map((t) => {
               const activo = t.key === tab;
               const n = t.key === "reponer" ? count : totalFaltantes;
