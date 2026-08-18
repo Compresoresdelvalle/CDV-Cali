@@ -28,6 +28,9 @@ const TIPOS = [
   { v: "chatarra", label: "Chatarra" },
 ];
 
+/** Valores REALES del enum `estado_stock`, los únicos que se aceptan por URL. */
+const ESTADOS_URL = ["OK", "Bajo", "Agotado", "Sobrestock"];
+
 /** #34: suma/quita un valor de un array (multi-selección de filtros). */
 const toggleEn = (arr, v) =>
   arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
@@ -60,10 +63,17 @@ export default function Inventario() {
   useRealtimeInventario();
 
   // #33: si llega ?q=… del buscador global, lo aplica una vez al montar.
+  // ?estado=… llega del botón de Reposición: el "Ver todo" de una vendedora
+  // debe caer en la lista ya filtrada, no en los ~2.900 SKUs completos.
   const [searchParams] = useSearchParams();
   const qParam = searchParams.get("q");
+  const estadoParam = searchParams.get("estado");
   useEffect(() => {
     if (qParam) setBusqueda(qParam);
+    // Lista blanca: un ?estado= arbitrario no debe llegar crudo a la query.
+    if (ESTADOS_URL.includes(estadoParam)) {
+      setFiltros({ filtroEstado: [estadoParam] });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
