@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Shield,
   Search,
@@ -47,18 +48,41 @@ const TIPOS = [
 ];
 const PAGE_SIZE = 50;
 
+/** Solo se acepta YYYY-MM-DD: un ?desde= arbitrario no llega crudo a la query. */
+const esFecha = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
 export default function Auditoria() {
   const [movimientos, setMovimientos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const [tipo, setTipo] = useState("Todos");
-  const [sedeId, setSedeId] = useState("");
+  // Deep-link desde la campana de notificaciones: el aviso agrupado de
+  // conversiones a insumo abre esta página ya filtrada por su día y sede.
+  const [searchParams] = useSearchParams();
+  const tipoParam = searchParams.get("tipo");
+  const sedeParam = searchParams.get("sede");
+  const desdeParam = searchParams.get("desde");
+  const hastaParam = searchParams.get("hasta");
+
+  // TIPOS es la lista blanca que ya existe en el archivo.
+  const [tipo, setTipo] = useState(
+    TIPOS.includes(tipoParam) ? tipoParam : "Todos",
+  );
+  const [sedeId, setSedeId] = useState(sedeParam ?? "");
   const [usuarioId, setUsuarioId] = useState("");
   const [search, setSearch] = useState("");
-  const [fechaDesde, setFechaDesde] = useState("");
-  const [fechaHasta, setFechaHasta] = useState("");
-  const [showFiltros, setShowFiltros] = useState(false);
+  const [fechaDesde, setFechaDesde] = useState(
+    esFecha(desdeParam) ? desdeParam : "",
+  );
+  const [fechaHasta, setFechaHasta] = useState(
+    esFecha(hastaParam) ? hastaParam : "",
+  );
+  // Si vino algo por URL, abrir el panel de filtros: si no, el usuario
+  // aterriza con filtros puestos que no ve y la pantalla parece vacía sin
+  // explicación.
+  const [showFiltros, setShowFiltros] = useState(
+    Boolean(tipoParam || sedeParam || desdeParam || hastaParam),
+  );
   const [seleccionado, setSeleccionado] = useState(null);
 
   const [sedes, setSedes] = useState([]);
