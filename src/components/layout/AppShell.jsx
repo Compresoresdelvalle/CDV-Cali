@@ -29,6 +29,7 @@ import Logo from "../ui/Logo";
 import ErrorBoundary from "../ui/ErrorBoundary";
 import { useReposicionCount } from "../../hooks/useReposicionCount";
 import ReposicionButton from "./ReposicionButton";
+import NotificacionesBell from "./NotificacionesBell";
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 const getInitials = (name = "") =>
@@ -245,6 +246,8 @@ function HeaderOps({ perfil, rol, initials, reposicionCount, onLogout }) {
 
       <ThemeToggle />
 
+      <NotificacionesBell />
+
       <ReposicionButton count={reposicionCount} perfil={perfil} />
 
       {/* Usuario + logout */}
@@ -311,6 +314,7 @@ function MobileHeader({ perfil, initials, reposicionCount, onMenu }) {
         >
           <Search className="h-[18px] w-[18px]" strokeWidth={1.75} />
         </button>
+        <NotificacionesBell mobile />
         <ReposicionButton count={reposicionCount} perfil={perfil} mobile />
         <button
           onClick={onMenu}

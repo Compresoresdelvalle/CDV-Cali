@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import ThemeToggle from "../ui/ThemeToggle";
-import NotificacionesBell from "../admin/NotificacionesBell";
+import NotificacionesBell from "./NotificacionesBell";
 import Logo from "../ui/Logo";
 import ErrorBoundary from "../ui/ErrorBoundary";
 import { SECCIONES_ADMIN, getInitials } from "../../lib/admin-shell-ui";
@@ -158,6 +158,7 @@ function MobileHeaderAdmin({ perfil, initials, reposicionCount, onMenu }) {
         >
           <ArrowLeftCircle className="h-[18px] w-[18px]" strokeWidth={1.75} />
         </Link>
+        <NotificacionesBell mobile />
         <ReposicionButton count={reposicionCount} perfil={perfil} mobile />
         <button
           onClick={onMenu}
