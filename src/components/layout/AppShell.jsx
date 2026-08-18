@@ -1,11 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import {
-  Outlet,
-  Link,
-  NavLink,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
+import { Outlet, Link, NavLink, useLocation } from "react-router-dom";
 import {
   Package,
   Tag,
@@ -19,7 +13,6 @@ import {
   Wrench,
   Puzzle,
   Home,
-  Bell,
   Menu,
   LogOut,
   Users,
@@ -34,7 +27,8 @@ import ThemeToggle from "../ui/ThemeToggle";
 import GlobalSearch from "./GlobalSearch";
 import Logo from "../ui/Logo";
 import ErrorBoundary from "../ui/ErrorBoundary";
-import { supabase } from "../../lib/supabase";
+import { useReposicionCount } from "../../hooks/useReposicionCount";
+import ReposicionButton from "./ReposicionButton";
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 const getInitials = (name = "") =>
@@ -233,7 +227,7 @@ function SidebarOps({ sections, isAdmin }) {
 }
 
 /* ── Topbar (brand color) ─────────────────────────────────────────────── */
-function HeaderOps({ perfil, rol, initials, alertCount, onLogout, onSearch }) {
+function HeaderOps({ perfil, rol, initials, reposicionCount, onLogout }) {
   return (
     <header className="chv-topbar sticky top-0 z-30 hidden lg:flex h-14 items-center gap-3 px-4">
       {/* #33 — Buscador global funcional (dropdown de resultados en vivo) */}
@@ -251,28 +245,7 @@ function HeaderOps({ perfil, rol, initials, alertCount, onLogout, onSearch }) {
 
       <ThemeToggle />
 
-      {/* Alertas de stock → inventario */}
-      <button
-        onClick={onSearch}
-        className="focus-ring relative grid h-9 w-9 place-items-center rounded-md text-white/85 hover:bg-white/10"
-        aria-label={
-          alertCount > 0
-            ? `${alertCount} alertas de stock`
-            : "Sin alertas de stock"
-        }
-        title={
-          alertCount > 0
-            ? `${alertCount} producto${alertCount !== 1 ? "s" : ""} con stock bajo o agotado`
-            : "Sin alertas de stock"
-        }
-      >
-        <Bell className="h-4 w-4" strokeWidth={1.75} />
-        {alertCount > 0 && (
-          <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-[--dang-500] px-1 text-[9px] font-bold leading-none text-white">
-            {alertCount > 99 ? "99+" : alertCount}
-          </span>
-        )}
-      </button>
+      <ReposicionButton count={reposicionCount} perfil={perfil} />
 
       {/* Usuario + logout */}
       <div className="ml-1 flex h-8 items-center gap-2 pl-2">
@@ -299,12 +272,12 @@ function HeaderOps({ perfil, rol, initials, alertCount, onLogout, onSearch }) {
 }
 
 /* ── Header móvil/tablet (< lg) ───────────────────────────────────────────
- * Expone sede activa, búsqueda global, alertas de stock (campana con contador)
+ * Expone sede activa, búsqueda global, reposición sugerida (botón con contador)
  * y un botón de avatar que abre el menú completo (drawer "Más"). El logout se
  * mueve al drawer para no saturar la barra superior. Respeta la safe-area del
  * notch con env(safe-area-inset-top).
  * ──────────────────────────────────────────────────────────────────────── */
-function MobileHeader({ perfil, initials, alertCount, onBell, onMenu }) {
+function MobileHeader({ perfil, initials, reposicionCount, onMenu }) {
   return (
     <header
       className="chv-topbar sticky top-0 z-30 flex lg:hidden items-center justify-between px-4"
@@ -338,25 +311,7 @@ function MobileHeader({ perfil, initials, alertCount, onBell, onMenu }) {
         >
           <Search className="h-[18px] w-[18px]" strokeWidth={1.75} />
         </button>
-        <button
-          onClick={onBell}
-          className="focus-ring relative grid h-10 w-10 place-items-center rounded-md text-white/90 hover:bg-white/10"
-          aria-label={
-            alertCount > 0
-              ? `${alertCount} alertas de stock`
-              : "Sin alertas de stock"
-          }
-        >
-          <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          {alertCount > 0 && (
-            <span
-              className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold leading-none text-white"
-              style={{ backgroundColor: "var(--dang-500)" }}
-            >
-              {alertCount > 99 ? "99+" : alertCount}
-            </span>
-          )}
-        </button>
+        <ReposicionButton count={reposicionCount} perfil={perfil} mobile />
         <button
           onClick={onMenu}
           className="focus-ring grid h-10 w-10 place-items-center rounded-full bg-white/15 font-mono text-[11px] font-semibold text-white ring-1 ring-white/25"
@@ -740,59 +695,12 @@ function buildBottomNav(modulos) {
   return items.slice(0, 5);
 }
 
-/* ── Hook: conteo de alertas de stock ────────────────────────────────── */
-function useAlertasCount(perfil) {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    if (!perfil?.id) return;
-
-    const fetchCount = async () => {
-      let q = supabase
-        .from("inventario")
-        // productos!inner + activo: no contar alertas de productos dados de baja.
-        .select("id, producto:productos!inner(activo)", {
-          count: "exact",
-          head: true,
-        })
-        .eq("producto.activo", true)
-        .in("estado_stock", ["Bajo", "Agotado"]);
-
-      if (perfil.rol !== "Admin" && perfil.sede_id) {
-        q = q.eq("sede_id", perfil.sede_id);
-      }
-
-      const { count: c, error } = await q;
-      // Si falla, conservar el último conteo en vez de mentir con 0.
-      if (!error) setCount(c ?? 0);
-    };
-
-    fetchCount();
-
-    const channel = supabase
-      .channel("alertas-stock-count")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "inventario" },
-        fetchCount,
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [perfil?.id, perfil?.rol, perfil?.sede_id]);
-
-  return count;
-}
-
 /* ── AppShell ─────────────────────────────────────────────────────────── */
 export default function AppShell() {
   const { perfil, logout } = useAuthStore();
-  const navigate = useNavigate();
   const location = useLocation();
 
-  const alertCount = useAlertasCount(perfil);
+  const reposicionCount = useReposicionCount(perfil);
   const [moreOpen, setMoreOpen] = useState(false);
 
   const rol = perfil?.rol ?? "";
@@ -823,8 +731,6 @@ export default function AppShell() {
     window.location.assign("/login");
   };
 
-  const goToInventario = () => navigate("/ops/inventario");
-
   return (
     <div
       className="flex h-screen overflow-hidden"
@@ -840,17 +746,15 @@ export default function AppShell() {
           perfil={perfil}
           rol={rol}
           initials={initials}
-          alertCount={alertCount}
+          reposicionCount={reposicionCount}
           onLogout={handleLogout}
-          onSearch={goToInventario}
         />
 
         {/* Header móvil/tablet */}
         <MobileHeader
           perfil={perfil}
           initials={initials}
-          alertCount={alertCount}
-          onBell={goToInventario}
+          reposicionCount={reposicionCount}
           onMenu={() => setMoreOpen(true)}
         />
 
