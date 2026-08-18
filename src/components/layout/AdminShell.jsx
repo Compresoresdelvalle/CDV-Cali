@@ -1,11 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import {
-  Outlet,
-  Link,
-  NavLink,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
+import { Outlet, Link, NavLink, useLocation } from "react-router-dom";
 import {
   ArrowLeftCircle,
   Bell,
@@ -21,49 +15,9 @@ import ThemeToggle from "../ui/ThemeToggle";
 import NotificacionesBell from "../admin/NotificacionesBell";
 import Logo from "../ui/Logo";
 import ErrorBoundary from "../ui/ErrorBoundary";
-import { supabase } from "../../lib/supabase";
 import { SECCIONES_ADMIN, getInitials } from "../../lib/admin-shell-ui";
-
-/* ── Hook: conteo de alertas de stock (admin = todas las sedes) ─────────── */
-function useAlertasCountAdmin(perfil) {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    if (!perfil?.id) return;
-
-    const fetchCount = async () => {
-      const { count: c, error } = await supabase
-        .from("inventario")
-        // productos!inner + activo: no contar alertas de productos dados de baja.
-        .select("id, producto:productos!inner(activo)", {
-          count: "exact",
-          head: true,
-        })
-        .eq("producto.activo", true)
-        .in("estado_stock", ["Bajo", "Agotado"]);
-      // Si la consulta falla, conservar el último conteo conocido en vez de
-      // caer a 0 (que leería como "todo en orden" siendo mentira).
-      if (!error) setCount(c ?? 0);
-    };
-
-    fetchCount();
-
-    const channel = supabase
-      .channel("alertas-stock-admin")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "inventario" },
-        fetchCount,
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [perfil?.id]);
-
-  return count;
-}
+import { useReposicionCount } from "../../hooks/useReposicionCount";
+import ReposicionButton from "./ReposicionButton";
 
 /* ── Sidebar admin (desktop ≥ lg) ─────────────────────────────────────── */
 function SidebarAdminItem({ href, label, icon }) {
@@ -126,7 +80,7 @@ function SidebarAdmin() {
 }
 
 /* ── Topbar admin (gradiente de marca) ────────────────────────────────── */
-function HeaderAdmin({ perfil, initials, onLogout }) {
+function HeaderAdmin({ perfil, initials, onLogout, reposicionCount }) {
   return (
     <header className="chv-topbar chv-topbar-admin sticky top-0 z-30 hidden lg:flex h-14 items-center gap-3 px-4">
       <Link
@@ -150,14 +104,7 @@ function HeaderAdmin({ perfil, initials, onLogout }) {
 
       <NotificacionesBell />
 
-      <Link
-        to="/admin/alertas"
-        className="focus-ring relative grid h-9 w-9 place-items-center rounded-md text-white/85 hover:bg-white/10"
-        aria-label="Ver alertas"
-        title="Ver alertas"
-      >
-        <Bell className="h-4 w-4" strokeWidth={1.75} />
-      </Link>
+      <ReposicionButton count={reposicionCount} perfil={perfil} />
 
       <div className="ml-1 flex h-8 items-center gap-2 pl-2">
         <div className="grid h-8 w-8 place-items-center rounded-full bg-white/15 ring-1 ring-white/25 font-mono text-[11px] font-semibold text-white">
@@ -186,7 +133,7 @@ function HeaderAdmin({ perfil, initials, onLogout }) {
  * Salida rápida a Operaciones, alertas con contador y avatar que abre el menú
  * admin completo (drawer). Respeta el notch con env(safe-area-inset-top).
  * ──────────────────────────────────────────────────────────────────────── */
-function MobileHeaderAdmin({ initials, alertCount, onBell, onMenu }) {
+function MobileHeaderAdmin({ perfil, initials, reposicionCount, onMenu }) {
   return (
     <header
       className="chv-topbar chv-topbar-admin sticky top-0 z-30 flex lg:hidden items-center justify-between px-4"
@@ -211,25 +158,7 @@ function MobileHeaderAdmin({ initials, alertCount, onBell, onMenu }) {
         >
           <ArrowLeftCircle className="h-[18px] w-[18px]" strokeWidth={1.75} />
         </Link>
-        <button
-          onClick={onBell}
-          className="focus-ring relative grid h-10 w-10 place-items-center rounded-md text-white/90 hover:bg-white/10"
-          aria-label={
-            alertCount > 0
-              ? `${alertCount} alertas de stock`
-              : "Sin alertas de stock"
-          }
-        >
-          <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          {alertCount > 0 && (
-            <span
-              className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold leading-none text-white"
-              style={{ backgroundColor: "var(--dang-500)" }}
-            >
-              {alertCount > 99 ? "99+" : alertCount}
-            </span>
-          )}
-        </button>
+        <ReposicionButton count={reposicionCount} perfil={perfil} mobile />
         <button
           onClick={onMenu}
           className="focus-ring grid h-10 w-10 place-items-center rounded-full bg-white/15 font-mono text-[11px] font-semibold text-white ring-1 ring-white/25"
@@ -452,7 +381,7 @@ const ADMIN_TABS = [
   },
 ];
 
-function BottomNavAdmin({ alertCount, onMore }) {
+function BottomNavAdmin({ reposicionCount, onMore }) {
   return (
     <nav
       className="chv-bottomnav lg:hidden sticky bottom-0 z-30 grid grid-cols-5"
@@ -480,12 +409,12 @@ function BottomNavAdmin({ alertCount, onMore }) {
                 >
                   {it.label}
                 </span>
-                {it.badge && alertCount > 0 && (
+                {it.badge && reposicionCount > 0 && (
                   <span
                     className="absolute right-[18%] top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold leading-none text-white"
-                    style={{ backgroundColor: "var(--dang-500)" }}
+                    style={{ backgroundColor: "var(--warn-500)" }}
                   >
-                    {alertCount > 99 ? "99+" : alertCount}
+                    {reposicionCount > 99 ? "99+" : reposicionCount}
                   </span>
                 )}
               </>
@@ -510,9 +439,8 @@ function BottomNavAdmin({ alertCount, onMore }) {
 export default function AdminShell() {
   const { perfil, logout } = useAuthStore();
   const location = useLocation();
-  const navigate = useNavigate();
   const initials = getInitials(perfil?.nombre || "");
-  const alertCount = useAlertasCountAdmin(perfil);
+  const reposicionCount = useReposicionCount(perfil);
   const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
@@ -549,13 +477,14 @@ export default function AdminShell() {
           perfil={perfil}
           initials={initials}
           onLogout={handleLogout}
+          reposicionCount={reposicionCount}
         />
 
         {/* Header móvil/tablet */}
         <MobileHeaderAdmin
+          perfil={perfil}
           initials={initials}
-          alertCount={alertCount}
-          onBell={() => navigate("/admin/alertas")}
+          reposicionCount={reposicionCount}
           onMenu={() => setMoreOpen(true)}
         />
 
@@ -571,7 +500,7 @@ export default function AdminShell() {
 
         {/* Bottom nav móvil/tablet */}
         <BottomNavAdmin
-          alertCount={alertCount}
+          reposicionCount={reposicionCount}
           onMore={() => setMoreOpen(true)}
         />
       </div>
