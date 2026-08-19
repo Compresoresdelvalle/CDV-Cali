@@ -85,6 +85,20 @@ export default function Auditoria() {
   );
   const [seleccionado, setSeleccionado] = useState(null);
 
+  // Los inicializadores de arriba solo corren en el primer render. Si el
+  // usuario YA está en esta página y pulsa otro aviso de la campana (otra sede
+  // u otro día), React Router cambia la query sin remontar: sin este efecto se
+  // quedarían los filtros del aviso anterior, mostrando datos de otro contexto
+  // como si fueran los del aviso que acaba de tocar.
+  useEffect(() => {
+    if (!tipoParam && !sedeParam && !desdeParam && !hastaParam) return;
+    setTipo(TIPOS.includes(tipoParam) ? tipoParam : "Todos");
+    setSedeId(sedeParam ?? "");
+    setFechaDesde(esFecha(desdeParam) ? desdeParam : "");
+    setFechaHasta(esFecha(hastaParam) ? hastaParam : "");
+    setShowFiltros(true);
+  }, [tipoParam, sedeParam, desdeParam, hastaParam]);
+
   const [sedes, setSedes] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
 

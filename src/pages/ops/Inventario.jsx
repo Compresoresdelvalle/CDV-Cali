@@ -62,9 +62,13 @@ export default function Inventario() {
   // Suscripción Realtime
   useRealtimeInventario();
 
-  // #33: si llega ?q=… del buscador global, lo aplica una vez al montar.
+  // #33: si llega ?q=… del buscador global, lo aplica.
   // ?estado=… llega del botón de Reposición: el "Ver todo" de una vendedora
   // debe caer en la lista ya filtrada, no en los ~2.900 SKUs completos.
+  //
+  // Depende de los parámetros y no de [] a propósito: si el usuario YA está en
+  // esta página y pulsa el enlace, React Router cambia la query sin remontar,
+  // y con [] el filtro no se aplicaría nunca. El botón parecería roto.
   const [searchParams] = useSearchParams();
   const qParam = searchParams.get("q");
   const estadoParam = searchParams.get("estado");
@@ -75,7 +79,7 @@ export default function Inventario() {
       setFiltros({ filtroEstado: [estadoParam] });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [qParam, estadoParam]);
 
   // Infinite scroll
   const sentinelRef = useRef(null);
