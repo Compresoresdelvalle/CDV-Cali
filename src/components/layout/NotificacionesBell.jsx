@@ -88,7 +88,9 @@ export default function NotificacionesBell({
         onClick={abrir}
         className={`focus-ring relative grid ${size} shrink-0 place-items-center rounded-md text-white/85 hover:bg-white/10`}
         aria-label={
-          noLeidas > 0 ? `${noLeidas} notificaciones sin leer` : "Notificaciones"
+          noLeidas > 0
+            ? `${noLeidas} notificaciones sin leer`
+            : "Notificaciones"
         }
         aria-expanded={open}
         title="Notificaciones"
