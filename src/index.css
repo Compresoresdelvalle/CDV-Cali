@@ -177,6 +177,10 @@
   --warn-50: #fffaeb;
   --warn-100: #fef0c7;
   --warn-500: #f79009;
+  /* Texto sobre --warn-500. Va aquí y NO en .dark a propósito: --warn-500 es
+     el mismo color en los dos temas, así que su texto también debe serlo.
+     #f79009 con blanco da 2.35:1 (ilegible); con este marrón, 7.92:1. */
+  --warn-500-fg: #1a1200;
   --warn-600: #dc6803;
   --warn-700: #b54708;
   --warn-900: #7a2e0e;
