@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../lib/supabase";
+import { ROLE_MODULES } from "../lib/constants";
+
+/** Solo cuenta para quien puede abrir Inventario: al Técnico el badge le
+ *  exigiría atención sobre un módulo al que no tiene acceso. */
+export const puedeVerInventario = (perfil) =>
+  Boolean(perfil?.rol && ROLE_MODULES[perfil.rol]?.includes("Inventario"));
 
 /**
  * Conteo de líneas de reposición sugerida (`v_sugerencias_reorden`).
@@ -20,9 +26,10 @@ export function useReposicionCount(perfil) {
   const perfilId = perfil?.id;
   const perfilRol = perfil?.rol;
   const perfilSedeId = perfil?.sede_id;
+  const tieneInventario = puedeVerInventario({ rol: perfilRol });
 
   const fetchCount = useCallback(async () => {
-    if (!perfilId) return;
+    if (!perfilId || !tieneInventario) return;
     let q = supabase
       .from("v_sugerencias_reorden")
       .select("producto_id", { count: "exact", head: true });
@@ -35,10 +42,10 @@ export function useReposicionCount(perfil) {
     // Si falla, conservar el último conteo conocido en vez de caer a 0: un 0
     // falso se lee como "todo en orden" y es el peor error posible en un badge.
     if (!error) setCount(c ?? 0);
-  }, [perfilId, perfilRol, perfilSedeId]);
+  }, [perfilId, perfilRol, perfilSedeId, tieneInventario]);
 
   useEffect(() => {
-    if (!perfilId) return;
+    if (!perfilId || !tieneInventario) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCount();
 
@@ -63,7 +70,7 @@ export function useReposicionCount(perfil) {
       if (timerRef.current) clearTimeout(timerRef.current);
       supabase.removeChannel(channel);
     };
-  }, [perfilId, fetchCount]);
+  }, [perfilId, tieneInventario, fetchCount]);
 
   return count;
 }

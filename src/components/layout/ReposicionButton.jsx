@@ -24,6 +24,7 @@ export default function ReposicionButton({ count, perfil, mobile = false }) {
   const [tab, setTab] = useState("reponer");
   const [datos, setDatos] = useState({ reponer: null, faltantes: null });
   const [totalFaltantes, setTotalFaltantes] = useState(null);
+  const [errores, setErrores] = useState({ reponer: null, faltantes: null });
   const ref = useRef(null);
 
   const esAdmin = perfil?.rol === "Admin";
@@ -44,7 +45,15 @@ export default function ReposicionButton({ count, perfil, mobile = false }) {
             .order("cantidad_sugerida", { ascending: false })
             .limit(8),
         );
-        if (!error) setDatos((d) => ({ ...d, reponer: data ?? [] }));
+        if (error) {
+          setErrores((e) => ({
+            ...e,
+            reponer: error.message ?? "No se pudo cargar",
+          }));
+        } else {
+          setErrores((e) => ({ ...e, reponer: null }));
+          setDatos((d) => ({ ...d, reponer: data ?? [] }));
+        }
         return;
       }
 
@@ -57,7 +66,15 @@ export default function ReposicionButton({ count, perfil, mobile = false }) {
           .order("ventas_90d", { ascending: false })
           .limit(8),
       );
-      if (!error) setDatos((d) => ({ ...d, faltantes: data ?? [] }));
+      if (error) {
+        setErrores((e) => ({
+          ...e,
+          faltantes: error.message ?? "No se pudo cargar",
+        }));
+      } else {
+        setErrores((e) => ({ ...e, faltantes: null }));
+        setDatos((d) => ({ ...d, faltantes: data ?? [] }));
+      }
 
       const { count: c, error: e2 } = await porSede(
         supabase
@@ -118,8 +135,11 @@ export default function ReposicionButton({ count, perfil, mobile = false }) {
         <PackageX className={icon} strokeWidth={1.75} />
         {count > 0 && (
           <span
-            className="absolute -right-0.5 -top-0.5 grid min-h-[16px] min-w-[16px] place-items-center rounded-full px-1 text-[10px] font-bold text-white"
-            style={{ backgroundColor: "var(--warn-500)" }}
+            className="absolute -right-0.5 -top-0.5 grid min-h-[16px] min-w-[16px] place-items-center rounded-full px-1 text-[10px] font-bold"
+            style={{
+              backgroundColor: "var(--warn-500)",
+              color: "var(--warn-500-fg)",
+            }}
           >
             {count > 99 ? "99+" : count}
           </span>
@@ -128,7 +148,7 @@ export default function ReposicionButton({ count, perfil, mobile = false }) {
 
       {open && (
         <div
-          className="absolute right-0 z-50 mt-2 w-[340px] overflow-hidden rounded-xl border shadow-lg"
+          className="fixed inset-x-2 top-[calc(3.5rem+env(safe-area-inset-top)+0.5rem)] z-50 overflow-hidden rounded-xl border shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[340px]"
           style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-200)" }}
         >
           <div
@@ -157,8 +177,21 @@ export default function ReposicionButton({ count, perfil, mobile = false }) {
             })}
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
-            {filas === null ? (
+          <div className="max-h-[min(20rem,60vh)] overflow-y-auto">
+            {errores[tab] ? (
+              <div className="px-3 py-6 text-center">
+                <p className="text-sm" style={{ color: "var(--dang-600)" }}>
+                  No se pudo cargar: {errores[tab]}
+                </p>
+                <button
+                  onClick={() => cargar(tab)}
+                  className="mt-2 text-xs font-medium"
+                  style={{ color: "var(--p-700)" }}
+                >
+                  Reintentar
+                </button>
+              </div>
+            ) : filas === null ? (
               <p
                 className="px-3 py-6 text-center text-sm"
                 style={{ color: "var(--n-500)" }}

@@ -16,7 +16,10 @@ import NotificacionesBell from "./NotificacionesBell";
 import Logo from "../ui/Logo";
 import ErrorBoundary from "../ui/ErrorBoundary";
 import { SECCIONES_ADMIN, getInitials } from "../../lib/admin-shell-ui";
-import { useReposicionCount } from "../../hooks/useReposicionCount";
+import {
+  useReposicionCount,
+  puedeVerInventario,
+} from "../../hooks/useReposicionCount";
 import { useNotificaciones } from "../../hooks/useNotificaciones";
 import ReposicionButton from "./ReposicionButton";
 
@@ -113,7 +116,9 @@ function HeaderAdmin({ perfil, initials, onLogout, reposicionCount, notifs }) {
         onAbrir={notifs.refrescar}
       />
 
-      <ReposicionButton count={reposicionCount} perfil={perfil} />
+      {puedeVerInventario(perfil) && (
+        <ReposicionButton count={reposicionCount} perfil={perfil} />
+      )}
 
       <div className="ml-1 flex h-8 items-center gap-2 pl-2">
         <div className="grid h-8 w-8 place-items-center rounded-full bg-white/15 ring-1 ring-white/25 font-mono text-[11px] font-semibold text-white">
@@ -183,7 +188,9 @@ function MobileHeaderAdmin({
           onAbrir={notifs.refrescar}
           mobile
         />
-        <ReposicionButton count={reposicionCount} perfil={perfil} mobile />
+        {puedeVerInventario(perfil) && (
+          <ReposicionButton count={reposicionCount} perfil={perfil} mobile />
+        )}
         <button
           onClick={onMenu}
           className="focus-ring grid h-10 w-10 place-items-center rounded-full bg-white/15 font-mono text-[11px] font-semibold text-white ring-1 ring-white/25"
@@ -436,8 +443,11 @@ function BottomNavAdmin({ reposicionCount, onMore }) {
                 </span>
                 {it.badge && reposicionCount > 0 && (
                   <span
-                    className="absolute right-[18%] top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold leading-none text-white"
-                    style={{ backgroundColor: "var(--warn-500)" }}
+                    className="absolute right-[18%] top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold leading-none"
+                    style={{
+                      backgroundColor: "var(--warn-500)",
+                      color: "var(--warn-500-fg)",
+                    }}
                   >
                     {reposicionCount > 99 ? "99+" : reposicionCount}
                   </span>
