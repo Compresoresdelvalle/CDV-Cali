@@ -27,7 +27,10 @@ import ThemeToggle from "../ui/ThemeToggle";
 import GlobalSearch from "./GlobalSearch";
 import Logo from "../ui/Logo";
 import ErrorBoundary from "../ui/ErrorBoundary";
-import { useReposicionCount } from "../../hooks/useReposicionCount";
+import {
+  useReposicionCount,
+  puedeVerInventario,
+} from "../../hooks/useReposicionCount";
 import { useNotificaciones } from "../../hooks/useNotificaciones";
 import ReposicionButton from "./ReposicionButton";
 import NotificacionesBell from "./NotificacionesBell";
@@ -264,7 +267,9 @@ function HeaderOps({
         onAbrir={notifs.refrescar}
       />
 
-      <ReposicionButton count={reposicionCount} perfil={perfil} />
+      {puedeVerInventario(perfil) && (
+        <ReposicionButton count={reposicionCount} perfil={perfil} />
+      )}
 
       {/* Usuario + logout */}
       <div className="ml-1 flex h-8 items-center gap-2 pl-2">
@@ -340,7 +345,9 @@ function MobileHeader({ perfil, initials, reposicionCount, notifs, onMenu }) {
           onAbrir={notifs.refrescar}
           mobile
         />
-        <ReposicionButton count={reposicionCount} perfil={perfil} mobile />
+        {puedeVerInventario(perfil) && (
+          <ReposicionButton count={reposicionCount} perfil={perfil} mobile />
+        )}
         <button
           onClick={onMenu}
           className="focus-ring grid h-10 w-10 place-items-center rounded-full bg-white/15 font-mono text-[11px] font-semibold text-white ring-1 ring-white/25"
