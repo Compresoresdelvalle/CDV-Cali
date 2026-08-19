@@ -1,22 +1,22 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
-import { supabase } from "../../lib/supabase";
 import { formatDate } from "../../lib/utils";
 
 /**
- * Campana de notificaciones in-app (tabla `notificaciones`).
- *
- * Vive en layout/ y no en admin/ porque la usan los dos shells: hasta ahora
- * solo se montaba en AdminShell, así que las 236 notificaciones de traspaso
- * dirigidas a Vendedor y Bodeguero nunca tuvieron dónde mostrarse.
- *
- * El badge se cuenta en servidor: contar los no leídos de las 30 filas
- * cargadas daba siempre 30 cuando el real era 763.
+ * Campana de notificaciones. Presentacional: el estado vive en
+ * `useNotificaciones`, que el shell llama UNA vez y reparte a las dos
+ * instancias (escritorio y móvil se montan las dos, solo se ocultan por CSS).
  */
 
-/** A dónde lleva cada tipo de aviso, usando el `data` jsonb que ya viene lleno. */
-function rutaDe(n) {
+/**
+ * A dónde lleva cada aviso. Devuelve null si no hay destino razonable, y en ese
+ * caso la tarjeta se pinta como no pulsable.
+ *
+ * Los respaldos importan: de 841 conversiones solo 1 trae `fecha` (las 840
+ * heredadas son de la función vieja), pero 840 sí traen `producto_id`.
+ */
+function rutaDe(n, rol) {
   const d = n?.data ?? {};
   switch (n?.tipo) {
     case "traspaso_en_camino":
@@ -24,71 +24,36 @@ function rutaDe(n) {
     case "ensamble_creado":
       return d.ensamble_id ? `/ops/ensambles/${d.ensamble_id}` : null;
     case "conversion_insumo":
-      return d.sede_id && d.fecha
-        ? `/admin/auditoria?tipo=conversion_a_insumo&sede=${encodeURIComponent(d.sede_id)}&desde=${d.fecha}&hasta=${d.fecha}`
-        : null;
-    case "costo_revisar":
+      // /admin/* está tras RoleGuard de Admin y redirige mudo a /ops: a los
+      // demás roles se les manda al producto, que es lo que sí pueden ver.
+      if (rol === "Admin" && d.sede_id && d.fecha) {
+        return `/admin/auditoria?tipo=conversion_a_insumo&sede=${encodeURIComponent(d.sede_id)}&desde=${d.fecha}&hasta=${d.fecha}`;
+      }
       return d.producto_id ? `/ops/inventario/${d.producto_id}` : null;
+    case "costo_revisar":
+      if (d.producto_id) return `/ops/inventario/${d.producto_id}`;
+      // Esta variante guarda `referencias`, no un id. Inventario ya lee ?q=.
+      return Array.isArray(d.referencias) && d.referencias[0]
+        ? `/ops/inventario?q=${encodeURIComponent(d.referencias[0])}`
+        : null;
     default:
       return null;
   }
 }
 
-const COLS = "id, tipo, titulo, mensaje, data, leida, created_at, updated_at";
-
-export default function NotificacionesBell({ mobile = false }) {
+export default function NotificacionesBell({
+  items,
+  noLeidas,
+  error,
+  perfil,
+  onMarcarUna,
+  onMarcarTodas,
+  onAbrir,
+  mobile = false,
+}) {
   const navigate = useNavigate();
-  const [items, setItems] = useState([]);
-  const [noLeidas, setNoLeidas] = useState(0);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-
-  // Conteo en servidor, separado de las 30 filas del panel.
-  const cargarConteo = useCallback(async () => {
-    const { count, error } = await supabase
-      .from("notificaciones")
-      .select("id", { count: "exact", head: true })
-      .eq("leida", false);
-    // Si falla, conservar el último conteo en vez de mentir con 0.
-    if (!error) setNoLeidas(count ?? 0);
-  }, []);
-
-  const cargarLista = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("notificaciones")
-      .select(COLS)
-      // updated_at y no created_at: un aviso agrupado que se actualiza debe
-      // subir a la cabeza de la lista, y su created_at no cambia.
-      .order("updated_at", { ascending: false })
-      .limit(30);
-    if (!error) setItems(data ?? []);
-  }, []);
-
-  useEffect(() => {
-    // Carga inicial: ambas son async y el setState ocurre tras el await, pero
-    // la regla no lo distingue. Mismo patrón que useParametro.js / AppShell.jsx.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    cargarConteo();
-    cargarLista();
-
-    // Escucha INSERT y UPDATE: el agrupado de conversiones actualiza una fila
-    // existente en vez de insertar, así que solo con INSERT no se vería.
-    const channel = supabase
-      .channel("notificaciones-feed")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notificaciones" },
-        () => {
-          cargarConteo();
-          cargarLista();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [cargarConteo, cargarLista]);
 
   useEffect(() => {
     if (!open) return;
@@ -99,43 +64,19 @@ export default function NotificacionesBell({ mobile = false }) {
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  const abrir = async () => {
+  const abrir = () => {
     const next = !open;
     setOpen(next);
-    if (next) await cargarLista();
+    if (next) onAbrir?.();
   };
 
-  const alHacerClic = async (n) => {
-    const destino = rutaDe(n);
-    if (!n.leida) {
-      setItems((rows) =>
-        rows.map((r) => (r.id === n.id ? { ...r, leida: true } : r)),
-      );
-      setNoLeidas((c) => Math.max(0, c - 1));
-      await supabase
-        .from("notificaciones")
-        .update({ leida: true })
-        .eq("id", n.id);
-    }
-    // Si el aviso no trae la clave esperada se queda marcado leído y no se
-    // navega, en vez de mandar a una ruta muerta.
+  const alHacerClic = (n) => {
+    const destino = rutaDe(n, perfil?.rol);
+    if (!n.leida) onMarcarUna(n.id);
     if (destino) {
       setOpen(false);
       navigate(destino);
     }
-  };
-
-  const marcarTodas = async () => {
-    if (noLeidas === 0) return;
-    setItems((rows) => rows.map((n) => ({ ...n, leida: true })));
-    setNoLeidas(0);
-    // Sin lista de ids: así barre las 763, no solo las 30 cargadas. La RLS ya
-    // limita el alcance a para_rol = get_my_rol() o created_by = auth.uid().
-    await supabase
-      .from("notificaciones")
-      .update({ leida: true })
-      .eq("leida", false);
-    await cargarConteo();
   };
 
   const size = mobile ? "h-10 w-10" : "h-9 w-9";
@@ -145,12 +86,11 @@ export default function NotificacionesBell({ mobile = false }) {
     <div className="relative" ref={ref}>
       <button
         onClick={abrir}
-        className={`focus-ring relative grid ${size} place-items-center rounded-md text-white/85 hover:bg-white/10`}
+        className={`focus-ring relative grid ${size} shrink-0 place-items-center rounded-md text-white/85 hover:bg-white/10`}
         aria-label={
-          noLeidas > 0
-            ? `${noLeidas} notificaciones sin leer`
-            : "Notificaciones"
+          noLeidas > 0 ? `${noLeidas} notificaciones sin leer` : "Notificaciones"
         }
+        aria-expanded={open}
         title="Notificaciones"
       >
         <Bell className={icon} strokeWidth={1.75} />
@@ -166,7 +106,7 @@ export default function NotificacionesBell({ mobile = false }) {
 
       {open && (
         <div
-          className="absolute right-0 z-50 mt-2 w-[340px] overflow-hidden rounded-xl border shadow-lg"
+          className="fixed inset-x-2 top-[calc(3.5rem+env(safe-area-inset-top)+0.5rem)] z-50 overflow-hidden rounded-xl border shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[340px]"
           style={{ backgroundColor: "var(--n-0)", borderColor: "var(--n-200)" }}
         >
           <div
@@ -181,16 +121,23 @@ export default function NotificacionesBell({ mobile = false }) {
             </span>
             {noLeidas > 0 && (
               <button
-                onClick={marcarTodas}
-                className="text-xs font-medium"
+                onClick={onMarcarTodas}
+                className="-mx-2 rounded px-2 py-2 text-xs font-medium"
                 style={{ color: "var(--p-700)" }}
               >
                 Marcar todas leídas
               </button>
             )}
           </div>
-          <div className="max-h-80 overflow-y-auto">
-            {items.length === 0 ? (
+          <div className="max-h-[min(20rem,60vh)] overflow-y-auto">
+            {error ? (
+              <p
+                className="px-3 py-6 text-center text-sm"
+                style={{ color: "var(--dang-600)" }}
+              >
+                No se pudieron cargar las notificaciones: {error}
+              </p>
+            ) : items.length === 0 ? (
               <p
                 className="px-3 py-6 text-center text-sm"
                 style={{ color: "var(--n-500)" }}
@@ -198,18 +145,9 @@ export default function NotificacionesBell({ mobile = false }) {
                 Sin notificaciones
               </p>
             ) : (
-              items.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => alHacerClic(n)}
-                  className="block w-full border-b px-3 py-2.5 text-left last:border-b-0"
-                  style={{
-                    borderColor: "var(--n-100)",
-                    backgroundColor: n.leida
-                      ? "var(--n-0)"
-                      : "var(--info-50, #eff6ff)",
-                  }}
-                >
+              items.map((n) => {
+                const destino = rutaDe(n, perfil?.rol);
+                const contenido = (
                   <div className="flex items-start gap-2">
                     {!n.leida && (
                       <span
@@ -235,8 +173,35 @@ export default function NotificacionesBell({ mobile = false }) {
                       </p>
                     </div>
                   </div>
-                </button>
-              ))
+                );
+                const estilo = {
+                  borderColor: "var(--n-100)",
+                  backgroundColor: n.leida
+                    ? "var(--n-0)"
+                    : "var(--info-50, #eff6ff)",
+                };
+                // Sin destino no se pinta como botón: un botón que no lleva a
+                // ninguna parte se lee como roto.
+                return destino ? (
+                  <button
+                    key={n.id}
+                    onClick={() => alHacerClic(n)}
+                    className="block w-full border-b px-3 py-2.5 text-left last:border-b-0"
+                    style={estilo}
+                  >
+                    {contenido}
+                  </button>
+                ) : (
+                  <div
+                    key={n.id}
+                    onClick={() => !n.leida && onMarcarUna(n.id)}
+                    className="block w-full border-b px-3 py-2.5 text-left last:border-b-0"
+                    style={estilo}
+                  >
+                    {contenido}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

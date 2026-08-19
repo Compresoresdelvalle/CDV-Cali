@@ -17,6 +17,7 @@ import Logo from "../ui/Logo";
 import ErrorBoundary from "../ui/ErrorBoundary";
 import { SECCIONES_ADMIN, getInitials } from "../../lib/admin-shell-ui";
 import { useReposicionCount } from "../../hooks/useReposicionCount";
+import { useNotificaciones } from "../../hooks/useNotificaciones";
 import ReposicionButton from "./ReposicionButton";
 
 /* ── Sidebar admin (desktop ≥ lg) ─────────────────────────────────────── */
@@ -80,7 +81,7 @@ function SidebarAdmin() {
 }
 
 /* ── Topbar admin (gradiente de marca) ────────────────────────────────── */
-function HeaderAdmin({ perfil, initials, onLogout, reposicionCount }) {
+function HeaderAdmin({ perfil, initials, onLogout, reposicionCount, notifs }) {
   return (
     <header className="chv-topbar chv-topbar-admin sticky top-0 z-30 hidden lg:flex h-14 items-center gap-3 px-4">
       <Link
@@ -102,7 +103,15 @@ function HeaderAdmin({ perfil, initials, onLogout, reposicionCount }) {
 
       <ThemeToggle />
 
-      <NotificacionesBell />
+      <NotificacionesBell
+        items={notifs.items}
+        noLeidas={notifs.noLeidas}
+        error={notifs.error}
+        perfil={perfil}
+        onMarcarUna={notifs.marcarUna}
+        onMarcarTodas={notifs.marcarTodas}
+        onAbrir={notifs.refrescar}
+      />
 
       <ReposicionButton count={reposicionCount} perfil={perfil} />
 
@@ -133,7 +142,13 @@ function HeaderAdmin({ perfil, initials, onLogout, reposicionCount }) {
  * Salida rápida a Operaciones, alertas con contador y avatar que abre el menú
  * admin completo (drawer). Respeta el notch con env(safe-area-inset-top).
  * ──────────────────────────────────────────────────────────────────────── */
-function MobileHeaderAdmin({ perfil, initials, reposicionCount, onMenu }) {
+function MobileHeaderAdmin({
+  perfil,
+  initials,
+  reposicionCount,
+  notifs,
+  onMenu,
+}) {
   return (
     <header
       className="chv-topbar chv-topbar-admin sticky top-0 z-30 flex lg:hidden items-center justify-between px-4"
@@ -158,7 +173,16 @@ function MobileHeaderAdmin({ perfil, initials, reposicionCount, onMenu }) {
         >
           <ArrowLeftCircle className="h-[18px] w-[18px]" strokeWidth={1.75} />
         </Link>
-        <NotificacionesBell mobile />
+        <NotificacionesBell
+          items={notifs.items}
+          noLeidas={notifs.noLeidas}
+          error={notifs.error}
+          perfil={perfil}
+          onMarcarUna={notifs.marcarUna}
+          onMarcarTodas={notifs.marcarTodas}
+          onAbrir={notifs.refrescar}
+          mobile
+        />
         <ReposicionButton count={reposicionCount} perfil={perfil} mobile />
         <button
           onClick={onMenu}
@@ -442,6 +466,7 @@ export default function AdminShell() {
   const location = useLocation();
   const initials = getInitials(perfil?.nombre || "");
   const reposicionCount = useReposicionCount(perfil);
+  const notifs = useNotificaciones(perfil);
   const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
@@ -479,6 +504,7 @@ export default function AdminShell() {
           initials={initials}
           onLogout={handleLogout}
           reposicionCount={reposicionCount}
+          notifs={notifs}
         />
 
         {/* Header móvil/tablet */}
@@ -486,6 +512,7 @@ export default function AdminShell() {
           perfil={perfil}
           initials={initials}
           reposicionCount={reposicionCount}
+          notifs={notifs}
           onMenu={() => setMoreOpen(true)}
         />
 
