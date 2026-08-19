@@ -20,6 +20,11 @@ export const puedeVerInventario = (perfil) =>
 export function useReposicionCount(perfil) {
   const [count, setCount] = useState(0);
   const timerRef = useRef(null);
+  // Sufijo único por montaje. Con un nombre fijo, al navegar entre /ops y
+  // /admin el shell nuevo pedía el canal mientras el del shell viejo seguía en
+  // estado `leaving`: supabase reutiliza el canal por topic, el subscribe() no
+  // hacía nada por no estar cerrado, y el badge se quedaba sin actualizarse.
+  const canalRef = useRef(null);
 
   // Primitivas sueltas: usando `perfil?.x` directo en las deps, el compilador de
   // React infiere `perfil` entero y no puede preservar la memoización.
@@ -57,8 +62,12 @@ export function useReposicionCount(perfil) {
       timerRef.current = setTimeout(fetchCount, 3000);
     };
 
+    if (!canalRef.current) {
+      canalRef.current = `reposicion-count-${Math.random().toString(36).slice(2)}`;
+    }
+
     const channel = supabase
-      .channel("reposicion-count")
+      .channel(canalRef.current)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "inventario" },
