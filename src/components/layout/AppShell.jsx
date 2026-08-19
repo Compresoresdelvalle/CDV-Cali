@@ -28,6 +28,7 @@ import GlobalSearch from "./GlobalSearch";
 import Logo from "../ui/Logo";
 import ErrorBoundary from "../ui/ErrorBoundary";
 import { useReposicionCount } from "../../hooks/useReposicionCount";
+import { useNotificaciones } from "../../hooks/useNotificaciones";
 import ReposicionButton from "./ReposicionButton";
 import NotificacionesBell from "./NotificacionesBell";
 
@@ -228,7 +229,14 @@ function SidebarOps({ sections, isAdmin }) {
 }
 
 /* ── Topbar (brand color) ─────────────────────────────────────────────── */
-function HeaderOps({ perfil, rol, initials, reposicionCount, onLogout }) {
+function HeaderOps({
+  perfil,
+  rol,
+  initials,
+  reposicionCount,
+  notifs,
+  onLogout,
+}) {
   return (
     <header className="chv-topbar sticky top-0 z-30 hidden lg:flex h-14 items-center gap-3 px-4">
       {/* #33 — Buscador global funcional (dropdown de resultados en vivo) */}
@@ -246,7 +254,15 @@ function HeaderOps({ perfil, rol, initials, reposicionCount, onLogout }) {
 
       <ThemeToggle />
 
-      <NotificacionesBell />
+      <NotificacionesBell
+        items={notifs.items}
+        noLeidas={notifs.noLeidas}
+        error={notifs.error}
+        perfil={perfil}
+        onMarcarUna={notifs.marcarUna}
+        onMarcarTodas={notifs.marcarTodas}
+        onAbrir={notifs.refrescar}
+      />
 
       <ReposicionButton count={reposicionCount} perfil={perfil} />
 
@@ -280,7 +296,7 @@ function HeaderOps({ perfil, rol, initials, reposicionCount, onLogout }) {
  * mueve al drawer para no saturar la barra superior. Respeta la safe-area del
  * notch con env(safe-area-inset-top).
  * ──────────────────────────────────────────────────────────────────────── */
-function MobileHeader({ perfil, initials, reposicionCount, onMenu }) {
+function MobileHeader({ perfil, initials, reposicionCount, notifs, onMenu }) {
   return (
     <header
       className="chv-topbar sticky top-0 z-30 flex lg:hidden items-center justify-between px-4"
@@ -314,7 +330,16 @@ function MobileHeader({ perfil, initials, reposicionCount, onMenu }) {
         >
           <Search className="h-[18px] w-[18px]" strokeWidth={1.75} />
         </button>
-        <NotificacionesBell mobile />
+        <NotificacionesBell
+          items={notifs.items}
+          noLeidas={notifs.noLeidas}
+          error={notifs.error}
+          perfil={perfil}
+          onMarcarUna={notifs.marcarUna}
+          onMarcarTodas={notifs.marcarTodas}
+          onAbrir={notifs.refrescar}
+          mobile
+        />
         <ReposicionButton count={reposicionCount} perfil={perfil} mobile />
         <button
           onClick={onMenu}
@@ -705,6 +730,7 @@ export default function AppShell() {
   const location = useLocation();
 
   const reposicionCount = useReposicionCount(perfil);
+  const notifs = useNotificaciones(perfil);
   const [moreOpen, setMoreOpen] = useState(false);
 
   const rol = perfil?.rol ?? "";
@@ -751,6 +777,7 @@ export default function AppShell() {
           rol={rol}
           initials={initials}
           reposicionCount={reposicionCount}
+          notifs={notifs}
           onLogout={handleLogout}
         />
 
@@ -759,6 +786,7 @@ export default function AppShell() {
           perfil={perfil}
           initials={initials}
           reposicionCount={reposicionCount}
+          notifs={notifs}
           onMenu={() => setMoreOpen(true)}
         />
 
