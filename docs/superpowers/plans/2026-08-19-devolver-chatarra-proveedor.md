@@ -30,13 +30,21 @@ No trabajar sobre `main`.
 Esto manda sobre qué botón ve cada quien. No inventar nada distinto:
 
 - **Devolución a proveedor** (`DevolucionNueva.jsx:68`): la ofrece la UI si el rol es
-  `Admin` o `Bodeguero`. La RPC `fn_registrar_devolucion` además exige, para quien no
-  es Admin, que `p_sede_id` sea su propia sede.
+  `Admin` o `Bodeguero`.
+- **Y el límite que de verdad manda** (`DevolucionNueva.jsx:255`): el formulario envía
+  siempre `p_sede_id: perfil?.sede_id` y **no tiene selector de sede**. Da igual que la
+  RPC le permita a un Admin operar en cualquier sede: la pantalla nunca se lo pide. Por
+  tanto **nadie, ni el Admin, puede devolver al proveedor una pieza que no esté en su
+  propia sede**.
 - **Traspaso** (`fn_crear_traspaso`): _"Solo puedes crear traspasos desde tu propia
-  sede"_ salvo Admin.
+  sede"_ salvo Admin, y `TraspasoNuevo.jsx:39` sí le da al Admin un selector de origen.
 
-Consecuencia práctica: un Bodeguero **no** puede traer la pieza desde CHV. Un Admin sí,
-y de hecho un Admin puede devolverla al proveedor directamente desde CHV sin traspaso.
+Consecuencia práctica: **el traspaso a bodega es obligatorio**, no un adorno. Una
+chatarra que quedó en CHV no la puede devolver nadie hasta que llegue a BODEGA. Quien
+la envía es la vendedora de CHV (desde su sede) o un Admin (desde cualquiera).
+
+Una versión anterior de este plan afirmaba que un Admin podía devolverla directamente
+desde CHV. Era falso y se corrigió al revisar qué sede manda el formulario.
 
 ## Estructura de archivos
 
@@ -135,12 +143,19 @@ const accionDevuelto = (d) => {
   if ((d.stock ?? 0) <= 0) {
     return { tipo: "sin-stock" };
   }
-  // fn_registrar_devolucion: quien no es Admin solo opera en su sede.
-  if (esAdmin || (esBodeguero && d.sede_id === perfil?.sede_id)) {
+  const enMiSede = d.sede_id === perfil?.sede_id;
+  // OJO: el formulario de Devoluciones manda SIEMPRE `perfil.sede_id` y no
+  // tiene selector de sede (DevolucionNueva.jsx:255). Así que devolver solo
+  // es posible si la pieza está en la sede de quien la registra — Admin
+  // incluido, aunque la RPC en teoría se lo permitiría desde cualquier sede.
+  if (puedeGestionarChatarra && enMiSede) {
     return { tipo: "devolver" };
   }
-  // fn_crear_traspaso: quien no es Admin solo crea desde su sede.
-  if (d.sede_id === perfil?.sede_id) {
+  // Traspaso: fn_crear_traspaso exige sede propia salvo Admin, y el
+  // formulario sí deja al Admin elegir el origen (TraspasoNuevo.jsx:39).
+  // Una vendedora también puede enviar desde su sede, y debe poder: es
+  // quien tiene la pieza en la mano.
+  if (esAdmin || enMiSede) {
     return { tipo: "traspasar" };
   }
   return { tipo: "otra-sede" };
@@ -206,7 +221,7 @@ que el bloque vecino, para que se vea igual:
                 </span>
               </div>
 
-              {puedeGestionarChatarra && accion.tipo === "devolver" && (
+              {accion.tipo === "devolver" && (
                 <button
                   onClick={() =>
                     navigate(
@@ -224,7 +239,7 @@ que el bloque vecino, para que se vea igual:
                 </button>
               )}
 
-              {puedeGestionarChatarra && accion.tipo === "traspasar" && (
+              {accion.tipo === "traspasar" && (
                 <button
                   onClick={() =>
                     navigate(
@@ -242,10 +257,10 @@ que el bloque vecino, para que se vea igual:
                 </button>
               )}
 
-              {puedeGestionarChatarra && accion.tipo === "otra-sede" && (
+              {accion.tipo === "otra-sede" && (
                 <p className="text-[11.5px]" style={{ color: "var(--n-500)" }}>
-                  Está en {d.sede_id}. Esa sede debe enviarla a bodega, o un
-                  Admin puede devolverla al proveedor directamente.
+                  Está en {d.sede_id}. Esa sede debe enviarla a bodega antes de
+                  poder devolverla al proveedor.
                 </p>
               )}
 
