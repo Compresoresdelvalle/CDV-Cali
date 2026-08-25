@@ -94,6 +94,10 @@ export default function ModalCambioProducto({
   // sin cuenta identificable para el arqueo).
   const [cuenta, setCuenta] = useState("");
   const [cuentasBanco, setCuentasBanco] = useState([]);
+  // Por qué se hace el cambio. Hasta ahora el motivo iba escrito a fuego y
+  // siempre decía lo mismo, así que en el historial no había forma de saber
+  // qué había pasado en cada cambio.
+  const [motivo, setMotivo] = useState("");
   const [guardando, setGuardando] = useState(false);
   const guardandoRef = useRef(false);
   const mountedRef = useRef(true);
@@ -243,7 +247,12 @@ export default function ModalCambioProducto({
             accion === "cobro" && metodo === "Transferencia"
               ? cuenta || null
               : null,
-          p_motivo: `Cambio desde venta #${venta.numero}`,
+          // Se concatena en vez de sustituir: el vínculo con la venta original
+          // es lo que permite rastrear el cambio, y no se puede perder porque
+          // alguien escriba un motivo.
+          p_motivo: motivo.trim()
+            ? `Cambio desde venta #${venta.numero} — ${motivo.trim()}`
+            : `Cambio desde venta #${venta.numero}`,
         },
       );
       if (rpcErr) throw new Error(rpcErr.message);
@@ -647,6 +656,22 @@ export default function ModalCambioProducto({
               )}
             </Section>
           )}
+
+          <Section titulo="Motivo del cambio">
+            <textarea
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              rows={2}
+              maxLength={300}
+              placeholder="Por qué se hace el cambio — opcional, pero ayuda a entender el historial después"
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              style={{
+                backgroundColor: "hsl(var(--card))",
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--foreground))",
+              }}
+            />
+          </Section>
         </div>
 
         {/* Footer */}
