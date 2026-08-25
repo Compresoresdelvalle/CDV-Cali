@@ -31,10 +31,8 @@ import {
   categoriaBadge,
   componerObservaciones,
 } from "../../lib/cotizaciones-ui";
-
-// Texto fijo de condiciones de entrega (Lovable paso 3 · locked, idéntico al PDF).
-const TEXTO_FIJO_ENTREGA =
-  "El cliente se compromete a recibir la mercancía en las condiciones físicas en que se entrega. Cualquier reclamo sobre defectos visibles debe realizarse al momento de la entrega. Las garantías aplican según política de fábrica del producto. Los precios incluyen embalaje estándar. Embalaje especial bajo cotización adicional.";
+// Fuente única del texto: antes vivía copiado aquí y en CotizacionEditar.jsx.
+import { TEXTO_FIJO_ENTREGA } from "../../lib/pdf/pdfStyles";
 
 // Validación de email igual al CHECK del servidor (RFC simplificado).
 const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
