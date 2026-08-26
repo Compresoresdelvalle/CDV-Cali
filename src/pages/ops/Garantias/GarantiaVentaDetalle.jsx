@@ -200,8 +200,14 @@ export default function GarantiaVentaDetalle() {
     );
   }
 
-  const esBodeguero = perfil?.rol === "Bodeguero";
-  const puedeGestionarChatarra = esAdmin || esBodeguero;
+  // Devolver al proveedor: el formulario de Devoluciones solo ofrece el tipo
+  // "proveedor" a Admin y Bodeguero. Pero a ESTA pantalla el RoleGuard solo
+  // deja entrar a Admin, Vendedor y Tecnico (ver App.jsx, garantias/venta/:id),
+  // asi que en la practica el unico que puede devolver desde aqui es el Admin.
+  // No se deja `|| esBodeguero` porque seria codigo muerto que sugiere una
+  // capacidad que nadie tiene: si algun dia Bodega entra aqui, hay que
+  // ampliar el RoleGuard y revisar el resto de la pantalla a la vez.
+  const puedeGestionarChatarra = esAdmin;
   // Quién puede CREAR un traspaso. Se deriva de ROLE_MODULES en vez de listar
   // roles a mano: si mañana cambia quién traspasa, este botón se entera solo.
   // Sin esto, un Técnico —que sí puede abrir garantías y llegar a esta
@@ -657,8 +663,9 @@ export default function GarantiaVentaDetalle() {
                           className="text-[11.5px]"
                           style={{ color: "var(--n-500)" }}
                         >
-                          Ya no está en inventario: se devolvió al proveedor o
-                          se dio de baja. Puedes ver su historial en Auditoría.
+                          Ya no está en inventario: se devolvió al proveedor, se
+                          dio de baja o se anuló una garantía que la retiró.
+                          Puedes ver su historial en Auditoría.
                         </p>
                       )}
                     </li>
