@@ -31,8 +31,9 @@ import {
   categoriaBadge,
   componerObservaciones,
 } from "../../lib/cotizaciones-ui";
-// Fuente única del texto: antes vivía copiado aquí y en CotizacionEditar.jsx.
-import { TEXTO_FIJO_ENTREGA } from "../../lib/pdf/pdfStyles";
+// Mismo texto que imprime el PDF: la pantalla mostraba otro distinto bajo la
+// etiqueta "aparece siempre", que no era cierta.
+import { TEXTO_ENTREGA_COTIZACION } from "../../lib/pdf/pdfStyles";
 
 // Validación de email igual al CHECK del servidor (RFC simplificado).
 const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -1390,7 +1391,7 @@ function PasoAjustes({
           className="text-[12px] leading-[1.55]"
           style={{ color: "var(--n-700)" }}
         >
-          {TEXTO_FIJO_ENTREGA}
+          {TEXTO_ENTREGA_COTIZACION}
         </p>
       </div>
     </WizCard>
