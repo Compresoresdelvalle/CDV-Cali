@@ -74,6 +74,7 @@ const MODULE_SECTION = {
   Recibos: "Operación comercial",
   Clientes: "Operación comercial",
   Devoluciones: "Operación comercial",
+  Cuentas: "Operación comercial",
   Compras: "Bodega y movimiento",
   Traspasos: "Bodega y movimiento",
   Garantías: "Bodega y movimiento",

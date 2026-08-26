@@ -62,7 +62,7 @@ import AnalisisABC from "./pages/admin/AnalisisABC";
 import Auditoria from "./pages/admin/Auditoria";
 import Usuarios from "./pages/admin/Usuarios";
 import Conteo from "./pages/admin/Conteo";
-import Cuentas from "./pages/admin/Cuentas";
+import Cuentas from "./pages/ops/Cuentas";
 import EtiquetasImprimir from "./pages/ops/EtiquetasImprimir";
 
 // Placeholder genérico para módulos aún no implementados
@@ -443,6 +443,18 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <CierreOps />
+              </RoleGuard>
+            }
+          />
+          {/* Cuentas por cobrar y por pagar. Mismo componente que /admin/cuentas:
+              las pestañas se derivan del rol dentro de la página, y el servidor
+              acota qué puede registrar cada uno y en qué sede. El Técnico no
+              entra. */}
+          <Route
+            path="cuentas"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
+                <Cuentas />
               </RoleGuard>
             }
           />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, Trash2, Wallet, CheckCircle2, Printer } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { useAuthStore } from "../../stores/authStore";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import {
   METODOS_PAGO_CUENTA,
@@ -24,6 +25,9 @@ import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
 export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
   const esCobro = cuenta.tipo === "cobro";
   const refKey = esCobro ? "venta_id" : "compra_id";
+
+  const perfil = useAuthStore((st) => st.perfil);
+  const esAdmin = perfil?.rol === "Admin";
 
   const [pagos, setPagos] = useState([]);
   const [cuentasBanco, setCuentasBanco] = useState([]);
@@ -415,7 +419,11 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                         >
                           {p.cuenta_bancaria || p.observaciones || ""}
                         </span>
-                        {anularId !== p.id && (
+                        {/* fn_eliminar_pago_cuenta es solo del Admin: anular
+                            deshace un movimiento contable. Sin esta condición,
+                            una vendedora vería la papelera y recibiría un error
+                            del servidor al pulsarla. */}
+                        {esAdmin && anularId !== p.id && (
                           <button
                             onClick={() => {
                               setAnularId(p.id);
