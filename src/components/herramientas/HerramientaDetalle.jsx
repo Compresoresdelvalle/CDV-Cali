@@ -19,6 +19,7 @@ import { supabase } from "../../lib/supabase";
 import {
   estadoPill,
   prestamoTono,
+  puedeDevolverHerramienta,
   sedeLabel,
   diasEnUsoTexto,
   diasVencida,
@@ -162,7 +163,8 @@ export default function HerramientaDetalle({
   // El rol dice QUÉ se puede hacer; la sede, DÓNDE. Desde que la lista muestra
   // herramientas de las cuatro sedes, sin la segunda condición saldrían botones
   // que el servidor rechaza por ser de otra sede.
-  const puedeGestionar = puedeOperar && (esAdmin || puedeOperarRol) && !estaRetirada;
+  const puedeGestionar =
+    puedeOperar && (esAdmin || puedeOperarRol) && !estaRetirada;
   const esMantenimiento = h.estado === "en_mantenimiento";
   const esInventariable = !!h.producto_id; // vinculada a un insumo del catálogo
   const tono = prestamoTono(h);
@@ -269,9 +271,11 @@ export default function HerramientaDetalle({
           {/* Devolver: solo Admin o Bodega. Una inventariable la regresa al insumo
               (retiro) → solo Admin; una manual vuelve a 'disponible'. */}
           {esPrestada &&
-            puedeOperar &&
-            (esAdmin || puedeOperarRol) &&
-            (!esInventariable || esAdmin) && (
+            puedeDevolverHerramienta(h, {
+              esAdmin,
+              puedeOperarRol,
+              puedeOperar,
+            }) && (
               <button
                 onClick={onDevolver}
                 disabled={accionando}
@@ -610,7 +614,7 @@ export default function HerramientaDetalle({
                           ? "Sin préstamo activo. Puedes prestarla desde la lista de herramientas."
                           : !puedeOperar
                             ? `Disponible en ${sedeLabel(h.sede_id)} · solo esa sede o el Admin puede prestarla.`
-                            : "Disponible · el préstamo lo registra el Admin o la vendedora de la sede."}
+                            : "Disponible · el préstamo lo registra quien tenga permiso en esta sede."}
                 </div>
               </div>
             )}
