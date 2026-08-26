@@ -62,9 +62,15 @@ const TABS = [
 export default function Herramientas() {
   const perfil = useAuthStore((s) => s.perfil);
   const isAdmin = perfil?.rol === "Admin";
-  const esBodega = perfil?.rol === "Bodeguero";
-  // Crear, prestar y devolver: solo Admin o Bodega. Consumir y regresar a insumo: solo Admin.
-  const puedeCrear = isAdmin || esBodega;
+  /** Decisión de la clienta (2026-08-26): bodega pasa a SOLO LECTURA en
+   *  herramientas. Ve las cuatro sedes, pero no opera ninguna. La capacidad
+   *  operativa por ROL queda solo en el Admin.
+   *
+   *  Se conserva como variable con nombre —en vez de escribir `isAdmin` suelto
+   *  por todas partes— porque devolverle la capacidad a bodega es cambiar esta
+   *  única línea, y porque el nombre dice POR QUÉ se puede, no QUIÉN eres. */
+  const puedeOperarRol = isAdmin;
+  const puedeCrear = isAdmin;
   const miSede = perfil?.sede_id;
   /** Las funciones del servidor solo dejan actuar sobre la sede propia, salvo
    *  al Admin. Ahora que la lista muestra herramientas de las cuatro sedes, el
@@ -618,7 +624,7 @@ export default function Herramientas() {
             disponiblesCount={disponibles.length}
             accionando={accionando}
             esAdmin={isAdmin}
-            esBodega={esBodega}
+            puedeOperarRol={puedeOperarRol}
             puedeOperarEn={puedeOperarEn}
             onOpen={setDetalleId}
             onAccion={(grupo, accion) => setModalCantidad({ grupo, accion })}
@@ -646,7 +652,7 @@ export default function Herramientas() {
           herramienta={detalle}
           accionando={accionando === detalle.id}
           esAdmin={isAdmin}
-          esBodega={esBodega}
+          puedeOperarRol={puedeOperarRol}
           puedeOperar={puedeOperarEn(detalle.sede_id)}
           onClose={() => setDetalleId(null)}
           onDevolver={() => devolver(detalle)}
@@ -739,7 +745,7 @@ function TabActivos({
   disponiblesCount,
   accionando,
   esAdmin,
-  esBodega,
+  puedeOperarRol,
   puedeOperarEn,
   onOpen,
   onAccion,
@@ -857,7 +863,7 @@ function TabActivos({
                 g={g}
                 accionando={g.unidades.some((u) => u.id === accionando)}
                 esAdmin={esAdmin}
-                esBodega={esBodega}
+                puedeOperarRol={puedeOperarRol}
                 puedeOperar={puedeOperarEn(g.anchor.sede_id)}
                 onOpen={() => onOpen(g.anchor.id)}
                 onAccion={(accion) => onAccion(g, accion)}
@@ -899,7 +905,7 @@ function TabActivos({
               g={g}
               accionando={g.unidades.some((u) => u.id === accionando)}
               esAdmin={esAdmin}
-              esBodega={esBodega}
+              puedeOperarRol={puedeOperarRol}
               puedeOperar={puedeOperarEn(g.anchor.sede_id)}
               onOpen={() => onOpen(g.anchor.id)}
               onAccion={(accion) => onAccion(g, accion)}
@@ -915,7 +921,7 @@ function LoanRow({
   g,
   accionando,
   esAdmin,
-  esBodega,
+  puedeOperarRol,
   puedeOperar,
   onOpen,
   onAccion,
@@ -931,7 +937,7 @@ function LoanRow({
   // tienen que cumplirse o el servidor rechaza la acción.
   const puedeDevolver = puedeDevolverHerramienta(h, {
     esAdmin,
-    esBodega,
+    puedeOperarRol,
     puedeOperar,
   });
   const codigo = g.unidades.every(
@@ -1096,7 +1102,7 @@ function LoanCard({
   g,
   accionando,
   esAdmin,
-  esBodega,
+  puedeOperarRol,
   puedeOperar,
   onOpen,
   onAccion,
@@ -1109,7 +1115,7 @@ function LoanCard({
   // tienen que cumplirse o el servidor rechaza la acción.
   const puedeDevolver = puedeDevolverHerramienta(h, {
     esAdmin,
-    esBodega,
+    puedeOperarRol,
     puedeOperar,
   });
   return (

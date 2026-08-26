@@ -127,7 +127,7 @@ export default function HerramientaDetalle({
   herramienta,
   accionando,
   esAdmin,
-  esBodega,
+  puedeOperarRol,
   puedeOperar,
   onClose,
   onDevolver,
@@ -161,7 +161,7 @@ export default function HerramientaDetalle({
   // El rol dice QUÉ se puede hacer; la sede, DÓNDE. Desde que la lista muestra
   // herramientas de las cuatro sedes, sin la segunda condición saldrían botones
   // que el servidor rechaza por ser de otra sede.
-  const puedeGestionar = puedeOperar && (esAdmin || esBodega) && !estaRetirada;
+  const puedeGestionar = puedeOperar && (esAdmin || puedeOperarRol) && !estaRetirada;
   const esMantenimiento = h.estado === "en_mantenimiento";
   const esInventariable = !!h.producto_id; // vinculada a un insumo del catálogo
   const tono = prestamoTono(h);
@@ -268,7 +268,7 @@ export default function HerramientaDetalle({
               (retiro) → solo Admin; una manual vuelve a 'disponible'. */}
           {esPrestada &&
             puedeOperar &&
-            (esAdmin || esBodega) &&
+            (esAdmin || puedeOperarRol) &&
             (!esInventariable || esAdmin) && (
               <button
                 onClick={onDevolver}

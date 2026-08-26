@@ -258,7 +258,8 @@ export function diasVencida(h) {
  * (`fn_devolver_herramienta`), así que si esto dice que sí y la RPC dice que
  * no, hay una desincronización que corregir aquí:
  *   - `puedeOperar`: la herramienta es de tu sede, o eres Admin.
- *   - rol Admin o Bodeguero.
+ *   - `puedeOperarRol`: el rol tiene capacidad operativa. Desde 2026-08-26
+ *     solo el Admin: bodega quedó en solo lectura por decisión de la clienta.
  *   - si es inventariable (tiene producto_id), devolverla la retira del
  *     catálogo, y eso solo lo hace el Admin.
  *
@@ -266,10 +267,13 @@ export function diasVencida(h) {
  * condición de sede hubo que tocarlo en dos sitios, que es justo el motivo
  * para tenerlo en uno solo.
  */
-export function puedeDevolverHerramienta(h, { esAdmin, esBodega, puedeOperar }) {
+export function puedeDevolverHerramienta(
+  h,
+  { esAdmin, puedeOperarRol, puedeOperar },
+) {
   return (
     Boolean(puedeOperar) &&
-    (esAdmin || esBodega) &&
+    (esAdmin || puedeOperarRol) &&
     (!h?.producto_id || esAdmin)
   );
 }
