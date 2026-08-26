@@ -13,6 +13,7 @@ import { jsPDF } from "jspdf";
 import {
   MARCA,
   NOMBRE_COMERCIAL,
+  TEXTO_POLITICA_DEVOLUCION,
   SEDE_TELEFONO,
   RECIBO_DIRECCION,
   formatCOP,
@@ -83,6 +84,11 @@ export function generarVentaPOS({
   // Reserva ≥ alto real: línea+header (~9.8) + n·3.6 + Abonado+SALDO (~9.8).
   const abonosAlto = hayAbonos ? nAbonos * 3.6 + 22 : 0;
 
+  // La política de devolución puede envolver a varias líneas: hay que
+  // reservarle alto o la tirilla se corta justo al final.
+  const politicaAlto =
+    probe.splitTextToSize(TEXTO_POLITICA_DEVOLUCION, CW).length * 3.4 + 2;
+
   // header ~58 + items + obs + cuenta + pagos + anulada + abonos + totales ~50 + footer ~25
   const altura = Math.max(
     58 +
@@ -92,6 +98,7 @@ export function generarVentaPOS({
       pagosAlto +
       anulAlto +
       abonosAlto +
+      politicaAlto +
       50 +
       25,
     120,
@@ -203,11 +210,13 @@ export function generarVentaPOS({
       doc.text(nombreLines[i], MX + 9, y);
       y += 3.6;
     }
-    // Línea 2: precio unitario
-    doc.setFontSize(6);
-    doc.setTextColor(120, 120, 120);
+    // Línea 2: precio unitario.
+    // NEGRO y 7pt a propósito. Iba en gris (120,120,120) a 6pt y salía
+    // fantasma en la impresora: una térmica es de un solo bit —quema el punto
+    // o no lo quema—, así que el gris lo simula con puntos salteados y a 6pt
+    // no quedan suficientes para formar las letras. No es la tipografía.
+    doc.setFontSize(7);
     doc.text(`  ${formatCOP(precio)} c/u`, MX + 9, y);
-    doc.setTextColor(0, 0, 0);
     y += 4.2;
   }
 
@@ -340,8 +349,13 @@ export function generarVentaPOS({
   doc.text("¡Gracias por su compra!", center, y, { align: "center" });
   y += 4;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6);
-  doc.setTextColor(120, 120, 120);
+  // Negro y 7pt por el mismo motivo que el precio unitario: en gris a 6pt
+  // esta línea salía ilegible en la tirilla impresa.
+  doc.setFontSize(7);
+  const politica = doc.splitTextToSize(TEXTO_POLITICA_DEVOLUCION, CW);
+  doc.text(politica, center, y, { align: "center" });
+  y += politica.length * 3.4 + 1;
+  doc.setFontSize(6.5);
   doc.text("Este recibo no es una factura electrónica.", center, y, {
     align: "center",
   });
