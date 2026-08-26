@@ -246,6 +246,22 @@ export default function HerramientaDetalle({
           </div>
         </div>
 
+        {/* Sin esto, una herramienta de otra sede se ve sin ningún botón y
+            sin explicación: la sede aparece arriba, pero nadie conecta "no veo
+            acciones" con "es de otra sede". */}
+        {!puedeOperar && !esAdmin && (
+          <p
+            className="mb-3 rounded-lg px-3 py-2 text-[12px]"
+            style={{
+              backgroundColor: "hsl(var(--muted) / 0.4)",
+              color: "hsl(var(--muted-foreground))",
+            }}
+          >
+            Pertenece a {sedeLabel(h.sede_id)}. Solo esa sede o el Admin puede
+            operarla desde aquí.
+          </p>
+        )}
+
         {/* ── Fila de acciones ─────────────────────────────────────── */}
         <div className="mb-5 flex flex-wrap gap-2">
           {/* Devolver: solo Admin o Bodega. Una inventariable la regresa al insumo
@@ -588,7 +604,9 @@ export default function HerramientaDetalle({
                       ? "Se consumió o se dañó · no regresó al inventario y ya no se puede prestar."
                       : regresadaAInsumo
                         ? "Su unidad volvió al stock de insumo · ya no está en el catálogo de herramientas."
-                        : "Sin préstamo activo. Puedes prestarla desde la lista de herramientas."}
+                        : puedeOperar
+                          ? "Sin préstamo activo. Puedes prestarla desde la lista de herramientas."
+                          : `Disponible en ${sedeLabel(h.sede_id)} · solo esa sede o el Admin puede prestarla.`}
                 </div>
               </div>
             )}

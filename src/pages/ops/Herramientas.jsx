@@ -29,6 +29,7 @@ import {
   diasEnUsoTexto,
   diasVencida,
   agruparPrestamos,
+  puedeDevolverHerramienta,
   STATUS_FILTERS,
 } from "../../lib/herramientas-ui";
 import {
@@ -73,6 +74,10 @@ export default function Herramientas() {
   const puedeOperarEn = (sedeId) => isAdmin || sedeId === miSede;
 
   const [herramientas, setHerramientas] = useState([]);
+  // Historial aparte: son 417 filas inactivas que no hacen falta salvo que se
+  // abra esa pestaña. `null` = todavía no se ha pedido.
+  const [devueltas, setDevueltas] = useState(null);
+  const [historialTruncado, setHistorialTruncado] = useState(false);
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("activos");
@@ -105,15 +110,23 @@ export default function Herramientas() {
     setLoading(true);
     setErrorMsg("");
     try {
-      // NO se filtra `activo` aquí: esta consulta alimenta los 3 tabs, y forzar
-      // activo=true escondía el HISTORIAL de toda herramienta regresada a
-      // insumo. Medido en producción: 171 devoluciones reales, solo 3 visibles
-      // — se perdían 168. El recorte por `activo` va por tab (ver más abajo):
-      // Catálogo y Préstamos activos sí lo exigen; el Historial no, porque una
-      // devolución ocurrió aunque la herramienta ya no esté en el catálogo.
+      // Solo las ACTIVAS: alimentan Catálogo y Préstamos activos.
+      //
+      // El Historial se carga en su propia consulta (cargarHistorial) y solo
+      // cuando se abre esa pestaña. Antes todo salía de una sola consulta sin
+      // filtro de `activo` para no perder el historial de las herramientas
+      // regresadas a insumo — el problema real que documentaba el comentario
+      // anterior (171 devoluciones, solo 3 visibles). Ese arreglo se conserva:
+      // el historial sigue viendo las inactivas, solo que por separado.
+      //
+      // Motivo del cambio: al abrir la vista a las cuatro sedes, esta consulta
+      // pasó de traer 3 filas a 529 para una vendedora. Separando, el caso
+      // común baja a 112 (las activas) y las 417 históricas solo viajan cuando
+      // alguien entra al Historial.
       let query = supabase
         .from("herramientas_prestamo")
         .select(SELECT_COLS)
+        .eq("activo", true)
         .order("herramienta_nombre", { ascending: true });
 
       // Sin filtro por sede a propósito: las herramientas viajan entre sedes y
@@ -140,6 +153,35 @@ export default function Herramientas() {
     }
   };
 
+  /** Historial de devoluciones. Se pide solo al abrir esa pestaña, e incluye
+   *  las herramientas INACTIVAS (una inventariable devuelta sale del catálogo
+   *  pero su devolución ocurrió). Tope explícito: si alguna vez se alcanza, la
+   *  pantalla lo dice en vez de recortar en silencio. */
+  const cargarHistorial = async () => {
+    try {
+      let q = supabase
+        .from("herramientas_prestamo")
+        .select(SELECT_COLS)
+        .eq("estado_prestamo", "devuelto")
+        .not("fecha_devolucion_real", "is", null)
+        .order("fecha_devolucion_real", { ascending: false })
+        .limit(1000);
+      const t = sanitizeSearch(search.trim());
+      if (t)
+        q = q.or(
+          `herramienta_nombre.ilike.%${t}%,herramienta_codigo.ilike.%${t}%`,
+        );
+      const { data, error } = await q;
+      if (error) throw error;
+      if (!mountedRef.current) return;
+      setDevueltas(data ?? []);
+      setHistorialTruncado((data ?? []).length >= 1000);
+    } catch (err) {
+      console.error("[Herramientas] historial:", err);
+      if (mountedRef.current) setDevueltas([]);
+    }
+  };
+
   const cargarUsuarios = async () => {
     try {
       let q = supabase
@@ -161,6 +203,13 @@ export default function Herramientas() {
     cargarUsuarios();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perfil?.sede_id, perfil?.rol]);
+
+  useEffect(() => {
+    if (tab !== "historial") return;
+    const t = setTimeout(cargarHistorial, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, search]);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -368,21 +417,9 @@ export default function Herramientas() {
     () => activas.filter((h) => h.estado === "en_mantenimiento"),
     [activas],
   );
-  // Historial: sobre TODAS, incluidas las regresadas a insumo. Antes se apoyaba
-  // en la consulta filtrada por activo=true y mostraba 3 de 171 devoluciones.
-  const devueltas = useMemo(
-    () =>
-      herramientas
-        .filter(
-          (h) => h.estado_prestamo === "devuelto" && h.fecha_devolucion_real,
-        )
-        .sort(
-          (a, b) =>
-            new Date(b.fecha_devolucion_real) -
-            new Date(a.fecha_devolucion_real),
-        ),
-    [herramientas],
-  );
+  // El historial ya no se deriva de `herramientas`: viene de su propia
+  // consulta (cargarHistorial), que sí incluye las inactivas y ordena por
+  // fecha de devolución en el servidor.
 
   const catalogoFiltrado = useMemo(() => {
     if (filtroEstado === "todas") return activas;
@@ -400,8 +437,12 @@ export default function Herramientas() {
     return c;
   }, [activas, disponibles, prestadas, enMantenimiento]);
 
+  // Busca en las dos listas: el detalle de un ítem del Historial ya no está
+  // en `herramientas`, que ahora solo trae las activas.
   const detalle = detalleId
-    ? herramientas.find((h) => h.id === detalleId)
+    ? (herramientas.find((h) => h.id === detalleId) ??
+      (devueltas ?? []).find((h) => h.id === detalleId) ??
+      null)
     : null;
 
   return (
@@ -486,7 +527,7 @@ export default function Herramientas() {
                     // (13), no las 181 que incluyen retiradas. Coincide con el
                     // encabezado y con el pill "Todas" de esta misma pestaña.
                     activas.length
-                  : devueltas.length;
+                  : (devueltas?.length ?? 0);
             const danger = t.id === "activos" && atrasadas.length > 0;
             return (
               <button
@@ -591,7 +632,11 @@ export default function Herramientas() {
             onOpen={setDetalleId}
           />
         ) : (
-          <TabHistorial devueltas={devueltas} onOpen={setDetalleId} />
+          <TabHistorial
+            devueltas={devueltas}
+            truncado={historialTruncado}
+            onOpen={setDetalleId}
+          />
         )}
       </div>
 
@@ -736,7 +781,8 @@ function TabActivos({
             <div style={{ color: "var(--warn-700)" }}>
               <b className="font-medium">{atrasada.herramienta_nombre}</b>{" "}
               prestada a{" "}
-              <b className="font-medium">{atrasada.usuario?.nombre ?? "—"}</b> ·
+              <b className="font-medium">{atrasada.usuario?.nombre ?? "—"}</b> ·{" "}
+              <b className="font-medium">{sedeLabel(atrasada.sede_id)}</b> ·
               venció hace{" "}
               <span className="font-mono font-medium">
                 {diasVencida(atrasada) ?? 0} día
@@ -883,8 +929,11 @@ function LoanRow({
   // (retiro) → solo Admin. Dar de baja (consumir) es solo Admin.
   // El rol dice QUÉ se puede hacer; la sede, DÓNDE. Las dos condiciones
   // tienen que cumplirse o el servidor rechaza la acción.
-  const puedeDevolver =
-    puedeOperar && (esAdmin || esBodega) && (!h.producto_id || esAdmin);
+  const puedeDevolver = puedeDevolverHerramienta(h, {
+    esAdmin,
+    esBodega,
+    puedeOperar,
+  });
   const codigo = g.unidades.every(
     (u) => u.herramienta_codigo === h.herramienta_codigo,
   )
@@ -998,9 +1047,19 @@ function LoanRow({
             <span
               className="text-[11px] italic"
               style={{ color: "var(--n-400)" }}
-              title="Regresar una herramienta inventariable al insumo solo lo hace el Admin"
+              title={
+                !puedeOperar
+                  ? `Esta herramienta es de ${sedeLabel(h.sede_id)}. Solo esa sede o el Admin puede devolverla.`
+                  : "Regresar una herramienta inventariable al insumo solo lo hace el Admin"
+              }
             >
-              Devuelve Admin
+              {/* Desde que se ven las cuatro sedes hay DOS motivos posibles de
+                  bloqueo, y el texto solo contaba uno. Decir "Devuelve Admin"
+                  cuando el problema es la sede manda a la persona a buscar al
+                  Admin para nada. */}
+              {!puedeOperar
+                ? `Es de ${sedeLabel(h.sede_id)}`
+                : "Devuelve Admin"}
             </span>
           )}
           {esAdmin && (
@@ -1048,8 +1107,11 @@ function LoanCard({
   const dang = tono === "danger";
   // El rol dice QUÉ se puede hacer; la sede, DÓNDE. Las dos condiciones
   // tienen que cumplirse o el servidor rechaza la acción.
-  const puedeDevolver =
-    puedeOperar && (esAdmin || esBodega) && (!h.producto_id || esAdmin);
+  const puedeDevolver = puedeDevolverHerramienta(h, {
+    esAdmin,
+    esBodega,
+    puedeOperar,
+  });
   return (
     <div
       className="rounded-xl border px-4 py-4"
@@ -1149,8 +1211,9 @@ function LoanCard({
             className="flex-1 text-center text-[11.5px] italic"
             style={{ color: "var(--n-400)" }}
           >
-            La devolución de esta herramienta (regresa al insumo) la registra el
-            Admin.
+            {!puedeOperar
+              ? `Es de ${sedeLabel(h.sede_id)}: solo esa sede o el Admin puede devolverla.`
+              : "La devolución de esta herramienta (regresa al insumo) la registra el Admin."}
           </p>
         )}
         {esAdmin && (
@@ -1363,7 +1426,12 @@ function CatalogCard({ grupo, onOpen }) {
 
 /* ────────────────────────────── TAB · Historial ────────────────────────── */
 
-function TabHistorial({ devueltas, onOpen }) {
+function TabHistorial({ devueltas, truncado, onOpen }) {
+  // `null` = todavía no se ha pedido: el historial se carga al abrir la
+  // pestaña, no con el resto de la pantalla.
+  if (devueltas === null) {
+    return <SkeletonGrid />;
+  }
   if (devueltas.length === 0) {
     return (
       <EmptyState
@@ -1381,7 +1449,14 @@ function TabHistorial({ devueltas, onOpen }) {
         <Stat>{devueltas.length}</Stat> devolución
         {devueltas.length === 1 ? "" : "es"} registrada
         {devueltas.length === 1 ? "" : "s"} · derivado de los préstamos cerrados
-        de tu vista
+        de todas las sedes
+        {truncado && (
+          // Nunca recortar en silencio: si se llegó al tope, se dice.
+          <span style={{ color: "var(--warn-700)" }}>
+            {" "}
+            · mostrando las más recientes
+          </span>
+        )}
       </p>
       <div
         className="overflow-hidden rounded-xl border"

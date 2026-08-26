@@ -250,3 +250,26 @@ export function diasVencida(h) {
   const ahora = new Date();
   return Math.max(0, Math.floor((ahora - esperada) / (1000 * 60 * 60 * 24)));
 }
+
+/**
+ * ¿Se puede devolver esta herramienta desde la interfaz?
+ *
+ * Tres condiciones, y las tres las exige también el servidor
+ * (`fn_devolver_herramienta`), así que si esto dice que sí y la RPC dice que
+ * no, hay una desincronización que corregir aquí:
+ *   - `puedeOperar`: la herramienta es de tu sede, o eres Admin.
+ *   - rol Admin o Bodeguero.
+ *   - si es inventariable (tiene producto_id), devolverla la retira del
+ *     catálogo, y eso solo lo hace el Admin.
+ *
+ * Vivía duplicado en LoanRow y LoanCard de Herramientas.jsx; al añadir la
+ * condición de sede hubo que tocarlo en dos sitios, que es justo el motivo
+ * para tenerlo en uno solo.
+ */
+export function puedeDevolverHerramienta(h, { esAdmin, esBodega, puedeOperar }) {
+  return (
+    Boolean(puedeOperar) &&
+    (esAdmin || esBodega) &&
+    (!h?.producto_id || esAdmin)
+  );
+}
