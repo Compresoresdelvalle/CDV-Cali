@@ -15,9 +15,11 @@ import { formatDate } from "../utils";
 import { descomponerObservaciones } from "../cotizaciones-ui";
 import {
   MARCA,
+  NOMBRE_COMERCIAL,
   RECIBO_DIRECCION,
   SEDE_TELEFONO,
   TEXTO_ENTREGA_COTIZACION,
+  TEXTO_LEGAL_COTIZACION,
   formatCOP,
 } from "./pdfStyles";
 
@@ -75,12 +77,12 @@ export function generarCotizacionPDF({
   doc.setFont("helvetica", "bold");
   doc.setFontSize(6);
   doc.setTextColor(...GRAY);
-  doc.text("COMPRESORES DEL VALLE", L, y + 17, { charSpace: 0.2 });
+  doc.text(NOMBRE_COMERCIAL.toUpperCase(), L, y + 17, { charSpace: 0.2 });
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10.5);
   doc.setTextColor(...INK);
-  doc.text(MARCA.nombre, R, y + 2, { align: "right" });
+  doc.text(NOMBRE_COMERCIAL, R, y + 2, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...GRAY);
@@ -299,10 +301,7 @@ export function generarCotizacionPDF({
   doc.setFont("helvetica", "italic");
   doc.setFontSize(8);
   doc.setTextColor(...GRAY);
-  const legal = doc.splitTextToSize(
-    "Esta cotización es válida hasta la fecha indicada. Los precios incluyen embalaje estándar. Las garantías aplican según política de fábrica del producto.",
-    W,
-  );
+  const legal = doc.splitTextToSize(TEXTO_LEGAL_COTIZACION, W);
   doc.text(legal, L, y);
   y += legal.length * 4 + 3;
   doc.setFont("helvetica", "normal");
@@ -310,7 +309,7 @@ export function generarCotizacionPDF({
   doc.setTextColor(...LIGHT);
   const totalPages = doc.getNumberOfPages();
   doc.text(
-    `Página ${totalPages} de ${totalPages} · #${cotizacion?.numero ?? "—"} · ${MARCA.nombre}`,
+    `Página ${totalPages} de ${totalPages} · #${cotizacion?.numero ?? "—"} · ${NOMBRE_COMERCIAL}`,
     L,
     y,
   );

@@ -31,10 +31,9 @@ import {
   categoriaBadge,
   componerObservaciones,
 } from "../../lib/cotizaciones-ui";
-
-// Texto fijo de condiciones de entrega (Lovable paso 3 · locked, idéntico al PDF).
-const TEXTO_FIJO_ENTREGA =
-  "El cliente se compromete a recibir la mercancía en las condiciones físicas en que se entrega. Cualquier reclamo sobre defectos visibles debe realizarse al momento de la entrega. Las garantías aplican según política de fábrica del producto. Los precios incluyen embalaje estándar. Embalaje especial bajo cotización adicional.";
+// Mismo texto que imprime el PDF: la pantalla mostraba otro distinto bajo la
+// etiqueta "aparece siempre", que no era cierta.
+import { TEXTO_ENTREGA_COTIZACION } from "../../lib/pdf/pdfStyles";
 
 // Validación de email igual al CHECK del servidor (RFC simplificado).
 const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -1392,7 +1391,7 @@ function PasoAjustes({
           className="text-[12px] leading-[1.55]"
           style={{ color: "var(--n-700)" }}
         >
-          {TEXTO_FIJO_ENTREGA}
+          {TEXTO_ENTREGA_COTIZACION}
         </p>
       </div>
     </WizCard>

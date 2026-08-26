@@ -12,7 +12,7 @@
 import { jsPDF } from "jspdf";
 import {
   MARCA,
-  RECIBO_NOMBRE,
+  NOMBRE_COMERCIAL,
   SEDE_TELEFONO,
   RECIBO_DIRECCION,
   formatCOP,
@@ -109,7 +109,7 @@ export function generarVentaPOS({
   // ── Encabezado empresa (#14: nombre comercial + teléfono de la sede) ──
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text(RECIBO_NOMBRE, center, y, { align: "center" });
+  doc.text(NOMBRE_COMERCIAL, center, y, { align: "center" });
   y += 4.5;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
