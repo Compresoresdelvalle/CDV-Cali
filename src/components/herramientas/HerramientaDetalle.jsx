@@ -127,7 +127,9 @@ export default function HerramientaDetalle({
   herramienta,
   accionando,
   esAdmin,
-  esBodega,
+  puedeOperarRol,
+  puedePrestar,
+  puedeOperar,
   onClose,
   onDevolver,
   onConsumir,
@@ -157,7 +159,10 @@ export default function HerramientaDetalle({
   const esExtraviada = h.estado === "extraviada";
   // Bodega y Admin manejan extravío y mantenimiento (mismo patrón que el resto
   // de la sección). Ninguna de las dos toca stock, así que no exigen Admin.
-  const puedeGestionar = (esAdmin || esBodega) && !estaRetirada;
+  // El rol dice QUÉ se puede hacer; la sede, DÓNDE. Desde que la lista muestra
+  // herramientas de las cuatro sedes, sin la segunda condición saldrían botones
+  // que el servidor rechaza por ser de otra sede.
+  const puedeGestionar = puedeOperar && (esAdmin || puedeOperarRol) && !estaRetirada;
   const esMantenimiento = h.estado === "en_mantenimiento";
   const esInventariable = !!h.producto_id; // vinculada a un insumo del catálogo
   const tono = prestamoTono(h);
@@ -242,12 +247,30 @@ export default function HerramientaDetalle({
           </div>
         </div>
 
+        {/* Sin esto, una herramienta de otra sede se ve sin ningún botón y
+            sin explicación: la sede aparece arriba, pero nadie conecta "no veo
+            acciones" con "es de otra sede". */}
+        {!esAdmin && (!puedeOperar || (!puedeOperarRol && !puedePrestar)) && (
+          <p
+            className="mb-3 rounded-lg px-3 py-2 text-[12px]"
+            style={{
+              backgroundColor: "hsl(var(--muted) / 0.4)",
+              color: "hsl(var(--muted-foreground))",
+            }}
+          >
+            {!puedeOperar
+              ? `Pertenece a ${sedeLabel(h.sede_id)}. Solo esa sede o el Admin puede operarla desde aquí.`
+              : "Esta pantalla es de consulta para tu rol. Las acciones sobre herramientas las registra el Admin."}
+          </p>
+        )}
+
         {/* ── Fila de acciones ─────────────────────────────────────── */}
         <div className="mb-5 flex flex-wrap gap-2">
           {/* Devolver: solo Admin o Bodega. Una inventariable la regresa al insumo
               (retiro) → solo Admin; una manual vuelve a 'disponible'. */}
           {esPrestada &&
-            (esAdmin || esBodega) &&
+            puedeOperar &&
+            (esAdmin || puedeOperarRol) &&
             (!esInventariable || esAdmin) && (
               <button
                 onClick={onDevolver}
@@ -288,7 +311,10 @@ export default function HerramientaDetalle({
               Consumido
             </button>
           )}
-          {esDisponible && onPrestar && (
+          {/* fn_prestar_herramientas_lote exige sede propia salvo al Admin.
+              Antes bastaba con que estuviera disponible porque la lista solo
+              traía la sede propia; ahora trae las cuatro. */}
+          {esDisponible && puedePrestar && onPrestar && (
             <button
               onClick={onPrestar}
               className="btn btn-pri inline-flex items-center gap-1.5"
@@ -367,7 +393,9 @@ export default function HerramientaDetalle({
           {/* Agregar más unidades físicas de esta misma herramienta (para poder
               prestar varias). Solo Admin/Bodega, y solo si sigue vigente: sobre
               una retirada (consumida o regresada a insumo) no tiene sentido. */}
-          {onAgregarUnidades && !estaRetirada && (
+          {/* fn_crear_herramienta_desde_insumo también exige sede propia
+              salvo al Admin. */}
+          {onAgregarUnidades && puedeOperar && !estaRetirada && (
             <button
               onClick={onAgregarUnidades}
               className="btn btn-out inline-flex items-center gap-1.5"
@@ -578,7 +606,11 @@ export default function HerramientaDetalle({
                       ? "Se consumió o se dañó · no regresó al inventario y ya no se puede prestar."
                       : regresadaAInsumo
                         ? "Su unidad volvió al stock de insumo · ya no está en el catálogo de herramientas."
-                        : "Sin préstamo activo. Puedes prestarla desde la lista de herramientas."}
+                        : puedePrestar
+                          ? "Sin préstamo activo. Puedes prestarla desde la lista de herramientas."
+                          : !puedeOperar
+                            ? `Disponible en ${sedeLabel(h.sede_id)} · solo esa sede o el Admin puede prestarla.`
+                            : "Disponible · el préstamo lo registra el Admin o la vendedora de la sede."}
                 </div>
               </div>
             )}
