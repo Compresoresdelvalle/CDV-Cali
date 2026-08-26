@@ -70,15 +70,19 @@ export default function Herramientas() {
    *  por todas partes— porque devolverle la capacidad a bodega es cambiar esta
    *  única línea, y porque el nombre dice POR QUÉ se puede, no QUIÉN eres. */
   const puedeOperarRol = isAdmin;
-  /** Prestar es la excepción: lo conservan las vendedoras además del Admin.
-   *  Va aparte de `puedeOperarRol` a propósito — no basta con la sede, porque
-   *  el servidor (fn_prestar_herramientas_lote) deja prestar a CUALQUIER rol en
-   *  su propia sede, incluido bodega. Sin esta condición, un bodeguero seguiría
-   *  viendo "Prestar" en BODEGA y el servidor se lo permitiría, rompiendo el
-   *  solo-lectura que pidió la clienta.
-   *  Recibir NO está aquí: fn_devolver_herramienta rechaza a las vendedoras,
-   *  así que solo el Admin registra devoluciones. */
-  const puedePrestarRol = isAdmin || perfil?.rol === "Vendedor";
+  /** Quién puede PRESTAR. Va aparte de `puedeOperarRol` porque el servidor
+   *  (fn_prestar_herramientas_lote) solo acota por sede, no por rol: sin esta
+   *  condición cualquiera vería el botón.
+   *
+   *  Bodega entra aquí por decisión de la clienta (2026-08-26): entró en
+   *  solo lectura por la mañana y se le devolvió el préstamo el mismo día.
+   *  Por eso esta capacidad vive en una lista y no repartida por la pantalla.
+   *
+   *  RECIBIR sigue fuera: fn_devolver_herramienta rechaza a Vendedor, así que
+   *  solo el Admin registra devoluciones. Es asimétrico —quien presta no
+   *  siempre puede recibir— y es a propósito mientras no se toque el servidor. */
+  const ROLES_QUE_PRESTAN = ["Admin", "Vendedor", "Bodeguero"];
+  const puedePrestarRol = ROLES_QUE_PRESTAN.includes(perfil?.rol ?? "");
   const puedeCrear = isAdmin;
   const miSede = perfil?.sede_id;
   /** Las funciones del servidor solo dejan actuar sobre la sede propia, salvo
