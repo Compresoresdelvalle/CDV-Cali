@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { useAuthStore } from "../../../stores/authStore";
+import { ROLE_MODULES } from "../../../lib/constants";
 import AnularGarantiaModal from "../../../components/garantias/AnularGarantiaModal";
 import { formatCOP, formatDate, safeError } from "../../../lib/utils";
 import { getParametroInt } from "../../../hooks/useParametro";
@@ -201,6 +202,12 @@ export default function GarantiaVentaDetalle() {
 
   const esBodeguero = perfil?.rol === "Bodeguero";
   const puedeGestionarChatarra = esAdmin || esBodeguero;
+  // Quién puede CREAR un traspaso. Se deriva de ROLE_MODULES en vez de listar
+  // roles a mano: si mañana cambia quién traspasa, este botón se entera solo.
+  // Sin esto, un Técnico —que sí puede abrir garantías y llegar a esta
+  // pantalla, pero NO tiene el módulo Traspasos— veía el botón y al pulsarlo
+  // RoleGuard lo devolvía a /ops sin decirle nada.
+  const puedeTraspasar = (ROLE_MODULES[perfil?.rol] ?? []).includes("Traspasos");
 
   /** Qué ofrecer para una chatarra concreta.
    *
@@ -219,7 +226,13 @@ export default function GarantiaVentaDetalle() {
     // fn_crear_traspaso exige sede propia salvo al Admin, y el formulario sí
     // deja al Admin elegir el origen. Una vendedora también puede enviarla
     // desde su sede, y debe poder: es quien tiene la pieza en la mano.
-    if (esAdmin || enMiSede) return { tipo: "traspasar" };
+    if (puedeTraspasar && (esAdmin || enMiSede))
+      return { tipo: "traspasar" };
+    // Puede ver la garantía pero no mover la pieza (el Técnico, por ejemplo).
+    // Decírselo así es más honesto que hablarle de sedes: el problema no es
+    // dónde está la pieza, es que a él no le toca moverla.
+    if (!puedeTraspasar && !puedeGestionarChatarra)
+      return { tipo: "sin-permiso" };
     return { tipo: "otra-sede" };
   };
 
@@ -599,7 +612,7 @@ export default function GarantiaVentaDetalle() {
                             )
                           }
                           className="btn btn-pri self-start text-[12px]"
-                          style={{ minHeight: 40 }}
+                          style={{ minHeight: 48 }}
                         >
                           Devolver al proveedor
                         </button>
@@ -613,10 +626,20 @@ export default function GarantiaVentaDetalle() {
                             )
                           }
                           className="btn self-start text-[12px]"
-                          style={{ minHeight: 40 }}
+                          style={{ minHeight: 48 }}
                         >
                           Traspasar a bodega para devolver
                         </button>
+                      )}
+
+                      {accion.tipo === "sin-permiso" && (
+                        <p
+                          className="text-[11.5px]"
+                          style={{ color: "var(--n-500)" }}
+                        >
+                          Bodega o el administrador se encargan de devolverla al
+                          proveedor.
+                        </p>
                       )}
 
                       {accion.tipo === "otra-sede" && (
