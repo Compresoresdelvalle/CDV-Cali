@@ -20,8 +20,15 @@ import BarraFiltros from "../../components/filtros/BarraFiltros";
 
 /**
  * B10 — Cuentas por cobrar (ventas a crédito) y por pagar (compras a crédito).
- * Solo Admin. Lee las vistas `v_cuentas_por_cobrar` / `v_cuentas_por_pagar`
- * (saldo ya neto de abonos de cotización) y registra cobros/pagos por modal.
+ *
+ * La sirven DOS rutas con el mismo componente: /admin/cuentas y /ops/cuentas.
+ * Las pestañas se derivan del rol —Admin ve las dos, la vendedora solo Por
+ * cobrar y bodega solo Por pagar— porque el servidor rechaza a quien intente
+ * registrar lo que no le toca (ver fn_registrar_pago_cuenta).
+ *
+ * Lee las vistas `v_cuentas_por_cobrar` / `v_cuentas_por_pagar` (saldo ya neto
+ * de abonos de cotización) y registra cobros/pagos por modal. Anular un pago
+ * sigue siendo exclusivo del Admin.
  */
 
 const PAGE_SIZE = 50;
@@ -132,10 +139,15 @@ export default function Cuentas() {
         tipo: "opciones",
         label: "Sede",
         columna: "sede_id",
+        // Solo Admin: a los demás la RLS ya los ata a su sede, así que el
+        // filtro solo puede devolver vacío. Mismo patrón que VentaHistorial.
+        visible: esAdmin,
         opciones: SEDES_OPCIONES,
       },
     ],
-    [],
+    // esAdmin decide si el filtro de Sede se muestra: tiene que estar aquí o
+    // los campos no se recalcularían si cambiara.
+    [esAdmin],
   );
   const fCobrar = useFiltros({ clave: "cuentas-cobrar", campos: camposCobrar });
 
@@ -160,10 +172,14 @@ export default function Cuentas() {
         tipo: "opciones",
         label: "Sede",
         columna: "sede_destino_id",
+        // Solo Admin, igual que en cobrar.
+        visible: esAdmin,
         opciones: SEDES_OPCIONES,
       },
     ],
-    [],
+    // esAdmin decide si el filtro de Sede se muestra: tiene que estar aquí o
+    // los campos no se recalcularían si cambiara.
+    [esAdmin],
   );
   const fPagar = useFiltros({ clave: "cuentas-pagar", campos: camposPagar });
 
@@ -266,7 +282,12 @@ export default function Cuentas() {
             className="m-0 mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em]"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            Admin · Cartera
+            {/* Decía "Admin · Cartera" siempre; ahora entran tres roles. */}
+            {esAdmin
+              ? "Admin · Cartera"
+              : esBodeguero
+                ? "Bodega · Pagos a proveedores"
+                : "Ventas · Cobros a clientes"}
           </p>
           <h1
             className="m-0 text-[24px] font-semibold leading-tight tracking-[-0.018em]"
