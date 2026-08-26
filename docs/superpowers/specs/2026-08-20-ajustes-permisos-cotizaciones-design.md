@@ -264,8 +264,8 @@ Este es el punto delicado del cambio, y no es la RLS.
 Hoy la lista solo muestra herramientas de tu sede, así que cualquier acción que
 aparezca es una acción que puedes hacer. **Al abrir la vista a todas las sedes, eso deja
 de ser cierto**: un bodeguero de BODEGA verá herramientas de CHV, y si los botones se
-dibujan igual, al pulsarlos recibirá *"No tienes permiso sobre herramientas de esta
-sede"*.
+dibujan igual, al pulsarlos recibirá _"No tienes permiso sobre herramientas de esta
+sede"_.
 
 Sería exactamente el error que ya cometimos con las campanas y con el botón de la
 chatarra: ofrecer algo que va a fallar.
