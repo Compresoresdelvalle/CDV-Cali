@@ -64,6 +64,13 @@ export default function Herramientas() {
   const esBodega = perfil?.rol === "Bodeguero";
   // Crear, prestar y devolver: solo Admin o Bodega. Consumir y regresar a insumo: solo Admin.
   const puedeCrear = isAdmin || esBodega;
+  const miSede = perfil?.sede_id;
+  /** Las funciones del servidor solo dejan actuar sobre la sede propia, salvo
+   *  al Admin. Ahora que la lista muestra herramientas de las cuatro sedes, el
+   *  permiso ya no depende solo del rol: depende de CADA herramienta. Sin esto
+   *  aparecerían botones que el servidor rechaza con "No tienes permiso sobre
+   *  herramientas de esta sede". */
+  const puedeOperarEn = (sedeId) => isAdmin || sedeId === miSede;
 
   const [herramientas, setHerramientas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -109,9 +116,10 @@ export default function Herramientas() {
         .select(SELECT_COLS)
         .order("herramienta_nombre", { ascending: true });
 
-      if (perfil?.rol !== "Admin" && perfil?.sede_id)
-        query = query.eq("sede_id", perfil.sede_id);
-
+      // Sin filtro por sede a propósito: las herramientas viajan entre sedes y
+      // nadie podía saber dónde quedó una sin llamar por teléfono. Lo que sigue
+      // acotado por sede son las ACCIONES, que se deciden fila por fila con
+      // `puedeOperarEn` — ver la nota junto a su definición.
       const q = sanitizeSearch(search.trim());
       if (q)
         query = query.or(
@@ -570,6 +578,7 @@ export default function Herramientas() {
             accionando={accionando}
             esAdmin={isAdmin}
             esBodega={esBodega}
+            puedeOperarEn={puedeOperarEn}
             onOpen={setDetalleId}
             onAccion={(grupo, accion) => setModalCantidad({ grupo, accion })}
           />
@@ -593,6 +602,7 @@ export default function Herramientas() {
           accionando={accionando === detalle.id}
           esAdmin={isAdmin}
           esBodega={esBodega}
+          puedeOperar={puedeOperarEn(detalle.sede_id)}
           onClose={() => setDetalleId(null)}
           onDevolver={() => devolver(detalle)}
           onConsumir={() => consumir(detalle)}
@@ -685,6 +695,7 @@ function TabActivos({
   accionando,
   esAdmin,
   esBodega,
+  puedeOperarEn,
   onOpen,
   onAccion,
 }) {
@@ -801,6 +812,7 @@ function TabActivos({
                 accionando={g.unidades.some((u) => u.id === accionando)}
                 esAdmin={esAdmin}
                 esBodega={esBodega}
+                puedeOperar={puedeOperarEn(g.anchor.sede_id)}
                 onOpen={() => onOpen(g.anchor.id)}
                 onAccion={(accion) => onAccion(g, accion)}
               />
@@ -842,6 +854,7 @@ function TabActivos({
               accionando={g.unidades.some((u) => u.id === accionando)}
               esAdmin={esAdmin}
               esBodega={esBodega}
+              puedeOperar={puedeOperarEn(g.anchor.sede_id)}
               onOpen={() => onOpen(g.anchor.id)}
               onAccion={(accion) => onAccion(g, accion)}
             />
@@ -852,7 +865,15 @@ function TabActivos({
   );
 }
 
-function LoanRow({ g, accionando, esAdmin, esBodega, onOpen, onAccion }) {
+function LoanRow({
+  g,
+  accionando,
+  esAdmin,
+  esBodega,
+  puedeOperar,
+  onOpen,
+  onAccion,
+}) {
   // Todas las unidades del grupo comparten herramienta, responsable y fechas:
   // el ancla las representa. Solo el código puede variar entre unidades.
   const h = g.anchor;
@@ -860,7 +881,10 @@ function LoanRow({ g, accionando, esAdmin, esBodega, onOpen, onAccion }) {
   const dang = tono === "danger";
   // Solo Admin o Bodega pueden devolver. Una inventariable la regresa al insumo
   // (retiro) → solo Admin. Dar de baja (consumir) es solo Admin.
-  const puedeDevolver = (esAdmin || esBodega) && (!h.producto_id || esAdmin);
+  // El rol dice QUÉ se puede hacer; la sede, DÓNDE. Las dos condiciones
+  // tienen que cumplirse o el servidor rechaza la acción.
+  const puedeDevolver =
+    puedeOperar && (esAdmin || esBodega) && (!h.producto_id || esAdmin);
   const codigo = g.unidades.every(
     (u) => u.herramienta_codigo === h.herramienta_codigo,
   )
@@ -1009,12 +1033,23 @@ function LoanRow({ g, accionando, esAdmin, esBodega, onOpen, onAccion }) {
   );
 }
 
-function LoanCard({ g, accionando, esAdmin, esBodega, onOpen, onAccion }) {
+function LoanCard({
+  g,
+  accionando,
+  esAdmin,
+  esBodega,
+  puedeOperar,
+  onOpen,
+  onAccion,
+}) {
   // El ancla representa al grupo: comparten herramienta, responsable y fechas.
   const h = g.anchor;
   const tono = prestamoTono(h);
   const dang = tono === "danger";
-  const puedeDevolver = (esAdmin || esBodega) && (!h.producto_id || esAdmin);
+  // El rol dice QUÉ se puede hacer; la sede, DÓNDE. Las dos condiciones
+  // tienen que cumplirse o el servidor rechaza la acción.
+  const puedeDevolver =
+    puedeOperar && (esAdmin || esBodega) && (!h.producto_id || esAdmin);
   return (
     <div
       className="rounded-xl border px-4 py-4"
@@ -1046,6 +1081,15 @@ function LoanCard({ g, accionando, esAdmin, esBodega, onOpen, onAccion }) {
                   {h.herramienta_codigo}
                 </span>
               )}
+              {/* La sede ya se veía en la tabla de escritorio y en el catálogo,
+                  pero no aquí. Ahora que la lista trae las cuatro sedes, sin
+                  esto el móvil mezcla herramientas sin decir de dónde son. */}
+              <span
+                className="font-mono text-xs"
+                style={{ color: "var(--n-500)" }}
+              >
+                · {sedeLabel(h.sede_id)}
+              </span>
             </div>
           </div>
         </button>

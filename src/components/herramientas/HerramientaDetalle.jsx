@@ -128,6 +128,7 @@ export default function HerramientaDetalle({
   accionando,
   esAdmin,
   esBodega,
+  puedeOperar,
   onClose,
   onDevolver,
   onConsumir,
@@ -157,7 +158,10 @@ export default function HerramientaDetalle({
   const esExtraviada = h.estado === "extraviada";
   // Bodega y Admin manejan extravío y mantenimiento (mismo patrón que el resto
   // de la sección). Ninguna de las dos toca stock, así que no exigen Admin.
-  const puedeGestionar = (esAdmin || esBodega) && !estaRetirada;
+  // El rol dice QUÉ se puede hacer; la sede, DÓNDE. Desde que la lista muestra
+  // herramientas de las cuatro sedes, sin la segunda condición saldrían botones
+  // que el servidor rechaza por ser de otra sede.
+  const puedeGestionar = puedeOperar && (esAdmin || esBodega) && !estaRetirada;
   const esMantenimiento = h.estado === "en_mantenimiento";
   const esInventariable = !!h.producto_id; // vinculada a un insumo del catálogo
   const tono = prestamoTono(h);
@@ -247,6 +251,7 @@ export default function HerramientaDetalle({
           {/* Devolver: solo Admin o Bodega. Una inventariable la regresa al insumo
               (retiro) → solo Admin; una manual vuelve a 'disponible'. */}
           {esPrestada &&
+            puedeOperar &&
             (esAdmin || esBodega) &&
             (!esInventariable || esAdmin) && (
               <button
@@ -288,7 +293,10 @@ export default function HerramientaDetalle({
               Consumido
             </button>
           )}
-          {esDisponible && onPrestar && (
+          {/* fn_prestar_herramientas_lote exige sede propia salvo al Admin.
+              Antes bastaba con que estuviera disponible porque la lista solo
+              traía la sede propia; ahora trae las cuatro. */}
+          {esDisponible && puedeOperar && onPrestar && (
             <button
               onClick={onPrestar}
               className="btn btn-pri inline-flex items-center gap-1.5"
@@ -367,7 +375,9 @@ export default function HerramientaDetalle({
           {/* Agregar más unidades físicas de esta misma herramienta (para poder
               prestar varias). Solo Admin/Bodega, y solo si sigue vigente: sobre
               una retirada (consumida o regresada a insumo) no tiene sentido. */}
-          {onAgregarUnidades && !estaRetirada && (
+          {/* fn_crear_herramienta_desde_insumo también exige sede propia
+              salvo al Admin. */}
+          {onAgregarUnidades && puedeOperar && !estaRetirada && (
             <button
               onClick={onAgregarUnidades}
               className="btn btn-out inline-flex items-center gap-1.5"
