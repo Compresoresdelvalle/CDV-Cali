@@ -2,20 +2,25 @@
  * Estilos compartidos del generador PDF de cotizaciones (Fase 11).
  *
  * Tamaño: carta (216 × 279 mm) — decisión §1.11 del cliente.
- *
- * Texto fijo de condiciones de entrega (§1.9 del cliente — INMUTABLE):
  */
 
-export const TEXTO_CONDICIONES_ENTREGA =
-  "El producto se entrega únicamente en nuestras instalaciones sin ningún " +
-  "costo. Fuera de nuestras instalaciones el flete corre por cuenta del cliente.";
-
-// Texto fijo de "Condiciones de entrega" que va en el PDF de cotización
-// (incluye la nota de garantías). Fuente única para el generador y el preview.
+// Condiciones de entrega. Fuente ÚNICA para el PDF y para lo que se muestra en
+// pantalla en el paso 3 de Cotizaciones (nueva y edición).
+//
+// Hasta ahora la pantalla mostraba un texto distinto al del PDF ("El cliente se
+// compromete a recibir la mercancía…") bajo la etiqueta "aparece siempre", que
+// era falsa: ese texto nunca llegaba al documento. El dueño confirmó que el
+// bueno es este, así que el otro se eliminó y ahora lo que se ve es lo que
+// firma el cliente.
 export const TEXTO_ENTREGA_COTIZACION =
   "El producto se entrega únicamente en nuestras instalaciones sin ningún costo. " +
   "Fuera de nuestras instalaciones el flete corre por cuenta del cliente. " +
   "Las garantías aplican según política de fábrica del producto.";
+
+// Nota legal al pie del PDF de cotización. También sin la mención al embalaje.
+export const TEXTO_LEGAL_COTIZACION =
+  "Esta cotización es válida hasta la fecha indicada. Las garantías aplican " +
+  "según política de fábrica del producto.";
 
 // Marca de la empresa
 export const MARCA = {
@@ -24,8 +29,11 @@ export const MARCA = {
   // Email/teléfono van vacíos por ahora — Admin puede llenar en config futura
 };
 
-// #14 — Nombre comercial corto que va en los RECIBOS (no el nombre legal).
-export const RECIBO_NOMBRE = "Compresores CV";
+// Nombre comercial corto de la empresa. NO es el nombre legal: para eso está
+// MARCA.nombre, que debe seguir usándose donde el nombre tenga valor jurídico
+// —en particular el titular de la cuenta bancaria de la cotización—.
+// Nació para los recibos (#14) y ahora lo comparten recibos y cotizaciones.
+export const NOMBRE_COMERCIAL = "Compresores CV";
 
 // #14 — Teléfono por sede para los recibos (se muestra el de la sede de la venta).
 // La Bodega Principal (BODEGA) no tiene teléfono propio: se omite la línea de
