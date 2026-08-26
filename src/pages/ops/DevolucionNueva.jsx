@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeftCircle,
   ArrowRight,
@@ -66,6 +66,37 @@ export default function DevolucionNueva() {
 
   // Proveedor es tarea de bodega: las vendedoras solo hacen devolución de cliente.
   const esBodega = perfil?.rol === "Admin" || perfil?.rol === "Bodeguero";
+
+  const [searchParams] = useSearchParams();
+  const tipoParam = searchParams.get("tipo");
+  const productoParam = searchParams.get("producto");
+
+  // Preselección al llegar desde una garantía. Reacciona al CAMBIO de los
+  // parámetros y no solo al montaje: si el usuario ya está en esta página y
+  // entra otra vez desde otra garantía, React Router no remonta el componente
+  // y la segunda preselección se perdería en silencio.
+  useEffect(() => {
+    // Lista blanca: un ?tipo= arbitrario no debe llegar crudo al estado. El
+    // efecto que fuerza 'cliente' a quien no es bodega corrige si no procede.
+    if (tipoParam === "proveedor" || tipoParam === "cliente")
+      setTipo(tipoParam);
+    if (!productoParam) return;
+    let vivo = true;
+    (async () => {
+      const { data, error: e } = await supabase
+        .from("productos")
+        .select("id, nombre, referencia, unidad_medida")
+        .eq("id", productoParam)
+        .eq("activo", true)
+        .maybeSingle();
+      // Si no existe o está inactivo no se preselecciona nada y la página
+      // queda utilizable a mano, en vez de romperse.
+      if (vivo && !e && data) setProductoSeleccionado(data);
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [tipoParam, productoParam]);
 
   useEffect(() => {
     // Reembolso solo por transferencia/tarjeta necesita cuenta.
