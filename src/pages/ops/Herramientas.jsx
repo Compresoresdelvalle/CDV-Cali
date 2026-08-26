@@ -93,6 +93,7 @@ export default function Herramientas() {
   // abra esa pestaña. `null` = todavía no se ha pedido.
   const [devueltas, setDevueltas] = useState(null);
   const [historialTruncado, setHistorialTruncado] = useState(false);
+  const [historialError, setHistorialError] = useState("");
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("activos");
@@ -172,7 +173,8 @@ export default function Herramientas() {
    *  las herramientas INACTIVAS (una inventariable devuelta sale del catálogo
    *  pero su devolución ocurrió). Tope explícito: si alguna vez se alcanza, la
    *  pantalla lo dice en vez de recortar en silencio. */
-  const cargarHistorial = async () => {
+  const cargarHistorial = async (signal) => {
+    setHistorialError("");
     try {
       let q = supabase
         .from("herramientas_prestamo")
@@ -187,13 +189,21 @@ export default function Herramientas() {
           `herramienta_nombre.ilike.%${t}%,herramienta_codigo.ilike.%${t}%`,
         );
       const { data, error } = await q;
+      // `signal` además de mountedRef: al teclear en el buscador se lanzan
+      // varias cargas y una respuesta vieja puede llegar después de la nueva.
+      // mountedRef solo protege del desmontaje, no del desorden.
+      if (signal?.aborted || !mountedRef.current) return;
       if (error) throw error;
-      if (!mountedRef.current) return;
       setDevueltas(data ?? []);
       setHistorialTruncado((data ?? []).length >= 1000);
     } catch (err) {
+      if (signal?.aborted || !mountedRef.current) return;
       console.error("[Herramientas] historial:", err);
-      if (mountedRef.current) setDevueltas([]);
+      // Antes se dejaba la lista vacía y la pantalla decía "Sin historial de
+      // devoluciones": un fallo de red se leía como "no hay nada", que es una
+      // mentira tranquilizadora. Ahora se dice que falló.
+      setDevueltas([]);
+      setHistorialError(safeError(err, "No se pudo cargar el historial"));
     }
   };
 
@@ -221,8 +231,12 @@ export default function Herramientas() {
 
   useEffect(() => {
     if (tab !== "historial") return;
-    const t = setTimeout(cargarHistorial, 300);
-    return () => clearTimeout(t);
+    const ac = new AbortController();
+    const t = setTimeout(() => cargarHistorial(ac.signal), 300);
+    return () => {
+      ac.abort();
+      clearTimeout(t);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, search]);
 
@@ -650,6 +664,7 @@ export default function Herramientas() {
           <TabHistorial
             devueltas={devueltas}
             truncado={historialTruncado}
+            error={historialError}
             onOpen={setDetalleId}
           />
         )}
@@ -663,9 +678,7 @@ export default function Herramientas() {
           esAdmin={isAdmin}
           puedeOperarRol={puedeOperarRol}
           puedeOperar={puedeOperarEn(detalle.sede_id)}
-          puedePrestar={
-            puedePrestarRol && puedeOperarEn(detalle.sede_id)
-          }
+          puedePrestar={puedePrestarRol && puedeOperarEn(detalle.sede_id)}
           onClose={() => setDetalleId(null)}
           onDevolver={() => devolver(detalle)}
           onConsumir={() => consumir(detalle)}
@@ -1068,7 +1081,9 @@ function LoanRow({
               title={
                 !puedeOperar
                   ? `Esta herramienta es de ${sedeLabel(h.sede_id)}. Solo esa sede o el Admin puede devolverla.`
-                  : "Regresar una herramienta inventariable al insumo solo lo hace el Admin"
+                  : h.producto_id
+                    ? "Regresar una herramienta inventariable al insumo solo lo hace el Admin"
+                    : "La devolución la registra el Admin"
               }
             >
               {/* Desde que se ven las cuatro sedes hay DOS motivos posibles de
@@ -1231,7 +1246,9 @@ function LoanCard({
           >
             {!puedeOperar
               ? `Es de ${sedeLabel(h.sede_id)}: solo esa sede o el Admin puede devolverla.`
-              : "La devolución de esta herramienta (regresa al insumo) la registra el Admin."}
+              : h.producto_id
+                ? "La devolución de esta herramienta (regresa al insumo) la registra el Admin."
+                : "La devolución la registra el Admin."}
           </p>
         )}
         {esAdmin && (
@@ -1444,7 +1461,17 @@ function CatalogCard({ grupo, onOpen }) {
 
 /* ────────────────────────────── TAB · Historial ────────────────────────── */
 
-function TabHistorial({ devueltas, truncado, onOpen }) {
+function TabHistorial({ devueltas, truncado, error, onOpen }) {
+  // El error va ANTES del caso vacío: si la carga falló, la lista está en []
+  // y sin esto se leería como "no hay devoluciones", que no es lo que pasó.
+  if (error) {
+    return (
+      <EmptyState
+        title="No se pudo cargar el historial"
+        sub={`${error} · Revisa la conexión y vuelve a entrar a esta pestaña.`}
+      />
+    );
+  }
   // `null` = todavía no se ha pedido: el historial se carga al abrir la
   // pestaña, no con el resto de la pantalla.
   if (devueltas === null) {

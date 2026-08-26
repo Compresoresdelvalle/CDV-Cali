@@ -70,6 +70,7 @@ export default function GarantiaVentaDetalle() {
   const [reloadTick, setReloadTick] = useState(0);
   // Chatarras que produjo esta garantía, con su stock actual.
   const [devueltos, setDevueltos] = useState([]);
+  const [devueltosError, setDevueltosError] = useState(false);
 
   useEffect(() => {
     const cargar = async () => {
@@ -115,34 +116,62 @@ export default function GarantiaVentaDetalle() {
         if (detErr) throw detErr;
         setG(gar);
         setDetalles(det ?? []);
-        if (chatErr) throw chatErr;
-        // Stock actual de cada chatarra: sin esto no se sabe si el botón de
-        // devolver serviría o fallaría, y ofrecer uno que falla es justo lo
-        // que la regla del proyecto prohíbe.
-        let filas = chat ?? [];
-        if (filas.length > 0) {
-          const { data: inv } = await supabase
-            .from("inventario")
-            .select("producto_id, sede_id, cantidad")
-            .in(
-              "producto_id",
-              filas.map((f) => f.producto_id),
-            );
-          const mapa = new Map(
-            (inv ?? []).map((i) => [
-              `${i.producto_id}|${i.sede_id}`,
-              i.cantidad,
-            ]),
-          );
-          filas = filas.map((f) => ({
-            ...f,
-            stock: mapa.get(`${f.producto_id}|${f.sede_id}`) ?? 0,
-          }));
-        }
-        setDevueltos(filas);
         // Vigencia real: parámetro de sistema (misma clave que la RPC).
         const dias = await getParametroInt("dias_garantia_venta", 90);
         setDiasGarantia(dias);
+
+        // El bloque de chatarras va en su PROPIO try: es un extra de la
+        // pantalla, y si falla no debe tumbar la garantía entera ni saltarse
+        // el cálculo de vigencia de arriba.
+        try {
+          if (chatErr) throw chatErr;
+          let filas = chat ?? [];
+          if (filas.length > 0) {
+            const { data: inv, error: invErr } = await supabase
+              .from("inventario")
+              .select("producto_id, sede_id, cantidad")
+              .in(
+                "producto_id",
+                filas.map((f) => f.producto_id),
+              );
+            if (invErr) throw invErr;
+
+            // La pieza SE MUEVE: el flujo normal es traspasarla a bodega para
+            // devolverla al proveedor. Buscar su stock solo en la sede donde
+            // ocurrió la garantía haría que, en cuanto se traspasa, la
+            // pantalla dijera "ya no está en inventario" — justo lo contrario
+            // de la verdad, y precisamente en el caso que esta función viene a
+            // resolver. Se sigue la pieza a donde esté ahora.
+            const porProducto = new Map();
+            for (const i of inv ?? []) {
+              if ((i.cantidad ?? 0) <= 0) continue;
+              const arr = porProducto.get(i.producto_id) ?? [];
+              arr.push({ sede: i.sede_id, cantidad: i.cantidad });
+              porProducto.set(i.producto_id, arr);
+            }
+            filas = filas.map((f) => {
+              const ubicaciones = porProducto.get(f.producto_id) ?? [];
+              // Si sigue donde entró, esa manda; si no, donde haya quedado.
+              const actual =
+                ubicaciones.find((u) => u.sede === f.sede_id) ??
+                ubicaciones[0] ??
+                null;
+              return {
+                ...f,
+                stock: actual?.cantidad ?? 0,
+                sedeActual: actual?.sede ?? f.sede_id,
+                seMovio: Boolean(actual && actual.sede !== f.sede_id),
+              };
+            });
+          }
+          setDevueltos(filas);
+        } catch (e) {
+          // Sin las chatarras la garantía sigue siendo útil: se avisa en el
+          // bloque en vez de dejar la pantalla en blanco.
+          console.error("[GarantiaVentaDetalle] chatarras:", e);
+          setDevueltos([]);
+          setDevueltosError(true);
+        }
       } catch (err) {
         setErrorMsg(safeError(err, "Error al cargar garantía"));
       } finally {
@@ -213,7 +242,9 @@ export default function GarantiaVentaDetalle() {
   // Sin esto, un Técnico —que sí puede abrir garantías y llegar a esta
   // pantalla, pero NO tiene el módulo Traspasos— veía el botón y al pulsarlo
   // RoleGuard lo devolvía a /ops sin decirle nada.
-  const puedeTraspasar = (ROLE_MODULES[perfil?.rol] ?? []).includes("Traspasos");
+  const puedeTraspasar = (ROLE_MODULES[perfil?.rol] ?? []).includes(
+    "Traspasos",
+  );
 
   /** Qué ofrecer para una chatarra concreta.
    *
@@ -227,13 +258,15 @@ export default function GarantiaVentaDetalle() {
    *  falla es peor que no ofrecer ninguno. */
   const accionDevuelto = (d) => {
     if ((d.stock ?? 0) <= 0) return { tipo: "sin-stock" };
-    const enMiSede = d.sede_id === perfil?.sede_id;
+    // `sedeActual`, no `sede_id`: la pieza pudo traspasarse a bodega, y lo que
+    // decide qué se puede hacer es dónde está hoy, no dónde entró.
+    const sede = d.sedeActual ?? d.sede_id;
+    const enMiSede = sede === perfil?.sede_id;
     if (puedeGestionarChatarra && enMiSede) return { tipo: "devolver" };
     // fn_crear_traspaso exige sede propia salvo al Admin, y el formulario sí
     // deja al Admin elegir el origen. Una vendedora también puede enviarla
     // desde su sede, y debe poder: es quien tiene la pieza en la mano.
-    if (puedeTraspasar && (esAdmin || enMiSede))
-      return { tipo: "traspasar" };
+    if (puedeTraspasar && (esAdmin || enMiSede)) return { tipo: "traspasar" };
     // Puede ver la garantía pero no mover la pieza (el Técnico, por ejemplo).
     // Decírselo así es más honesto que hablarle de sedes: el problema no es
     // dónde está la pieza, es que a él no le toca moverla.
@@ -565,6 +598,19 @@ export default function GarantiaVentaDetalle() {
           {/* Piezas que devolvió el cliente y quedaron en chatarra.
               El camino hacia el proveedor: mandar una chatarra a Devoluciones
               ya se podía, pero no había nada que llevara hasta ahí. */}
+          {devueltosError && (
+            <p
+              className="mt-3 rounded-lg px-3 py-2 text-[12px]"
+              style={{
+                backgroundColor: "var(--dang-50)",
+                color: "var(--dang-700)",
+              }}
+            >
+              No se pudieron cargar las piezas devueltas. Recarga la página; el
+              resto de la garantía sí está bien.
+            </p>
+          )}
+
           {devueltos.length > 0 && (
             <div className="iblock">
               <div className="ib-head">
@@ -598,7 +644,9 @@ export default function GarantiaVentaDetalle() {
                             className="font-mono text-[11px]"
                             style={{ color: "var(--n-500)" }}
                           >
-                            {d.producto?.referencia} · {d.sede_id} · quedan{" "}
+                            {d.producto?.referencia} ·{" "}
+                            {d.sedeActual ?? d.sede_id}
+                            {d.seMovio && ` (vino de ${d.sede_id})`} · quedan{" "}
                             {d.stock ?? 0}
                           </p>
                         </div>
@@ -628,7 +676,7 @@ export default function GarantiaVentaDetalle() {
                         <button
                           onClick={() =>
                             navigate(
-                              `/ops/traspasos/nuevo?producto=${d.producto_id}&origen=${encodeURIComponent(d.sede_id)}&destino=BODEGA`,
+                              `/ops/traspasos/nuevo?producto=${d.producto_id}&origen=${encodeURIComponent(d.sedeActual ?? d.sede_id)}&destino=BODEGA`,
                             )
                           }
                           className="btn self-start text-[12px]"
@@ -653,8 +701,9 @@ export default function GarantiaVentaDetalle() {
                           className="text-[11.5px]"
                           style={{ color: "var(--n-500)" }}
                         >
-                          Está en {d.sede_id}. Esa sede debe enviarla a bodega
-                          antes de poder devolverla al proveedor.
+                          Está en {d.sedeActual ?? d.sede_id}. Esa sede debe
+                          enviarla a bodega antes de poder devolverla al
+                          proveedor.
                         </p>
                       )}
 
@@ -665,7 +714,12 @@ export default function GarantiaVentaDetalle() {
                         >
                           Ya no está en inventario: se devolvió al proveedor, se
                           dio de baja o se anuló una garantía que la retiró.
-                          Puedes ver su historial en Auditoría.
+                          {/* Auditoría es solo del panel admin: mandar ahí a una
+                              vendedora o al técnico es mandarlos a una puerta
+                              cerrada. */}
+                          {esAdmin
+                            ? " Puedes ver su historial en Auditoría."
+                            : " Bodega o el administrador pueden revisar su historial."}
                         </p>
                       )}
                     </li>
