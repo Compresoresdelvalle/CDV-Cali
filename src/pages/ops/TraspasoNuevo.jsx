@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeftCircle,
   Search,
@@ -237,6 +237,33 @@ export default function TraspasoNuevo() {
     },
     [sedeOrigen],
   );
+
+  const [searchParams] = useSearchParams();
+  const productoParam = searchParams.get("producto");
+  const origenParam = searchParams.get("origen");
+  const destinoParam = searchParams.get("destino");
+
+  // Llegada desde una garantía: traer la chatarra a bodega para devolverla.
+  // Reacciona a los parámetros y no solo al montaje, por lo mismo que en
+  // Devoluciones: React Router no remonta si solo cambia la query string.
+  useEffect(() => {
+    // Las sedes se validan contra las reales: un ?origen= inventado no debe
+    // llegar crudo al estado ni a la RPC.
+    const sedeValida = (x) => SEDES.some((sd) => sd.id === x);
+    // Solo el Admin puede elegir origen; para el resto la RPC exige su propia
+    // sede, así que el parámetro se ignora y sale de la suya, que es lo correcto.
+    if (origenParam && sedeValida(origenParam) && esAdmin)
+      setSedeOrigen(origenParam);
+    if (destinoParam && sedeValida(destinoParam)) setSedeDestino(destinoParam);
+  }, [origenParam, destinoParam, SEDES, esAdmin]);
+
+  // El producto se añade aparte: handleQRFound necesita que sedeOrigen ya esté
+  // puesta para comprobar el stock. Reutilizarlo evita duplicar la validación
+  // de existencia, actividad y stock. agregarItem ya deduplica por producto.
+  useEffect(() => {
+    if (!productoParam || !sedeOrigen) return;
+    handleQRFound(productoParam);
+  }, [productoParam, sedeOrigen, handleQRFound]);
 
   const eliminarItem = (productoId) =>
     setItems((prev) => prev.filter((i) => i.producto_id !== productoId));
