@@ -29,6 +29,12 @@ export const MARCA = {
   // Email/teléfono van vacíos por ahora — Admin puede llenar en config futura
 };
 
+// Política de devoluciones que va impresa en el recibo de venta. Pedida por la
+// dueña para dejarla por escrito en el documento que se lleva el cliente, no
+// solo de palabra en el mostrador.
+export const TEXTO_POLITICA_DEVOLUCION =
+  "Después de entregado el producto no se aceptan devoluciones.";
+
 // Nombre comercial corto de la empresa. NO es el nombre legal: para eso está
 // MARCA.nombre, que debe seguir usándose donde el nombre tenga valor jurídico
 // —en particular el titular de la cuenta bancaria de la cotización—.
