@@ -94,6 +94,7 @@ export const ROLE_MODULES = {
     "Productos",
     "Etiquetas",
     "Cierre",
+    "Cuentas",
   ],
   Vendedor: [
     "Inventario",
@@ -110,6 +111,7 @@ export const ROLE_MODULES = {
     "Clientes",
     "Devoluciones",
     "Cierre",
+    "Cuentas",
   ],
   Tecnico: ["Órdenes", "Ensambles", "Herramientas"],
 };
@@ -131,6 +133,7 @@ export const MODULE_ICONS = {
   Clientes: "👤",
   Etiquetas: "🖨️",
   Cierre: "🧮",
+  Cuentas: "💵",
   "→ Panel Admin": "📊",
 };
 
@@ -151,6 +154,7 @@ export const MODULE_ROUTES = {
   Clientes: "/ops/clientes",
   Etiquetas: "/ops/etiquetas",
   Cierre: "/ops/cierre",
+  Cuentas: "/ops/cuentas",
   "→ Panel Admin": "/admin",
 };
 

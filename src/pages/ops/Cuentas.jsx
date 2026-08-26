@@ -7,6 +7,7 @@ import {
   CircleDollarSign,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { useAuthStore } from "../../stores/authStore";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import {
   estadoCuenta,
@@ -19,8 +20,15 @@ import BarraFiltros from "../../components/filtros/BarraFiltros";
 
 /**
  * B10 — Cuentas por cobrar (ventas a crédito) y por pagar (compras a crédito).
- * Solo Admin. Lee las vistas `v_cuentas_por_cobrar` / `v_cuentas_por_pagar`
- * (saldo ya neto de abonos de cotización) y registra cobros/pagos por modal.
+ *
+ * La sirven DOS rutas con el mismo componente: /admin/cuentas y /ops/cuentas.
+ * Las pestañas se derivan del rol —Admin ve las dos, la vendedora solo Por
+ * cobrar y bodega solo Por pagar— porque el servidor rechaza a quien intente
+ * registrar lo que no le toca (ver fn_registrar_pago_cuenta).
+ *
+ * Lee las vistas `v_cuentas_por_cobrar` / `v_cuentas_por_pagar` (saldo ya neto
+ * de abonos de cotización) y registra cobros/pagos por modal. Anular un pago
+ * sigue siendo exclusivo del Admin.
  */
 
 const PAGE_SIZE = 50;
@@ -73,7 +81,21 @@ function aplicarEstadoCuenta(q, estado, esCobrar) {
 }
 
 export default function Cuentas() {
-  const [tab, setTab] = useState("cobrar"); // 'cobrar' | 'pagar'
+  const perfil = useAuthStore((s) => s.perfil);
+  const esAdmin = perfil?.rol === "Admin";
+  const esBodeguero = perfil?.rol === "Bodeguero";
+  /** Qué pestañas ve cada rol. No es cosmético: el servidor rechaza a un
+   *  vendedor que intente registrar un pago a proveedor y a un bodeguero que
+   *  intente un cobro, así que enseñar la pestaña que no toca sería ofrecer
+   *  algo que va a fallar. El caso por defecto es "cobrar" —lo del vendedor—
+   *  porque RoleGuard ya impide que llegue aquí cualquier otro rol. */
+  const tabsPermitidos = esAdmin
+    ? ["cobrar", "pagar"]
+    : esBodeguero
+      ? ["pagar"]
+      : ["cobrar"];
+
+  const [tab, setTab] = useState(tabsPermitidos[0]); // 'cobrar' | 'pagar'
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0); // count exacto del filtro
   // #S3-12: los KPIs de cartera se calculan sobre TODOS los documentos del
@@ -117,10 +139,15 @@ export default function Cuentas() {
         tipo: "opciones",
         label: "Sede",
         columna: "sede_id",
+        // Solo Admin: a los demás la RLS ya los ata a su sede, así que el
+        // filtro solo puede devolver vacío. Mismo patrón que VentaHistorial.
+        visible: esAdmin,
         opciones: SEDES_OPCIONES,
       },
     ],
-    [],
+    // esAdmin decide si el filtro de Sede se muestra: tiene que estar aquí o
+    // los campos no se recalcularían si cambiara.
+    [esAdmin],
   );
   const fCobrar = useFiltros({ clave: "cuentas-cobrar", campos: camposCobrar });
 
@@ -145,10 +172,14 @@ export default function Cuentas() {
         tipo: "opciones",
         label: "Sede",
         columna: "sede_destino_id",
+        // Solo Admin, igual que en cobrar.
+        visible: esAdmin,
         opciones: SEDES_OPCIONES,
       },
     ],
-    [],
+    // esAdmin decide si el filtro de Sede se muestra: tiene que estar aquí o
+    // los campos no se recalcularían si cambiara.
+    [esAdmin],
   );
   const fPagar = useFiltros({ clave: "cuentas-pagar", campos: camposPagar });
 
@@ -251,7 +282,12 @@ export default function Cuentas() {
             className="m-0 mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em]"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            Admin · Cartera
+            {/* Decía "Admin · Cartera" siempre; ahora entran tres roles. */}
+            {esAdmin
+              ? "Admin · Cartera"
+              : esBodeguero
+                ? "Bodega · Pagos a proveedores"
+                : "Ventas · Cobros a clientes"}
           </p>
           <h1
             className="m-0 text-[24px] font-semibold leading-tight tracking-[-0.018em]"
@@ -268,42 +304,51 @@ export default function Cuentas() {
         </div>
       </div>
 
-      {/* Tabs CxC / CxP */}
-      <div
-        className="inline-flex w-full max-w-md rounded-lg border p-1"
-        style={{
-          borderColor: "hsl(var(--border))",
-          backgroundColor: "hsl(var(--muted) / 0.3)",
-        }}
-        role="tablist"
-      >
-        {[
-          { id: "cobrar", label: "Por cobrar", icon: HandCoins },
-          { id: "pagar", label: "Por pagar", icon: Receipt },
-        ].map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              role="tab"
-              aria-selected={active}
-              onClick={() => setTab(t.id)}
-              className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-md text-[13px] font-semibold transition-colors cursor-pointer"
-              style={{
-                backgroundColor: active ? "hsl(var(--card))" : "transparent",
-                color: active
-                  ? "hsl(var(--foreground))"
-                  : "hsl(var(--muted-foreground))",
-                boxShadow: active ? "0 1px 2px hsl(0 0% 0% / 0.08)" : "none",
-              }}
-            >
-              <Icon className="h-4 w-4" strokeWidth={1.75} />
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Tabs CxC / CxP — con una sola pestaña permitida no se dibujan:
+          una pestaña única es ruido, no información. */}
+      {tabsPermitidos.length > 1 && (
+        <div
+          className="inline-flex w-full max-w-md rounded-lg border p-1"
+          style={{
+            borderColor: "hsl(var(--border))",
+            backgroundColor: "hsl(var(--muted) / 0.3)",
+          }}
+          role="tablist"
+        >
+          {[
+            { id: "cobrar", label: "Por cobrar", icon: HandCoins },
+            { id: "pagar", label: "Por pagar", icon: Receipt },
+          ]
+            .filter((t) => tabsPermitidos.includes(t.id))
+            .map((t) => {
+              const Icon = t.icon;
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(t.id)}
+                  className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-md text-[13px] font-semibold transition-colors cursor-pointer"
+                  style={{
+                    backgroundColor: active
+                      ? "hsl(var(--card))"
+                      : "transparent",
+                    color: active
+                      ? "hsl(var(--foreground))"
+                      : "hsl(var(--muted-foreground))",
+                    boxShadow: active
+                      ? "0 1px 2px hsl(0 0% 0% / 0.08)"
+                      : "none",
+                  }}
+                >
+                  <Icon className="h-4 w-4" strokeWidth={1.75} />
+                  {t.label}
+                </button>
+              );
+            })}
+        </div>
+      )}
 
       {/* Búsqueda + filtros cruzables (server-side) */}
       <BarraFiltros
