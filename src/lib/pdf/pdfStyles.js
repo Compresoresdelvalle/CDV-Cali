@@ -4,23 +4,18 @@
  * Tamaño: carta (216 × 279 mm) — decisión §1.11 del cliente.
  */
 
-// Texto fijo de "Condiciones de entrega" que va en el PDF de cotización
-// (incluye la nota de garantías). Fuente única para el generador y el preview.
+// Condiciones de entrega. Fuente ÚNICA para el PDF y para lo que se muestra en
+// pantalla en el paso 3 de Cotizaciones (nueva y edición).
+//
+// Hasta ahora la pantalla mostraba un texto distinto al del PDF ("El cliente se
+// compromete a recibir la mercancía…") bajo la etiqueta "aparece siempre", que
+// era falsa: ese texto nunca llegaba al documento. El dueño confirmó que el
+// bueno es este, así que el otro se eliminó y ahora lo que se ve es lo que
+// firma el cliente.
 export const TEXTO_ENTREGA_COTIZACION =
   "El producto se entrega únicamente en nuestras instalaciones sin ningún costo. " +
   "Fuera de nuestras instalaciones el flete corre por cuenta del cliente. " +
   "Las garantías aplican según política de fábrica del producto.";
-
-// Condiciones que se muestran en el paso 3 de Cotizaciones (nueva y edición).
-// Vivía copiado en CotizacionNueva.jsx y CotizacionEditar.jsx; se unifica aquí
-// porque tenerlo por duplicado es justo por qué la mención al embalaje
-// sobrevivió tanto: se corregía en un sitio y no en el otro.
-// Sin la nota de embalaje: la empresa no presta ese servicio.
-export const TEXTO_FIJO_ENTREGA =
-  "El cliente se compromete a recibir la mercancía en las condiciones físicas " +
-  "en que se entrega. Cualquier reclamo sobre defectos visibles debe realizarse " +
-  "al momento de la entrega. Las garantías aplican según política de fábrica del " +
-  "producto.";
 
 // Nota legal al pie del PDF de cotización. También sin la mención al embalaje.
 export const TEXTO_LEGAL_COTIZACION =
