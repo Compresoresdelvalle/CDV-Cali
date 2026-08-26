@@ -658,12 +658,14 @@ export default function ModalCambioProducto({
           )}
 
           <Section titulo="Motivo del cambio">
+            {/* Placeholder corto a propósito: con rows=2 en un móvil de 360px,
+                uno largo llena las dos líneas visibles y se recorta. */}
             <textarea
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
               rows={2}
               maxLength={300}
-              placeholder="Por qué se hace el cambio — opcional, pero ayuda a entender el historial después"
+              placeholder="¿Por qué se cambia? (opcional)"
               className="w-full rounded-lg border px-3 py-2 text-sm"
               style={{
                 backgroundColor: "hsl(var(--card))",
