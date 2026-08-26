@@ -85,6 +85,23 @@ export default function EnsambleDetalle() {
   const sede = ens?.sede_id;
   const editable = ens && !ens.completado;
   const esAdmin = perfil?.rol === "Admin";
+  /** Costo de materiales del ensamble.
+   *
+   *  Ya se calculaba, pero solo dentro del diálogo de confirmación de
+   *  "Completar": había que pulsar el botón para ver el número que sirve para
+   *  decidir si pulsarlo. Ahora vive en la página.
+   *
+   *  Antes de completar se estima desde los insumos; al completar, el trigger
+   *  `trg_ensamble_stock` guarda el definitivo en `ensambles.costo_total` y
+   *  propaga el costo al producto resultante por promedio ponderado. Por eso,
+   *  una vez completado se muestra el guardado y no el recalculado: es el que
+   *  de verdad se usó. */
+  const costoMaterialesVista = ens?.completado
+    ? Number(ens.costo_total ?? 0)
+    : items.reduce(
+        (acc, i) => acc + (i.costo_unitario ?? 0) * (i.cantidad ?? 0),
+        0,
+      );
   const esTecnicoAsignado =
     perfil?.rol === "Tecnico" && ens?.tecnico_id === perfil?.id;
   const esCreador = ens?.realizado_por === perfil?.id;
@@ -309,10 +326,9 @@ export default function EnsambleDetalle() {
     if (accion) return;
     // Resumen honesto de lo que va a pasar con el inventario (UX ENS-05).
     const totalInsumos = items.reduce((s, i) => s + (i.cantidad ?? 0), 0);
-    const costoMateriales = items.reduce(
-      (s, i) => s + (i.costo_unitario ?? 0) * (i.cantidad ?? 0),
-      0,
-    );
+    // Mismo número que muestra la página: si divergieran, el diálogo diría
+    // una cosa y la pantalla otra justo en el momento de decidir.
+    const costoMateriales = costoMaterialesVista;
     const ok = await confirm({
       titulo: "Completar ensamble",
       mensaje:
@@ -493,6 +509,45 @@ export default function EnsambleDetalle() {
               </li>
             ))}
           </ul>
+        )}
+
+        {/* Costo de materiales: solo Admin, y en la PÁGINA — antes solo salía
+            dentro del cuadro de confirmación al pulsar Completar. */}
+        {esAdmin && items.length > 0 && (
+          <div
+            className="mt-3 flex items-center justify-between rounded-lg border px-3.5 py-3"
+            style={{
+              borderColor: "var(--p-200)",
+              backgroundColor: "var(--n-0)",
+            }}
+          >
+            <div>
+              <p
+                className="font-mono text-[10px] uppercase tracking-[0.08em]"
+                style={{ color: "var(--n-300)" }}
+              >
+                {ens.completado
+                  ? "Costo de materiales"
+                  : "Costo estimado de materiales"}
+              </p>
+              {ens.cantidad_producida > 1 && (
+                <p className="text-[11.5px]" style={{ color: "var(--n-500)" }}>
+                  {formatCOP(
+                    Math.round(
+                      costoMaterialesVista / (ens.cantidad_producida || 1),
+                    ),
+                  )}{" "}
+                  por unidad · {ens.cantidad_producida} unidades
+                </p>
+              )}
+            </div>
+            <p
+              className="font-mono text-[20px] font-medium tabular-nums"
+              style={{ color: "var(--p-700)" }}
+            >
+              {formatCOP(costoMaterialesVista)}
+            </p>
+          </div>
         )}
 
         {/* Agregar insumo (solo si editable) */}
