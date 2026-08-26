@@ -70,6 +70,15 @@ export default function Herramientas() {
    *  por todas partes— porque devolverle la capacidad a bodega es cambiar esta
    *  única línea, y porque el nombre dice POR QUÉ se puede, no QUIÉN eres. */
   const puedeOperarRol = isAdmin;
+  /** Prestar es la excepción: lo conservan las vendedoras además del Admin.
+   *  Va aparte de `puedeOperarRol` a propósito — no basta con la sede, porque
+   *  el servidor (fn_prestar_herramientas_lote) deja prestar a CUALQUIER rol en
+   *  su propia sede, incluido bodega. Sin esta condición, un bodeguero seguiría
+   *  viendo "Prestar" en BODEGA y el servidor se lo permitiría, rompiendo el
+   *  solo-lectura que pidió la clienta.
+   *  Recibir NO está aquí: fn_devolver_herramienta rechaza a las vendedoras,
+   *  así que solo el Admin registra devoluciones. */
+  const puedePrestarRol = isAdmin || perfil?.rol === "Vendedor";
   const puedeCrear = isAdmin;
   const miSede = perfil?.sede_id;
   /** Las funciones del servidor solo dejan actuar sobre la sede propia, salvo
@@ -654,6 +663,9 @@ export default function Herramientas() {
           esAdmin={isAdmin}
           puedeOperarRol={puedeOperarRol}
           puedeOperar={puedeOperarEn(detalle.sede_id)}
+          puedePrestar={
+            puedePrestarRol && puedeOperarEn(detalle.sede_id)
+          }
           onClose={() => setDetalleId(null)}
           onDevolver={() => devolver(detalle)}
           onConsumir={() => consumir(detalle)}
