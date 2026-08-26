@@ -11,9 +11,11 @@ import {
   Printer,
   MessageSquare,
   Ban,
+  PackageX,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { useAuthStore } from "../../../stores/authStore";
+import { ROLE_MODULES } from "../../../lib/constants";
 import AnularGarantiaModal from "../../../components/garantias/AnularGarantiaModal";
 import { formatCOP, formatDate, safeError } from "../../../lib/utils";
 import { getParametroInt } from "../../../hooks/useParametro";
@@ -66,35 +68,78 @@ export default function GarantiaVentaDetalle() {
   const [anulOpen, setAnulOpen] = useState(false);
   const [anulBusy, setAnulBusy] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
+  // Chatarras que produjo esta garantía, con su stock actual.
+  const [devueltos, setDevueltos] = useState([]);
 
   useEffect(() => {
     const cargar = async () => {
       setLoading(true);
       setErrorMsg("");
       try {
-        const [{ data: gar, error: garErr }, { data: det, error: detErr }] =
-          await Promise.all([
-            supabase
-              .from("garantias_venta")
-              .select(
-                `id, numero, fecha, resolucion, estado, motivo, monto_devuelto,
+        const [
+          { data: gar, error: garErr },
+          { data: det, error: detErr },
+          { data: chat, error: chatErr },
+        ] = await Promise.all([
+          supabase
+            .from("garantias_venta")
+            .select(
+              `id, numero, fecha, resolucion, estado, motivo, monto_devuelto,
                venta:venta_id(id, numero, cliente_nombre, fecha, total, vendedor:vendedor_id(nombre)),
                orden:orden_servicio_id(id, numero, cliente_nombre, cliente_telefono, fecha_entrega, total),
                ot_reparacion:ot_reparacion_id(id, numero, estado, tipo)`,
-              )
-              .eq("id", id)
-              .single(),
-            supabase
-              .from("detalle_garantia_venta")
-              .select(
-                `id, cantidad, producto:producto_id(nombre, codigo_interno, referencia)`,
-              )
-              .eq("garantia_id", id),
-          ]);
+            )
+            .eq("id", id)
+            .single(),
+          supabase
+            .from("detalle_garantia_venta")
+            .select(
+              `id, cantidad, producto:producto_id(nombre, codigo_interno, referencia)`,
+            )
+            .eq("garantia_id", id),
+          // Chatarras que produjo esta garantía. El filtro por tipo='chatarra'
+          // separa el ingreso real de las reversas que deja una anulación, que
+          // también son movimientos 'garantia_entrada'.
+          supabase
+            .from("movimientos")
+            .select(
+              `id, producto_id, sede_id, cantidad, fecha,
+               producto:producto_id!inner(nombre, referencia, tipo)`,
+            )
+            .eq("referencia_id", id)
+            .eq("referencia_tipo", "garantia_venta")
+            .eq("tipo", "garantia_entrada")
+            .eq("producto.tipo", "chatarra"),
+        ]);
         if (garErr) throw garErr;
         if (detErr) throw detErr;
         setG(gar);
         setDetalles(det ?? []);
+        if (chatErr) throw chatErr;
+        // Stock actual de cada chatarra: sin esto no se sabe si el botón de
+        // devolver serviría o fallaría, y ofrecer uno que falla es justo lo
+        // que la regla del proyecto prohíbe.
+        let filas = chat ?? [];
+        if (filas.length > 0) {
+          const { data: inv } = await supabase
+            .from("inventario")
+            .select("producto_id, sede_id, cantidad")
+            .in(
+              "producto_id",
+              filas.map((f) => f.producto_id),
+            );
+          const mapa = new Map(
+            (inv ?? []).map((i) => [
+              `${i.producto_id}|${i.sede_id}`,
+              i.cantidad,
+            ]),
+          );
+          filas = filas.map((f) => ({
+            ...f,
+            stock: mapa.get(`${f.producto_id}|${f.sede_id}`) ?? 0,
+          }));
+        }
+        setDevueltos(filas);
         // Vigencia real: parámetro de sistema (misma clave que la RPC).
         const dias = await getParametroInt("dias_garantia_venta", 90);
         setDiasGarantia(dias);
@@ -154,6 +199,48 @@ export default function GarantiaVentaDetalle() {
       </div>
     );
   }
+
+  // Devolver al proveedor: el formulario de Devoluciones solo ofrece el tipo
+  // "proveedor" a Admin y Bodeguero. Pero a ESTA pantalla el RoleGuard solo
+  // deja entrar a Admin, Vendedor y Tecnico (ver App.jsx, garantias/venta/:id),
+  // asi que en la practica el unico que puede devolver desde aqui es el Admin.
+  // No se deja `|| esBodeguero` porque seria codigo muerto que sugiere una
+  // capacidad que nadie tiene: si algun dia Bodega entra aqui, hay que
+  // ampliar el RoleGuard y revisar el resto de la pantalla a la vez.
+  const puedeGestionarChatarra = esAdmin;
+  // Quién puede CREAR un traspaso. Se deriva de ROLE_MODULES en vez de listar
+  // roles a mano: si mañana cambia quién traspasa, este botón se entera solo.
+  // Sin esto, un Técnico —que sí puede abrir garantías y llegar a esta
+  // pantalla, pero NO tiene el módulo Traspasos— veía el botón y al pulsarlo
+  // RoleGuard lo devolvía a /ops sin decirle nada.
+  const puedeTraspasar = (ROLE_MODULES[perfil?.rol] ?? []).includes("Traspasos");
+
+  /** Qué ofrecer para una chatarra concreta.
+   *
+   *  El formulario de Devoluciones manda SIEMPRE `perfil.sede_id` y no tiene
+   *  selector de sede, así que devolver al proveedor solo es posible si la
+   *  pieza está en la sede de quien la registra — el Admin incluido, aunque la
+   *  RPC en teoría se lo permitiría desde cualquiera. Por eso el traspaso a
+   *  bodega es obligatorio y no un adorno.
+   *
+   *  Nunca devuelve una acción que vaya a ser rechazada: ofrecer un botón que
+   *  falla es peor que no ofrecer ninguno. */
+  const accionDevuelto = (d) => {
+    if ((d.stock ?? 0) <= 0) return { tipo: "sin-stock" };
+    const enMiSede = d.sede_id === perfil?.sede_id;
+    if (puedeGestionarChatarra && enMiSede) return { tipo: "devolver" };
+    // fn_crear_traspaso exige sede propia salvo al Admin, y el formulario sí
+    // deja al Admin elegir el origen. Una vendedora también puede enviarla
+    // desde su sede, y debe poder: es quien tiene la pieza en la mano.
+    if (puedeTraspasar && (esAdmin || enMiSede))
+      return { tipo: "traspasar" };
+    // Puede ver la garantía pero no mover la pieza (el Técnico, por ejemplo).
+    // Decírselo así es más honesto que hablarle de sedes: el problema no es
+    // dónde está la pieza, es que a él no le toca moverla.
+    if (!puedeTraspasar && !puedeGestionarChatarra)
+      return { tipo: "sin-permiso" };
+    return { tipo: "otra-sede" };
+  };
 
   const origen = g.venta
     ? {
@@ -471,6 +558,119 @@ export default function GarantiaVentaDetalle() {
                     </span>
                   </li>
                 ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Piezas que devolvió el cliente y quedaron en chatarra.
+              El camino hacia el proveedor: mandar una chatarra a Devoluciones
+              ya se podía, pero no había nada que llevara hasta ahí. */}
+          {devueltos.length > 0 && (
+            <div className="iblock">
+              <div className="ib-head">
+                <div className="ib-ico">
+                  <PackageX className="h-3.5 w-3.5" />
+                </div>
+                <div className="ib-title">Piezas devueltas por el cliente</div>
+                <div className="ib-aux">{devueltos.length} items</div>
+              </div>
+              <ul className="flex flex-col gap-1.5">
+                {devueltos.map((d) => {
+                  const accion = accionDevuelto(d);
+                  return (
+                    <li
+                      key={d.id}
+                      className="flex flex-col gap-2 rounded-lg border px-3.5 py-2.5"
+                      style={{
+                        borderColor: "var(--n-100)",
+                        backgroundColor: "var(--n-0)",
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="text-[12.5px] font-medium leading-tight"
+                            style={{ color: "var(--n-950)" }}
+                          >
+                            {d.producto?.nombre}
+                          </p>
+                          <p
+                            className="font-mono text-[11px]"
+                            style={{ color: "var(--n-500)" }}
+                          >
+                            {d.producto?.referencia} · {d.sede_id} · quedan{" "}
+                            {d.stock ?? 0}
+                          </p>
+                        </div>
+                        <span
+                          className="font-mono text-[13px] font-medium"
+                          style={{ color: "var(--n-700)" }}
+                        >
+                          × {d.cantidad}
+                        </span>
+                      </div>
+
+                      {accion.tipo === "devolver" && (
+                        <button
+                          onClick={() =>
+                            navigate(
+                              `/ops/devoluciones/nueva?tipo=proveedor&producto=${d.producto_id}`,
+                            )
+                          }
+                          className="btn btn-pri self-start text-[12px]"
+                          style={{ minHeight: 48 }}
+                        >
+                          Devolver al proveedor
+                        </button>
+                      )}
+
+                      {accion.tipo === "traspasar" && (
+                        <button
+                          onClick={() =>
+                            navigate(
+                              `/ops/traspasos/nuevo?producto=${d.producto_id}&origen=${encodeURIComponent(d.sede_id)}&destino=BODEGA`,
+                            )
+                          }
+                          className="btn self-start text-[12px]"
+                          style={{ minHeight: 48 }}
+                        >
+                          Traspasar a bodega para devolver
+                        </button>
+                      )}
+
+                      {accion.tipo === "sin-permiso" && (
+                        <p
+                          className="text-[11.5px]"
+                          style={{ color: "var(--n-500)" }}
+                        >
+                          Bodega o el administrador se encargan de devolverla al
+                          proveedor.
+                        </p>
+                      )}
+
+                      {accion.tipo === "otra-sede" && (
+                        <p
+                          className="text-[11.5px]"
+                          style={{ color: "var(--n-500)" }}
+                        >
+                          Está en {d.sede_id}. Esa sede debe enviarla a bodega
+                          antes de poder devolverla al proveedor.
+                        </p>
+                      )}
+
+                      {accion.tipo === "sin-stock" && (
+                        <p
+                          className="text-[11.5px]"
+                          style={{ color: "var(--n-500)" }}
+                        >
+                          Ya no está en inventario: se devolvió al proveedor, se
+                          dio de baja o se anuló una garantía que la retiró.
+                          Puedes ver su historial en Auditoría.
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
