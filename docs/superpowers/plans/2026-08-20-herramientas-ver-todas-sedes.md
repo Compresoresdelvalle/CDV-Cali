@@ -283,14 +283,14 @@ acotar los **dos** puntos que dependen del rol:
 Línea 160, hoy:
 
 ```jsx
-  const puedeGestionar = (esAdmin || esBodega) && !estaRetirada;
+const puedeGestionar = (esAdmin || esBodega) && !estaRetirada;
 ```
 
 pasa a:
 
 ```jsx
-  // El rol dice QUÉ; la sede, DÓNDE. Sin las dos, el servidor rechaza.
-  const puedeGestionar = puedeOperar && (esAdmin || esBodega) && !estaRetirada;
+// El rol dice QUÉ; la sede, DÓNDE. Sin las dos, el servidor rechaza.
+const puedeGestionar = puedeOperar && (esAdmin || esBodega) && !estaRetirada;
 ```
 
 Líneas 250-251, hoy:
