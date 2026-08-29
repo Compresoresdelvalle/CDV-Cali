@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, ScanLine, Plus, X, Package } from "lucide-react";
+import {
+  Search,
+  ScanLine,
+  Plus,
+  X,
+  Package,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useInventario } from "../../hooks/useInventario";
 import { useRealtimeInventario } from "../../hooks/useRealtime";
 import { useAuthStore } from "../../stores/authStore";
@@ -142,8 +149,18 @@ export default function Inventario() {
             Inventario
           </h1>
         </div>
-        {esAdmin && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {/* Mínimos por sede: entra Admin, Bodeguero y Vendedor — los dos
+              últimos configuran sólo la suya, y el servidor lo fuerza. */}
+          <button
+            onClick={() => navigate("/ops/minimos")}
+            className="btn btn-out"
+            style={{ height: 48 }}
+          >
+            <SlidersHorizontal className="h-4 w-4" strokeWidth={1.75} />
+            Mínimos
+          </button>
+          {esAdmin && (
             <button
               onClick={() => navigate("/ops/inventario/nuevo")}
               className="btn btn-pri"
@@ -152,8 +169,8 @@ export default function Inventario() {
               <Plus className="h-4 w-4" strokeWidth={2} />
               Nuevo producto
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ── Fila de búsqueda + escáner ──────────────────────────────── */}

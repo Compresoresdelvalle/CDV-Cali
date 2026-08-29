@@ -89,26 +89,22 @@ export default function Reorden() {
 
   const cargarAgotadosSinConfig = async () => {
     try {
-      // El stock de un vendible vive en `cantidad`; el de un insumo en
-      // `cantidad_insumo` — contar solo `cantidad` marcaría como agotados
-      // insumos con existencias.
-      const base = () =>
-        supabase
-          .from("inventario")
-          .select("id, producto:producto_id!inner(id)", {
-            count: "exact",
-            head: true,
-          })
-          .eq("producto.activo", true)
-          .eq("producto.stock_minimo", 0);
-      const [vendibles, insumos] = await Promise.all([
-        base().eq("producto.vendible", true).lte("cantidad", 0),
-        base().eq("producto.vendible", false).lte("cantidad_insumo", 0),
-      ]);
+      // Con el mínimo por sede esto se vuelve una sola consulta: `estado_stock`
+      // ya distingue vendible de insumo, y `stock_minimo` vive en la misma fila.
+      // Antes hacían falta dos consultas cruzando `producto.vendible` porque el
+      // mínimo era global y el estado no miraba `cantidad_insumo`.
+      const { count, error } = await supabase
+        .from("inventario")
+        .select("id, producto:producto_id!inner(id)", {
+          count: "exact",
+          head: true,
+        })
+        .eq("producto.activo", true)
+        .eq("stock_minimo", 0)
+        .eq("estado_stock", "Agotado");
       if (!mountedRef.current) return;
-      if (vendibles.error) throw vendibles.error;
-      if (insumos.error) throw insumos.error;
-      setAgotadosSinConfig((vendibles.count ?? 0) + (insumos.count ?? 0));
+      if (error) throw error;
+      setAgotadosSinConfig(count ?? 0);
     } catch {
       // Silencioso: es un dato informativo adicional, no crítico para la página.
       if (mountedRef.current) setAgotadosSinConfig(null);

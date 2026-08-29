@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../stores/authStore";
+import MinMaxModal from "../../components/inventario/MinMaxModal";
 import StatusBadge from "../../components/ui/StatusBadge";
 import QRGenerator from "../../components/qr/QRGenerator";
 import QRPrintLabel from "../../components/qr/QRPrintLabel";
@@ -28,6 +29,17 @@ export default function ProductoDetalle() {
   const authLoading = useAuthStore((s) => s.loading);
   const perfil = useAuthStore((s) => s.perfil);
   const esAdmin = perfil?.rol === "Admin";
+  // Fila de inventario cuyo mín/máx se está configurando (null = modal cerrado).
+  const [minMaxFila, setMinMaxFila] = useState(null);
+  // Quién puede configurar el mín/máx de UNA sede. Espeja lo que valida
+  // `fn_definir_minmax` en el servidor: Admin en todas, Vendedor y Bodeguero
+  // sólo en la suya. Si no puede, no se le muestra el botón — no se ofrece un
+  // botón que va a fallar.
+  const puedeConfigurarMinMax = (sedeId) =>
+    (esAdmin ||
+      ((perfil?.rol === "Vendedor" || perfil?.rol === "Bodeguero") &&
+        sedeId === perfil?.sede_id)) &&
+    Boolean(sedeId);
   // S4-04: el RPC fn_convertir_a_insumo autoriza a estos 4 roles (y notifica al
   // Admin cuando lo usa otro rol). '→ a venta' (fn_revertir_insumo_a_venta) sí
   // es solo Admin. Antes ambos botones estaban ocultos a todos menos Admin.
@@ -95,7 +107,7 @@ export default function ProductoDetalle() {
         const { data: prod, error: prodErr } = await supabase
           .from("productos")
           .select(
-            "id, referencia, codigo_interno, codigo_proveedor, tipo, nombre, categoria, subcategoria, marca, modelo, descripcion, precio_venta, stock_minimo, stock_maximo, unidad_medida, activo, vendible, stand, posicion, en_piso" +
+            "id, referencia, codigo_interno, codigo_proveedor, tipo, nombre, categoria, subcategoria, marca, modelo, descripcion, precio_venta, unidad_medida, activo, vendible, stand, posicion, en_piso" +
               (esAdmin ? ", costo_promedio" : ""),
           )
           .eq("id", productoId)
@@ -106,7 +118,7 @@ export default function ProductoDetalle() {
         const { data: inv } = await supabase
           .from("inventario")
           .select(
-            "id, cantidad, cantidad_insumo, estado_stock, ubicacion_id, sede:sedes(id, nombre)",
+            "id, cantidad, cantidad_insumo, estado_stock, ubicacion_id, sede_id, stock_minimo, stock_maximo, sede:sedes(id, nombre)",
           )
           .eq("producto_id", productoId)
           .order("sede_id");
@@ -519,8 +531,10 @@ export default function ProductoDetalle() {
             </button>
           </Stat>
         )}
-        <Stat label="Stock mínimo" value={producto.stock_minimo} small />
-        <Stat label="Stock máximo" value={producto.stock_maximo ?? "—"} small />
+        {/* El mínimo y el máximo dejaron de ser globales: ahora cada sede
+            tiene los suyos y se configuran en la tabla de existencias de
+            abajo. Mostrarlos aquí como un solo número sería mentir. */}
+        <Stat label="Mínimo y máximo" value="Por sede" small />
         {/* stand/posición es un dato físico solo de BODEGA (S4-05 ux). */}
         <Stat
           label="Ubicación (BODEGA)"
@@ -615,6 +629,30 @@ export default function ProductoDetalle() {
                           <div style={{ color: "var(--n-500)" }}>
                             Insumo: {inv.cantidad_insumo ?? 0}
                           </div>
+                        </td>
+                        <td className="p-sub" style={{ width: 132 }}>
+                          <div>
+                            Mín: <b>{inv.stock_minimo ?? 0}</b> · Máx:{" "}
+                            <b>
+                              {inv.stock_maximo > 0
+                                ? inv.stock_maximo
+                                : "sin techo"}
+                            </b>
+                          </div>
+                          {(inv.stock_minimo ?? 0) === 0 && (
+                            <div style={{ color: "var(--n-500)" }}>
+                              No alerta en esta sede
+                            </div>
+                          )}
+                          {puedeConfigurarMinMax(inv.sede_id) && (
+                            <button
+                              onClick={() => setMinMaxFila(inv)}
+                              className="mt-1 cursor-pointer text-left text-xs font-medium"
+                              style={{ color: "var(--p-700)" }}
+                            >
+                              Configurar
+                            </button>
+                          )}
                         </td>
                         {puedeConvertirInsumo && (
                           <td style={{ width: 110 }}>
@@ -1211,6 +1249,30 @@ export default function ProductoDetalle() {
             </div>
           </div>
         </div>
+      )}
+
+      {minMaxFila && (
+        <MinMaxModal
+          producto={producto}
+          sede={{
+            id: minMaxFila.sede_id,
+            nombre: minMaxFila.sede?.nombre ?? minMaxFila.sede_id,
+          }}
+          minimoActual={minMaxFila.stock_minimo ?? 0}
+          maximoActual={minMaxFila.stock_maximo ?? 0}
+          onCerrar={() => setMinMaxFila(null)}
+          onGuardado={({ minimo, maximo }) =>
+            // Se refleja en la tabla sin recargar toda la ficha. El estado de
+            // stock lo recalcula el servidor; llega por realtime o al volver.
+            setInventario((prev) =>
+              prev.map((i) =>
+                i.id === minMaxFila.id
+                  ? { ...i, stock_minimo: minimo, stock_maximo: maximo }
+                  : i,
+              ),
+            )
+          }
+        />
       )}
 
       <ConfirmDialog />

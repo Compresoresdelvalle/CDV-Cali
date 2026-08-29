@@ -95,11 +95,12 @@ export default function Dashboard() {
         supabase
           .from("inventario")
           .select(
-            `id, cantidad, estado_stock,
+            `id, cantidad, estado_stock, stock_minimo,
              sede:sede_id(nombre),
-             producto:producto_id(referencia, nombre, stock_minimo, categoria)`,
+             producto:producto_id(referencia, nombre, categoria)`,
           )
           .in("estado_stock", ["Agotado", "Bajo"])
+          .gt("stock_minimo", 0)
           .order("cantidad", { ascending: true })
           .limit(50),
         supabase
@@ -415,7 +416,7 @@ export default function Dashboard() {
                 right={
                   <RightStock
                     current={it.cantidad}
-                    min={it.producto?.stock_minimo ?? 0}
+                    min={it.stock_minimo ?? 0}
                     status={sev.label}
                     token={sev.token}
                   />
