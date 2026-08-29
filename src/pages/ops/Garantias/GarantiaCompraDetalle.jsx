@@ -15,6 +15,7 @@ import {
 import { supabase } from "../../../lib/supabase";
 import { useAuthStore } from "../../../stores/authStore";
 import AnularGarantiaModal from "../../../components/garantias/AnularGarantiaModal";
+import { useConfirm } from "../../../components/ui/ConfirmDialog";
 import { formatCOP, formatDate, safeError } from "../../../lib/utils";
 import { avisarOk, avisarError } from "../../../lib/notify";
 import {
@@ -72,6 +73,16 @@ export default function GarantiaCompraDetalle() {
   const puedeOperar = esAdmin || esBodega;
   const [anulOpen, setAnulOpen] = useState(false);
   const [anulBusy, setAnulBusy] = useState(false);
+  // Resolución que se está guardando ('reposicion_fisica' | 'nota_credito'),
+  // para bloquear los dos botones y decir cuál está en curso.
+  const [definiendo, setDefiniendo] = useState(null);
+  const { confirm, ConfirmDialog } = useConfirm();
+
+  const montoDe = (ds) =>
+    ds.reduce(
+      (acc, d) => acc + Number(d.cantidad) * Number(d.costo_unitario),
+      0,
+    );
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -122,6 +133,7 @@ export default function GarantiaCompraDetalle() {
 
   const submittingRef = useRef(false);
   const anulBusyRef = useRef(false);
+  const definiendoRef = useRef(false);
 
   const marcarReposicion = async () => {
     const seleccionados = detalles.filter(
@@ -150,6 +162,52 @@ export default function GarantiaCompraDetalle() {
     } finally {
       setSubmitting(false);
       submittingRef.current = false;
+    }
+  };
+
+  /** Define la resolución de una garantía que se abrió como "pendiente".
+   *
+   *  Sin esto quedaba congelada: `abierta` no tenía salida —solo anular— y el
+   *  stock reclamado ya había salido del inventario. La RPC hace lo mismo que
+   *  la apertura habría hecho de haberse decidido desde el principio. */
+  const definirResolucion = async (resolucion) => {
+    const esNota = resolucion === "nota_credito";
+    const monto = montoDe(detalles);
+    const ok = await confirm({
+      titulo: esNota ? "Emitir nota crédito" : "Resolver por reposición física",
+      mensaje: esNota
+        ? `Se emite una nota crédito de ${formatCOP(monto)} a ${
+            garantia.compra?.proveedor ?? "el proveedor"
+          } para descontar en próximas compras, y la garantía queda resuelta por esa vía. No se puede deshacer.`
+        : "El proveedor repone el producto. La garantía queda esperando la reposición; al recibirla se confirma aquí y el stock reingresa al inventario.",
+      confirmLabel: esNota ? "Emitir nota crédito" : "Confirmar reposición",
+    });
+    if (!ok) return;
+    if (definiendoRef.current) return; // guard síncrono anti doble-submit
+    definiendoRef.current = true;
+    setDefiniendo(resolucion);
+    setErrorMsg("");
+    try {
+      const { error } = await supabase.rpc(
+        "fn_definir_resolucion_garantia_compra",
+        { p_garantia_id: id, p_resolucion: resolucion },
+      );
+      if (error) throw error;
+      avisarOk(
+        esNota
+          ? "Nota crédito emitida."
+          : "Queda a la espera de la reposición del proveedor.",
+      );
+      await cargar();
+    } catch (err) {
+      avisarError(err, "No se pudo definir la resolución");
+      // Si otra persona la resolvió mientras esta pantalla estaba abierta, el
+      // servidor rechaza y la tarjeta seguiría ofreciendo un botón condenado a
+      // fallar otra vez. Recargar la deja mostrando el estado real.
+      await cargar();
+    } finally {
+      setDefiniendo(null);
+      definiendoRef.current = false;
     }
   };
 
@@ -205,10 +263,8 @@ export default function GarantiaCompraDetalle() {
 
   const puedeRecibir =
     garantia.estado === "reposicion_pendiente" && puedeOperar;
-  const total = detalles.reduce(
-    (acc, d) => acc + Number(d.cantidad) * Number(d.costo_unitario),
-    0,
-  );
+  const total = montoDe(detalles);
+  const unidades = detalles.reduce((acc, d) => acc + Number(d.cantidad), 0);
   const pasos = construirProcesoCompra(garantia, formatDate);
   const historial = construirHistorialCompraGarantia(
     garantia,
@@ -320,6 +376,8 @@ export default function GarantiaCompraDetalle() {
         </div>
       )}
 
+      <ConfirmDialog />
+
       <AnularGarantiaModal
         open={anulOpen}
         tipo="compra"
@@ -333,6 +391,85 @@ export default function GarantiaCompraDetalle() {
 
       <div className="grid items-start gap-4 lg:grid-cols-[1fr_340px]">
         <div className="flex flex-col gap-3">
+          {/* Definir resolución — la salida del estado 'abierta'.
+              Una garantía abierta con resolución "pendiente" no tenía forma de
+              avanzar: la única acción era anularla, con el stock ya fuera del
+              inventario. Este es el paso que faltaba. */}
+          {garantia.estado === "abierta" && (
+            <div className="iblock">
+              <div className="ib-head">
+                <div className="ib-ico">
+                  <CheckSquare className="h-3.5 w-3.5" />
+                </div>
+                <div className="ib-title">Definir resolución</div>
+              </div>
+              {puedeOperar ? (
+                <>
+                  <p
+                    className="text-[12.5px] leading-[1.5]"
+                    style={{ color: "var(--n-500)" }}
+                  >
+                    Se abrió sin decidir qué haría el proveedor. Mientras siga
+                    así la garantía no avanza y{" "}
+                    <b className="font-medium">
+                      {unidades === 1
+                        ? "la unidad reclamada sigue"
+                        : `las ${unidades} unidades reclamadas siguen`}
+                    </b>{" "}
+                    fuera del inventario. Cuando lo acuerden, regístralo aquí.
+                  </p>
+                  <div className="mt-3.5 flex flex-col gap-2 sm:flex-row">
+                    <button
+                      onClick={() => definirResolucion("reposicion_fisica")}
+                      disabled={!!definiendo}
+                      className="btn btn-out justify-center sm:flex-1 disabled:opacity-50"
+                      style={{ height: 48 }}
+                    >
+                      <Package className="h-3.5 w-3.5" strokeWidth={2} />
+                      {definiendo === "reposicion_fisica"
+                        ? "Guardando…"
+                        : "Reposición física"}
+                    </button>
+                    <button
+                      onClick={() => definirResolucion("nota_credito")}
+                      disabled={!!definiendo}
+                      className="btn btn-out justify-center sm:flex-1 disabled:opacity-50"
+                      style={{ height: 48 }}
+                    >
+                      <CreditCard className="h-3.5 w-3.5" strokeWidth={2} />
+                      {definiendo === "nota_credito"
+                        ? "Guardando…"
+                        : `Nota crédito · ${formatCOP(total)}`}
+                    </button>
+                  </div>
+                  <p
+                    className="mt-2.5 text-[11.5px] leading-[1.5]"
+                    style={{ color: "var(--n-500)" }}
+                  >
+                    <b className="font-medium">Reposición física:</b> el
+                    proveedor manda el reemplazo y se confirma al recibirlo —
+                    ahí reingresa al inventario.{" "}
+                    <b className="font-medium">Nota crédito:</b> se emite en el
+                    momento por el monto reclamado, para descontar en la próxima
+                    compra al mismo proveedor.
+                  </p>
+                </>
+              ) : (
+                /* El vendedor abre la garantía pero no la resuelve (lo exige la
+                   RPC). Sin este texto ve una pantalla sin acciones y sin
+                   ninguna pista de qué falta ni de quién depende. */
+                <p
+                  className="text-[12.5px] leading-[1.5]"
+                  style={{ color: "var(--n-500)" }}
+                >
+                  Falta acordar con el proveedor si repone el producto o emite
+                  nota crédito. Eso lo registran Bodega o Administración:
+                  avísales qué se acordó y ellos la dejan andando.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Datos de la reclamación */}
           <div className="iblock">
             <div className="ib-head">
@@ -524,7 +661,12 @@ export default function GarantiaCompraDetalle() {
                   puedeOperar
                   ? "Nota crédito aún no registrada."
                   : "La nota crédito la gestiona Bodega/Administración."
-                : "Resolución por reposición física — sin nota crédito."}
+                : garantia.resolucion === "reposicion_fisica"
+                  ? "Resolución por reposición física — sin nota crédito."
+                  : // Sin este caso, una garantía sin resolución decía
+                    // "Resolución por reposición física", que era falso y
+                    // contradecía al badge "Sin resolución definida".
+                    "Todavía sin resolución: no hay nota crédito ni reposición en curso."}
             </div>
           )}
 
