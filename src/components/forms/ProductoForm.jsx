@@ -37,6 +37,9 @@ export default function ProductoForm({
     tipo: initial.tipo ?? "nuevo",
     precio_venta: initial.precio_venta ?? "",
     costo_promedio: initial.costo_promedio ?? "",
+    // Se siguen enviando porque las columnas de `productos` todavía existen y
+    // `fn_crear_producto` las espera. Ya no son editables: el mín/máx real vive
+    // en `inventario`, por sede. Se retiran cuando se dropeen esas columnas.
     stock_minimo: initial.stock_minimo ?? 0,
     stock_maximo: initial.stock_maximo ?? "",
     vendible: initial.vendible ?? true,
@@ -303,25 +306,14 @@ export default function ProductoForm({
               maxLength={20}
             />
           </Field>
-          <Field label="Stock mínimo">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={form.stock_minimo}
-              onChange={set("stock_minimo")}
-              className="finput"
-            />
-          </Field>
-          <Field label="Stock máximo (0 = sin tope)">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={form.stock_maximo}
-              onChange={set("stock_maximo")}
-              className="finput"
-            />
+          {/* El mínimo y el máximo dejaron de vivir en el producto: ahora son
+              por sede, porque una sede puede no manejar algo que otra vende a
+              diario. Se configuran en la ficha del producto, en la tabla de
+              existencias por sede, o en Inventario → Mínimos. */}
+          <Field label="Stock mínimo y máximo">
+            <p className="m-0 text-xs" style={{ color: "var(--n-500)" }}>
+              Se configuran por sede, en la ficha del producto o en Mínimos.
+            </p>
           </Field>
         </Row>
       </SectionCard>

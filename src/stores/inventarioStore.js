@@ -155,9 +155,10 @@ export const useInventarioStore = create((set, get) => ({
         .select(
           `
           id, cantidad, estado_stock, ubicacion_id, sede_id,
+          stock_minimo, stock_maximo,
           producto:productos!inner(id, referencia, codigo_interno, codigo_proveedor,
                              tipo, nombre, categoria, marca,
-                             precio_venta, stock_minimo, stock_maximo, activo,
+                             precio_venta, activo,
                              stand, posicion, en_piso),
           sede:sedes(id, nombre)
         `,
