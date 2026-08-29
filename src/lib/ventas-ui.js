@@ -239,3 +239,33 @@ export function precioSugeridoCambio({
   if (lDev <= 0) return Math.round(lNue);
   return Math.max(0, Math.round(pagado + (lNue - lDev)));
 }
+
+/**
+ * Proporción del subtotal que el cliente realmente pagó en una venta, usada
+ * para calcular el crédito cuando devuelve algo de ella.
+ *
+ * Es el espejo de `v_ratio` en `fn_registrar_cambio`. Vive aquí, y no suelta
+ * dentro del modal, porque estaba duplicada a mano en los dos lados y se
+ * desincronizó: al arreglar el backend para que una venta de cambio use ratio
+ * = 1, la pantalla siguió aplicando el ratio viejo y mostraba un crédito
+ * mucho menor del que la caja iba a mover (en la venta #1345, $0 contra
+ * $18.000). Un solo lugar y un test que lo fije.
+ *
+ * @param {{subtotal?:number, descuento_valor?:number, descuento_pct?:number,
+ *          cambio_de_venta_id?:string|null}} venta
+ * @returns {number} factor entre 0 y 1
+ */
+export function ratioCreditoVenta(venta) {
+  // En una venta que a su vez es un CAMBIO, `descuento_valor` guarda la
+  // PERMUTA —lo que valía el producto que el cliente entregó—, no un descuento
+  // comercial. Aplicarlo subvaloraría el crédito.
+  if (venta?.cambio_de_venta_id != null) return 1;
+  const sub = Number(venta?.subtotal) || 0;
+  if (sub <= 0) return 1;
+  const descRaw =
+    venta?.descuento_valor != null
+      ? Number(venta.descuento_valor)
+      : (sub * (Number(venta?.descuento_pct) || 0)) / 100;
+  const desc = Math.max(0, Math.min(descRaw, sub));
+  return (sub - desc) / sub;
+}
