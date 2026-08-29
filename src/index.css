@@ -3835,6 +3835,13 @@ body {
 .dark .hrm-row-dang {
   background: rgba(240, 68, 56, 0.08);
 }
+/* Sin esta regla, el :hover claro de arriba —que lleva !important— ganaba
+   tambien en modo oscuro y pintaba la fila atrasada casi blanca con el texto
+   claro encima: ilegible al pasar el mouse. Mismo par base/hover que
+   .ot-row-warn, que ya lo tenia resuelto. */
+.dark .hrm-row-dang:hover {
+  background: rgba(240, 68, 56, 0.16) !important;
+}
 .hrm-card-warn {
   border: 2px solid var(--warn-500);
   background: linear-gradient(180deg, var(--warn-50) 0%, var(--n-0) 70%);
