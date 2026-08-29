@@ -275,6 +275,10 @@ export default function Reorden() {
 
       {modalMinMax && (
         <ModalMinMax
+          sedes={sedes.filter((x) => x !== TODAS_SEDES)}
+          sedeInicial={
+            sedeFiltro !== TODAS_SEDES ? sedeFiltro : (perfil?.sede_id ?? "")
+          }
           onClose={() => setModalMinMax(false)}
           onAplicado={() => {
             cargar();
@@ -713,7 +717,11 @@ const PARAM_LABELS = {
   minmax_factor_max: "Máx = mín ×",
 };
 
-function ModalMinMax({ onClose, onAplicado }) {
+function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
+  // Las sugerencias son POR SEDE: la demanda de BODEGA (que despacha) no se
+  // parece a la de CHV (que vende). Sin elegir sede, `fn_sugerir_minmax`
+  // devolvería las cuatro y el mismo producto saldría repetido.
+  const [sede, setSede] = useState(sedeInicial);
   const [loading, setLoading] = useState(true);
   const [recalculando, setRecalculando] = useState(false);
   const [aplicando, setAplicando] = useState(false);
@@ -764,6 +772,7 @@ function ModalMinMax({ onClose, onAplicado }) {
     try {
       const { data, error } = await supabase.rpc("fn_sugerir_minmax", {
         p_dias: 90,
+        p_sede_id: sede,
       });
       if (!mountedRef.current) return;
       if (error) throw error;
@@ -771,6 +780,8 @@ function ModalMinMax({ onClose, onAplicado }) {
       setSugerencias(lista);
       // Selección por defecto: todos los NO configurados marcados, los
       // ya configurados desmarcados (protege valores manuales existentes).
+      // Dentro del modal se trabaja UNA sede, así que `producto_id` alcanza
+      // como clave. Se limpia al cambiar de sede para no arrastrar marcas.
       setSeleccion(
         new Set(
           lista.filter((i) => !i.ya_configurado).map((i) => i.producto_id),
@@ -786,9 +797,14 @@ function ModalMinMax({ onClose, onAplicado }) {
 
   useEffect(() => {
     cargarParametros();
-    cargarSugerencias();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Recalcula al cambiar de sede: las sugerencias de una no sirven para otra.
+  useEffect(() => {
+    cargarSugerencias();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sede]);
 
   const recalcular = async () => {
     // Validar los 3 valores ANTES de escribir: la tabla `parametros` es
@@ -873,6 +889,9 @@ function ModalMinMax({ onClose, onAplicado }) {
     try {
       const payload = seleccionados.map((i) => ({
         producto_id: i.producto_id,
+        // La sede va en cada ítem: el mín/máx es por sede y el servidor la
+        // valida contra el rol de quien guarda.
+        sede_id: i.sede_id ?? sede,
         min: i.min_sugerido,
         max: i.max_sugerido,
       }));
@@ -948,6 +967,28 @@ function ModalMinMax({ onClose, onAplicado }) {
               backgroundColor: "hsl(var(--muted) / 0.3)",
             }}
           >
+            <div className="flex flex-col gap-1">
+              <label
+                className="font-mono text-[10.5px] uppercase tracking-[0.06em]"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+                htmlFor="minmax-sede"
+              >
+                Sede
+              </label>
+              <select
+                id="minmax-sede"
+                value={sede}
+                onChange={(e) => setSede(e.target.value)}
+                className="h-11 w-36 rounded-lg border px-2.5 text-sm"
+                style={surfaceInputStyle}
+              >
+                {sedes.map((x) => (
+                  <option key={x} value={x}>
+                    {x}
+                  </option>
+                ))}
+              </select>
+            </div>
             {Object.keys(parametros).map((clave) => (
               <div key={clave} className="flex flex-col gap-1">
                 <label
