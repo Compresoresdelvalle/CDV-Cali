@@ -173,8 +173,13 @@ export default function Reorden() {
 
   const generarOC = () => {
     // Abre el flujo REAL de Nueva compra (no se inventa creación de OC aquí).
-    // Adjunta las sugerencias como `state` para que CompraNueva pueda
-    // preseleccionarlas cuando ese soporte exista; hoy se ignora sin romper.
+    // CompraNueva lee este `state` y precarga el carrito.
+    //
+    // Ojo con dos cosas al leerlo del otro lado:
+    //  · la selección se lleva por producto Y sede (`keyOf`), así que el mismo
+    //    producto puede venir dos veces y hay que consolidarlo;
+    //  · `vendible` viaja para que el destino del ítem (venta / insumo) se
+    //    decida igual que en `agregarAlCarrito`.
     navigate("/ops/compras/nueva", {
       state: {
         sugerenciasReorden: seleccionados.map((i) => ({
@@ -184,6 +189,7 @@ export default function Reorden() {
           sede_id: i.sede_id,
           cantidad_sugerida: i.cantidad_sugerida,
           costo_unitario: Number(i.costo_promedio || 0),
+          vendible: i.vendible,
         })),
       },
     });

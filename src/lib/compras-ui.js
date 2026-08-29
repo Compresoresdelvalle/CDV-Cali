@@ -150,3 +150,58 @@ export function construirTimelineCompra(compra, garantias, fmtDate) {
 
   return eventos;
 }
+
+/**
+ * Convierte las sugerencias que manda Reorden en líneas de carrito de compra.
+ *
+ * Se extrae aquí, fuera del componente, porque tiene dos trampas que ya
+ * costaron un error de diseño y conviene poder probarlas:
+ *
+ *  1. La selección de Reorden se lleva por producto Y sede (`producto_id-sede_id`),
+ *     así que el mismo producto puede venir dos veces —bajo mínimo en CHV y en
+ *     CV—. El carrito, en cambio, se indexa por `producto_id`: dos líneas con el
+ *     mismo id se editarían y se borrarían juntas. Por eso se consolidan
+ *     sumando las cantidades.
+ *  2. El destino se decide con la misma regla que `agregarAlCarrito`: lo no
+ *     vendible entra como insumo. Con "venta" fijo, los insumos del catálogo
+ *     sumarían a `cantidad` en vez de `cantidad_insumo` y habría que
+ *     convertirlos a mano después.
+ *
+ * @param {Array<object>|null|undefined} sugerencias `state.sugerenciasReorden`
+ * @param {{ esVendedor?: boolean }} [opciones] Al Vendedor no se le precarga el
+ *   costo histórico: arranca en 0 y lo digita, igual que en una compra normal.
+ * @returns {Array<object>} líneas listas para `setCarrito`
+ */
+export function carritoDesdeReorden(sugerencias, { esVendedor = false } = {}) {
+  if (!Array.isArray(sugerencias)) return [];
+
+  const porProducto = new Map();
+  for (const s of sugerencias) {
+    if (!s?.producto_id) continue;
+    const cantidad = Math.max(1, Number(s.cantidad_sugerida) || 1);
+    const ya = porProducto.get(s.producto_id);
+    if (ya) {
+      ya.cantidad += cantidad;
+      continue;
+    }
+    porProducto.set(s.producto_id, {
+      producto_id: s.producto_id,
+      nombre: s.nombre,
+      referencia: s.referencia,
+      cantidad,
+      costo_unitario: esVendedor ? 0 : Number(s.costo_unitario) || 0,
+      destino: s.vendible === false ? "insumo" : "venta",
+    });
+  }
+  return [...porProducto.values()];
+}
+
+/**
+ * Sedes de las que venían las sugerencias, sin repetir y sin vacíos.
+ * Sirve para avisar que la compra se registra en la sede del usuario y no en
+ * la de la sugerencia (`fn_registrar_compra` recibe una sola sede).
+ */
+export function sedesDeSugerencias(sugerencias) {
+  if (!Array.isArray(sugerencias)) return [];
+  return [...new Set(sugerencias.map((s) => s?.sede_id).filter(Boolean))];
+}
