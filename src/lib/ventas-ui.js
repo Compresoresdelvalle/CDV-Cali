@@ -207,3 +207,35 @@ export function construirHistorialVenta(
 
   return eventos;
 }
+
+/* ──────────────────── Cambio de producto (precio sugerido) ───────────── */
+
+/**
+ * Precio sugerido para el producto que el cliente se lleva en un CAMBIO.
+ *
+ * Conserva el trato relativo que se le hizo: parte de lo que realmente pagó y
+ * le suma la diferencia de precio de lista entre los dos productos. Si las dos
+ * referencias valen lo mismo, el resultado es lo que pagó — o sea, cambio par,
+ * que es el caso que rompía antes (se le cobraba de vuelta el descuento).
+ *
+ * Usa a propósito los precios de lista de HOY y no `detalle_venta.precio_catalogo`:
+ * esa columna está vacía en las ventas anteriores a que se empezara a guardar
+ * (542 de 3.811 líneas), y una fórmula que dependa de ella fallaría justo en las
+ * ventas viejas.
+ *
+ * @param {{precioPagadoUnitario:number, listaDevuelto:number, listaNuevo:number}} args
+ * @returns {number} precio unitario sugerido, en pesos enteros, nunca negativo
+ */
+export function precioSugeridoCambio({
+  precioPagadoUnitario,
+  listaDevuelto,
+  listaNuevo,
+}) {
+  const pagado = Number(precioPagadoUnitario) || 0;
+  const lDev = Number(listaDevuelto) || 0;
+  const lNue = Number(listaNuevo) || 0;
+  // Sin lista del devuelto no hay con qué comparar: se cae al precio de lista
+  // del nuevo, que es el comportamiento de siempre.
+  if (lDev <= 0) return Math.round(lNue);
+  return Math.max(0, Math.round(pagado + (lNue - lDev)));
+}
