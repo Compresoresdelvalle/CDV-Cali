@@ -5,6 +5,7 @@ import { formatCOP, sanitizeSearch } from "../../lib/utils";
 import { avisarOk, avisarError } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../ui/UbicacionChip";
+import { precioSugeridoCambio } from "../../lib/ventas-ui";
 
 /**
  * Modal de CAMBIO de producto (Reporte clienta).
@@ -90,6 +91,9 @@ export default function ModalCambioProducto({
   const [buscando, setBuscando] = useState(false);
   const [nuevo, setNuevo] = useState(null); // { id, nombre, referencia, precio_venta }
   const [cantNuevo, setCantNuevo] = useState(1);
+  // Precio unitario acordado para el producto que se lleva. Vacío = todavía no
+  // se ha elegido producto nuevo. Se guarda como string porque es un input.
+  const [precioAcordado, setPrecioAcordado] = useState("");
 
   const [metodo, setMetodo] = useState("Efectivo");
   // #S1-15: cuenta bancaria destino cuando la diferencia se cobra por transferencia
@@ -208,9 +212,29 @@ export default function ModalCambioProducto({
   }, [venta]);
   const precioDev = devSel ? devSel.precio : 0;
   const valorDev = Math.round(precioDev * cantDev * ratioPagado);
-  const valorNuevo = nuevo
-    ? Math.round(Number(nuevo.precio_venta) * cantNuevo)
+
+  // Lo que el cliente realmente pagó por unidad del producto que devuelve.
+  const precioPagadoUnitario = Math.round(precioDev * ratioPagado);
+  const listaNuevo = nuevo ? Number(nuevo.precio_venta) || 0 : 0;
+  const sugerido = nuevo
+    ? precioSugeridoCambio({
+        precioPagadoUnitario,
+        listaDevuelto: devSel?.precioLista ?? 0,
+        listaNuevo,
+      })
     : 0;
+
+  // Al elegir producto nuevo (o cambiar el devuelto) el campo se precarga con
+  // el sugerido. La vendedora puede sobrescribirlo; si vuelve a elegir otro
+  // producto, se recalcula.
+  useEffect(() => {
+    setPrecioAcordado(nuevo ? String(sugerido) : "");
+    // `sugerido` depende de nuevo/devSel: se recalcula al cambiar cualquiera.
+  }, [nuevo, devSel?.producto_id, sugerido]);
+
+  // Espejo exacto del backend: valor_nuevo = precio acordado × cantidad.
+  const precioAcordadoNum = Math.max(0, Math.round(Number(precioAcordado) || 0));
+  const valorNuevo = nuevo ? precioAcordadoNum * cantNuevo : 0;
   const difNeta = valorNuevo - valorDev;
   const difConIva = Math.round(difNeta * factor);
   const accion = difNeta > 0 ? "cobro" : difNeta < 0 ? "devolucion" : "par";
@@ -222,6 +246,9 @@ export default function ModalCambioProducto({
     cantDev <= maxDev &&
     !!nuevo &&
     cantNuevo >= 1 &&
+    precioAcordado !== "" &&
+    Number.isFinite(Number(precioAcordado)) &&
+    Number(precioAcordado) >= 0 &&
     nuevo.id !== devSel.producto_id &&
     // #S1-15: si se cobra por transferencia, la cuenta destino es obligatoria.
     (accion !== "cobro" || metodo !== "Transferencia" || !!cuenta) &&
@@ -256,6 +283,9 @@ export default function ModalCambioProducto({
           p_motivo: motivo.trim()
             ? `Cambio desde venta #${venta.numero} — ${motivo.trim()}`
             : `Cambio desde venta #${venta.numero}`,
+          // El backend cae en el precio de lista si llega null; se manda
+          // siempre para que lo que ve la vendedora sea lo que se registra.
+          p_precio_nuevo: precioAcordadoNum,
         },
       );
       if (rpcErr) throw new Error(rpcErr.message);
@@ -541,6 +571,54 @@ export default function ModalCambioProducto({
           {/* 3 · Diferencia */}
           {devSel && nuevo && nuevo.id !== devSel.producto_id && (
             <Section titulo="3 · Diferencia y pago">
+              {nuevo && (
+                <div className="mt-4">
+                  <label
+                    className="mb-1.5 block text-[12px] font-medium"
+                    style={{ color: "var(--n-700)" }}
+                  >
+                    Precio acordado por unidad
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      inputMode="numeric"
+                      value={precioAcordado}
+                      onChange={(e) => setPrecioAcordado(e.target.value)}
+                      className="finput sans flex-1"
+                      style={{ height: 48 }}
+                    />
+                    {precioAcordadoNum !== listaNuevo && (
+                      <button
+                        type="button"
+                        onClick={() => setPrecioAcordado(String(listaNuevo))}
+                        className="btn btn-out"
+                        style={{ height: 48 }}
+                        title="Usar el precio de lista del producto"
+                      >
+                        Lista {formatCOP(listaNuevo)}
+                      </button>
+                    )}
+                  </div>
+                  <p
+                    className="mt-1.5 text-[11.5px] leading-[1.5]"
+                    style={{ color: "var(--n-500)" }}
+                  >
+                    {precioAcordadoNum === sugerido && sugerido !== listaNuevo ? (
+                      <>
+                        Sugerido: conserva el mismo descuento que se le hizo en
+                        la venta original. Lista {formatCOP(listaNuevo)}.
+                      </>
+                    ) : precioAcordadoNum !== listaNuevo ? (
+                      <>Lista {formatCOP(listaNuevo)}. Queda registrado en el cambio.</>
+                    ) : (
+                      <>Precio de lista.</>
+                    )}
+                  </p>
+                </div>
+              )}
               <div className="space-y-1.5 text-sm">
                 <Row
                   label={`Crédito por lo devuelto (×${cantDev})`}
