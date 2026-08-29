@@ -83,7 +83,19 @@ export default function Herramientas() {
    *  siempre puede recibir— y es a propósito mientras no se toque el servidor. */
   const ROLES_QUE_PRESTAN = ["Admin", "Vendedor", "Bodeguero"];
   const puedePrestarRol = ROLES_QUE_PRESTAN.includes(perfil?.rol ?? "");
-  const puedeCrear = isAdmin;
+  /** Quién puede CREAR herramientas (y sumarles unidades). El servidor ya lo
+   *  permitía desde antes: `fn_crear_herramienta_desde_insumo` acepta
+   *  'Admin' y 'Bodeguero', y la política `hp_insert` deja insertar a Bodega
+   *  en su propia sede. Lo único que faltaba era el botón.
+   *
+   *  Decisión de la clienta (2026-08-29), en la misma línea que devolverle el
+   *  préstamo: bodega es quien tiene las herramientas en la mano.
+   *
+   *  Aquí solo va el ROL. La SEDE la acota `puedeOperar` donde se ofrece
+   *  "Agregar unidades", y el modal de creación fija la sede propia a quien no
+   *  es Admin: bodega crea en BODEGA y en ninguna otra. */
+  const ROLES_QUE_CREAN = ["Admin", "Bodeguero"];
+  const puedeCrear = ROLES_QUE_CREAN.includes(perfil?.rol ?? "");
   const miSede = perfil?.sede_id;
   /** Las funciones del servidor solo dejan actuar sobre la sede propia, salvo
    *  al Admin. Ahora que la lista muestra herramientas de las cuatro sedes, el
