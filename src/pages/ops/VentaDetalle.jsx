@@ -313,8 +313,12 @@ export default function VentaDetalle() {
   // debe anularse por separado: anularla reingresaría el producto nuevo dejando
   // también reingresado el viejo (de la devolución del cambio), inflando el
   // inventario. Para revertir un cambio se registra el cambio inverso.
+  // El enlace vive en `cambio_de_venta_id` desde 2026-08-29. La observación se
+  // sigue mirando como respaldo por si alguna venta vieja no quedó enlazada en
+  // el backfill; el prefijo lo sigue escribiendo fn_registrar_cambio.
   const obs = venta.observaciones || "";
-  const esCambio = obs.startsWith("Cambio por venta #");
+  const esCambio =
+    venta.cambio_de_venta_id != null || obs.startsWith("Cambio por venta #");
   const cambioRefNum = esCambio ? (obs.match(/#(\d+)/)?.[1] ?? null) : null;
 
   return (
