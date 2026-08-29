@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { precioSugeridoCambio } from "../../src/lib/ventas-ui";
+import {
+  precioSugeridoCambio,
+  ratioCreditoVenta,
+} from "../../src/lib/ventas-ui";
 
 describe("precioSugeridoCambio", () => {
   it("misma lista: sugiere lo que el cliente pagó (cambio par)", () => {
@@ -71,5 +74,45 @@ describe("precioSugeridoCambio", () => {
         listaNuevo: 65000,
       }),
     ).toBe(60000);
+  });
+});
+
+describe("ratioCreditoVenta", () => {
+  it("venta normal con descuento: reduce el crédito en esa proporción", () => {
+    expect(
+      ratioCreditoVenta({ subtotal: 100000, descuento_valor: 20000 }),
+    ).toBeCloseTo(0.8);
+  });
+
+  it("venta sin descuento: el crédito es completo", () => {
+    expect(ratioCreditoVenta({ subtotal: 100000, descuento_valor: 0 })).toBe(1);
+  });
+
+  it("venta que ES un cambio: ratio 1, porque el descuento es una permuta", () => {
+    // Regresión: la venta #1345 (subtotal 18.000, descuento 18.000) daba 0 y la
+    // pantalla mostraba crédito $0 mientras el backend acreditaba los 18.000.
+    expect(
+      ratioCreditoVenta({
+        subtotal: 18000,
+        descuento_valor: 18000,
+        cambio_de_venta_id: "algun-uuid",
+      }),
+    ).toBe(1);
+  });
+
+  it("usa descuento_pct cuando no hay descuento_valor", () => {
+    expect(
+      ratioCreditoVenta({ subtotal: 100000, descuento_pct: 10 }),
+    ).toBeCloseTo(0.9);
+  });
+
+  it("subtotal en cero no divide por cero", () => {
+    expect(ratioCreditoVenta({ subtotal: 0, descuento_valor: 0 })).toBe(1);
+  });
+
+  it("descuento mayor al subtotal se acota", () => {
+    expect(
+      ratioCreditoVenta({ subtotal: 10000, descuento_valor: 999999 }),
+    ).toBe(0);
   });
 });

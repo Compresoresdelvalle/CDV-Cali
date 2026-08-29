@@ -5,7 +5,7 @@ import { formatCOP, sanitizeSearch } from "../../lib/utils";
 import { avisarOk, avisarError } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../ui/UbicacionChip";
-import { precioSugeridoCambio } from "../../lib/ventas-ui";
+import { precioSugeridoCambio, ratioCreditoVenta } from "../../lib/ventas-ui";
 
 /**
  * Modal de CAMBIO de producto (Reporte clienta).
@@ -200,16 +200,7 @@ export default function ModalCambioProducto({
   const factor = 1 + ivaPct / 100;
   // Proporción realmente pagada en la venta original (espejo del backend): si tuvo
   // descuento global, el crédito por lo devuelto se reduce en esa misma proporción.
-  const ratioPagado = useMemo(() => {
-    const sub = Number(venta?.subtotal) || 0;
-    if (sub <= 0) return 1;
-    const descRaw =
-      venta?.descuento_valor != null
-        ? Number(venta.descuento_valor)
-        : (sub * (Number(venta?.descuento_pct) || 0)) / 100;
-    const desc = Math.max(0, Math.min(descRaw, sub));
-    return (sub - desc) / sub;
-  }, [venta]);
+  const ratioPagado = useMemo(() => ratioCreditoVenta(venta), [venta]);
   const precioDev = devSel ? devSel.precio : 0;
   const valorDev = Math.round(precioDev * cantDev * ratioPagado);
 
@@ -233,7 +224,11 @@ export default function ModalCambioProducto({
   }, [nuevo, devSel?.producto_id, sugerido]);
 
   // Espejo exacto del backend: valor_nuevo = precio acordado × cantidad.
-  const precioAcordadoNum = Math.max(0, Math.round(Number(precioAcordado) || 0));
+  const precioListo = precioAcordado !== "";
+  const precioAcordadoNum = Math.max(
+    0,
+    Math.round(Number(precioAcordado) || 0),
+  );
   const valorNuevo = nuevo ? precioAcordadoNum * cantNuevo : 0;
   const difNeta = valorNuevo - valorDev;
   const difConIva = Math.round(difNeta * factor);
@@ -246,9 +241,7 @@ export default function ModalCambioProducto({
     cantDev <= maxDev &&
     !!nuevo &&
     cantNuevo >= 1 &&
-    precioAcordado !== "" &&
-    Number.isFinite(Number(precioAcordado)) &&
-    Number(precioAcordado) >= 0 &&
+    precioListo &&
     nuevo.id !== devSel.producto_id &&
     // #S1-15: si se cobra por transferencia, la cuenta destino es obligatoria.
     (accion !== "cobro" || metodo !== "Transferencia" || !!cuenta) &&
@@ -580,13 +573,20 @@ export default function ModalCambioProducto({
                     Precio acordado por unidad
                   </label>
                   <div className="flex items-center gap-2">
+                    {/* `type="text"` + solo dígitos, como el resto de la app.
+                        Con `type="number"`, teclear "60.000" —el separador de
+                        miles colombiano, que es justo como escribe el precio el
+                        botón "Lista" de al lado— se interpretaba como 60 y
+                        registraba el cambio a $60 la unidad. */}
                     <input
-                      type="number"
-                      min="0"
-                      step="1"
+                      type="text"
                       inputMode="numeric"
                       value={precioAcordado}
-                      onChange={(e) => setPrecioAcordado(e.target.value)}
+                      onChange={(e) =>
+                        setPrecioAcordado(e.target.value.replace(/[^\d]/g, ""))
+                      }
+                      placeholder="0"
+                      aria-label="Precio acordado por unidad"
                       className="finput sans flex-1"
                       style={{ height: 48 }}
                     />
@@ -604,22 +604,36 @@ export default function ModalCambioProducto({
                   </div>
                   <p
                     className="mt-1.5 text-[11.5px] leading-[1.5]"
-                    style={{ color: "var(--n-500)" }}
+                    style={{
+                      color: precioListo ? "var(--n-500)" : "var(--warn-700)",
+                    }}
                   >
-                    {precioAcordadoNum === sugerido && sugerido !== listaNuevo ? (
+                    {!precioListo ? (
+                      <>
+                        Escribe el precio acordado para ver la diferencia. Es lo
+                        que se le cobra al cliente por unidad.
+                      </>
+                    ) : precioAcordadoNum === sugerido &&
+                      sugerido !== listaNuevo ? (
                       <>
                         Sugerido: conserva el mismo descuento que se le hizo en
                         la venta original. Lista {formatCOP(listaNuevo)}.
                       </>
                     ) : precioAcordadoNum !== listaNuevo ? (
-                      <>Lista {formatCOP(listaNuevo)}. Queda registrado en el cambio.</>
+                      <>
+                        Lista {formatCOP(listaNuevo)}. Queda registrado en el
+                        cambio.
+                      </>
                     ) : (
                       <>Precio de lista.</>
                     )}
                   </p>
                 </div>
               )}
-              <div className="space-y-1.5 text-sm">
+              <div
+                className="space-y-1.5 text-sm"
+                style={{ opacity: precioListo ? 1 : 0.45 }}
+              >
                 <Row
                   label={`Crédito por lo devuelto (×${cantDev})`}
                   value={`−${formatCOP(valorDev)}`}
@@ -649,11 +663,13 @@ export default function ModalCambioProducto({
                     className="text-sm font-semibold"
                     style={{ color: "hsl(var(--foreground))" }}
                   >
-                    {accion === "cobro"
-                      ? "Cobrar al cliente"
-                      : accion === "devolucion"
-                        ? "Devolver al cliente (efectivo)"
-                        : "Cambio par — sin diferencia"}
+                    {!precioListo
+                      ? "Falta el precio acordado"
+                      : accion === "cobro"
+                        ? "Cobrar al cliente"
+                        : accion === "devolucion"
+                          ? "Devolver al cliente (efectivo)"
+                          : "Cambio par — sin diferencia"}
                   </span>
                   <span
                     className="text-base font-bold tabular-nums"
