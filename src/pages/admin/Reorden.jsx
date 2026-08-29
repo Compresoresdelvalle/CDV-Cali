@@ -24,6 +24,19 @@ const TODAS_SEDES = "Todas";
 const COLS =
   "grid-cols-[28px_minmax(0,1fr)_56px_130px_104px_72px_72px_84px_116px]";
 
+/**
+ * Clase ABC que manda en Reorden: la COMBINADA (ventas + consumo como insumo).
+ *
+ * Aquí la pregunta no es "qué me deja plata" sino "qué no me puede faltar", y
+ * son distintas: los cabezotes, tanques y motores casi no se venden sueltos
+ * —salen 'C' por ventas— pero se consumen en cada ensamble.
+ *
+ * Cae a la de ventas cuando no hay combinada: el asistente de min/max se
+ * alimenta de `fn_sugerir_minmax`, que sólo devuelve esa, y un producto recién
+ * creado no tiene combinada hasta el siguiente recálculo.
+ */
+const claseReorden = (i) => i?.clasificacion_global ?? i?.clasificacion ?? null;
+
 /* ── Sugerencias de reorden (datos reales: v_sugerencias_reorden) ──────── */
 export default function Reorden() {
   const navigate = useNavigate();
@@ -125,7 +138,7 @@ export default function Reorden() {
         ? items
         : items.filter((i) => i.sede_id === sedeFiltro);
     if (claseFiltro !== "Todas")
-      out = out.filter((i) => i.clasificacion === claseFiltro);
+      out = out.filter((i) => claseReorden(i) === claseFiltro);
     const needle = busqueda.trim().toLowerCase();
     if (needle) {
       out = out.filter((i) =>
@@ -142,7 +155,7 @@ export default function Reorden() {
     0,
   );
   const urgentes = filtrados.filter((i) => i.estado_stock === "Agotado").length;
-  const claseA = filtrados.filter((i) => i.clasificacion === "A").length;
+  const claseA = filtrados.filter((i) => claseReorden(i) === "A").length;
 
   // Métricas de la selección activa.
   const seleccionados = filtrados.filter((i) => seleccion.has(keyOf(i)));
@@ -205,6 +218,16 @@ export default function Reorden() {
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
             Admin · Sugerencias de reposición
+          </p>
+          {/* La letra ABC de esta pantalla es la COMBINADA, no la de ventas.
+              Decirlo evita el desconcierto de ver "A" aquí y "C" en Análisis
+              ABC para el mismo producto. */}
+          <p
+            className="m-0 mb-1.5 text-[11.5px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            La clase ABC que se muestra aquí es la combinada: ventas más consumo
+            como insumo.
           </p>
           <h1
             className="m-0 flex items-center gap-2.5 text-[24px] font-semibold leading-tight tracking-[-0.018em]"
@@ -542,9 +565,9 @@ export default function Reorden() {
                   </div>
                   <span
                     className="grid h-5 w-5 place-items-center rounded-[4px] border text-[10.5px] font-bold"
-                    style={abcBadgeStyle(i.clasificacion)}
+                    style={abcBadgeStyle(claseReorden(i))}
                   >
-                    {i.clasificacion ?? "—"}
+                    {claseReorden(i) ?? "—"}
                   </span>
                   <span
                     className="truncate text-xs"
@@ -635,9 +658,9 @@ export default function Reorden() {
                       />
                       <span
                         className="grid h-6 w-6 shrink-0 place-items-center rounded-md border text-[10.5px] font-bold"
-                        style={abcBadgeStyle(i.clasificacion)}
+                        style={abcBadgeStyle(claseReorden(i))}
                       >
-                        {i.clasificacion ?? "—"}
+                        {claseReorden(i) ?? "—"}
                       </span>
                       <div className="min-w-0">
                         <p
@@ -1039,9 +1062,9 @@ function ModalMinMax({ onClose, onAplicado }) {
                       <div className="flex min-w-0 items-center gap-2">
                         <span
                           className="grid h-5 w-5 shrink-0 place-items-center rounded-[4px] border text-[10.5px] font-bold"
-                          style={abcBadgeStyle(i.clasificacion)}
+                          style={abcBadgeStyle(claseReorden(i))}
                         >
-                          {i.clasificacion ?? "—"}
+                          {claseReorden(i) ?? "—"}
                         </span>
                         <div className="min-w-0">
                           <p
@@ -1116,9 +1139,9 @@ function ModalMinMax({ onClose, onAplicado }) {
                           />
                           <span
                             className="grid h-6 w-6 shrink-0 place-items-center rounded-md border text-[10.5px] font-bold"
-                            style={abcBadgeStyle(i.clasificacion)}
+                            style={abcBadgeStyle(claseReorden(i))}
                           >
-                            {i.clasificacion ?? "—"}
+                            {claseReorden(i) ?? "—"}
                           </span>
                           <div className="min-w-0">
                             <p

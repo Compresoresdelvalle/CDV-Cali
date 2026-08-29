@@ -135,3 +135,27 @@ export function tonoBadgeStyle(token) {
     borderColor: `hsl(var(${token}) / 0.4)`,
   };
 }
+
+/**
+ * Criterios del Análisis ABC. Son tres preguntas distintas y mezclarlas pierde
+ * información: qué deja plata (ventas), qué se acaba siempre (consumo como
+ * insumo en ensambles y OT) y qué no puede faltar (las dos en pesos).
+ *
+ * El combinado es el que guía Reorden y las compras. Los otros dos explican
+ * POR QUÉ algo es A, que es lo que permite discutirlo.
+ */
+export const CRITERIOS_ABC = [
+  { campo: "clasificacion", label: "Ventas" },
+  { campo: "clasificacion_consumo", label: "Consumo" },
+  { campo: "clasificacion_global", label: "Combinado" },
+];
+
+/** Campo de clasificación a partir de la etiqueta del selector. */
+export function campoCriterioABC(label) {
+  return CRITERIOS_ABC.find((c) => c.label === label)?.campo ?? "clasificacion";
+}
+
+/** Etiqueta del criterio a partir del campo. */
+export function labelCriterioABC(campo) {
+  return CRITERIOS_ABC.find((c) => c.campo === campo)?.label ?? "Ventas";
+}
