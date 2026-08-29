@@ -104,7 +104,9 @@ export default function VentaDetalle() {
           supabase
             .from("detalle_venta")
             .select(
-              `*, producto:producto_id(nombre, referencia, unidad_medida)`,
+              // `precio_venta` es la lista de HOY del producto: la necesita el
+              // modal de cambio para sugerir el precio acordado.
+              `*, producto:producto_id(nombre, referencia, unidad_medida, precio_venta)`,
             )
             .eq("venta_id", id),
         ]);

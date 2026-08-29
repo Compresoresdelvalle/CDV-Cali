@@ -43,6 +43,9 @@ export default function ModalCambioProducto({
         producto_id: it.producto_id,
         nombre: it.producto?.nombre ?? it.descripcion ?? "—",
         referencia: it.producto?.referencia ?? "",
+        // Lista de HOY del producto devuelto. Es la referencia contra la que se
+        // mide el descuento que se le dio al cliente.
+        precioLista: Number(it.producto?.precio_venta) || 0,
         cantidad: 0,
         subtotal: 0,
       };
