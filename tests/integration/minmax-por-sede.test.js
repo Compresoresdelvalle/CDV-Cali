@@ -1,9 +1,20 @@
 /**
  * Min/max por sede: la regla de estado y quién puede configurar qué.
  *
- * Se replican aquí las dos reglas que deciden todo, porque son las que no
- * pueden equivocarse: si el estado se calcula mal, el inventario miente; si el
- * permiso se calcula mal, una vendedora apaga las alertas de otra sede.
+ * OJO CON LO QUE ESTE ARCHIVO **NO** ES. Las reglas de verdad viven en PL/pgSQL
+ * (`fn_actualizar_estado_stock` y `fn_definir_minmax`) y la única base que
+ * existe es producción, así que no se pueden ejecutar desde aquí. Lo que hay
+ * abajo son ESPEJOS en JavaScript de esas reglas: sirven como documentación
+ * ejecutable de la lógica acordada y atrapan un error de razonamiento al
+ * discutirla, pero **no cubren el código que corre en producción**. Si alguien
+ * cambia el SQL y no toca este archivo, estas pruebas siguen en verde y no se
+ * enteran de nada.
+ *
+ * Para verificar el SQL real hay que consultarlo contra la base (`pg_get_functiondef`,
+ * y SELECT de comprobación sobre datos reales), que es como se validó al
+ * implementarlo. Lo que sí es cobertura real de código son las pruebas de
+ * `reorden-a-compras.test.js` y `abc-criterios.test.js`, que importan las
+ * funciones de `src/lib/`.
  */
 import { describe, it, expect } from "vitest";
 

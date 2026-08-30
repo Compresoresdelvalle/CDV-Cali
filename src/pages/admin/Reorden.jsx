@@ -370,10 +370,14 @@ export default function Reorden() {
           <p className="m-0">
             <strong>{agotadosSinConfig}</strong>{" "}
             {agotadosSinConfig === 1
-              ? "referencia agotada no aparece"
-              : "referencias agotadas no aparecen"}{" "}
-            en esta lista porque no tienen stock mínimo configurado. Configura
-            mínimo y máximo en el producto para recibir sugerencias.
+              ? "combinación producto–sede agotada no aparece"
+              : "combinaciones producto–sede agotadas no aparecen"}{" "}
+            en esta lista porque no tienen mínimo configurado en esa sede.
+            Configúralos en Inventario → Mínimos para recibir sugerencias.
+            {/* Se cuentan PARES producto-sede, no referencias: el mínimo es por
+                sede, así que la misma referencia cuenta una vez por cada sede
+                donde falta. Decir "referencias" inflaba el número casi al
+                triple (2.880 pares contra 1.004 referencias distintas). */}
           </p>
         </div>
       )}
@@ -732,6 +736,12 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
   // parece a la de CHV (que vende). Sin elegir sede, `fn_sugerir_minmax`
   // devolvería las cuatro y el mismo producto saldría repetido.
   const [sede, setSede] = useState(sedeInicial);
+  // Espejo en un ref: `sede` es un `const` de este render, así que compararla
+  // consigo misma tras el await no detecta el cambio de sede. Ver Minimos.jsx.
+  const sedeRef = useRef(sedeInicial);
+  useEffect(() => {
+    sedeRef.current = sede;
+  }, [sede]);
   const [loading, setLoading] = useState(true);
   const [recalculando, setRecalculando] = useState(false);
   const [aplicando, setAplicando] = useState(false);
@@ -789,7 +799,7 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
         p_dias: 90,
         p_sede_id: sede,
       });
-      if (!mountedRef.current || sedePedida !== sede) return;
+      if (!mountedRef.current || sedePedida !== sedeRef.current) return;
       if (error) throw error;
       const lista = data ?? [];
       setSugerencias(lista);
