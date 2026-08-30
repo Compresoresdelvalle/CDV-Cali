@@ -56,14 +56,26 @@ describe("precioSugeridoCambio", () => {
     ).toBe(100000);
   });
 
-  it("nunca sugiere un precio negativo", () => {
+  it("si el descuento se come el producto, cae en la lista y no lo regala", () => {
+    // El descuento en pesos venia de una venta mucho mas cara. Antes esto
+    // devolvia 0 y el modal proponia entregar el producto gratis.
     expect(
       precioSugeridoCambio({
         precioPagadoUnitario: 10000,
         listaDevuelto: 65000,
         listaNuevo: 20000,
       }),
-    ).toBe(0);
+    ).toBe(20000);
+  });
+
+  it("descuento grande sobre un producto barato: no baja de cero", () => {
+    expect(
+      precioSugeridoCambio({
+        precioPagadoUnitario: 500000,
+        listaDevuelto: 600000,
+        listaNuevo: 80000,
+      }),
+    ).toBe(80000);
   });
 
   it("redondea a pesos", () => {

@@ -225,6 +225,13 @@ export default function ModalCambioProducto({
 
   // Espejo exacto del backend: valor_nuevo = precio acordado × cantidad.
   const precioListo = precioAcordado !== "";
+  const listaRedondeada = Math.round(listaNuevo);
+  const esPrecioDeLista = precioListo && precioAcordadoNum === listaRedondeada;
+  const descuentoAplicado = Math.max(0, listaRedondeada - precioAcordadoNum);
+  // Un descuento que se come casi todo el producto casi nunca es intencional:
+  // sale de arrastrar un descuento en pesos de una venta mucho mas cara.
+  const descuentoDesproporcionado =
+    listaRedondeada > 0 && descuentoAplicado > listaRedondeada * 0.6;
   const precioAcordadoNum = Math.max(
     0,
     Math.round(Number(precioAcordado) || 0),
@@ -529,7 +536,17 @@ export default function ModalCambioProducto({
                       className="font-mono text-[11px]"
                       style={{ color: "hsl(var(--muted-foreground))" }}
                     >
-                      {nuevo.referencia} · {formatCOP(nuevo.precio_venta)}
+                      {nuevo.referencia} ·{" "}
+                      {precioListo && precioAcordadoNum !== listaRedondeada ? (
+                        <>
+                          {formatCOP(precioAcordadoNum)}{" "}
+                          <span style={{ textDecoration: "line-through" }}>
+                            {formatCOP(listaRedondeada)}
+                          </span>
+                        </>
+                      ) : (
+                        formatCOP(listaRedondeada)
+                      )}
                     </p>
                   </div>
                   <button
@@ -564,20 +581,38 @@ export default function ModalCambioProducto({
           {/* 3 · Diferencia */}
           {devSel && nuevo && nuevo.id !== devSel.producto_id && (
             <Section titulo="3 · Diferencia y pago">
-              {nuevo && (
-                <div className="mt-4">
-                  <label
-                    className="mb-1.5 block text-[12px] font-medium"
-                    style={{ color: "var(--n-700)" }}
-                  >
-                    Precio acordado por unidad
-                  </label>
-                  <div className="flex items-center gap-2">
-                    {/* `type="text"` + solo dígitos, como el resto de la app.
+              <div>
+                <label
+                  className="mb-1.5 block text-[12px] font-medium"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                >
+                  Precio acordado por unidad
+                </label>
+                <div className="flex items-center gap-2">
+                  {/* `type="text"` + solo dígitos, como el resto de la app.
                         Con `type="number"`, teclear "60.000" —el separador de
                         miles colombiano, que es justo como escribe el precio el
                         botón "Lista" de al lado— se interpretaba como 60 y
                         registraba el cambio a $60 la unidad. */}
+                  {/* `min-w-0`: sin el, el ancho minimo automatico del input
+                        (size=20, unos 160px) mas el boton, que es `nowrap`, no
+                        caben en un celular de 360px y sacan scroll horizontal.
+                        El `$` y la fuente mono son los del PriceInput que usan
+                        Nueva Venta y Cotizaciones. */}
+                  <div
+                    className="flex min-w-0 flex-1 items-center overflow-hidden rounded-lg border"
+                    style={{
+                      height: 48,
+                      borderColor: "hsl(var(--border))",
+                      backgroundColor: "hsl(var(--card))",
+                    }}
+                  >
+                    <span
+                      className="pl-3 font-mono text-[13px]"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      $
+                    </span>
                     <input
                       type="text"
                       inputMode="numeric"
@@ -587,49 +622,61 @@ export default function ModalCambioProducto({
                       }
                       placeholder="0"
                       aria-label="Precio acordado por unidad"
-                      className="finput sans flex-1"
-                      style={{ height: 48 }}
+                      className="min-w-0 flex-1 border-0 bg-transparent px-2 text-right font-mono text-[14px] font-medium outline-none"
+                      style={{ color: "hsl(var(--foreground))" }}
                     />
-                    {precioAcordadoNum !== listaNuevo && (
-                      <button
-                        type="button"
-                        onClick={() => setPrecioAcordado(String(listaNuevo))}
-                        className="btn btn-out"
-                        style={{ height: 48 }}
-                        title="Usar el precio de lista del producto"
-                      >
-                        Lista {formatCOP(listaNuevo)}
-                      </button>
-                    )}
                   </div>
-                  <p
-                    className="mt-1.5 text-[11.5px] leading-[1.5]"
+                  {/* Siempre montado: si aparece y desaparece segun el valor,
+                        el campo se ensancha y se angosta bajo el dedo mientras
+                        se teclea, y el boton se desvanece justo al pulsarlo. */}
+                  <button
+                    type="button"
+                    onClick={() => setPrecioAcordado(String(listaRedondeada))}
+                    disabled={esPrecioDeLista}
+                    className="btn btn-out shrink-0"
                     style={{
-                      color: precioListo ? "var(--n-500)" : "var(--warn-700)",
+                      height: 48,
+                      opacity: esPrecioDeLista ? 0.4 : 1,
+                      pointerEvents: esPrecioDeLista ? "none" : undefined,
                     }}
+                    title="Poner el precio de lista del producto"
                   >
-                    {!precioListo ? (
-                      <>
-                        Escribe el precio acordado para ver la diferencia. Es lo
-                        que se le cobra al cliente por unidad.
-                      </>
-                    ) : precioAcordadoNum === sugerido &&
-                      sugerido !== listaNuevo ? (
-                      <>
-                        Sugerido: conserva el mismo descuento que se le hizo en
-                        la venta original. Lista {formatCOP(listaNuevo)}.
-                      </>
-                    ) : precioAcordadoNum !== listaNuevo ? (
-                      <>
-                        Lista {formatCOP(listaNuevo)}. Queda registrado en el
-                        cambio.
-                      </>
-                    ) : (
-                      <>Precio de lista.</>
-                    )}
-                  </p>
+                    Usar lista
+                  </button>
                 </div>
-              )}
+                <p
+                  className="mt-1.5 text-[11.5px] leading-[1.5]"
+                  style={{
+                    color: precioListo ? "var(--n-500)" : "var(--warn-700)",
+                  }}
+                >
+                  {!precioListo ? (
+                    <>
+                      Escribe el precio acordado para poder confirmar el cambio.
+                      Es el precio por unidad, antes de IVA.
+                    </>
+                  ) : descuentoAplicado <= 0 ? (
+                    <>Precio de lista.</>
+                  ) : descuentoDesproporcionado ? (
+                    <>
+                      Son {formatCOP(descuentoAplicado)} menos que la lista,
+                      casi todo el valor del producto. Revísalo antes de
+                      confirmar.
+                    </>
+                  ) : precioAcordadoNum === sugerido ? (
+                    <>
+                      Sugerido: mantiene los {formatCOP(descuentoAplicado)} de
+                      descuento de la venta original. Queda anotado en el
+                      cambio.
+                    </>
+                  ) : (
+                    <>
+                      {formatCOP(descuentoAplicado)} por debajo de la lista.
+                      Queda anotado en el cambio.
+                    </>
+                  )}
+                </p>
+              </div>
               <div
                 className="space-y-1.5 text-sm"
                 style={{ opacity: precioListo ? 1 : 0.45 }}
@@ -639,7 +686,11 @@ export default function ModalCambioProducto({
                   value={`−${formatCOP(valorDev)}`}
                 />
                 <Row
-                  label={`Valor del nuevo (×${cantNuevo})`}
+                  label={
+                    cantNuevo > 1
+                      ? `Valor del nuevo (${cantNuevo} × ${formatCOP(precioAcordadoNum)})`
+                      : "Valor del nuevo"
+                  }
                   value={formatCOP(valorNuevo)}
                 />
                 {ivaPct > 0 && (
@@ -648,36 +699,39 @@ export default function ModalCambioProducto({
                     value={formatCOP(difConIva - difNeta)}
                   />
                 )}
-                <div
-                  className="mt-1 flex items-center justify-between rounded-lg px-3 py-2.5"
-                  style={{
-                    backgroundColor:
-                      accion === "cobro"
-                        ? "hsl(var(--primary) / 0.08)"
-                        : accion === "devolucion"
-                          ? "hsl(var(--warning) / 0.12)"
-                          : "hsl(var(--muted) / 0.4)",
-                  }}
+              </div>
+              {/* Fuera del bloque atenuado: es el aviso que explica por que el
+                  boton no responde, y era lo menos legible de la pantalla. */}
+              <div
+                className="mt-1 flex items-center justify-between rounded-lg px-3 py-2.5"
+                style={{
+                  backgroundColor: !precioListo
+                    ? "hsl(var(--muted) / 0.4)"
+                    : accion === "cobro"
+                      ? "hsl(var(--primary) / 0.08)"
+                      : accion === "devolucion"
+                        ? "hsl(var(--warning) / 0.12)"
+                        : "hsl(var(--muted) / 0.4)",
+                }}
+              >
+                <span
+                  className="text-sm font-semibold"
+                  style={{ color: "hsl(var(--foreground))" }}
                 >
-                  <span
-                    className="text-sm font-semibold"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {!precioListo
-                      ? "Falta el precio acordado"
-                      : accion === "cobro"
-                        ? "Cobrar al cliente"
-                        : accion === "devolucion"
-                          ? "Devolver al cliente (efectivo)"
-                          : "Cambio par — sin diferencia"}
-                  </span>
-                  <span
-                    className="text-base font-bold tabular-nums"
-                    style={{ color: "hsl(var(--foreground))" }}
-                  >
-                    {formatCOP(Math.abs(difConIva))}
-                  </span>
-                </div>
+                  {!precioListo
+                    ? "Falta el precio acordado"
+                    : accion === "cobro"
+                      ? "Cobrar al cliente"
+                      : accion === "devolucion"
+                        ? "Devolver al cliente (efectivo)"
+                        : "Cambio par — sin diferencia"}
+                </span>
+                <span
+                  className="text-base font-bold tabular-nums"
+                  style={{ color: "hsl(var(--foreground))" }}
+                >
+                  {precioListo ? formatCOP(Math.abs(difConIva)) : "—"}
+                </span>
               </div>
 
               {accion === "cobro" && (
