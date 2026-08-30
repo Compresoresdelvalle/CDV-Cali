@@ -22,13 +22,32 @@ async function reciboDePrueba(extra = {}) {
     ...extra,
   };
   const items = [
-    { producto: { nombre: "CABEZOTE 1 HP 1065" }, cantidad: 1, precio_unitario: 380000, subtotal: 380000 },
-    { producto: { nombre: "FILTRO 1/2 PLASTICO" }, cantidad: 1, precio_unitario: 0, subtotal: 0 },
-    { producto: { nombre: "MANOMETRO 150 1/4 CT" }, cantidad: 1, precio_unitario: 25000, subtotal: 25000 },
+    {
+      producto: { nombre: "CABEZOTE 1 HP 1065" },
+      cantidad: 1,
+      precio_unitario: 380000,
+      subtotal: 380000,
+    },
+    {
+      producto: { nombre: "FILTRO 1/2 PLASTICO" },
+      cantidad: 1,
+      precio_unitario: 0,
+      subtotal: 0,
+    },
+    {
+      producto: { nombre: "MANOMETRO 150 1/4 CT" },
+      cantidad: 1,
+      precio_unitario: 25000,
+      subtotal: 25000,
+    },
   ];
   const pagos = [
     { metodo_pago: "Efectivo", monto: 105000 },
-    { metodo_pago: "Transferencia", monto: 300000, cuenta_bancaria: "Nequi Digital 3103794129" },
+    {
+      metodo_pago: "Transferencia",
+      monto: 300000,
+      cuenta_bancaria: "Nequi Digital 3103794129",
+    },
   ];
   const pdf = generarVentaPOS({ venta, items, pagos, vendedor: "Sofía" });
   // ventaPOS expone `blob`, no `dataUri` como cotizacionPDF.
