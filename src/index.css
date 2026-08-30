@@ -143,8 +143,15 @@
   --n-100: #eef1f5;
   --n-150: #e4e7ec;
   --n-200: #d0d5dd;
+  /* --n-400 y --n-600 faltaban en la escala pese a usarse en ~45 sitios
+     (texto atenuado, marcadores de posicion, puntos). Una var() sin definir NO
+     cae al valor por defecto: en `color` hereda y en `border-color` cae a
+     currentColor, asi que esos textos salian oscuros en vez de grises. Valores
+     interpolados entre los escalones vecinos. */
   --n-300: #98a2b3;
+  --n-400: #7f899c;
   --n-500: #667085;
+  --n-600: #566276;
   --n-700: #475467;
   --n-800: #344054;
   --n-900: #1d2939;
@@ -188,6 +195,8 @@
 
   --dang-50: #fef3f2;
   --dang-100: #fee4e2;
+  /* Alias del borde de peligro: se usa como `borderColor` en 8 sitios. */
+  --dang-200: #fecdca;
   --dang-500: #f04438;
   --dang-600: #d92d20;
   --dang-700: #b42318;
@@ -295,7 +304,9 @@
   --n-150: #2d3955;
   --n-200: #3b4866;
   --n-300: #6a7896;
+  --n-400: #828eaa;
   --n-500: #9aa5be;
+  --n-600: #afb8cc;
   --n-700: #c5ccdb;
   --n-800: #d6dbe6;
   --n-900: #e5e8ef;
@@ -365,6 +376,7 @@
   /* DANGER */
   --dang-50: #2e1b1b;
   --dang-100: #3d2222;
+  --dang-200: #5c2b29;
   --dang-700: #fda29b;
   --dang-border: #5c2b29;
 

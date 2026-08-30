@@ -59,7 +59,7 @@ const OPCIONES_ABC = [
 /* `!inner` en el embed de producto: sin él, filtrar por `producto.clasificacion`
  * solo vaciaría el objeto embebido en vez de descartar la fila (y el count
  * seguiría contando filas que no cumplen el filtro). */
-const COLS_STOCK = `id, cantidad, estado_stock, sede_id, sede:sede_id(nombre), producto:producto_id!inner(referencia, nombre, stock_minimo, clasificacion)`;
+const COLS_STOCK = `id, cantidad, estado_stock, sede_id, stock_minimo, sede:sede_id(nombre), producto:producto_id!inner(referencia, nombre, clasificacion)`;
 
 /* Las pestañas que no son de stock caben enteras en memoria y siguen con el
  * filtro por sede/prioridad de siempre. */
@@ -205,7 +205,8 @@ export default function Alertas() {
       let query = supabase
         .from("inventario")
         .select(COLS_STOCK, { count: "exact" })
-        .in("estado_stock", ESTADOS_ALERTA);
+        .in("estado_stock", ESTADOS_ALERTA)
+        .gt("stock_minimo", 0);
       query = fStock.aplicar(query);
       const desde = stockPage * PAGE_SIZE;
       const { data, error, count } = await query
@@ -224,7 +225,8 @@ export default function Alertas() {
       const { count: global } = await supabase
         .from("inventario")
         .select("id", { count: "exact", head: true })
-        .in("estado_stock", ESTADOS_ALERTA);
+        .in("estado_stock", ESTADOS_ALERTA)
+        .gt("stock_minimo", 0);
       if (mountedRef.current && fStock.esReqVigente(reqId)) {
         setStockTotalGlobal(global ?? 0);
       }
@@ -691,7 +693,7 @@ function renderTab(tab, filas, navigate) {
             sevLabel={sev.label}
             keyText={s.producto?.referencia}
             title={s.producto?.nombre}
-            meta={`${s.sede?.nombre} · stock ${s.cantidad} · mínimo ${s.producto?.stock_minimo}`}
+            meta={`${s.sede?.nombre} · stock ${s.cantidad} · mínimo ${s.stock_minimo}`}
             badge={<StatusBadge status={s.estado_stock} />}
             action={{
               label: "Reorden",

@@ -1,0 +1,26 @@
+-- REGRESION DE SEGURIDAD introducida hoy. Se restaura.
+--
+-- La migracion 20260503000004_audit_fixes_fases_7_8.sql hizo en mayo, a
+-- proposito y etiquetado "HIGH F8":
+--     ALTER VIEW v_sugerencias_reorden SET (security_invoker = true);
+--
+-- Hoy la vista se reescribio tres veces con CREATE OR REPLACE VIEW sin clausula
+-- WITH (para exponer `vendible`, luego `clasificacion_global`, luego el min/max
+-- por sede). CREATE OR REPLACE VIEW **descarta las reloptions que no se
+-- vuelven a declarar**, asi que cada reescritura borro el security_invoker sin
+-- avisar de nada.
+--
+-- Consecuencia real, comprobada ejecutando como rol `anon`: la vista pasaba a
+-- evaluarse con los permisos de su dueno (postgres), saltandose la RLS, y
+-- `anon` tiene SELECT sobre ella. Sin ninguna sesion iniciada se leian 77 filas
+-- con `costo_promedio` y `costo_estimado_compra`: $35.634.553 en costos de
+-- compra de la empresa. La regla del proyecto es que la clave anon nunca ve
+-- datos de negocio.
+--
+-- Comprobado despues de aplicar: anon ve 0 filas, authenticated sigue viendo
+-- las 77 y la pantalla de Reorden funciona igual.
+--
+-- Se usa ALTER VIEW y no CREATE OR REPLACE para no repetir el error: asi el
+-- ajuste no depende de que alguien se acuerde de copiar la clausula WITH la
+-- proxima vez que se toque la definicion.
+ALTER VIEW public.v_sugerencias_reorden SET (security_invoker = true);

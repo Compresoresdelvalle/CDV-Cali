@@ -19,16 +19,34 @@ import { abcBadgeStyle } from "../../lib/admin-analytics-ui";
 import { useAuthStore } from "../../stores/authStore";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { surfaceInputStyle, pillStyle } from "../../lib/admin-ops-ui";
+import { useSedes } from "../../hooks/useSedes";
 
 const TODAS_SEDES = "Todas";
 const COLS =
   "grid-cols-[28px_minmax(0,1fr)_56px_130px_104px_72px_72px_84px_116px]";
+
+/**
+ * Clase ABC que manda en Reorden: la COMBINADA (ventas + consumo como insumo).
+ *
+ * Aquí la pregunta no es "qué me deja plata" sino "qué no me puede faltar", y
+ * son distintas: los cabezotes, tanques y motores casi no se venden sueltos
+ * —salen 'C' por ventas— pero se consumen en cada ensamble.
+ *
+ * Cae a la de ventas cuando no hay combinada: el asistente de min/max se
+ * alimenta de `fn_sugerir_minmax`, que sólo devuelve esa, y un producto recién
+ * creado no tiene combinada hasta el siguiente recálculo.
+ */
+const claseReorden = (i) => i?.clasificacion_global ?? i?.clasificacion ?? null;
 
 /* ── Sugerencias de reorden (datos reales: v_sugerencias_reorden) ──────── */
 export default function Reorden() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
   const isAdmin = perfil?.rol === "Admin";
+  // Las sedes salen de la TABLA, no de las filas de reorden: esas exigen
+  // `stock_minimo > 0`, así que una sede sin configurar nunca aparecería en el
+  // asistente que sirve precisamente para configurarla.
+  const { sedes: sedesActivas } = useSedes();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -76,26 +94,22 @@ export default function Reorden() {
 
   const cargarAgotadosSinConfig = async () => {
     try {
-      // El stock de un vendible vive en `cantidad`; el de un insumo en
-      // `cantidad_insumo` — contar solo `cantidad` marcaría como agotados
-      // insumos con existencias.
-      const base = () =>
-        supabase
-          .from("inventario")
-          .select("id, producto:producto_id!inner(id)", {
-            count: "exact",
-            head: true,
-          })
-          .eq("producto.activo", true)
-          .eq("producto.stock_minimo", 0);
-      const [vendibles, insumos] = await Promise.all([
-        base().eq("producto.vendible", true).lte("cantidad", 0),
-        base().eq("producto.vendible", false).lte("cantidad_insumo", 0),
-      ]);
+      // Con el mínimo por sede esto se vuelve una sola consulta: `estado_stock`
+      // ya distingue vendible de insumo, y `stock_minimo` vive en la misma fila.
+      // Antes hacían falta dos consultas cruzando `producto.vendible` porque el
+      // mínimo era global y el estado no miraba `cantidad_insumo`.
+      const { count, error } = await supabase
+        .from("inventario")
+        .select("id, producto:producto_id!inner(id)", {
+          count: "exact",
+          head: true,
+        })
+        .eq("producto.activo", true)
+        .eq("stock_minimo", 0)
+        .eq("estado_stock", "Agotado");
       if (!mountedRef.current) return;
-      if (vendibles.error) throw vendibles.error;
-      if (insumos.error) throw insumos.error;
-      setAgotadosSinConfig((vendibles.count ?? 0) + (insumos.count ?? 0));
+      if (error) throw error;
+      setAgotadosSinConfig(count ?? 0);
     } catch {
       // Silencioso: es un dato informativo adicional, no crítico para la página.
       if (mountedRef.current) setAgotadosSinConfig(null);
@@ -125,7 +139,7 @@ export default function Reorden() {
         ? items
         : items.filter((i) => i.sede_id === sedeFiltro);
     if (claseFiltro !== "Todas")
-      out = out.filter((i) => i.clasificacion === claseFiltro);
+      out = out.filter((i) => claseReorden(i) === claseFiltro);
     const needle = busqueda.trim().toLowerCase();
     if (needle) {
       out = out.filter((i) =>
@@ -142,7 +156,7 @@ export default function Reorden() {
     0,
   );
   const urgentes = filtrados.filter((i) => i.estado_stock === "Agotado").length;
-  const claseA = filtrados.filter((i) => i.clasificacion === "A").length;
+  const claseA = filtrados.filter((i) => claseReorden(i) === "A").length;
 
   // Métricas de la selección activa.
   const seleccionados = filtrados.filter((i) => seleccion.has(keyOf(i)));
@@ -173,8 +187,13 @@ export default function Reorden() {
 
   const generarOC = () => {
     // Abre el flujo REAL de Nueva compra (no se inventa creación de OC aquí).
-    // Adjunta las sugerencias como `state` para que CompraNueva pueda
-    // preseleccionarlas cuando ese soporte exista; hoy se ignora sin romper.
+    // CompraNueva lee este `state` y precarga el carrito.
+    //
+    // Ojo con dos cosas al leerlo del otro lado:
+    //  · la selección se lleva por producto Y sede (`keyOf`), así que el mismo
+    //    producto puede venir dos veces y hay que consolidarlo;
+    //  · `vendible` viaja para que el destino del ítem (venta / insumo) se
+    //    decida igual que en `agregarAlCarrito`.
     navigate("/ops/compras/nueva", {
       state: {
         sugerenciasReorden: seleccionados.map((i) => ({
@@ -184,6 +203,7 @@ export default function Reorden() {
           sede_id: i.sede_id,
           cantidad_sugerida: i.cantidad_sugerida,
           costo_unitario: Number(i.costo_promedio || 0),
+          vendible: i.vendible,
         })),
       },
     });
@@ -199,6 +219,16 @@ export default function Reorden() {
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
             Admin · Sugerencias de reposición
+          </p>
+          {/* La letra ABC de esta pantalla es la COMBINADA, no la de ventas.
+              Decirlo evita el desconcierto de ver "A" aquí y "C" en Análisis
+              ABC para el mismo producto. */}
+          <p
+            className="m-0 mb-1.5 text-[11.5px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            La clase ABC que se muestra aquí es la combinada: ventas más consumo
+            como insumo.
           </p>
           <h1
             className="m-0 flex items-center gap-2.5 text-[24px] font-semibold leading-tight tracking-[-0.018em]"
@@ -250,6 +280,12 @@ export default function Reorden() {
 
       {modalMinMax && (
         <ModalMinMax
+          sedes={sedesActivas}
+          sedeInicial={
+            sedeFiltro !== TODAS_SEDES
+              ? sedeFiltro
+              : (perfil?.sede_id ?? sedesActivas[0]?.id ?? "")
+          }
           onClose={() => setModalMinMax(false)}
           onAplicado={() => {
             cargar();
@@ -334,10 +370,14 @@ export default function Reorden() {
           <p className="m-0">
             <strong>{agotadosSinConfig}</strong>{" "}
             {agotadosSinConfig === 1
-              ? "referencia agotada no aparece"
-              : "referencias agotadas no aparecen"}{" "}
-            en esta lista porque no tienen stock mínimo configurado. Configura
-            mínimo y máximo en el producto para recibir sugerencias.
+              ? "combinación producto–sede agotada no aparece"
+              : "combinaciones producto–sede agotadas no aparecen"}{" "}
+            en esta lista porque no tienen mínimo configurado en esa sede.
+            Configúralos en Inventario → Mínimos para recibir sugerencias.
+            {/* Se cuentan PARES producto-sede, no referencias: el mínimo es por
+                sede, así que la misma referencia cuenta una vez por cada sede
+                donde falta. Decir "referencias" inflaba el número casi al
+                triple (2.880 pares contra 1.004 referencias distintas). */}
           </p>
         </div>
       )}
@@ -536,9 +576,9 @@ export default function Reorden() {
                   </div>
                   <span
                     className="grid h-5 w-5 place-items-center rounded-[4px] border text-[10.5px] font-bold"
-                    style={abcBadgeStyle(i.clasificacion)}
+                    style={abcBadgeStyle(claseReorden(i))}
                   >
-                    {i.clasificacion ?? "—"}
+                    {claseReorden(i) ?? "—"}
                   </span>
                   <span
                     className="truncate text-xs"
@@ -629,9 +669,9 @@ export default function Reorden() {
                       />
                       <span
                         className="grid h-6 w-6 shrink-0 place-items-center rounded-md border text-[10.5px] font-bold"
-                        style={abcBadgeStyle(i.clasificacion)}
+                        style={abcBadgeStyle(claseReorden(i))}
                       >
-                        {i.clasificacion ?? "—"}
+                        {claseReorden(i) ?? "—"}
                       </span>
                       <div className="min-w-0">
                         <p
@@ -682,16 +722,30 @@ export default function Reorden() {
 }
 
 /* ── Bloque B — Modal "Sugerir min/max" ────────────────────────────────── */
+// Tope por llamada de `fn_aplicar_minmax`, que lanza excepción si se pasa.
+const TANDA_MINMAX = 200;
+
 const PARAM_LABELS = {
   minmax_lead_time_dias: "Lead time (días)",
   minmax_factor_seguridad: "Factor de seguridad",
   minmax_factor_max: "Máx = mín ×",
 };
 
-function ModalMinMax({ onClose, onAplicado }) {
+function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
+  // Las sugerencias son POR SEDE: la demanda de BODEGA (que despacha) no se
+  // parece a la de CHV (que vende). Sin elegir sede, `fn_sugerir_minmax`
+  // devolvería las cuatro y el mismo producto saldría repetido.
+  const [sede, setSede] = useState(sedeInicial);
+  // Espejo en un ref: `sede` es un `const` de este render, así que compararla
+  // consigo misma tras el await no detecta el cambio de sede. Ver Minimos.jsx.
+  const sedeRef = useRef(sedeInicial);
+  useEffect(() => {
+    sedeRef.current = sede;
+  }, [sede]);
   const [loading, setLoading] = useState(true);
   const [recalculando, setRecalculando] = useState(false);
   const [aplicando, setAplicando] = useState(false);
+  const [progresoAplicar, setProgresoAplicar] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [sugerencias, setSugerencias] = useState([]);
   const [soloSinConfigurar, setSoloSinConfigurar] = useState(true);
@@ -734,18 +788,25 @@ function ModalMinMax({ onClose, onAplicado }) {
   };
 
   const cargarSugerencias = async () => {
+    // Se recuerda para qué sede se pidió: el RPC recorre 90 días de movimientos
+    // y tarda. Sin esto, una respuesta lenta de la sede anterior sobrescribía
+    // las sugerencias de la nueva y "Aplicar" guardaba en la sede equivocada.
+    const sedePedida = sede;
     setLoading(true);
     setErrorMsg("");
     try {
       const { data, error } = await supabase.rpc("fn_sugerir_minmax", {
         p_dias: 90,
+        p_sede_id: sede,
       });
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || sedePedida !== sedeRef.current) return;
       if (error) throw error;
       const lista = data ?? [];
       setSugerencias(lista);
       // Selección por defecto: todos los NO configurados marcados, los
       // ya configurados desmarcados (protege valores manuales existentes).
+      // Dentro del modal se trabaja UNA sede, así que `producto_id` alcanza
+      // como clave. Se limpia al cambiar de sede para no arrastrar marcas.
       setSeleccion(
         new Set(
           lista.filter((i) => !i.ya_configurado).map((i) => i.producto_id),
@@ -761,9 +822,14 @@ function ModalMinMax({ onClose, onAplicado }) {
 
   useEffect(() => {
     cargarParametros();
-    cargarSugerencias();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Recalcula al cambiar de sede: las sugerencias de una no sirven para otra.
+  useEffect(() => {
+    cargarSugerencias();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sede]);
 
   const recalcular = async () => {
     // Validar los 3 valores ANTES de escribir: la tabla `parametros` es
@@ -848,17 +914,29 @@ function ModalMinMax({ onClose, onAplicado }) {
     try {
       const payload = seleccionados.map((i) => ({
         producto_id: i.producto_id,
+        // La sede va en cada ítem: el mín/máx es por sede y el servidor la
+        // valida contra el rol de quien guarda.
+        sede_id: i.sede_id ?? sede,
         min: i.min_sugerido,
         max: i.max_sugerido,
       }));
-      const { data, error } = await supabase.rpc("fn_aplicar_minmax", {
-        p_items: payload,
-      });
-      if (error) throw error;
-      avisarOk(
-        `${data?.aplicados ?? seleccionados.length} productos actualizados`,
-      );
+      // Por tandas: `fn_aplicar_minmax` corta en 200 por llamada porque cada
+      // ítem escribe bitácora y recalcula estado. Sin trocear, el primer uso
+      // real (BODEGA tiene ~471 productos con demanda) fallaba entero.
+      let aplicados = 0;
+      for (let i = 0; i < payload.length; i += TANDA_MINMAX) {
+        const { data, error } = await supabase.rpc("fn_aplicar_minmax", {
+          p_items: payload.slice(i, i + TANDA_MINMAX),
+        });
+        if (error) throw error;
+        aplicados += data?.aplicados ?? 0;
+        if (mountedRef.current && payload.length > TANDA_MINMAX) {
+          setProgresoAplicar({ hechos: aplicados, total: payload.length });
+        }
+      }
+      avisarOk(`${aplicados} productos actualizados`);
       await onAplicado();
+      await cargarSugerencias();
     } catch (err) {
       avisarError(err, "Error al aplicar sugerencias");
     } finally {
@@ -923,6 +1001,28 @@ function ModalMinMax({ onClose, onAplicado }) {
               backgroundColor: "hsl(var(--muted) / 0.3)",
             }}
           >
+            <div className="flex flex-col gap-1">
+              <label
+                className="font-mono text-[10.5px] uppercase tracking-[0.06em]"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+                htmlFor="minmax-sede"
+              >
+                Sede
+              </label>
+              <select
+                id="minmax-sede"
+                value={sede}
+                onChange={(e) => setSede(e.target.value)}
+                className="h-11 w-36 rounded-lg border px-2.5 text-sm"
+                style={surfaceInputStyle}
+              >
+                {sedes.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.nombre ?? x.id}
+                  </option>
+                ))}
+              </select>
+            </div>
             {Object.keys(parametros).map((clave) => (
               <div key={clave} className="flex flex-col gap-1">
                 <label
@@ -1033,9 +1133,9 @@ function ModalMinMax({ onClose, onAplicado }) {
                       <div className="flex min-w-0 items-center gap-2">
                         <span
                           className="grid h-5 w-5 shrink-0 place-items-center rounded-[4px] border text-[10.5px] font-bold"
-                          style={abcBadgeStyle(i.clasificacion)}
+                          style={abcBadgeStyle(claseReorden(i))}
                         >
-                          {i.clasificacion ?? "—"}
+                          {claseReorden(i) ?? "—"}
                         </span>
                         <div className="min-w-0">
                           <p
@@ -1110,9 +1210,9 @@ function ModalMinMax({ onClose, onAplicado }) {
                           />
                           <span
                             className="grid h-6 w-6 shrink-0 place-items-center rounded-md border text-[10.5px] font-bold"
-                            style={abcBadgeStyle(i.clasificacion)}
+                            style={abcBadgeStyle(claseReorden(i))}
                           >
-                            {i.clasificacion ?? "—"}
+                            {claseReorden(i) ?? "—"}
                           </span>
                           <div className="min-w-0">
                             <p
@@ -1175,7 +1275,9 @@ function ModalMinMax({ onClose, onAplicado }) {
             className="font-mono text-[12px] font-semibold tabular-nums"
             style={{ color: "hsl(var(--foreground))" }}
           >
-            {seleccionados.length} seleccionados
+            {progresoAplicar
+              ? `Guardando ${progresoAplicar.hechos} de ${progresoAplicar.total}…`
+              : `${seleccionados.length} seleccionados`}
           </span>
           <button
             disabled={seleccionados.length === 0 || aplicando}
@@ -1196,7 +1298,7 @@ function ModalMinMax({ onClose, onAplicado }) {
             }
           >
             <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
-            Aplicar seleccionados
+            {aplicando ? "Aplicando…" : "Aplicar seleccionados"}
           </button>
         </div>
       </div>
