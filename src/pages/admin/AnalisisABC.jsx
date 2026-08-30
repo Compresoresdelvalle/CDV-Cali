@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { RefreshCw, Package, TrendingUp, Search } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
@@ -8,6 +8,9 @@ import {
   abcBadgeStyle,
   PERIODOS_RANKING,
   labelPeriodoRanking,
+  CRITERIOS_ABC,
+  campoCriterioABC,
+  labelCriterioABC,
 } from "../../lib/admin-analytics-ui";
 
 const COLS =
@@ -48,7 +51,7 @@ async function traerTodosLosProductosActivos() {
     const { data, error } = await supabase
       .from("productos")
       .select(
-        "id, referencia, nombre, categoria, clasificacion, precio_venta, costo_promedio",
+        "id, referencia, nombre, categoria, clasificacion, clasificacion_consumo, clasificacion_global, precio_venta, costo_promedio",
       )
       .eq("activo", true)
       .order("clasificacion", { ascending: true })
@@ -72,6 +75,9 @@ export default function AnalisisABC() {
   const [recalculando, setRecalculando] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [filtro, setFiltro] = useState("Todos");
+  // Criterio activo: qué clasificación manda en el badge, el filtro y los KPIs.
+  const [criterio, setCriterio] = useState("clasificacion");
+  const claseDe = useCallback((p) => p?.[criterio] ?? null, [criterio]);
   const [periodo, setPeriodo] = useState(90);
   const [busqueda, setBusqueda] = useState("");
   const mountedRef = useRef(true);
@@ -114,24 +120,36 @@ export default function AnalisisABC() {
   };
 
   const recalcular = async () => {
+    // El diálogo dice lo que de verdad va a pasar con ESTE periodo, no un texto
+    // fijo: elegir "último mes" no es un cambio de visualización, empuja a la
+    // cola larga todo lo que no se movió en esos 30 días.
+    const conVentas = ventasMap.size;
+    const sinVentas = Math.max(0, productos.length - conVentas);
+    const etiqueta = labelPeriodoRanking(periodo).toLowerCase();
     const ok = await confirm({
       titulo: "Recalcular clasificación ABC",
       mensaje:
-        "Reclasifica TODOS los productos según ventas de los últimos 90 días. Puede tardar varios segundos.",
+        `Reclasifica los ${productos.length.toLocaleString("es-CO")} productos activos ` +
+        `según el movimiento del ${etiqueta}. En ese periodo ${conVentas.toLocaleString("es-CO")} ` +
+        `tienen ventas y ${sinVentas.toLocaleString("es-CO")} no, así que estos últimos ` +
+        `quedarán en C por ventas (en el criterio combinado siguen contando si se usan como insumo).`,
       confirmLabel: "Recalcular",
     });
     if (!ok) return;
     setRecalculando(true);
     try {
-      // Timeout duro 30s — recalcular ABC sobre 3000 productos puede tardar
+      // Plazo de 30s para no dejar el botón girando para siempre. OJO: esto NO
+      // cancela nada en el servidor —la petición sigue y termina—, así que el
+      // mensaje no puede decir que falló: dice que siga corriendo y ofrece
+      // recargar.
       const { error } = await Promise.race([
-        supabase.rpc("fn_recalcular_abc"),
+        supabase.rpc("fn_recalcular_abc", { p_dias: periodo }),
         new Promise((_, reject) =>
           setTimeout(
             () =>
               reject(
                 new Error(
-                  "Timeout: el recálculo tarda más de 30s, contacta soporte",
+                  "El recálculo se está demorando más de 30s. Sigue corriendo en el servidor: vuelve a entrar en un momento para ver el resultado.",
                 ),
               ),
             30000,
@@ -178,9 +196,7 @@ export default function AnalisisABC() {
   // yendo al servidor.
   const filtrados = useMemo(() => {
     const porClase =
-      filtro === "Todos"
-        ? filas
-        : filas.filter((p) => p.clasificacion === filtro);
+      filtro === "Todos" ? filas : filas.filter((p) => claseDe(p) === filtro);
     const needle = busqueda.trim().toLowerCase();
     if (!needle) return porClase;
     return porClase.filter((p) =>
@@ -188,25 +204,28 @@ export default function AnalisisABC() {
         .filter(Boolean)
         .some((c) => String(c).toLowerCase().includes(needle)),
     );
-  }, [filas, filtro, busqueda]);
+  }, [filas, filtro, busqueda, claseDe]);
 
   const counts = {
-    A: productos.filter((p) => p.clasificacion === "A").length,
-    B: productos.filter((p) => p.clasificacion === "B").length,
-    C: productos.filter((p) => p.clasificacion === "C").length,
+    A: productos.filter((p) => claseDe(p) === "A").length,
+    B: productos.filter((p) => claseDe(p) === "B").length,
+    C: productos.filter((p) => claseDe(p) === "C").length,
   };
 
   // Reparto de ventas por clase (modelo Lovable: % de ingresos por clase).
+  // Se agrupa por el criterio activo: con el combinado, la pregunta que
+  // responde es "cuánto ingreso concentra lo que considero crítico".
   const ventasPorClase = useMemo(() => {
     const acc = { A: 0, B: 0, C: 0, total: 0 };
     filas.forEach((p) => {
       acc.total += p.ventas;
-      if (p.clasificacion === "A") acc.A += p.ventas;
-      else if (p.clasificacion === "B") acc.B += p.ventas;
-      else if (p.clasificacion === "C") acc.C += p.ventas;
+      const clase = claseDe(p);
+      if (clase === "A") acc.A += p.ventas;
+      else if (clase === "B") acc.B += p.ventas;
+      else if (clase === "C") acc.C += p.ventas;
     });
     return acc;
-  }, [filas]);
+  }, [filas, claseDe]);
 
   const pctVentas = (v) =>
     ventasPorClase.total > 0
@@ -239,6 +258,15 @@ export default function AnalisisABC() {
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Criterio: tres preguntas distintas sobre el mismo catálogo.
+              Ventas = qué deja plata · Consumo = qué se acaba siempre en
+              ensambles y OT · Combinado = qué no puede faltar (es el que
+              guía Reorden). */}
+          <Seg
+            options={CRITERIOS_ABC.map((c) => c.label)}
+            value={labelCriterioABC(criterio)}
+            onChange={(label) => setCriterio(campoCriterioABC(label))}
+          />
           <Seg
             options={PERIODOS_RANKING.map((p) => p.label)}
             value={labelPeriodoRanking(periodo)}
@@ -406,9 +434,9 @@ export default function AnalisisABC() {
                   </span>
                   <span
                     className="grid h-5 w-5 place-items-center rounded-[4px] border text-[10.5px] font-bold"
-                    style={abcBadgeStyle(p.clasificacion)}
+                    style={abcBadgeStyle(claseDe(p))}
                   >
-                    {p.clasificacion ?? "—"}
+                    {claseDe(p) ?? "—"}
                   </span>
                 </span>
                 <span
@@ -469,7 +497,7 @@ export default function AnalisisABC() {
                     strokeWidth={1.5}
                     style={{ color: "hsl(var(--muted-foreground))" }}
                   />
-                  {SUGERENCIA_CLASE[p.clasificacion] ?? "Sin clasificar"}
+                  {SUGERENCIA_CLASE[claseDe(p)] ?? "Sin clasificar"}
                 </span>
               </div>
             ))}
@@ -487,9 +515,9 @@ export default function AnalisisABC() {
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <span
                       className="grid h-7 w-7 shrink-0 place-items-center rounded-md border text-xs font-bold"
-                      style={abcBadgeStyle(p.clasificacion)}
+                      style={abcBadgeStyle(claseDe(p))}
                     >
-                      {p.clasificacion ?? "—"}
+                      {claseDe(p) ?? "—"}
                     </span>
                     <div className="min-w-0">
                       <p
@@ -526,7 +554,7 @@ export default function AnalisisABC() {
                   style={{ color: "hsl(var(--muted-foreground))" }}
                 >
                   <TrendingUp className="h-3 w-3 shrink-0" strokeWidth={1.5} />
-                  {SUGERENCIA_CLASE[p.clasificacion] ?? "Sin clasificar"}
+                  {SUGERENCIA_CLASE[claseDe(p)] ?? "Sin clasificar"}
                 </p>
               </li>
             ))}
@@ -544,9 +572,10 @@ export default function AnalisisABC() {
               {filtrados.length} SKUs · ordenados por ventas descendente
             </span>
             <span>
-              Ventas reales de {labelPeriodoRanking(periodo).toLowerCase()} ·
-              clase recalculada sobre 90 días (ventas directas + repuestos de
-              OT), automática cada mes · timeout 30s
+              Criterio {labelCriterioABC(criterio).toLowerCase()} · ventas
+              reales de {labelPeriodoRanking(periodo).toLowerCase()} ·
+              &quot;Recalcular&quot; usa el periodo elegido arriba · recálculo
+              automático el día 1 de cada mes, sobre 90 días
             </span>
           </footer>
         </section>

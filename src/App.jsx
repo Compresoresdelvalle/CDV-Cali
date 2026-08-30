@@ -12,6 +12,7 @@ import RoleGuard from "./components/layout/RoleGuard";
 import AppShell from "./components/layout/AppShell";
 import AdminShell from "./components/layout/AdminShell";
 import Inventario from "./pages/ops/Inventario";
+import Minimos from "./pages/ops/Minimos";
 import Productos from "./pages/ops/Productos";
 import Clientes from "./pages/ops/Clientes";
 import ProductoDetalle from "./pages/ops/ProductoDetalle";
@@ -135,6 +136,19 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <Inventario />
+              </RoleGuard>
+            }
+          />
+
+          {/* Mínimos y máximos por sede. Vive en /ops y no en /admin porque el
+              panel Admin es sólo de Maritza, y quien más necesita ajustar los
+              mínimos de su sede son las vendedoras. El servidor fuerza la sede
+              propia a quien no es Admin. */}
+          <Route
+            path="minimos"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
+                <Minimos />
               </RoleGuard>
             }
           />

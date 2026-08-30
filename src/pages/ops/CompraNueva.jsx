@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeftCircle,
   ArrowRight,
   Check,
+  Info,
   Search,
   ScanLine,
   Trash2,
@@ -12,6 +13,7 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch } from "../../lib/utils";
+import { carritoDesdeReorden, sedesDeSugerencias } from "../../lib/compras-ui";
 import { avisarOk, avisarError } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../../components/ui/UbicacionChip";
@@ -23,6 +25,7 @@ const IVA_PRESETS = [0, 19];
 
 export default function CompraNueva() {
   const navigate = useNavigate();
+  const location = useLocation();
   const perfil = useAuthStore((s) => s.perfil);
   // Al Vendedor nunca se le muestra/precarga el costo histórico del producto:
   // lo digita manualmente (arranca en 0).
@@ -58,6 +61,30 @@ export default function CompraNueva() {
   const [scannerOpen, setScannerOpen] = useState(false); // C-05: escáner QR
 
   const [carrito, setCarrito] = useState([]);
+
+  // Sedes de las que venían las sugerencias de Reorden, para el aviso de que
+  // la compra se registra en la sede del usuario y no en la de la sugerencia.
+  const [sedesOrigen, setSedesOrigen] = useState([]);
+
+  // Precarga del carrito desde Reorden ("Generar orden de compra").
+  //
+  // Se hace una sola vez. Si el usuario ya empezó a armar el carrito no se le
+  // pisa, y se limpia el state del historial para que un F5 no vuelva a
+  // precargar encima de lo que ya haya.
+  const precargaHecha = useRef(false);
+  useEffect(() => {
+    if (precargaHecha.current) return;
+    const sug = location.state?.sugerenciasReorden;
+    if (!Array.isArray(sug) || sug.length === 0) return;
+    precargaHecha.current = true;
+
+    setCarrito(carritoDesdeReorden(sug, { esVendedor }));
+    setSedesOrigen(sedesDeSugerencias(sug));
+    // Limpia el state DENTRO del router. Un `window.history.replaceState({}, "")`
+    // borra también el `idx` y el `key` internos de react-router, y a partir de
+    // ahí el índice del historial queda en NaN y no se recupera ni con F5.
+    navigate(".", { replace: true, state: null });
+  }, [location.state, esVendedor, navigate]);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
@@ -385,6 +412,35 @@ export default function CompraNueva() {
           Cancelar
         </button>
       </div>
+
+      {/* ── Aviso de sede al venir desde Reorden ─────────────────────────
+          La compra se registra SIEMPRE en la sede del usuario (fn_registrar_compra
+          recibe una sola sede). Si las sugerencias venían de otras sedes, la
+          mercancía va a quedar aquí y hay que traspasarla: mejor decirlo ahora
+          que dejar que la busquen donde no está. */}
+      {sedesOrigen.some((s) => s !== perfil?.sede_id) && (
+        <div
+          className="flex items-start gap-2.5 rounded-[10px] border px-4 py-3"
+          style={{
+            backgroundColor: "var(--info-50)",
+            borderColor: "var(--info-border)",
+          }}
+        >
+          <Info
+            className="mt-0.5 h-4 w-4 shrink-0"
+            strokeWidth={1.75}
+            style={{ color: "var(--info-600)" }}
+            aria-hidden="true"
+          />
+          <p className="m-0 text-sm" style={{ color: "var(--info-700)" }}>
+            Esta compra se registrará en{" "}
+            <b className="font-semibold">{perfil?.sede_id ?? "—"}</b>. Las
+            sugerencias venían de{" "}
+            <b className="font-semibold">{sedesOrigen.join(", ")}</b>: cuando
+            llegue la mercancía habrá que traspasarla.
+          </p>
+        </div>
+      )}
 
       {/* ── Selector de tipo de compra (#31) ─────────────────────────── */}
       <div className="flex flex-wrap gap-2">
@@ -1317,7 +1373,7 @@ function DestinoToggle({ value, onChange }) {
             className="min-h-[40px] px-3 py-2 text-[11px] font-semibold transition-colors"
             style={{
               backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
-              color: on ? "var(--p-contrast, #fff)" : "var(--n-600)",
+              color: on ? "var(--p-contrast, #fff)" : "var(--n-500)",
             }}
           >
             {o.t}
