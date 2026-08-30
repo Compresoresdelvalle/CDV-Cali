@@ -237,7 +237,15 @@ export function precioSugeridoCambio({
   // Sin lista del devuelto no hay con qué comparar: se cae al precio de lista
   // del nuevo, que es el comportamiento de siempre.
   if (lDev <= 0) return Math.round(lNue);
-  return Math.max(0, Math.round(pagado + (lNue - lDev)));
+  const sugerido = Math.round(pagado + (lNue - lDev));
+  // Un descuento en pesos arrastrado desde una venta mucho mas cara puede dejar
+  // el sugerido en cero o en negativo: pago 500.000 de una lista de 600.000 y
+  // cambia por uno de lista 80.000 daria -20.000. Ahi el trato original ya no
+  // aplica, y acotarlo a 0 proponia REGALAR el producto con el mismo mensaje
+  // tranquilizador de siempre. Se cae al precio de lista, que es la decision
+  // segura, y la vendedora ajusta si acuerdan otra cosa.
+  if (sugerido <= 0) return Math.round(lNue);
+  return sugerido;
 }
 
 /**
