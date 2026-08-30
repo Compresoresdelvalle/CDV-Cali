@@ -1261,17 +1261,31 @@ export default function ProductoDetalle() {
           minimoActual={minMaxFila.stock_minimo ?? 0}
           maximoActual={minMaxFila.stock_maximo ?? 0}
           onCerrar={() => setMinMaxFila(null)}
-          onGuardado={({ minimo, maximo }) =>
-            // Se refleja en la tabla sin recargar toda la ficha. El estado de
-            // stock lo recalcula el servidor; llega por realtime o al volver.
+          onGuardado={async ({ minimo, maximo }) => {
+            // Refresco optimista para que los números se vean de inmediato.
             setInventario((prev) =>
               prev.map((i) =>
                 i.id === minMaxFila.id
                   ? { ...i, stock_minimo: minimo, stock_maximo: maximo }
                   : i,
               ),
-            )
-          }
+            );
+            // Y se relee el estado desde el servidor: `fn_definir_minmax`
+            // recalcula `estado_stock`, así que poner un mínimo puede pasar la
+            // fila de "OK" a "Bajo". Sin esta relectura el badge se quedaba
+            // mostrando el estado anterior hasta salir y volver a entrar.
+            const { data } = await supabase
+              .from("inventario")
+              .select("id, estado_stock, stock_minimo, stock_maximo")
+              .eq("producto_id", productoId);
+            if (!data) return;
+            const porId = new Map(data.map((r) => [r.id, r]));
+            setInventario((prev) =>
+              prev.map((i) =>
+                porId.has(i.id) ? { ...i, ...porId.get(i.id) } : i,
+              ),
+            );
+          }}
         />
       )}
 

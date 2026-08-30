@@ -85,6 +85,16 @@ export default function Minimos() {
   // igual, pero aquí ni siquiera se ofrece cambiarla.
   const sedeEfectiva = esAdmin ? sede : (perfil?.sede_id ?? "");
 
+  // Espejo de la sede en un ref. Hace falta porque `sedeEfectiva` es un `const`
+  // de ESTE render: dentro de un mismo cierre asíncrono vale lo mismo antes y
+  // después del await, así que compararla consigo misma nunca detecta nada. El
+  // ref sí cambia entre renders, y es lo único que permite saber si la sede
+  // cambió MIENTRAS la petición viajaba.
+  const sedeRef = useRef(sedeEfectiva);
+  useEffect(() => {
+    sedeRef.current = sedeEfectiva;
+  }, [sedeEfectiva]);
+
   const cargar = useCallback(async () => {
     if (!sedeEfectiva) {
       // Un usuario sin sede asignada existe: el propio RPC lo contempla. Sin
@@ -170,7 +180,7 @@ export default function Minimos() {
       // `throw error` y no `new Error(error.message)`: safeError solo muestra el
       // motivo real cuando conserva el code P0001 del RAISE EXCEPTION.
       if (error) throw error;
-      if (!mountedRef.current || sedePedida !== sedeEfectiva) return;
+      if (!mountedRef.current || sedePedida !== sedeRef.current) return;
       const m = new Map();
       (data ?? []).forEach((s) =>
         m.set(s.producto_id, { min: s.min_sugerido, max: s.max_sugerido }),
@@ -225,15 +235,42 @@ export default function Minimos() {
     setBorrador((prev) => anotar(prev, f, { min: s.min, max: s.max }));
   };
 
-  const usarSugeridosVisibles = () =>
+  // Una fila está "sin tocar" si no tiene NI mínimo NI máximo. Ojo con el
+  // máximo: hay 85 filas con techo puesto a mano y mínimo 0, que el filtro
+  // "Sin configurar" muestra igual. Aplicar el sugerido en lote les pisaría ese
+  // techo sin avisar.
+  const sinTocar = (f) =>
+    (f.stock_minimo ?? 0) === 0 && (f.stock_maximo ?? 0) === 0;
+
+  const usarSugeridosVisibles = () => {
+    const aplicables = filas.filter(
+      (f) => sugeridos.has(f.producto_id) && sinTocar(f),
+    );
+    const respetados = filas.filter(
+      (f) => sugeridos.has(f.producto_id) && !sinTocar(f),
+    );
+    if (aplicables.length === 0) {
+      avisarOk(
+        respetados.length > 0
+          ? `Los ${respetados.length} productos con sugerencia ya tienen valores puestos a mano. No se tocaron; cámbialos uno a uno si quieres.`
+          : "No hay sugerencias que aplicar en lo visible.",
+      );
+      return;
+    }
     setBorrador((prev) => {
       let next = prev;
-      filas.forEach((f) => {
+      aplicables.forEach((f) => {
         const s = sugeridos.get(f.producto_id);
-        if (s) next = anotar(next, f, { min: s.min, max: s.max });
+        next = anotar(next, f, { min: s.min, max: s.max });
       });
       return next;
     });
+    avisarOk(
+      respetados.length > 0
+        ? `${aplicables.length} preparados. Se respetaron ${respetados.length} que ya tenían valores puestos a mano.`
+        : `${aplicables.length} preparados. Revisa y guarda.`,
+    );
+  };
 
   // Sólo se manda lo que de verdad cambió: guardar lo que ya estaba escribiría
   // bitácora de un cambio que no existió. Se compara contra los originales que
@@ -301,8 +338,10 @@ export default function Minimos() {
   const paginas = Math.max(1, Math.ceil(total / PAGE_SIZE));
   // Cuántas de las filas visibles tienen sugerencia: el botón decía "en los 50
   // visibles" y cambiaba 12.
-  const conSugerencia = filas.filter((f) =>
-    sugeridos.has(f.producto_id),
+  // Sólo cuenta lo que el botón va a tocar de verdad: con sugerencia y sin
+  // valores puestos a mano.
+  const conSugerencia = filas.filter(
+    (f) => sugeridos.has(f.producto_id) && sinTocar(f),
   ).length;
 
   // Tras guardar con el filtro "Sin configurar", las filas configuradas salen
@@ -342,11 +381,21 @@ export default function Minimos() {
             <select
               value={sede}
               onChange={(e) => {
+                // Cambiar de sede descarta el borrador: son filas de otra
+                // sede. Antes se perdía sin decir nada.
+                if (
+                  borrador.size > 0 &&
+                  !window.confirm(
+                    `Tienes ${pendientes.length} cambio(s) sin guardar en ${sedeEfectiva}. Si cambias de sede se descartan. ¿Continuar?`,
+                  )
+                )
+                  return;
                 setSede(e.target.value);
                 setPagina(0);
                 setBorrador(new Map());
                 setSugeridos(new Map());
               }}
+              disabled={guardando || cargandoSug}
               className="h-12 rounded-lg border bg-transparent px-3 text-sm"
               style={{ borderColor: "var(--n-200)" }}
               aria-label="Sede"
@@ -445,7 +494,7 @@ export default function Minimos() {
           style={{ height: 48 }}
         >
           <Check className="h-4 w-4" strokeWidth={1.75} />
-          Usar el sugerido en {conSugerencia} de los visibles
+          Usar el sugerido en {conSugerencia} sin configurar
         </button>
       )}
 
