@@ -987,7 +987,7 @@ export default function ProductoDetalle() {
                 className="rounded-lg border px-3 py-2 text-xs"
                 style={{
                   backgroundColor: "var(--dang-50)",
-                  borderColor: "var(--dang-200)",
+                  borderColor: "var(--dang-border)",
                   color: "var(--dang-700)",
                 }}
               >
@@ -1105,7 +1105,7 @@ export default function ProductoDetalle() {
                 className="rounded-lg border px-3 py-2 text-xs"
                 style={{
                   backgroundColor: "var(--dang-50)",
-                  borderColor: "var(--dang-200)",
+                  borderColor: "var(--dang-border)",
                   color: "var(--dang-700)",
                 }}
               >
@@ -1197,7 +1197,7 @@ export default function ProductoDetalle() {
                 className="rounded-lg border px-3 py-2 text-xs"
                 style={{
                   backgroundColor: "var(--dang-50)",
-                  borderColor: "var(--dang-200)",
+                  borderColor: "var(--dang-border)",
                   color: "var(--dang-700)",
                 }}
               >

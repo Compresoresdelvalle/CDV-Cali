@@ -1,6 +1,6 @@
 # Plan — Min/max por sede · Reorden→Compras · ABC de insumos
 
-**Fecha:** 2026-08-29 · **Versión:** 2 (revisión a fondo) · **Estado:** planeado, sin implementar
+**Fecha:** 2026-08-29 · **Versión:** 2 (revisión a fondo) · **Estado:** IMPLEMENTADO 2026-08-29, rama `feat/reorden-a-compras`, sin merge
 **Rama sugerida:** `feat/minmax-sede-abc-insumos`
 
 > **La v2 cambia la recomendación principal de la v1.** La segunda pasada encontró que buena

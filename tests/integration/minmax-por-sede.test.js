@@ -148,8 +148,7 @@ describe("validación de mínimo y máximo", () => {
   // ESTRICTO: con max = min no existe ninguna cantidad que deje el producto en
   // "OK" (queda en Bajo o en Sobrestock), y Reorden lo excluye porque no hay
   // nada que pedir. Es la regla que ya tenía `productos` desde julio.
-  const valido = (min, max) =>
-    min >= 0 && max >= 0 && (max === 0 || max > min);
+  const valido = (min, max) => min >= 0 && max >= 0 && (max === 0 || max > min);
 
   it("acepta mínimo 0 (no controlar) y máximo 0 (sin techo)", () => {
     expect(valido(0, 0)).toBe(true);

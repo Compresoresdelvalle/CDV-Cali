@@ -1373,7 +1373,7 @@ function DestinoToggle({ value, onChange }) {
             className="min-h-[40px] px-3 py-2 text-[11px] font-semibold transition-colors"
             style={{
               backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
-              color: on ? "var(--p-contrast, #fff)" : "var(--n-600)",
+              color: on ? "var(--p-contrast, #fff)" : "var(--n-500)",
             }}
           >
             {o.t}

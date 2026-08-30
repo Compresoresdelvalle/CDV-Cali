@@ -101,16 +101,21 @@ export default function Minimos() {
     try {
       // Paginado y filtrado en el servidor: una sede tiene ~1.400 filas de
       // inventario y traerlas todas al cliente sería tirar memoria del celular.
+      // `v_minmax_sede` cruza TODOS los productos activos con TODAS las sedes
+      // activas, así que incluye las ~2.640 combinaciones que aún no tienen fila
+      // en `inventario`. Partir de `inventario` dejaba esos productos
+      // inalcanzables: no salían ni buscándolos por referencia, y son justo los
+      // que una sede quiere empezar a controlar. `fn_definir_minmax` crea la
+      // fila al guardar.
       let q = supabase
-        .from("inventario")
+        .from("v_minmax_sede")
         .select(
-          `id, producto_id, sede_id, cantidad, cantidad_insumo, estado_stock,
-           stock_minimo, stock_maximo,
-           producto:productos!inner(id, referencia, nombre, categoria, vendible, activo)`,
+          `producto_id, referencia, nombre, categoria, vendible, sede_id,
+           cantidad, cantidad_insumo, estado_stock, stock_minimo, stock_maximo,
+           tiene_inventario`,
           { count: "exact" },
         )
-        .eq("sede_id", sedeEfectiva)
-        .eq("producto.activo", true);
+        .eq("sede_id", sedeEfectiva);
 
       if (filtro === "sin_config") q = q.eq("stock_minimo", 0);
       else if (filtro === "configurados") q = q.gt("stock_minimo", 0);
@@ -119,16 +124,12 @@ export default function Minimos() {
 
       const needle = sanitizeSearch(busqueda.trim());
       if (needle) {
-        // El texto se busca sobre el producto embebido, con `!inner` arriba
-        // para que el filtro no se ignore en silencio.
-        q = q.or(`referencia.ilike.%${needle}%,nombre.ilike.%${needle}%`, {
-          referencedTable: "producto",
-        });
+        q = q.or(`referencia.ilike.%${needle}%,nombre.ilike.%${needle}%`);
       }
 
       const desde = pagina * PAGE_SIZE;
       const { data, error, count } = await q
-        .order("producto_id", { ascending: true })
+        .order("referencia", { ascending: true })
         .range(desde, desde + PAGE_SIZE - 1);
 
       if (!mountedRef.current || req !== reqRef.current) return;
@@ -417,7 +418,7 @@ export default function Minimos() {
           const on = filtro === f.id;
           return (
             <button
-              key={f.id}
+              key={f.producto_id}
               onClick={() => {
                 setFiltro(f.id);
                 setPagina(0);
@@ -478,7 +479,7 @@ export default function Minimos() {
               <tbody>
                 {filas.map((f) => (
                   <Fila
-                    key={f.id}
+                    key={f.producto_id}
                     f={f}
                     valorDe={valorDe}
                     editar={editar}
@@ -499,7 +500,7 @@ export default function Minimos() {
               const max = valorDe(f, "max");
               return (
                 <li
-                  key={f.id}
+                  key={f.producto_id}
                   className="rounded-xl border p-4"
                   style={{
                     borderColor: "var(--n-200)",
@@ -512,15 +513,15 @@ export default function Minimos() {
                         className="m-0 truncate text-sm font-medium"
                         style={{ color: "var(--n-950)" }}
                       >
-                        {f.producto?.nombre}
+                        {f.nombre}
                       </p>
                       <p
                         className="m-0 truncate font-mono text-[11px]"
                         style={{ color: "var(--n-500)" }}
                       >
-                        {f.producto?.referencia} ·{" "}
-                        {f.producto?.vendible ? f.cantidad : f.cantidad_insumo}{" "}
-                        uds
+                        {f.referencia} ·{" "}
+                        {f.vendible ? f.cantidad : f.cantidad_insumo} uds
+                        {!f.tiene_inventario ? " · nunca ha estado aquí" : ""}
                       </p>
                     </div>
                     <StatusBadge status={f.estado_stock} />
@@ -680,20 +681,20 @@ function Th({ children, right }) {
 function Fila({ f, valorDe, editar, sugerido, usarSugerido, guardando }) {
   const min = valorDe(f, "min");
   const max = valorDe(f, "max");
-  const existencias = f.producto?.vendible ? f.cantidad : f.cantidad_insumo;
+  const existencias = f.vendible ? f.cantidad : f.cantidad_insumo;
   const invalido = max > 0 && max <= min;
 
   return (
     <tr className="border-t" style={{ borderColor: "var(--n-100)" }}>
       <td className="px-3 py-2">
         <div className="text-sm" style={{ color: "var(--n-950)" }}>
-          {f.producto?.nombre}
+          {f.nombre}
         </div>
         <div
           className="font-mono text-[11px]"
           style={{ color: "var(--n-500)" }}
         >
-          {f.producto?.referencia}
+          {f.referencia}
         </div>
       </td>
       <td
@@ -711,7 +712,7 @@ function Fila({ f, valorDe, editar, sugerido, usarSugerido, guardando }) {
           disabled={guardando}
           className="h-12 w-20 rounded-lg border px-2 text-right font-mono text-sm outline-none"
           style={{ borderColor: invalido ? "var(--dang-500)" : "var(--n-200)" }}
-          aria-label={`Mínimo de ${f.producto?.referencia}`}
+          aria-label={`Mínimo de ${f.referencia}`}
         />
       </td>
       <td className="px-3 py-2 text-right">
@@ -723,11 +724,18 @@ function Fila({ f, valorDe, editar, sugerido, usarSugerido, guardando }) {
           disabled={guardando}
           className="h-12 w-20 rounded-lg border px-2 text-right font-mono text-sm outline-none"
           style={{ borderColor: invalido ? "var(--dang-500)" : "var(--n-200)" }}
-          aria-label={`Máximo de ${f.producto?.referencia}`}
+          aria-label={`Máximo de ${f.referencia}`}
         />
       </td>
       <td className="px-3 py-2">
         <StatusBadge status={f.estado_stock} />
+        {/* Con la vista aparecen productos que esta sede nunca ha tenido: se
+            dice, para que "Agotado" no se lea como "se acabó". */}
+        {!f.tiene_inventario && (
+          <div className="text-[10.5px]" style={{ color: "var(--n-500)" }}>
+            Nunca ha estado aquí
+          </div>
+        )}
         {min === 0 && (
           <div className="text-[10.5px]" style={{ color: "var(--n-500)" }}>
             No alerta
