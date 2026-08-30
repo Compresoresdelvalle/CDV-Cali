@@ -218,10 +218,14 @@ export function construirHistorialVenta(
  * referencias valen lo mismo, el resultado es lo que pagó — o sea, cambio par,
  * que es el caso que rompía antes (se le cobraba de vuelta el descuento).
  *
- * Usa a propósito los precios de lista de HOY y no `detalle_venta.precio_catalogo`:
- * esa columna está vacía en las ventas anteriores a que se empezara a guardar
- * (542 de 3.811 líneas), y una fórmula que dependa de ella fallaría justo en las
- * ventas viejas.
+ * `listaDevuelto` debe ser la lista del MOMENTO DE LA VENTA
+ * (`detalle_venta.precio_catalogo`), no la de hoy. Con la de hoy, cualquier alza
+ * de precio entre la venta y el cambio se le devolvía al cliente como si fuera
+ * un descuento: un filtro vendido en 65.000 sin descuento, que hoy lista en
+ * 90.000, sugería 65.000 para el producto nuevo y regalaba 25.000.
+ *
+ * Esa columna está vacía en las ventas viejas (542 de 3.811 líneas), así que
+ * quien llama cae a la lista de hoy cuando falta: es lo único disponible ahí.
  *
  * @param {{precioPagadoUnitario:number, listaDevuelto:number, listaNuevo:number}} args
  * @returns {number} precio unitario sugerido, en pesos enteros, nunca negativo

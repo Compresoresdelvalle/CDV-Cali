@@ -44,12 +44,20 @@ export default function ModalCambioProducto({
         producto_id: it.producto_id,
         nombre: it.producto?.nombre ?? it.descripcion ?? "—",
         referencia: it.producto?.referencia ?? "",
-        // Lista de HOY del producto devuelto. Es la referencia contra la que se
-        // mide el descuento que se le dio al cliente.
+        // Lista de HOY del producto devuelto, solo como respaldo.
         precioLista: Number(it.producto?.precio_venta) || 0,
+        // Lista del MOMENTO DE LA VENTA: es la referencia correcta para medir
+        // el descuento. Con la de hoy, una subida de precio se le devolvía al
+        // cliente como un descuento que nunca existió.
+        precioCatalogo: 0,
         cantidad: 0,
         subtotal: 0,
       };
+      // Las líneas del mismo producto comparten catálogo; se toma la primera
+      // que lo traiga, porque en ventas viejas la columna viene vacía.
+      if (!g.precioCatalogo && it.precio_catalogo) {
+        g.precioCatalogo = Number(it.precio_catalogo) || 0;
+      }
       g.cantidad += Number(it.cantidad) || 0;
       g.subtotal +=
         Number(it.subtotal) ||
@@ -210,7 +218,8 @@ export default function ModalCambioProducto({
   const sugerido = nuevo
     ? precioSugeridoCambio({
         precioPagadoUnitario,
-        listaDevuelto: devSel?.precioLista ?? 0,
+        // La del momento de la venta; la de hoy solo si aquella no se guardó.
+        listaDevuelto: devSel?.precioCatalogo || devSel?.precioLista || 0,
         listaNuevo,
       })
     : 0;
@@ -224,21 +233,34 @@ export default function ModalCambioProducto({
   }, [nuevo, devSel?.producto_id, sugerido]);
 
   // Espejo exacto del backend: valor_nuevo = precio acordado × cantidad.
-  const precioListo = precioAcordado !== "";
-  const listaRedondeada = Math.round(listaNuevo);
-  const esPrecioDeLista = precioListo && precioAcordadoNum === listaRedondeada;
-  const descuentoAplicado = Math.max(0, listaRedondeada - precioAcordadoNum);
-  // Un descuento que se come casi todo el producto casi nunca es intencional:
-  // sale de arrastrar un descuento en pesos de una venta mucho mas cara.
-  const descuentoDesproporcionado =
-    listaRedondeada > 0 && descuentoAplicado > listaRedondeada * 0.6;
+  // Se declara ANTES que sus consumidores: al insertar los derivados de
+  // abajo quedo debajo de ellos y el componente reventaba con un
+  // ReferenceError de zona muerta temporal en cada render. Build, eslint y
+  // los tests pasaron igual, porque ninguno monta el componente.
   const precioAcordadoNum = Math.max(
     0,
     Math.round(Number(precioAcordado) || 0),
   );
+  const precioListo = precioAcordado !== "";
+  const listaRedondeada = Math.round(listaNuevo);
+  const esPrecioDeLista = precioListo && precioAcordadoNum === listaRedondeada;
+  const descuentoAplicado = Math.max(0, listaRedondeada - precioAcordadoNum);
+  const sobreprecio = Math.max(0, precioAcordadoNum - listaRedondeada);
+  // Un descuento que se come casi todo el producto casi nunca es intencional:
+  // sale de arrastrar un descuento en pesos de una venta mucho mas cara.
+  const descuentoDesproporcionado =
+    listaRedondeada > 0 && descuentoAplicado > listaRedondeada * 0.6;
   const valorNuevo = nuevo ? precioAcordadoNum * cantNuevo : 0;
   const difNeta = valorNuevo - valorDev;
-  const difConIva = Math.round(difNeta * factor);
+  // El servidor redondea el reembolso sobre el valor POSITIVO
+  // (`round((v_valor_dev - v_valor_nuevo) * v_iva_factor)`). Math.round redondea
+  // hacia +infinito, así que aplicarlo sobre el negativo daba un peso menos que
+  // la caja en toda diferencia terminada en 50: la pantalla decía 1.249 y se
+  // entregaban 1.250.
+  const difConIva =
+    difNeta < 0
+      ? -Math.round(Math.abs(difNeta) * factor)
+      : Math.round(difNeta * factor);
   const accion = difNeta > 0 ? "cobro" : difNeta < 0 ? "devolucion" : "par";
 
   const maxDev = devSel ? Number(devSel.restante) : 1;
@@ -647,13 +669,24 @@ export default function ModalCambioProducto({
                 <p
                   className="mt-1.5 text-[11.5px] leading-[1.5]"
                   style={{
-                    color: precioListo ? "var(--n-500)" : "var(--warn-700)",
+                    color:
+                      !precioListo ||
+                      sobreprecio > 0 ||
+                      descuentoDesproporcionado
+                        ? "var(--warn-700)"
+                        : "var(--n-500)",
                   }}
                 >
                   {!precioListo ? (
                     <>
                       Escribe el precio acordado para poder confirmar el cambio.
                       Es el precio por unidad, antes de IVA.
+                    </>
+                  ) : sobreprecio > 0 ? (
+                    <>
+                      Son {formatCOP(sobreprecio)} por encima de la lista (
+                      {formatCOP(listaRedondeada)}). Revísalo antes de
+                      confirmar.
                     </>
                   ) : descuentoAplicado <= 0 ? (
                     <>Precio de lista.</>
