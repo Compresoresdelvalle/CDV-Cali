@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
+import { safeError } from "../../lib/utils";
 import { avisarOk, avisarError } from "../../lib/notify";
 import NumeroInput from "../forms/NumeroInput";
 
@@ -14,6 +15,9 @@ import NumeroInput from "../forms/NumeroInput";
  * rangos y bitácora). Aquí sólo se adelanta lo obvio para no hacer un viaje que
  * ya se sabe que falla.
  */
+/** El RPC recibe INTEGER: un 2.5 llegaria como error crudo de Postgres. */
+const entero = (v) => Math.max(0, Math.round(Number(v) || 0));
+
 export default function MinMaxModal({
   producto, // { id, nombre, referencia }
   sede, // { id, nombre }
@@ -33,10 +37,24 @@ export default function MinMaxModal({
     setError(null);
   }, [minimoActual, maximoActual, producto?.id, sede?.id]);
 
+  // Escape cierra, y el foco arranca en el campo de Mínimo. Es el patrón que ya
+  // siguen los demás modales del proyecto; sin esto se podía tabular por detrás.
+  const primerCampoRef = useRef(null);
+  useEffect(() => {
+    const alPulsar = (e) => {
+      if (e.key === "Escape" && !guardando) onCerrar?.();
+    };
+    document.addEventListener("keydown", alPulsar);
+    primerCampoRef.current?.focus();
+    return () => document.removeEventListener("keydown", alPulsar);
+  }, [guardando, onCerrar]);
+
   // Mismo criterio que el CHECK de la tabla: max = 0 es válido (sin techo),
-  // pero un máximo por debajo del mínimo dejaría la fila siendo "Bajo" y
-  // "Sobrestock" a la vez.
-  const maxInvalido = maximo > 0 && maximo < minimo;
+  // pero el máximo tiene que ser ESTRICTAMENTE mayor que el mínimo. Con
+  // max = min no existe ninguna cantidad que deje el producto en "OK": queda
+  // en "Bajo" o en "Sobrestock" para siempre, y Reorden lo excluye porque no
+  // hay nada que pedir. Una alerta sin salida.
+  const maxInvalido = maximo > 0 && maximo <= minimo;
 
   const guardar = async () => {
     if (maxInvalido || guardando) return;
@@ -46,18 +64,18 @@ export default function MinMaxModal({
       const { error: rpcErr } = await supabase.rpc("fn_definir_minmax", {
         p_producto_id: producto.id,
         p_sede_id: sede.id,
-        p_minimo: Number(minimo) || 0,
-        p_maximo: Number(maximo) || 0,
+        // NumeroInput acepta decimales (parseFloat) pero el RPC recibe INTEGER.
+        p_minimo: entero(minimo),
+        p_maximo: entero(maximo),
       });
-      if (rpcErr) throw new Error(rpcErr.message);
+      // `throw rpcErr` y no `new Error(...)`: safeError solo muestra el motivo
+      // real cuando conserva el code P0001 del RAISE EXCEPTION.
+      if (rpcErr) throw rpcErr;
       avisarOk(`Mínimo y máximo guardados para ${sede.nombre ?? sede.id}.`);
-      onGuardado?.({
-        minimo: Number(minimo) || 0,
-        maximo: Number(maximo) || 0,
-      });
+      onGuardado?.({ minimo: entero(minimo), maximo: entero(maximo) });
       onCerrar?.();
     } catch (err) {
-      setError(err.message);
+      setError(safeError(err, "No se pudo guardar"));
       avisarError(err, "No se pudo guardar");
     } finally {
       setGuardando(false);
@@ -93,7 +111,7 @@ export default function MinMaxModal({
             className="rounded-lg border px-3 py-2 text-xs"
             style={{
               backgroundColor: "var(--dang-50)",
-              borderColor: "var(--dang-200)",
+              borderColor: "var(--dang-border)",
               color: "var(--dang-700)",
             }}
           >
@@ -110,9 +128,11 @@ export default function MinMaxModal({
               Mínimo
             </span>
             <NumeroInput
+              ref={primerCampoRef}
               value={minimo}
               onChange={setMinimo}
               min={0}
+              step={1}
               className="h-12 w-full rounded-lg border px-3 text-right font-mono text-base outline-none"
               style={{ borderColor: "var(--n-200)" }}
             />
@@ -128,6 +148,7 @@ export default function MinMaxModal({
               value={maximo}
               onChange={setMaximo}
               min={0}
+              step={1}
               className="h-12 w-full rounded-lg border px-3 text-right font-mono text-base outline-none"
               style={{ borderColor: "var(--n-200)" }}
             />
@@ -141,7 +162,7 @@ export default function MinMaxModal({
           style={{
             borderColor: "var(--n-200)",
             backgroundColor: "var(--n-25, var(--n-50))",
-            color: "var(--n-600)",
+            color: "var(--n-500)",
           }}
         >
           <li>
@@ -159,8 +180,9 @@ export default function MinMaxModal({
             className="m-0 text-xs font-medium"
             style={{ color: "var(--dang-700)" }}
           >
-            El máximo ({maximo}) no puede ser menor que el mínimo ({minimo}).
-            Sube el máximo o baja el mínimo.
+            El máximo ({maximo}) debe ser mayor que el mínimo ({minimo}). Con
+            los dos iguales el producto quedaría siempre en alerta. Sube el
+            máximo, o pon 0 para dejarlo sin techo.
           </p>
         )}
 

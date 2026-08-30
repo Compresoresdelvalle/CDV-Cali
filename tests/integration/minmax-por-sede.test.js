@@ -145,8 +145,11 @@ describe("quién puede configurar el mínimo de una sede", () => {
 });
 
 describe("validación de mínimo y máximo", () => {
+  // ESTRICTO: con max = min no existe ninguna cantidad que deje el producto en
+  // "OK" (queda en Bajo o en Sobrestock), y Reorden lo excluye porque no hay
+  // nada que pedir. Es la regla que ya tenía `productos` desde julio.
   const valido = (min, max) =>
-    min >= 0 && max >= 0 && (max === 0 || max >= min);
+    min >= 0 && max >= 0 && (max === 0 || max > min);
 
   it("acepta mínimo 0 (no controlar) y máximo 0 (sin techo)", () => {
     expect(valido(0, 0)).toBe(true);
@@ -157,8 +160,21 @@ describe("validación de mínimo y máximo", () => {
     expect(valido(10, 3)).toBe(false);
   });
 
-  it("acepta máximo igual al mínimo", () => {
-    expect(valido(5, 5)).toBe(true);
+  it("con máximo igual al mínimo no hay cantidad que dé OK", () => {
+    // La razón de fondo de que la regla sea estricta.
+    const conMinMax = (cantidad) =>
+      estadoStock({ ...base, cantidad, min: 10, max: 10 });
+    expect(conMinMax(9)).toBe("Bajo");
+    expect(conMinMax(10)).toBe("Bajo");
+    expect(conMinMax(11)).toBe("Sobrestock");
+  });
+
+  it("rechaza el máximo IGUAL al mínimo, que sería una alerta sin salida", () => {
+    expect(valido(5, 5)).toBe(false);
+  });
+
+  it("acepta el máximo una unidad por encima del mínimo", () => {
+    expect(valido(5, 6)).toBe(true);
   });
 
   it("rechaza negativos", () => {
