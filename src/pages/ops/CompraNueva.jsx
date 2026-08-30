@@ -80,8 +80,11 @@ export default function CompraNueva() {
 
     setCarrito(carritoDesdeReorden(sug, { esVendedor }));
     setSedesOrigen(sedesDeSugerencias(sug));
-    window.history.replaceState({}, "");
-  }, [location.state, esVendedor]);
+    // Limpia el state DENTRO del router. Un `window.history.replaceState({}, "")`
+    // borra también el `idx` y el `key` internos de react-router, y a partir de
+    // ahí el índice del historial queda en NaN y no se recupera ni con F5.
+    navigate(".", { replace: true, state: null });
+  }, [location.state, esVendedor, navigate]);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);

@@ -69,8 +69,12 @@ export default function Minimos() {
       .select("id, nombre")
       .eq("activa", true)
       .order("nombre")
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (!mountedRef.current) return;
+        if (error) {
+          setErrorMsg(safeError(error, "No se pudieron cargar las sedes"));
+          return;
+        }
         setSedes(data ?? []);
         // Sin sede en el perfil (caso raro), Admin arranca en la primera.
         if (!perfil?.sede_id && esAdmin && data?.length) setSede(data[0].id);
@@ -82,7 +86,15 @@ export default function Minimos() {
   const sedeEfectiva = esAdmin ? sede : (perfil?.sede_id ?? "");
 
   const cargar = useCallback(async () => {
-    if (!sedeEfectiva) return;
+    if (!sedeEfectiva) {
+      // Un usuario sin sede asignada existe: el propio RPC lo contempla. Sin
+      // esto la pantalla se quedaba en "Cargando…" para siempre, sin decir por qué.
+      setLoading(false);
+      setErrorMsg(
+        "Tu usuario no tiene sede asignada, así que no hay mínimos que mostrar. Pídele a Maritza que la configure.",
+      );
+      return;
+    }
     const req = ++reqRef.current;
     setLoading(true);
     setErrorMsg("");
@@ -143,14 +155,21 @@ export default function Minimos() {
   /** Trae los sugeridos del asistente para esta sede. */
   const traerSugeridos = async () => {
     if (!sedeEfectiva || cargandoSug) return;
+    // Se recuerda para qué sede se pidió: el RPC recorre 90 días de movimientos
+    // y tarda. Si entretanto se cambia de sede, la respuesta vieja pintaría los
+    // sugeridos de una sede sobre los productos de otra, y "usar el sugerido"
+    // los escribiría sin avisar.
+    const sedePedida = sedeEfectiva;
     setCargandoSug(true);
     try {
       const { data, error } = await supabase.rpc("fn_sugerir_minmax", {
         p_dias: 90,
         p_sede_id: sedeEfectiva,
       });
-      if (error) throw new Error(error.message);
-      if (!mountedRef.current) return;
+      // `throw error` y no `new Error(error.message)`: safeError solo muestra el
+      // motivo real cuando conserva el code P0001 del RAISE EXCEPTION.
+      if (error) throw error;
+      if (!mountedRef.current || sedePedida !== sedeEfectiva) return;
       const m = new Map();
       (data ?? []).forEach((s) =>
         m.set(s.producto_id, { min: s.min_sugerido, max: s.max_sugerido }),
@@ -174,43 +193,55 @@ export default function Minimos() {
     return campo === "min" ? (f.stock_minimo ?? 0) : (f.stock_maximo ?? 0);
   };
 
-  const editar = (f, campo, valor) =>
-    setBorrador((prev) => {
-      const next = new Map(prev);
-      const actual = next.get(f.producto_id) ?? {
-        min: f.stock_minimo ?? 0,
-        max: f.stock_maximo ?? 0,
-      };
-      next.set(f.producto_id, { ...actual, [campo]: Number(valor) || 0 });
-      return next;
+  // Cada entrada del borrador guarda TAMBIÉN los valores originales de la fila.
+  // Sin eso, `pendientes` tendría que cruzar contra `filas` —que es sólo la
+  // página visible— y las ediciones hechas en la página 1 desaparecerían al
+  // pasar a la 2: la barra diría "0 cambios" y el trabajo se perdería sin aviso.
+  const anotar = (prev, f, valores) => {
+    const next = new Map(prev);
+    const actual = next.get(f.producto_id);
+    next.set(f.producto_id, {
+      min: actual?.min ?? f.stock_minimo ?? 0,
+      max: actual?.max ?? f.stock_maximo ?? 0,
+      minOrig: actual?.minOrig ?? f.stock_minimo ?? 0,
+      maxOrig: actual?.maxOrig ?? f.stock_maximo ?? 0,
+      ...valores,
     });
+    return next;
+  };
+
+  // NumeroInput acepta decimales (usa parseFloat) pero el RPC recibe INTEGER:
+  // un 2.5 revienta la tanda entera con un error crudo de Postgres. Se redondea
+  // aqui, que es el ultimo sitio antes de guardar.
+  const editar = (f, campo, valor) =>
+    setBorrador((prev) =>
+      anotar(prev, f, { [campo]: Math.max(0, Math.round(Number(valor) || 0)) }),
+    );
 
   const usarSugerido = (f) => {
     const s = sugeridos.get(f.producto_id);
     if (!s) return;
-    setBorrador((prev) => new Map(prev).set(f.producto_id, { ...s }));
+    setBorrador((prev) => anotar(prev, f, { min: s.min, max: s.max }));
   };
 
   const usarSugeridosVisibles = () =>
     setBorrador((prev) => {
-      const next = new Map(prev);
+      let next = prev;
       filas.forEach((f) => {
         const s = sugeridos.get(f.producto_id);
-        if (s) next.set(f.producto_id, { ...s });
+        if (s) next = anotar(next, f, { min: s.min, max: s.max });
       });
       return next;
     });
 
   // Sólo se manda lo que de verdad cambió: guardar lo que ya estaba escribiría
-  // bitácora de un cambio que no existió.
+  // bitácora de un cambio que no existió. Se compara contra los originales que
+  // lleva el propio borrador, así que las ediciones sobreviven a la paginación
+  // y a los filtros.
   const pendientes = useMemo(() => {
-    const porId = new Map(filas.map((f) => [f.producto_id, f]));
     const out = [];
     for (const [productoId, v] of borrador) {
-      const f = porId.get(productoId);
-      if (!f) continue;
-      if (v.min === (f.stock_minimo ?? 0) && v.max === (f.stock_maximo ?? 0))
-        continue;
+      if (v.min === v.minOrig && v.max === v.maxOrig) continue;
       out.push({
         producto_id: productoId,
         sede_id: sedeEfectiva,
@@ -219,16 +250,18 @@ export default function Minimos() {
       });
     }
     return out;
-  }, [borrador, filas, sedeEfectiva]);
+  }, [borrador, sedeEfectiva]);
 
-  const invalidos = pendientes.filter((p) => p.max > 0 && p.max < p.min);
+  // Estricto: con máximo igual al mínimo el producto no puede quedar nunca en
+  // "OK" y la alerta no tiene forma de resolverse.
+  const invalidos = pendientes.filter((p) => p.max > 0 && p.max <= p.min);
 
   const guardar = async () => {
     if (pendientes.length === 0 || guardando) return;
     if (invalidos.length > 0) {
       avisarError(
         new Error(
-          `${invalidos.length} producto(s) tienen el máximo por debajo del mínimo. Corrígelos antes de guardar.`,
+          `${invalidos.length} producto(s) tienen el máximo igual o por debajo del mínimo. El máximo debe ser mayor, o 0 para dejarlo sin techo.`,
         ),
         "Revisa los valores",
       );
@@ -242,7 +275,7 @@ export default function Minimos() {
         const { error } = await supabase.rpc("fn_aplicar_minmax", {
           p_items: tanda,
         });
-        if (error) throw new Error(error.message);
+        if (error) throw error;
         hechos += tanda.length;
         if (mountedRef.current) {
           setProgreso({ hechos, total: pendientes.length });
@@ -265,6 +298,18 @@ export default function Minimos() {
   };
 
   const paginas = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Cuántas de las filas visibles tienen sugerencia: el botón decía "en los 50
+  // visibles" y cambiaba 12.
+  const conSugerencia = filas.filter((f) =>
+    sugeridos.has(f.producto_id),
+  ).length;
+
+  // Tras guardar con el filtro "Sin configurar", las filas configuradas salen
+  // del filtro y la última página puede dejar de existir: sin esto quedaba
+  // "Página 6 de 5" con la lista vacía, justo después de un guardado correcto.
+  useEffect(() => {
+    if (pagina > 0 && pagina >= paginas) setPagina(paginas - 1);
+  }, [pagina, paginas]);
 
   return (
     <div className="p-4 sm:p-6 space-y-4 animate-fade-in">
@@ -357,7 +402,7 @@ export default function Minimos() {
         <div className="relative min-w-[200px] flex-1">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
-            style={{ color: "var(--n-400)" }}
+            style={{ color: "var(--n-300)" }}
             strokeWidth={1.75}
           />
           <input
@@ -377,12 +422,13 @@ export default function Minimos() {
                 setFiltro(f.id);
                 setPagina(0);
               }}
-              className="rounded-lg border px-3 text-[12.5px] font-medium"
+              disabled={guardando}
+              className="rounded-lg border px-3 text-[12.5px] font-medium disabled:opacity-50"
               style={{
                 height: 48,
                 borderColor: on ? "var(--p-500)" : "var(--n-200)",
                 backgroundColor: on ? "var(--p-50)" : "transparent",
-                color: on ? "var(--p-700)" : "var(--n-600)",
+                color: on ? "var(--p-700)" : "var(--n-500)",
               }}
             >
               {f.label}
@@ -398,7 +444,7 @@ export default function Minimos() {
           style={{ height: 48 }}
         >
           <Check className="h-4 w-4" strokeWidth={1.75} />
-          Usar el sugerido en los {filas.length} visibles
+          Usar el sugerido en {conSugerencia} de los visibles
         </button>
       )}
 
@@ -438,6 +484,7 @@ export default function Minimos() {
                     editar={editar}
                     sugerido={sugeridos.get(f.producto_id)}
                     usarSugerido={usarSugerido}
+                    guardando={guardando}
                   />
                 ))}
               </tbody>
@@ -482,7 +529,7 @@ export default function Minimos() {
                     <label className="block">
                       <span
                         className="mb-1 block text-[11px]"
-                        style={{ color: "var(--n-600)" }}
+                        style={{ color: "var(--n-500)" }}
                       >
                         Mínimo
                       </span>
@@ -490,6 +537,8 @@ export default function Minimos() {
                         value={min}
                         onChange={(v) => editar(f, "min", v)}
                         min={0}
+                        step={1}
+                        disabled={guardando}
                         className="h-12 w-full rounded-lg border px-3 text-right font-mono outline-none"
                         style={{ borderColor: "var(--n-200)" }}
                       />
@@ -497,7 +546,7 @@ export default function Minimos() {
                     <label className="block">
                       <span
                         className="mb-1 block text-[11px]"
-                        style={{ color: "var(--n-600)" }}
+                        style={{ color: "var(--n-500)" }}
                       >
                         Máximo
                       </span>
@@ -505,24 +554,31 @@ export default function Minimos() {
                         value={max}
                         onChange={(v) => editar(f, "max", v)}
                         min={0}
+                        step={1}
+                        disabled={guardando}
                         className="h-12 w-full rounded-lg border px-3 text-right font-mono outline-none"
                         style={{ borderColor: "var(--n-200)" }}
                       />
                     </label>
                   </div>
-                  {max > 0 && max < min && (
+                  {max > 0 && max <= min && (
                     <p
                       className="m-0 mt-1.5 text-[11px] font-medium"
                       style={{ color: "var(--dang-700)" }}
                     >
-                      El máximo no puede ser menor que el mínimo.
+                      El máximo debe ser mayor que el mínimo (o 0 = sin techo).
                     </p>
                   )}
                   {s && (
                     <button
                       onClick={() => usarSugerido(f)}
-                      className="mt-2 text-xs font-medium"
-                      style={{ color: "var(--p-700)" }}
+                      disabled={guardando}
+                      className="mt-2 inline-flex items-center rounded-lg border px-3 text-xs font-medium disabled:opacity-50"
+                      style={{
+                        minHeight: 48,
+                        borderColor: "var(--n-200)",
+                        color: "var(--p-700)",
+                      }}
                     >
                       Usar sugerido: {s.min} → {s.max}
                     </button>
@@ -541,7 +597,7 @@ export default function Minimos() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setPagina((p) => Math.max(0, p - 1))}
-                  disabled={pagina === 0}
+                  disabled={pagina === 0 || guardando}
                   className="btn btn-out disabled:opacity-40"
                   style={{ height: 48 }}
                 >
@@ -549,7 +605,7 @@ export default function Minimos() {
                 </button>
                 <button
                   onClick={() => setPagina((p) => Math.min(paginas - 1, p + 1))}
-                  disabled={pagina >= paginas - 1}
+                  disabled={pagina >= paginas - 1 || guardando}
                   className="btn btn-out disabled:opacity-40"
                   style={{ height: 48 }}
                 >
@@ -578,7 +634,7 @@ export default function Minimos() {
             {invalidos.length > 0 && (
               <b style={{ color: "var(--dang-700)" }}>
                 {" "}
-                · {invalidos.length} con el máximo por debajo del mínimo
+                · {invalidos.length} con el máximo igual o menor que el mínimo
               </b>
             )}
           </span>
@@ -621,11 +677,11 @@ function Th({ children, right }) {
   );
 }
 
-function Fila({ f, valorDe, editar, sugerido, usarSugerido }) {
+function Fila({ f, valorDe, editar, sugerido, usarSugerido, guardando }) {
   const min = valorDe(f, "min");
   const max = valorDe(f, "max");
   const existencias = f.producto?.vendible ? f.cantidad : f.cantidad_insumo;
-  const invalido = max > 0 && max < min;
+  const invalido = max > 0 && max <= min;
 
   return (
     <tr className="border-t" style={{ borderColor: "var(--n-100)" }}>
@@ -651,7 +707,9 @@ function Fila({ f, valorDe, editar, sugerido, usarSugerido }) {
           value={min}
           onChange={(v) => editar(f, "min", v)}
           min={0}
-          className="h-10 w-20 rounded-lg border px-2 text-right font-mono text-sm outline-none"
+          step={1}
+          disabled={guardando}
+          className="h-12 w-20 rounded-lg border px-2 text-right font-mono text-sm outline-none"
           style={{ borderColor: invalido ? "var(--dang-500)" : "var(--n-200)" }}
           aria-label={`Mínimo de ${f.producto?.referencia}`}
         />
@@ -661,7 +719,9 @@ function Fila({ f, valorDe, editar, sugerido, usarSugerido }) {
           value={max}
           onChange={(v) => editar(f, "max", v)}
           min={0}
-          className="h-10 w-20 rounded-lg border px-2 text-right font-mono text-sm outline-none"
+          step={1}
+          disabled={guardando}
+          className="h-12 w-20 rounded-lg border px-2 text-right font-mono text-sm outline-none"
           style={{ borderColor: invalido ? "var(--dang-500)" : "var(--n-200)" }}
           aria-label={`Máximo de ${f.producto?.referencia}`}
         />
@@ -678,13 +738,18 @@ function Fila({ f, valorDe, editar, sugerido, usarSugerido }) {
         {sugerido ? (
           <button
             onClick={() => usarSugerido(f)}
-            className="text-xs font-medium"
-            style={{ color: "var(--p-700)" }}
+            disabled={guardando}
+            className="inline-flex items-center rounded-lg border px-2.5 text-xs font-medium disabled:opacity-50"
+            style={{
+              minHeight: 48,
+              borderColor: "var(--n-200)",
+              color: "var(--p-700)",
+            }}
           >
             {sugerido.min} → {sugerido.max}
           </button>
         ) : (
-          <span className="text-xs" style={{ color: "var(--n-400)" }}>
+          <span className="text-xs" style={{ color: "var(--n-300)" }}>
             —
           </span>
         )}

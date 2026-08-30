@@ -19,6 +19,7 @@ import { abcBadgeStyle } from "../../lib/admin-analytics-ui";
 import { useAuthStore } from "../../stores/authStore";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { surfaceInputStyle, pillStyle } from "../../lib/admin-ops-ui";
+import { useSedes } from "../../hooks/useSedes";
 
 const TODAS_SEDES = "Todas";
 const COLS =
@@ -42,6 +43,10 @@ export default function Reorden() {
   const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
   const isAdmin = perfil?.rol === "Admin";
+  // Las sedes salen de la TABLA, no de las filas de reorden: esas exigen
+  // `stock_minimo > 0`, así que una sede sin configurar nunca aparecería en el
+  // asistente que sirve precisamente para configurarla.
+  const { sedes: sedesActivas } = useSedes();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -275,9 +280,11 @@ export default function Reorden() {
 
       {modalMinMax && (
         <ModalMinMax
-          sedes={sedes.filter((x) => x !== TODAS_SEDES)}
+          sedes={sedesActivas}
           sedeInicial={
-            sedeFiltro !== TODAS_SEDES ? sedeFiltro : (perfil?.sede_id ?? "")
+            sedeFiltro !== TODAS_SEDES
+              ? sedeFiltro
+              : (perfil?.sede_id ?? sedesActivas[0]?.id ?? "")
           }
           onClose={() => setModalMinMax(false)}
           onAplicado={() => {
@@ -711,6 +718,9 @@ export default function Reorden() {
 }
 
 /* ── Bloque B — Modal "Sugerir min/max" ────────────────────────────────── */
+// Tope por llamada de `fn_aplicar_minmax`, que lanza excepción si se pasa.
+const TANDA_MINMAX = 200;
+
 const PARAM_LABELS = {
   minmax_lead_time_dias: "Lead time (días)",
   minmax_factor_seguridad: "Factor de seguridad",
@@ -725,6 +735,7 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
   const [loading, setLoading] = useState(true);
   const [recalculando, setRecalculando] = useState(false);
   const [aplicando, setAplicando] = useState(false);
+  const [progresoAplicar, setProgresoAplicar] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [sugerencias, setSugerencias] = useState([]);
   const [soloSinConfigurar, setSoloSinConfigurar] = useState(true);
@@ -767,6 +778,10 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
   };
 
   const cargarSugerencias = async () => {
+    // Se recuerda para qué sede se pidió: el RPC recorre 90 días de movimientos
+    // y tarda. Sin esto, una respuesta lenta de la sede anterior sobrescribía
+    // las sugerencias de la nueva y "Aplicar" guardaba en la sede equivocada.
+    const sedePedida = sede;
     setLoading(true);
     setErrorMsg("");
     try {
@@ -774,7 +789,7 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
         p_dias: 90,
         p_sede_id: sede,
       });
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || sedePedida !== sede) return;
       if (error) throw error;
       const lista = data ?? [];
       setSugerencias(lista);
@@ -895,14 +910,23 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
         min: i.min_sugerido,
         max: i.max_sugerido,
       }));
-      const { data, error } = await supabase.rpc("fn_aplicar_minmax", {
-        p_items: payload,
-      });
-      if (error) throw error;
-      avisarOk(
-        `${data?.aplicados ?? seleccionados.length} productos actualizados`,
-      );
+      // Por tandas: `fn_aplicar_minmax` corta en 200 por llamada porque cada
+      // ítem escribe bitácora y recalcula estado. Sin trocear, el primer uso
+      // real (BODEGA tiene ~471 productos con demanda) fallaba entero.
+      let aplicados = 0;
+      for (let i = 0; i < payload.length; i += TANDA_MINMAX) {
+        const { data, error } = await supabase.rpc("fn_aplicar_minmax", {
+          p_items: payload.slice(i, i + TANDA_MINMAX),
+        });
+        if (error) throw error;
+        aplicados += data?.aplicados ?? 0;
+        if (mountedRef.current && payload.length > TANDA_MINMAX) {
+          setProgresoAplicar({ hechos: aplicados, total: payload.length });
+        }
+      }
+      avisarOk(`${aplicados} productos actualizados`);
       await onAplicado();
+      await cargarSugerencias();
     } catch (err) {
       avisarError(err, "Error al aplicar sugerencias");
     } finally {
@@ -983,8 +1007,8 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
                 style={surfaceInputStyle}
               >
                 {sedes.map((x) => (
-                  <option key={x} value={x}>
-                    {x}
+                  <option key={x.id} value={x.id}>
+                    {x.nombre ?? x.id}
                   </option>
                 ))}
               </select>
@@ -1241,7 +1265,9 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
             className="font-mono text-[12px] font-semibold tabular-nums"
             style={{ color: "hsl(var(--foreground))" }}
           >
-            {seleccionados.length} seleccionados
+            {progresoAplicar
+              ? `Guardando ${progresoAplicar.hechos} de ${progresoAplicar.total}…`
+              : `${seleccionados.length} seleccionados`}
           </span>
           <button
             disabled={seleccionados.length === 0 || aplicando}
@@ -1262,7 +1288,7 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
             }
           >
             <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
-            Aplicar seleccionados
+            {aplicando ? "Aplicando…" : "Aplicar seleccionados"}
           </button>
         </div>
       </div>
