@@ -32,9 +32,10 @@ const COLS =
  * son distintas: los cabezotes, tanques y motores casi no se venden sueltos
  * —salen 'C' por ventas— pero se consumen en cada ensamble.
  *
- * Cae a la de ventas cuando no hay combinada: el asistente de min/max se
- * alimenta de `fn_sugerir_minmax`, que sólo devuelve esa, y un producto recién
- * creado no tiene combinada hasta el siguiente recálculo.
+ * Cae a la de ventas sólo como red de seguridad: un producto recién creado no
+ * tiene combinada hasta el siguiente recálculo. Tanto la vista
+ * `v_sugerencias_reorden` como el asistente (`fn_sugerir_minmax`) devuelven ya
+ * la combinada, así que en la práctica el respaldo casi no se usa.
  */
 const claseReorden = (i) => i?.clasificacion_global ?? i?.clasificacion ?? null;
 
