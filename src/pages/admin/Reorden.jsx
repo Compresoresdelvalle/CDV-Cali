@@ -165,6 +165,10 @@ export default function Reorden() {
     (s, i) => s + Number(i.costo_estimado_compra || 0),
     0,
   );
+  // Marcados que el filtro actual esconde. `generarOC` manda SOLO los visibles,
+  // así que el pie y el botón tienen que contar lo mismo que se va a pedir: si
+  // no, el botón decía "12" y llegaban 3 al carrito, o ninguno.
+  const ocultosPorFiltro = seleccion.size - seleccionados.length;
 
   const toggle = (key) =>
     setSeleccion((prev) => {
@@ -463,8 +467,17 @@ export default function Reorden() {
               className="font-mono text-[12px] font-semibold tabular-nums"
               style={{ color: "hsl(var(--foreground))" }}
             >
-              {seleccion.size} SKUs
+              {seleccionados.length} SKUs
             </span>
+            {ocultosPorFiltro > 0 && (
+              <span
+                className="font-mono text-[11px] tabular-nums"
+                style={{ color: "hsl(var(--warning))" }}
+                title="Están seleccionados pero el filtro actual no los muestra, así que no entran en el pedido."
+              >
+                (+{ocultosPorFiltro} ocultos por el filtro)
+              </span>
+            )}
             <span style={{ color: "hsl(var(--border))" }}>·</span>
             <span
               className="font-mono text-[12px] tabular-nums"
@@ -474,11 +487,11 @@ export default function Reorden() {
             </span>
           </div>
           <button
-            disabled={seleccion.size === 0}
+            disabled={seleccionados.length === 0}
             onClick={generarOC}
             className="inline-flex h-12 items-center gap-1.5 rounded-md px-4 text-[12.5px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed"
             style={
-              seleccion.size === 0
+              seleccionados.length === 0
                 ? {
                     border: "1px solid hsl(var(--border))",
                     backgroundColor: "hsl(var(--card))",
@@ -493,7 +506,7 @@ export default function Reorden() {
           >
             <ShoppingCart className="h-3.5 w-3.5" strokeWidth={1.75} />
             Generar OC
-            {seleccion.size > 0 && ` (${seleccion.size})`}
+            {seleccionados.length > 0 && ` (${seleccionados.length})`}
           </button>
         </div>
       )}
