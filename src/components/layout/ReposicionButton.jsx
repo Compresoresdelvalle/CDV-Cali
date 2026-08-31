@@ -47,7 +47,10 @@ export default function ReposicionButton({ count, perfil, mobile = false }) {
             .select(
               "producto_id, referencia, nombre, clasificacion, clasificacion_global, sede_id, sede_nombre, cantidad_sugerida",
             )
-            .order("clasificacion_global", { ascending: true, nullsFirst: false })
+            .order("clasificacion_global", {
+              ascending: true,
+              nullsFirst: false,
+            })
             .order("cantidad_sugerida", { ascending: false })
             .limit(8),
         );
@@ -114,7 +117,15 @@ export default function ReposicionButton({ count, perfil, mobile = false }) {
     if (esAdmin) {
       navigate(tab === "reponer" ? "/admin/reorden" : "/admin/alertas");
     } else {
-      navigate("/ops/inventario?estado=Agotado");
+      // A Mínimos con el filtro "En alerta": es exactamente la misma lista que
+      // muestra este panel (lo configurado que está Bajo o Agotado en su sede).
+      // Antes llevaba a /ops/inventario?estado=Agotado, que en CV son 730 filas
+      // y ademas ESCONDE las que estan en Bajo: de las 18 del panel, 9 lo estan.
+      navigate(
+        tab === "reponer"
+          ? "/ops/minimos?filtro=alerta"
+          : "/ops/inventario?estado=Agotado",
+      );
     }
   };
 
