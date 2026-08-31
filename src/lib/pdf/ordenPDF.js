@@ -62,8 +62,9 @@ export function generarOrdenPDF({
   // modo:
   //   'final'     (default) — documento completo: repuestos + totales + abonos + saldo.
   //   'recepcion'           — constancia de recepción: encabezado + cliente + equipo
-  //                           + checklist + nota "sin valor comercial". OCULTA
-  //                           repuestos, totales, abonos y saldo.
+  //                           + diagnóstico inicial + checklist + nota "sin valor
+  //                           comercial". OCULTA repuestos, totales, abonos,
+  //                           saldo y trabajo realizado (nada de eso existe aún).
   modo = "final",
 }) {
   const esRecepcion = modo === "recepcion";
@@ -197,11 +198,24 @@ export function generarOrdenPDF({
   }
 
   // ── Diagnóstico / trabajo ────────────────────────────────────────────
-  // En la constancia de recepción no se imprime diagnóstico ni trabajo (aún no
-  // existen al recibir el equipo).
+  // El diagnóstico SÍ va en la constancia de recepción. Se escribe al crear la
+  // orden, en el campo "Diagnóstico inicial", y es donde se anota el estado del
+  // equipo que no cabe en el checklist ("llega sin tapa", "carcasa golpeada").
+  // Es justo lo que esta hoja promete acreditar: su pie dice que documenta "el
+  // ingreso del equipo y su estado al momento de la recepción". Sin él, el
+  // cliente se lleva un papel al que le falta la mitad de la constancia.
+  //
+  // Se rotula "Diagnóstico inicial" en la recepción, igual que en el formulario,
+  // y "Diagnóstico" en el documento final, donde ya recoge el del técnico.
+  //
+  // `trabajo_realizado` sí se queda fuera: al recibir el equipo todavía no se ha
+  // hecho ningún trabajo, así que no hay nada que imprimir.
   const bloques = [];
-  if (!esRecepcion && orden.diagnostico)
-    bloques.push(["Diagnóstico", orden.diagnostico]);
+  if (orden.diagnostico)
+    bloques.push([
+      esRecepcion ? "Diagnóstico inicial" : "Diagnóstico",
+      orden.diagnostico,
+    ]);
   if (!esRecepcion && orden.trabajo_realizado)
     bloques.push(["Trabajo realizado", orden.trabajo_realizado]);
   for (const [tit, txt] of bloques) {
