@@ -62,8 +62,9 @@ export function generarOrdenPDF({
   // modo:
   //   'final'     (default) — documento completo: repuestos + totales + abonos + saldo.
   //   'recepcion'           — constancia de recepción: encabezado + cliente + equipo
-  //                           + checklist + nota "sin valor comercial". OCULTA
-  //                           repuestos, totales, abonos y saldo.
+  //                           + diagnóstico inicial + checklist + nota "sin valor
+  //                           comercial". OCULTA repuestos, totales, abonos,
+  //                           saldo y trabajo realizado (nada de eso existe aún).
   modo = "final",
 }) {
   const esRecepcion = modo === "recepcion";
@@ -197,14 +198,40 @@ export function generarOrdenPDF({
   }
 
   // ── Diagnóstico / trabajo ────────────────────────────────────────────
-  // En la constancia de recepción no se imprime diagnóstico ni trabajo (aún no
-  // existen al recibir el equipo).
+  // El diagnóstico SÍ va en la constancia de recepción. Se escribe al crear la
+  // orden, en el campo "Diagnóstico inicial", y es donde se anota el estado del
+  // equipo que no cabe en el checklist ("llega sin tapa", "carcasa golpeada").
+  // Es justo lo que esta hoja promete acreditar: su pie dice que documenta "el
+  // ingreso del equipo y su estado al momento de la recepción". Sin él, el
+  // cliente se lleva un papel al que le falta la mitad de la constancia.
+  //
+  // Se rotula "Diagnóstico inicial" en la recepción, igual que en el formulario,
+  // y "Diagnóstico" en el documento final, donde ya recoge el del técnico.
+  //
+  // `trabajo_realizado` sí se queda fuera: al recibir el equipo todavía no se ha
+  // hecho ningún trabajo, así que no hay nada que imprimir.
   const bloques = [];
-  if (!esRecepcion && orden.diagnostico)
-    bloques.push(["Diagnóstico", orden.diagnostico]);
+  if (orden.diagnostico)
+    bloques.push([
+      esRecepcion ? "Diagnóstico inicial" : "Diagnóstico",
+      orden.diagnostico,
+    ]);
   if (!esRecepcion && orden.trabajo_realizado)
     bloques.push(["Trabajo realizado", orden.trabajo_realizado]);
+  // Se pinta línea a línea y con salto de página. El campo del formulario no
+  // tiene tope de longitud, y jsPDF dibuja igual por debajo del pie: el sobrante
+  // sale de la hoja sin avisar. Sería la misma falla que se corrige aquí —
+  // texto que se escribió y no aparece impreso — sólo que por otra puerta.
+  // El más largo hoy son 363 caracteres (4 líneas), así que en la práctica
+  // ninguna orden salta de página; esto es para que no dependa de eso.
+  const limiteTexto = LAYOUT.pageHeight - 25; // deja libre el pie
+  const saltarPagina = () => {
+    doc.addPage();
+    y = LAYOUT.margenSup;
+  };
   for (const [tit, txt] of bloques) {
+    // El título nunca se queda solo al final de la página.
+    if (y > limiteTexto - 9) saltarPagina();
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.setTextColor(...COLORES.textoOscuro);
@@ -212,9 +239,12 @@ export function generarOrdenPDF({
     y += 4.5;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...COLORES.textoMedio);
-    const wrap = doc.splitTextToSize(txt, LAYOUT.contentWidth);
-    doc.text(wrap, LAYOUT.margenIzq, y);
-    y += wrap.length * 4.5 + 3;
+    for (const linea of doc.splitTextToSize(txt, LAYOUT.contentWidth)) {
+      if (y > limiteTexto) saltarPagina();
+      doc.text(linea, LAYOUT.margenIzq, y);
+      y += 4.5;
+    }
+    y += 3;
   }
 
   // ── Checklist de recepción (#24) ─────────────────────────────────────
