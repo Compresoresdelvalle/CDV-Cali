@@ -182,6 +182,13 @@ export function carritoDesdeReorden(sugerencias, { esVendedor = false } = {}) {
     const ya = porProducto.get(s.producto_id);
     if (ya) {
       ya.cantidad += cantidad;
+      // Se guarda el desglose: la suma de varias sedes puede dar un número
+      // sorprendente. La migración que pasó el mín/máx a las sedes copió el
+      // valor global a las cuatro, así que un producto con techo 15.000 genera
+      // hoy cuatro sugerencias y el carrito pide ~58.000. Es aritméticamente
+      // correcto según lo configurado, pero nadie debería descubrirlo al
+      // recibir la mercancía: se muestra de dónde sale cada número.
+      if (s.sede_id) ya.desglose.push({ sede_id: s.sede_id, cantidad });
       continue;
     }
     porProducto.set(s.producto_id, {
@@ -191,6 +198,7 @@ export function carritoDesdeReorden(sugerencias, { esVendedor = false } = {}) {
       cantidad,
       costo_unitario: esVendedor ? 0 : Number(s.costo_unitario) || 0,
       destino: s.vendible === false ? "insumo" : "venta",
+      desglose: s.sede_id ? [{ sede_id: s.sede_id, cantidad }] : [],
     });
   }
   return [...porProducto.values()];

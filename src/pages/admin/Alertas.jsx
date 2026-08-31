@@ -59,7 +59,7 @@ const OPCIONES_ABC = [
 /* `!inner` en el embed de producto: sin él, filtrar por `producto.clasificacion`
  * solo vaciaría el objeto embebido en vez de descartar la fila (y el count
  * seguiría contando filas que no cumplen el filtro). */
-const COLS_STOCK = `id, cantidad, estado_stock, sede_id, stock_minimo, sede:sede_id(nombre), producto:producto_id!inner(referencia, nombre, clasificacion)`;
+const COLS_STOCK = `id, cantidad, estado_stock, sede_id, stock_minimo, sede:sede_id(nombre), producto:producto_id!inner(referencia, nombre, clasificacion, clasificacion_global)`;
 
 /* Las pestañas que no son de stock caben enteras en memoria y siguen con el
  * filtro por sede/prioridad de siempre. */
@@ -121,9 +121,13 @@ export default function Alertas() {
         id: "abc",
         tipo: "opciones",
         label: "Clasificación",
-        columna: "producto.clasificacion",
+        // Se filtra por la clasificación COMBINADA (ventas + consumo como
+        // insumo), no por la de ventas. Con la de ventas, el arranque en "A y B"
+        // escondía cosas que sí importan: TF1/4 y C3X10 son 'C' por ventas pero
+        // 'B' combinada, y están agotados en tres sedes. Un filtro que se llama
+        // "lo que más pesa" no puede pesar sólo lo que se vende.
+        columna: "producto.clasificacion_global",
         opciones: OPCIONES_ABC,
-        // Arranca en A+B: son ~181 productos accionables de 2.634 alertas.
         porDefecto: "AB",
       },
     ],

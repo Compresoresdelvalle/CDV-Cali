@@ -69,7 +69,11 @@ export default function Reorden() {
     };
   }, []);
 
-  const cargar = async () => {
+  // `preservarSeleccion`: al volver del asistente de min/max hay que refrescar
+  // las sugerencias, pero NO tirar los productos que el usuario ya marcó para
+  // el pedido. Antes, aplicar sugerencias le borraba la selección sin avisar y
+  // sin que el modal siquiera se cerrara, así que ni se enteraba.
+  const cargar = async ({ preservarSeleccion = false } = {}) => {
     setLoading(true);
     setErrorMsg("");
     try {
@@ -84,7 +88,7 @@ export default function Reorden() {
       if (error) throw error;
       setItems(data ?? []);
       setTotalReal(count ?? (data ?? []).length);
-      setSeleccion(new Set());
+      if (!preservarSeleccion) setSeleccion(new Set());
     } catch (err) {
       if (!mountedRef.current) return;
       setErrorMsg(safeError(err, "Error al cargar sugerencias"));
@@ -293,7 +297,9 @@ export default function Reorden() {
           }
           onClose={() => setModalMinMax(false)}
           onAplicado={() => {
-            cargar();
+            // Se refresca la lista pero se respeta lo que el usuario ya marcó
+            // para el pedido: configurar mínimos no es motivo para perderlo.
+            cargar({ preservarSeleccion: true });
             cargarAgotadosSinConfig();
           }}
         />
@@ -827,10 +833,13 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
         ),
       );
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || sedePedida !== sedeRef.current) return;
       setErrorMsg(safeError(err, "Error al calcular sugerencias"));
     } finally {
-      if (mountedRef.current) setLoading(false);
+      // Sólo la petición de la sede que sigue seleccionada apaga el "cargando".
+      // Si no, una respuesta vieja dejaba la pantalla lista para aplicar sobre
+      // una sede que ya no era la elegida.
+      if (mountedRef.current && sedePedida === sedeRef.current) setLoading(false);
     }
   };
 
@@ -989,8 +998,9 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
               className="mt-1 text-[12.5px]"
               style={{ color: "hsl(var(--muted-foreground))" }}
             >
-              Basado en la demanda real de los últimos 90 días (ventas + OT +
-              ensambles).
+              Basado en la salida real de los últimos 90 días de esta sede:
+              ventas, consumo en OT y ensambles, y lo despachado a otras sedes
+              por traspaso.
             </p>
           </div>
           <button
