@@ -90,7 +90,13 @@ export default function AnalisisABC() {
     };
   }, []);
 
+  // Token de peticion: cambiar de periodo dispara otra carga, y la respuesta
+  // del periodo viejo podia llegar despues y pisar la nueva. Es el mismo patron
+  // que ya usan los demas cargadores del proyecto.
+  const reqRef = useRef(0);
+
   const cargar = async (dias = periodo) => {
+    const req = ++reqRef.current;
     setLoading(true);
     setErrorMsg("");
     try {
@@ -99,7 +105,7 @@ export default function AnalisisABC() {
         // Ventas reales del periodo para enriquecer la clasificación.
         supabase.rpc("fn_top_productos", { p_dias: dias, p_limit: 3000 }),
       ]);
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || req !== reqRef.current) return;
       if (prodRes.error) throw prodRes.error;
       if (topRes.error) throw topRes.error;
       const map = new Map();
@@ -112,10 +118,10 @@ export default function AnalisisABC() {
       setProductos(prodRes.data ?? []);
       setVentasMap(map);
     } catch (err) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || req !== reqRef.current) return;
       setErrorMsg(safeError(err, "Error al cargar productos"));
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && req === reqRef.current) setLoading(false);
     }
   };
 

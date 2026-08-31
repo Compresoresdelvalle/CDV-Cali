@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeftCircle, Search, Wand2, Check } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { sanitizeSearch, safeError } from "../../lib/utils";
@@ -42,7 +42,14 @@ export default function Minimos() {
   const [total, setTotal] = useState(0);
   const [pagina, setPagina] = useState(0);
   const [busqueda, setBusqueda] = useState("");
-  const [filtro, setFiltro] = useState("todos");
+  // Se acepta ?filtro= por URL para que "Ver todo" de la campana de reposición
+  // caiga en la lista ya filtrada, en vez de en el catálogo entero. Lista
+  // blanca: un valor arbitrario no debe llegar crudo a la consulta.
+  const [searchParams] = useSearchParams();
+  const filtroUrl = searchParams.get("filtro");
+  const [filtro, setFiltro] = useState(
+    FILTROS.some((f) => f.id === filtroUrl) ? filtroUrl : "todos",
+  );
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [guardando, setGuardando] = useState(false);

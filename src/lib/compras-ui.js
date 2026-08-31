@@ -172,6 +172,12 @@ export function construirTimelineCompra(compra, garantias, fmtDate) {
  *   costo histórico: arranca en 0 y lo digita, igual que en una compra normal.
  * @returns {Array<object>} líneas listas para `setCarrito`
  */
+// Mismo tope que aplica `setCantidadDirecta` al teclear a mano y que declara el
+// `max` del campo. Sin esto, el carrito importado podía superarlo (la suma de
+// varias sedes no pasa por el campo) y las dos formas de llenar el carrito
+// seguían reglas distintas.
+const TOPE_CANTIDAD = 100000;
+
 export function carritoDesdeReorden(sugerencias, { esVendedor = false } = {}) {
   if (!Array.isArray(sugerencias)) return [];
 
@@ -181,7 +187,7 @@ export function carritoDesdeReorden(sugerencias, { esVendedor = false } = {}) {
     const cantidad = Math.max(1, Number(s.cantidad_sugerida) || 1);
     const ya = porProducto.get(s.producto_id);
     if (ya) {
-      ya.cantidad += cantidad;
+      ya.cantidad = Math.min(TOPE_CANTIDAD, ya.cantidad + cantidad);
       // Se guarda el desglose: la suma de varias sedes puede dar un número
       // sorprendente. La migración que pasó el mín/máx a las sedes copió el
       // valor global a las cuatro, así que un producto con techo 15.000 genera
@@ -195,7 +201,7 @@ export function carritoDesdeReorden(sugerencias, { esVendedor = false } = {}) {
       producto_id: s.producto_id,
       nombre: s.nombre,
       referencia: s.referencia,
-      cantidad,
+      cantidad: Math.min(TOPE_CANTIDAD, cantidad),
       costo_unitario: esVendedor ? 0 : Number(s.costo_unitario) || 0,
       destino: s.vendible === false ? "insumo" : "venta",
       desglose: s.sede_id ? [{ sede_id: s.sede_id, cantidad }] : [],
