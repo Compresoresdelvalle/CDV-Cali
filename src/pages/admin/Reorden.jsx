@@ -839,7 +839,8 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
       // Sólo la petición de la sede que sigue seleccionada apaga el "cargando".
       // Si no, una respuesta vieja dejaba la pantalla lista para aplicar sobre
       // una sede que ya no era la elegida.
-      if (mountedRef.current && sedePedida === sedeRef.current) setLoading(false);
+      if (mountedRef.current && sedePedida === sedeRef.current)
+        setLoading(false);
     }
   };
 

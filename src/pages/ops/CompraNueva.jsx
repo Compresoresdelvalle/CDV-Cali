@@ -162,39 +162,42 @@ export default function CompraNueva() {
   // nada. Ahora se distingue cada caso y se avisa (mismo criterio que
   // VentaNueva #S1-19). No se cierra el escáner aquí: en modo continuo lo
   // mantiene abierto el propio QRScanner para encadenar la siguiente lectura.
-  const handleQRFound = useCallback(async (productoId) => {
-    try {
-      const { data, error: e } = await supabase
-        .from("productos")
-        .select(
-          "id, nombre, referencia, unidad_medida, vendible" +
-            (esVendedor ? "" : ", costo_promedio"),
-        )
-        .eq("id", productoId)
-        .eq("activo", true)
-        .maybeSingle();
-      if (e) throw e;
-      if (!data) {
-        // Toast además del texto fijo: en modo continuo el escáner tapa toda
-        // la pantalla, así que el `setError` de abajo no se ve hasta cerrarlo.
-        const msg =
-          "Ese código no corresponde a un producto activo (no existe o está inactivo).";
-        setError(msg);
-        avisarError(msg);
-        return;
+  const handleQRFound = useCallback(
+    async (productoId) => {
+      try {
+        const { data, error: e } = await supabase
+          .from("productos")
+          .select(
+            "id, nombre, referencia, unidad_medida, vendible" +
+              (esVendedor ? "" : ", costo_promedio"),
+          )
+          .eq("id", productoId)
+          .eq("activo", true)
+          .maybeSingle();
+        if (e) throw e;
+        if (!data) {
+          // Toast además del texto fijo: en modo continuo el escáner tapa toda
+          // la pantalla, así que el `setError` de abajo no se ve hasta cerrarlo.
+          const msg =
+            "Ese código no corresponde a un producto activo (no existe o está inactivo).";
+          setError(msg);
+          avisarError(msg);
+          return;
+        }
+        setError(null);
+        agregarAlCarrito(data);
+      } catch (err) {
+        avisarError(
+          err,
+          "No se pudo leer el producto escaneado. Revisa la conexión e intenta de nuevo.",
+        );
       }
-      setError(null);
-      agregarAlCarrito(data);
-    } catch (err) {
-      avisarError(
-        err,
-        "No se pudo leer el producto escaneado. Revisa la conexión e intenta de nuevo.",
-      );
-    }
-    // `agregarAlCarrito` no está memoizado, de ahí la excepción; `esVendedor` sí
-    // se declara porque decide si se pide la columna de costo al servidor.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [esVendedor]);
+      // `agregarAlCarrito` no está memoizado, de ahí la excepción; `esVendedor` sí
+      // se declara porque decide si se pide la columna de costo al servidor.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [esVendedor],
+  );
 
   const agregarAlCarrito = (prod) => {
     setBusqueda("");
