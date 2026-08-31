@@ -38,10 +38,16 @@ export default function ReposicionButton({ count, perfil, mobile = false }) {
         const { data, error } = await porSede(
           supabase
             .from("v_sugerencias_reorden")
+            // Se ordena por la clasificación COMBINADA (ventas + consumo como
+            // insumo), no por la de ventas. Con la de ventas, el tope de 8 dejaba
+            // fuera lo más urgente: C2X10 pide 19.591 unidades entre cuatro sedes
+            // —la mayor cantidad sugerida de toda la vista— y no aparecía porque
+            // su letra de ventas es B. Es el mismo criterio que ya usan Reorden y
+            // su asistente.
             .select(
-              "producto_id, referencia, nombre, clasificacion, sede_id, sede_nombre, cantidad_sugerida",
+              "producto_id, referencia, nombre, clasificacion, clasificacion_global, sede_id, sede_nombre, cantidad_sugerida",
             )
-            .order("clasificacion", { ascending: true })
+            .order("clasificacion_global", { ascending: true, nullsFirst: false })
             .order("cantidad_sugerida", { ascending: false })
             .limit(8),
         );

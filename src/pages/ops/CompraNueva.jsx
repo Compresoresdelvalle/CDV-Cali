@@ -106,7 +106,11 @@ export default function CompraNueva() {
         const { data, error: e } = await supabase
           .from("productos")
           .select(
-            "id, nombre, referencia, costo_promedio, unidad_medida, vendible",
+            "id, nombre, referencia, unidad_medida, vendible" +
+              // S4-01: el costo es informacion de costo. Al Vendedor no se le
+              // pide siquiera, porque ocultarlo solo en pantalla lo dejaba
+              // viajando en la respuesta y visible desde el navegador.
+              (esVendedor ? "" : ", costo_promedio"),
           )
           .eq("activo", true)
           .or(`nombre.ilike.%${safe}%,referencia.ilike.%${safe}%`)
@@ -141,7 +145,7 @@ export default function CompraNueva() {
         if (myReq === busquedaReqRef.current) setBuscando(false);
       }
     },
-    [perfil?.sede_id],
+    [perfil?.sede_id, esVendedor],
   );
 
   const buscarDebounced = useDebouncedCallback(buscarProductos, 400);
@@ -163,7 +167,8 @@ export default function CompraNueva() {
       const { data, error: e } = await supabase
         .from("productos")
         .select(
-          "id, nombre, referencia, costo_promedio, unidad_medida, vendible",
+          "id, nombre, referencia, unidad_medida, vendible" +
+            (esVendedor ? "" : ", costo_promedio"),
         )
         .eq("id", productoId)
         .eq("activo", true)
@@ -186,8 +191,10 @@ export default function CompraNueva() {
         "No se pudo leer el producto escaneado. Revisa la conexión e intenta de nuevo.",
       );
     }
+    // `agregarAlCarrito` no está memoizado, de ahí la excepción; `esVendedor` sí
+    // se declara porque decide si se pide la columna de costo al servidor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [esVendedor]);
 
   const agregarAlCarrito = (prod) => {
     setBusqueda("");
@@ -696,6 +703,18 @@ export default function CompraNueva() {
                               >
                                 {item.referencia}
                               </p>
+                              {item.desglose?.length > 1 && (
+                                <p
+                                  className="m-0 text-[10.5px]"
+                                  style={{ color: "var(--info-700)" }}
+                                  title="Esta cantidad es la suma de lo que Reorden sugiere para cada sede."
+                                >
+                                  Suma de{" "}
+                                  {item.desglose
+                                    .map((d) => `${d.sede_id} ${d.cantidad}`)
+                                    .join(" + ")}
+                                </p>
+                              )}
                             </td>
                             <td>
                               <DestinoToggle
@@ -810,6 +829,17 @@ export default function CompraNueva() {
                             >
                               {item.referencia}
                             </p>
+                            {item.desglose?.length > 1 && (
+                              <p
+                                className="m-0 text-[10.5px]"
+                                style={{ color: "var(--info-700)" }}
+                              >
+                                Suma de{" "}
+                                {item.desglose
+                                  .map((d) => `${d.sede_id} ${d.cantidad}`)
+                                  .join(" + ")}
+                              </p>
+                            )}
                           </div>
                           <button
                             onClick={() => eliminarItem(item.producto_id)}

@@ -37,6 +37,26 @@ describe("carritoDesdeReorden", () => {
     expect(carrito[0].cantidad).toBe(10);
   });
 
+  it("guarda de qué sedes salió cada cantidad consolidada", () => {
+    // La migración copió el mín/máx global a las cuatro sedes, así que un
+    // producto puede generar cuatro sugerencias y sumar mucho más que el techo
+    // de una sede. El desglose evita que ese número aparezca sin explicación.
+    const [linea] = carritoDesdeReorden([
+      sug({ sede_id: "CHV", cantidad_sugerida: 15000 }),
+      sug({ sede_id: "CV", cantidad_sugerida: 13555 }),
+    ]);
+    expect(linea.cantidad).toBe(28555);
+    expect(linea.desglose).toEqual([
+      { sede_id: "CHV", cantidad: 15000 },
+      { sede_id: "CV", cantidad: 13555 },
+    ]);
+  });
+
+  it("una sola sede deja un desglose de un elemento, y la interfaz no lo pinta", () => {
+    const [linea] = carritoDesdeReorden([sug({ sede_id: "L3" })]);
+    expect(linea.desglose).toHaveLength(1);
+  });
+
   it("no consolida productos distintos", () => {
     const carrito = carritoDesdeReorden([
       sug({ producto_id: "p1" }),
