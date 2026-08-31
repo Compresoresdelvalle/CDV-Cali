@@ -981,7 +981,7 @@ git commit -m "feat(ventas): precio acordado editable en el cambio de producto"
 - [ ] **Step 1: Confirmar que la columna ya llega**
 
 La consulta de la venta en `VentaDetalle.jsx:100` es
-`.select(\`*, vendedor:vendedor_id(nombre)\`)`. El `*` ya trae
+``.select(`*, vendedor:vendedor_id(nombre)`)``. El `*` ya trae
 `cambio_de_venta_id` sin tocar nada. Verificarlo y seguir:
 
 Run: `grep -n 'from("ventas")' -A 2 src/pages/ops/VentaDetalle.jsx`
