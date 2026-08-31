@@ -218,7 +218,20 @@ export function generarOrdenPDF({
     ]);
   if (!esRecepcion && orden.trabajo_realizado)
     bloques.push(["Trabajo realizado", orden.trabajo_realizado]);
+  // Se pinta línea a línea y con salto de página. El campo del formulario no
+  // tiene tope de longitud, y jsPDF dibuja igual por debajo del pie: el sobrante
+  // sale de la hoja sin avisar. Sería la misma falla que se corrige aquí —
+  // texto que se escribió y no aparece impreso — sólo que por otra puerta.
+  // El más largo hoy son 363 caracteres (4 líneas), así que en la práctica
+  // ninguna orden salta de página; esto es para que no dependa de eso.
+  const limiteTexto = LAYOUT.pageHeight - 25; // deja libre el pie
+  const saltarPagina = () => {
+    doc.addPage();
+    y = LAYOUT.margenSup;
+  };
   for (const [tit, txt] of bloques) {
+    // El título nunca se queda solo al final de la página.
+    if (y > limiteTexto - 9) saltarPagina();
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.setTextColor(...COLORES.textoOscuro);
@@ -226,9 +239,12 @@ export function generarOrdenPDF({
     y += 4.5;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...COLORES.textoMedio);
-    const wrap = doc.splitTextToSize(txt, LAYOUT.contentWidth);
-    doc.text(wrap, LAYOUT.margenIzq, y);
-    y += wrap.length * 4.5 + 3;
+    for (const linea of doc.splitTextToSize(txt, LAYOUT.contentWidth)) {
+      if (y > limiteTexto) saltarPagina();
+      doc.text(linea, LAYOUT.margenIzq, y);
+      y += 4.5;
+    }
+    y += 3;
   }
 
   // ── Checklist de recepción (#24) ─────────────────────────────────────

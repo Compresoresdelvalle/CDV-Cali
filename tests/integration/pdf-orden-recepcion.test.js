@@ -13,13 +13,14 @@
  */
 import { describe, it, expect } from "vitest";
 import zlib from "node:zlib";
+import { Buffer } from "node:buffer";
 import { generarOrdenPDF } from "../../src/lib/pdf/ordenPDF";
 
 const DIAGNOSTICO = "LLEGA SIN TAPA Y CON LA CARCASA GOLPEADA";
 const TRABAJO = "SE CAMBIO EL EMPAQUE";
 
-async function textoDelPDF(modo) {
-  const pdf = generarOrdenPDF({
+function construir(modo, over = {}) {
+  return generarOrdenPDF({
     orden: {
       numero: 1234,
       fecha: "2026-08-31T12:00:00Z",
@@ -32,12 +33,16 @@ async function textoDelPDF(modo) {
       estado: "recepcion",
       sede_id: "CV",
       total: 0,
+      ...over,
     },
     tecnico: "TecPrueba",
     checklist: [],
     modo,
   });
+}
 
+/** Devuelve los streams del PDF ya descomprimidos y concatenados. */
+async function streams(pdf) {
   // ordenPDF expone `blob`, igual que ventaPOS (cotizacionPDF usa `dataUri`).
   const buf = Buffer.from(await pdf.blob.arrayBuffer());
 
@@ -59,6 +64,24 @@ async function textoDelPDF(modo) {
     i = fin + 1;
   }
   return texto;
+}
+
+const textoDelPDF = (modo, over) => streams(construir(modo, over));
+
+/**
+ * Coordenada vertical más baja a la que se escribe algo, en puntos.
+ *
+ * jsPDF posiciona con `x y Td` midiendo desde el PIE de la página, así que
+ * un valor negativo es texto dibujado por debajo del borde: se pierde al
+ * imprimir y jsPDF no avisa. Es la única forma de comprobar el recorte, porque
+ * el texto recortado igual aparece dentro del stream.
+ */
+async function menorY(pdf) {
+  const ys = [...(await streams(pdf)).matchAll(/([-\d.]+) ([-\d.]+) Td/g)].map(
+    (m) => Number(m[2]),
+  );
+  expect(ys.length).toBeGreaterThan(10); // si no hay coordenadas, no se midió nada
+  return Math.min(...ys);
 }
 
 /** El texto viaja troceado por el interletrado, así que se comparan sólo las
@@ -103,5 +126,29 @@ describe("documento final de la OT", async () => {
 
   it("y ahí sí el trabajo realizado", () => {
     expect(plano).toContain(soloLetras(TRABAJO));
+  });
+});
+
+describe("un diagnóstico largo no se sale de la hoja", () => {
+  // El textarea de OrdenNueva no tiene tope de longitud, y jsPDF dibuja igual
+  // por debajo del borde inferior: el sobrante se pierde al imprimir sin que
+  // nada avise. Sería la misma queja de la dueña — texto escrito que no sale
+  // en el papel — sólo que por otra puerta.
+  //
+  // Contar páginas NO sirve como comprobación: la sección de firmas ya añade
+  // una página por su cuenta cuando el contenido creció, así que el conteo da
+  // 2 con recorte y sin él. Lo que discrimina es la coordenada.
+  it("nunca escribe por debajo del borde de la hoja", async () => {
+    const largo = "RAYON EN LA CARCASA. ".repeat(250); // ~5.000 caracteres
+    expect(
+      await menorY(construir("recepcion", { diagnostico: largo })),
+    ).toBeGreaterThan(0);
+  });
+
+  it("y una orden normal tampoco, claro", async () => {
+    // 363 caracteres es el diagnóstico más largo que existe hoy en la base.
+    expect(
+      await menorY(construir("recepcion", { diagnostico: "A".repeat(363) })),
+    ).toBeGreaterThan(0);
   });
 });
