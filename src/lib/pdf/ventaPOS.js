@@ -19,9 +19,50 @@ import {
   formatCOP,
 } from "./pdfStyles";
 
-const W = 80; // ancho tirilla en mm
-const MX = 5; // margen lateral
+export const W = 80; // ancho tirilla en mm
+export const MX = 5; // margen lateral
 const CW = W - MX * 2; // ancho contenido
+
+// ── Geometría de la fila de ítem ─────────────────────────────────────────
+// Vive aquí, en un solo sitio, porque el alto de la tirilla se calcula en una
+// pasada previa y el contenido se dibuja en otra. Cuando cada pasada medía por
+// su cuenta se desincronizaron: el nombre del producto salió montado encima del
+// total ("COMPRESOR 3HP SENCILLO MONOFAS$C3O600.000" en el recibo 01767).
+export const X_DESC = MX + 9; // la descripción arranca después de la columna CANT
+export const GAP_COL = 2; // aire mínimo entre la descripción y el total
+export const FS_ITEM = 7; // tamaño con el que se MIDE y se DIBUJA el ítem
+
+/**
+ * Ancho disponible para el nombre del producto, en mm.
+ *
+ * El ancho del total no puede ser una constante: un compresor de $3.500.000
+ * ocupa 12,9 mm y un empaque de $2.000 apenas 7. Antes se reservaban 18 mm
+ * fijos medidos desde el margen —no desde donde realmente empieza la
+ * descripción—, así que la descripción llegaba hasta x=66 mm cuando el total
+ * arrancaba en x=62,1: 3,7 mm de solapamiento.
+ *
+ * Se mide el importe más largo del recibo y la descripción se queda con lo que
+ * sobre. Así una tirilla de repuestos baratos gana espacio para nombres largos
+ * y una de compresores nunca se pisa.
+ */
+export function anchoDescripcion(d, items) {
+  d.setFontSize(FS_ITEM);
+  const anchoTotal = items.reduce((max, it) => {
+    const cant = it.cantidad ?? 0;
+    const sub = Number(it.subtotal ?? cant * Number(it.precio_unitario ?? 0));
+    return Math.max(max, d.getTextWidth(formatCOP(sub)));
+  }, 0);
+  return W - MX - anchoTotal - GAP_COL - X_DESC;
+}
+
+/** Nombre del ítem partido en líneas. Mide SIEMPRE con `FS_ITEM`, que es el
+ *  tamaño con el que después se dibuja: medir a 6,5 y dibujar a 7 hacía el
+ *  texto un 7,7% más ancho de lo calculado. */
+export function lineasNombre(d, it, ancho) {
+  d.setFontSize(FS_ITEM);
+  // B3: las líneas de servicio no tienen producto; usan `descripcion`.
+  return d.splitTextToSize(it.descripcion ?? it.producto?.nombre ?? "—", ancho);
+}
 
 /**
  * Args:
@@ -42,13 +83,12 @@ export function generarVentaPOS({
   // envuelven a varias líneas no desborden la tirilla.
   const probe = new jsPDF({ unit: "mm", format: [W, 1000] });
   probe.setFontSize(7);
+  // Mismo ancho y mismo tamaño de fuente que usará el dibujo: si las dos
+  // pasadas no miden igual, o sobra papel o la tirilla sale cortada.
+  const anchoDesc = anchoDescripcion(probe, items);
   let itemsAlto = 0;
   for (const it of items) {
-    // B3: las líneas de servicio no tienen producto; usan `descripcion`.
-    const lineas = probe.splitTextToSize(
-      it.descripcion ?? it.producto?.nombre ?? "—",
-      CW - 18,
-    );
+    const lineas = lineasNombre(probe, it, anchoDesc);
     // 3.6 primera línea + 3.6 por cada línea extra del nombre + 4.2 precio c/u
     itemsAlto += 3.6 + Math.max(0, lineas.length - 1) * 3.6 + 4.2;
   }
@@ -192,22 +232,24 @@ export function generarVentaPOS({
   y += 3.5;
   doc.setFont("helvetica", "normal");
 
+  // El mismo ancho que reservó la pasada de altura, calculado igual.
+  const anchoDescItems = anchoDescripcion(doc, items);
+
   for (const it of items) {
-    const nombre = it.descripcion ?? it.producto?.nombre ?? "—";
     const cant = it.cantidad ?? 0;
     const precio = Number(it.precio_unitario ?? 0);
     const sub = Number(it.subtotal ?? cant * precio);
 
     // Línea 1: cantidad + nombre (envuelto)
-    const nombreLines = doc.splitTextToSize(nombre, CW - 18);
-    doc.setFontSize(7);
+    const nombreLines = lineasNombre(doc, it, anchoDescItems);
+    doc.setFontSize(FS_ITEM);
     doc.text(String(cant), MX, y);
-    doc.text(nombreLines[0], MX + 9, y);
+    doc.text(nombreLines[0], X_DESC, y);
     doc.text(formatCOP(sub), W - MX, y, { align: "right" });
     y += 3.6;
     // Líneas extra del nombre si es largo
     for (let i = 1; i < nombreLines.length; i++) {
-      doc.text(nombreLines[i], MX + 9, y);
+      doc.text(nombreLines[i], X_DESC, y);
       y += 3.6;
     }
     // Línea 2: precio unitario.
@@ -216,7 +258,7 @@ export function generarVentaPOS({
     // o no lo quema—, así que el gris lo simula con puntos salteados y a 6pt
     // no quedan suficientes para formar las letras. No es la tipografía.
     doc.setFontSize(7);
-    doc.text(`  ${formatCOP(precio)} c/u`, MX + 9, y);
+    doc.text(`  ${formatCOP(precio)} c/u`, X_DESC, y);
     y += 4.2;
   }
 
