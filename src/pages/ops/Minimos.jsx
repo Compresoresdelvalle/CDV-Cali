@@ -22,6 +22,43 @@ const FILTROS = [
 ];
 
 /**
+ * Filtro por clase ABC. Va aparte de FILTROS y no dentro, porque son dos
+ * preguntas distintas y se combinan: "sin configurar" + "A" es justo la lista
+ * con la que se empieza a trabajar.
+ *
+ * La clase la resuelve la vista (`clase_abc`): es la COMBINADA, la misma que
+ * manda en Reorden, porque aquí tampoco importa qué deja plata sino qué no
+ * puede faltar.
+ */
+const CLASES_ABC = [
+  { id: "todas", label: "ABC: todas" },
+  { id: "A", label: "A" },
+  { id: "B", label: "B" },
+  { id: "C", label: "C" },
+];
+
+/** Color del distintivo de clase. A es lo crítico, C lo de baja rotación. */
+const COLOR_ABC = {
+  A: { fondo: "var(--dang-50)", texto: "var(--dang-700)" },
+  B: { fondo: "var(--warn-50)", texto: "var(--warn-700)" },
+  C: { fondo: "var(--n-100)", texto: "var(--n-600)" },
+};
+
+function ClaseABC({ clase }) {
+  if (!clase) return null;
+  const c = COLOR_ABC[clase] ?? COLOR_ABC.C;
+  return (
+    <span
+      className="shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold"
+      style={{ backgroundColor: c.fondo, color: c.texto }}
+      title={`Clase ${clase} (rotación combinada: ventas más consumo)`}
+    >
+      {clase}
+    </span>
+  );
+}
+
+/**
  * Mínimos y máximos por sede, en lote.
  *
  * Sin esta pantalla la funcionalidad nace muerta: configurar a mano producto por
@@ -50,6 +87,7 @@ export default function Minimos() {
   const [filtro, setFiltro] = useState(
     FILTROS.some((f) => f.id === filtroUrl) ? filtroUrl : "todos",
   );
+  const [abc, setAbc] = useState("todas");
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -129,10 +167,13 @@ export default function Minimos() {
         .select(
           `producto_id, referencia, nombre, categoria, vendible, sede_id,
            cantidad, cantidad_insumo, estado_stock, stock_minimo, stock_maximo,
-           tiene_inventario`,
+           tiene_inventario, clase_abc`,
           { count: "exact" },
         )
         .eq("sede_id", sedeEfectiva);
+
+      // El ABC se combina con el filtro de configuración, no lo reemplaza.
+      if (abc !== "todas") q = q.eq("clase_abc", abc);
 
       if (filtro === "sin_config") q = q.eq("stock_minimo", 0);
       else if (filtro === "configurados") q = q.gt("stock_minimo", 0);
@@ -159,7 +200,7 @@ export default function Minimos() {
     } finally {
       if (mountedRef.current && req === reqRef.current) setLoading(false);
     }
-  }, [sedeEfectiva, filtro, busqueda, pagina]);
+  }, [sedeEfectiva, filtro, abc, busqueda, pagina]);
 
   useEffect(() => {
     cargar();
@@ -474,7 +515,9 @@ export default function Minimos() {
           const on = filtro === f.id;
           return (
             <button
-              key={f.producto_id}
+              // `f` aquí es un filtro, no una fila de producto: la clave decía
+              // `f.producto_id` y salía `undefined` en los cuatro botones.
+              key={f.id}
               onClick={() => {
                 setFiltro(f.id);
                 setPagina(0);
@@ -489,6 +532,38 @@ export default function Minimos() {
               }}
             >
               {f.label}
+            </button>
+          );
+        })}
+        {/* Separador: el ABC es otra pregunta y se combina con la de arriba. */}
+        <span
+          className="mx-1 hidden h-6 w-px sm:block"
+          style={{ backgroundColor: "var(--n-200)" }}
+        />
+        {CLASES_ABC.map((c) => {
+          const on = abc === c.id;
+          return (
+            <button
+              key={c.id}
+              onClick={() => {
+                setAbc(c.id);
+                setPagina(0);
+              }}
+              disabled={guardando}
+              className="rounded-lg border px-3 text-[12.5px] font-medium disabled:opacity-50"
+              style={{
+                height: 48,
+                borderColor: on ? "var(--p-500)" : "var(--n-200)",
+                backgroundColor: on ? "var(--p-50)" : "transparent",
+                color: on ? "var(--p-700)" : "var(--n-500)",
+              }}
+              title={
+                c.id === "todas"
+                  ? "Todas las clases"
+                  : `Solo los de clase ${c.id}`
+              }
+            >
+              {c.label}
             </button>
           );
         })}
@@ -580,6 +655,7 @@ export default function Minimos() {
                         {!f.tiene_inventario ? " · nunca ha estado aquí" : ""}
                       </p>
                     </div>
+                    <ClaseABC clase={f.clase_abc} />
                     <StatusBadge status={f.estado_stock} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -747,10 +823,11 @@ function Fila({ f, valorDe, editar, sugerido, usarSugerido, guardando }) {
           {f.nombre}
         </div>
         <div
-          className="font-mono text-[11px]"
+          className="flex items-center gap-1.5 font-mono text-[11px]"
           style={{ color: "var(--n-500)" }}
         >
           {f.referencia}
+          <ClaseABC clase={f.clase_abc} />
         </div>
       </td>
       <td
