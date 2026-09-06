@@ -40,6 +40,8 @@ import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
 import OrdenStepper from "../../components/ot/OrdenStepper";
 import { generarOrdenPDF } from "../../lib/pdf/ordenPDF";
 import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
+import BloqueRetenciones from "../../components/ventas/BloqueRetenciones";
+import { CLAVES_TARIFA_RETENCION } from "../../lib/retenciones";
 import {
   PASOS,
   pasoActual,
@@ -1443,6 +1445,32 @@ function PasoCotizacion({
   const [mano, setMano] = useState(String(orden.costo_mano_obra ?? 0));
   const [desc, setDesc] = useState(String(orden.descuento_valor ?? 0));
 
+  // Tarifas sugeridas de Configuración, solo para precargar el bloque de
+  // retenciones cuando alguien lo abre. Si la consulta falla, abre en cero y se
+  // escriben a mano: no es motivo para bloquear la cotización.
+  const [tarifasSugeridas, setTarifasSugeridas] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    supabase
+      .from("parametros_sistema")
+      .select("key, value")
+      .in("key", Object.values(CLAVES_TARIFA_RETENCION))
+      .then(({ data }) => {
+        if (!vivo || !data) return;
+        const porClave = Object.fromEntries(
+          data.map((r) => [r.key, Number(r.value)]),
+        );
+        setTarifasSugeridas({
+          retefuentePct: porClave[CLAVES_TARIFA_RETENCION.retefuentePct] ?? 0,
+          reteicaPct: porClave[CLAVES_TARIFA_RETENCION.reteicaPct] ?? 0,
+          reteivaPct: porClave[CLAVES_TARIFA_RETENCION.reteivaPct] ?? 0,
+        });
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
   // Stock de cada repuesto cotizado, para no dejarla cotizar a ciegas.
   const idsDraft = useMemo(
     () => draft.map((l) => l.producto_id).sort(),
@@ -1880,6 +1908,28 @@ function PasoCotizacion({
           })}
         </div>
       </Field>
+
+      {/* Retenciones. Van aquí, con el IVA y el descuento, porque es donde se
+          decide la plata; en Entrega ya solo se muestran. */}
+      <BloqueRetenciones
+        base={montos.base}
+        iva={montos.iva}
+        total={montos.total}
+        valores={{
+          retefuentePct: orden.retefuente_pct ?? 0,
+          reteicaPct: orden.reteica_pct ?? 0,
+          reteivaPct: orden.reteiva_pct ?? 0,
+        }}
+        sugeridas={tarifasSugeridas}
+        soloLectura={ro}
+        onChange={(v) =>
+          updateOrden({
+            retefuente_pct: v.retefuentePct,
+            reteica_pct: v.reteicaPct,
+            reteiva_pct: v.reteivaPct,
+          }).catch((err) => avisarError(err))
+        }
+      />
 
       {/* Resumen */}
       <ResumenMini montos={montos} />
@@ -2696,10 +2746,26 @@ function PasoEntrega({
 
   return (
     <div className="space-y-4">
-      {/* Totales grandes */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* Totales grandes. Con retención se agrega una cuarta caja: sin ella el
+          saldo no cuadraría con total − anticipos y parecería un error. */}
+      <div
+        className={
+          montos.retenciones > 0
+            ? "grid grid-cols-2 gap-2 sm:grid-cols-4"
+            : "grid grid-cols-3 gap-2"
+        }
+      >
         {[
           { l: TX.total, v: montos.total, color: "hsl(var(--foreground))" },
+          ...(montos.retenciones > 0
+            ? [
+                {
+                  l: "Retenciones",
+                  v: -montos.retenciones,
+                  color: "hsl(var(--warning))",
+                },
+              ]
+            : []),
           {
             l: TX.anticipos,
             v: montos.anticipos,
