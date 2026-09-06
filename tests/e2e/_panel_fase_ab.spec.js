@@ -204,4 +204,55 @@ test.describe("Panel — fases A y B", () => {
       fullPage: true,
     });
   });
+
+  test("la cascada y las pérdidas se ven con datos reales", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+
+    // Últimos 90 para que haya datos de verdad.
+    await page.getByRole("button", { name: "Últimos 90", exact: true }).click();
+
+    await expect(page.getByText("Margen bruto")).toBeVisible({
+      timeout: 25_000,
+    });
+    await expect(page.getByText("Vendido bajo costo")).toBeVisible({
+      timeout: 25_000,
+    });
+    // El aviso tiene que ser un incentivo, no una amenaza.
+    await expect(page.getByText(/puede subir hasta/i)).toBeVisible();
+
+    await page.screenshot({
+      path: "tests/results/panel-08-cascada.png",
+      fullPage: true,
+    });
+  });
+
+  test("una cifra de pérdida abre su detalle hasta el documento", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+    await page.getByRole("button", { name: "Últimos 90", exact: true }).click();
+    await expect(page.getByText("Vendido bajo costo")).toBeVisible({
+      timeout: 25_000,
+    });
+
+    await page.getByText("Vendido bajo costo").click();
+
+    const panel = page.getByRole("dialog");
+    await expect(panel).toBeVisible({ timeout: 15_000 });
+    // Cada fila lleva a su venta: una cifra que no se puede abrir genera
+    // desconfianza.
+    await expect(panel.locator('a[href^="/ops/ventas/"]').first()).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await page.screenshot({ path: "tests/results/panel-09-detalle.png" });
+
+    // Cierra con Escape.
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden({ timeout: 5_000 });
+  });
 });
