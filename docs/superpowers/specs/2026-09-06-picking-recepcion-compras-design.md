@@ -124,14 +124,42 @@ Deshabilitado cuando se agotan, con el teléfono a la vista.
 # Bloque 1 · Picking de recepción
 
 **Ruta:** `/ops/compras/:id/picking`, espejo de `/ops/traspasos/:id/picking`.
-**Roles:** Admin, Bodeguero y Vendedor — los mismos tres que ya acepta
-`fn_recibir_compra`, con la misma regla de sede.
+**Roles: Admin y Bodeguero.** El Vendedor queda por fuera a propósito.
+
+### Por qué solo Admin y Bodega, y por qué eso no deja huecos
+
+Los datos de los últimos 120 días dicen dónde está la mercancía de verdad:
+
+| Sede | Compras | Caja menor | Líneas de producto (prom.) | Total prom. |
+| --- | --- | --- | --- | --- |
+| CV | 475 | 77% | 0,4 | $88.816 |
+| **BODEGA** | 159 | 19% | **2,5** (máx. 17) | **$1.454.534** |
+| L3 | 56 | 73% | 0,3 | $61.776 |
+| CHV | 39 | 64% | 0,4 | $124.067 |
+
+En CV, L3 y CHV las compras son mayoritariamente **caja menor sin productos**:
+transporte, papelería, gastos. Promedian menos de media línea, o sea que la
+mayoría no tiene ninguna. La mercancía llega a BODEGA, con 2,5 líneas por compra
+y un valor quince veces mayor.
+
+De ahí sale la segunda regla, que es tan importante como la de roles:
+
+> **El picking solo se ofrece si la compra tiene al menos una línea de producto.**
+
+Una compra de caja menor sin líneas se recibe directo, sin picking y **sin
+advertencia**: no hay nada que contar y meterle fricción sería castigar al
+operario por hacer bien su trabajo. Las vendedoras siguen recibiendo sus gastos
+exactamente como hoy.
 
 ## Cómo se entra
 
-En el detalle de una compra sin recibir, el botón principal pasa a ser **"Contar
-y recibir"**. Debajo, en texto pequeño y gris, **"Recibir sin contar"**. No es
-una puerta escondida, pero no compite.
+En el detalle de una compra sin recibir **que tenga líneas de producto**, y para
+Admin o Bodeguero, el botón principal pasa a ser **"Contar y recibir"**. Debajo,
+en texto pequeño y gris, **"Recibir sin contar"**. No es una puerta escondida,
+pero no compite.
+
+Para el resto de los casos —sin líneas, o rol Vendedor— la pantalla queda
+exactamente como está hoy.
 
 ## Qué pide cada línea
 
@@ -151,14 +179,35 @@ faltan  = max(0, pedido − llegaron)
 sobran  = max(0, llegaron − pedido)
 ```
 
-**"Llegaron" arranca en el pedido, no en cero.** En la vida real casi todo llega
-completo; arrancar en cero obliga a teclear cuarenta veces lo que ya se sabe.
-Es además lo que ya hace `RecepcionTraspaso`.
+### "Llegaron" arranca en CERO y el operario suma
 
-El riesgo obvio de ese default es que pasen de largo sin mirar. Contra eso, cada
-línea guarda si el operario **la tocó** (botón, teclado o escáner), y el resumen
-final lo dice sin regañar: **"contadas 8 · asumidas completas 7"**. Honesto, sin
-convertirse en obstáculo.
+Decisión del dueño, y es la que convierte esto en un conteo de verdad: si el
+campo viniera con el pedido puesto, bastaría pasar de largo dándole a "siguiente"
+para que el sistema jurara que todo llegó. Arrancando en cero, cada unidad que
+queda registrada es una unidad que alguien miró.
+
+Eso trae una consecuencia que hay que resolver bien, porque si no el diseño se
+cae: **con el campo en cero, "0" es ambiguo**. Puede significar "no llegó nada" o
+"todavía no lo he contado". Y no da lo mismo: `fn_recibir_compra` **borra** la
+línea que reciba en 0, así que confundirlas borraría de la factura un producto
+que sí llegó.
+
+La solución es que el cero nunca sea implícito. Cada línea tiene un estado
+explícito de **contada / sin contar**, y tres formas de contarla:
+
+- **+ / −** y el teclado numérico, sumando a mano.
+- **Escanear**, que suma de a uno. Con el campo en cero, el escáner deja de ser
+  un lujo y pasa a ser la forma natural de trabajar: se escanea cada pieza
+  mientras se descarga y el número sube solo.
+- **"Llegó completo"**, un botón de un toque por línea que la pone en el pedido y
+  la marca contada. Mantiene la velocidad para el caso de siempre, pero exige un
+  acto deliberado en vez de regalar el dato.
+- **"No llegó nada"**, que la marca contada en cero. Ese es el único camino a un
+  cero, y va con confirmación porque borra la línea de la factura.
+
+**No se puede confirmar con líneas sin contar.** El botón queda deshabilitado y
+dice qué falta: *"Faltan 3 líneas por contar"*, con un enlace que salta a la
+primera. La barra de progreso cuenta líneas contadas, no líneas vistas.
 
 ## Las preguntas, solo cuando hacen falta
 
@@ -191,7 +240,7 @@ Es el idioma de `PickingPage`. Un producto llena la pantalla.
 ```
 ┌───────────────────────────────┐
 │ ←  Compra #412 · FVR          │  sticky
-│ ▓▓▓▓▓▓▓▓▓░░░░░░   8 de 15     │
+│ ▓▓▓▓▓▓░░░░░░░░  contadas 6/15 │
 ├───────────────────────────────┤
 │                               │
 │   MANGUERA TUBIN 6MM AZU      │  hasta 2 líneas
@@ -200,13 +249,20 @@ Es el idioma de `PickingPage`. Un producto llena la pantalla.
 │         PEDIDO  24            │  el ancla
 │                               │
 │   ┌────┐   ┌───────┐   ┌────┐ │
-│   │ −  │   │  24   │   │ +  │ │  56px; el número enorme
+│   │ −  │   │   0   │   │ +  │ │  56px; el número enorme
 │   └────┘   └───────┘   └────┘ │
 │           LLEGARON            │
 │                               │
+│   ┌───────────────────────┐   │
+│   │  ✓ Llegó completo (24)│   │  un toque, marca contada
+│   └───────────────────────┘   │
+│   ┌───────────────────────┐   │
+│   │  ✕ No llegó nada      │   │  el único camino al cero
+│   └───────────────────────┘   │
+│                               │
 │   › marcar dañadas            │  colapsado
 │                               │
-│   ✓  Completo                 │  color + texto
+│   ○  Sin contar               │  color + texto
 │                               │
 ├───────────────────────────────┤
 │  ◀ Anterior       Siguiente ▶ │  sticky, 48px
@@ -216,7 +272,11 @@ Es el idioma de `PickingPage`. Un producto llena la pantalla.
 
 - Tocar el número abre el `NumericKeypad` del proyecto, no el teclado del
   sistema.
+- Los dos botones de atajo desaparecen en cuanto la línea queda contada, y en su
+  lugar sale el estado y un "corregir" discreto. No se deja el atajo puesto para
+  que nadie lo pulse por inercia sobre una línea ya contada.
 - "Marcar dañadas" va colapsado: es el caso raro y no debe robar espacio.
+- "No llegó nada" pide confirmación, porque esa línea se borra de la factura.
 - El estado se recalcula en vivo mientras teclea.
 
 ### Modo lista — por defecto en tablet y escritorio
@@ -236,6 +296,7 @@ guantes, polvo y contraluz, el color solo no alcanza.
 
 | Situación | Token |
 | --- | --- |
+| Sin contar | `--muted-foreground` |
 | Completo | `--success` |
 | Faltan | `--warning` |
 | Dañadas | `--destructive` |
@@ -250,8 +311,8 @@ en la compra #412"* — y ofrece ver qué sí está, en vez de un error mudo.
 
 ### Barra de resumen
 
-Fija abajo: **"12 de 15 líneas · 3 a reclamar · 2 de más"** y el botón de
-confirmar. En celular va **por encima del bottom-nav**: ya hubo antes un botón de
+Fija abajo: **"contadas 12 de 15 · 3 a reclamar · 2 de más"** y el botón de
+confirmar, deshabilitado mientras falten líneas por contar y diciendo cuántas. En celular va **por encima del bottom-nav**: ya hubo antes un botón de
 recepción que quedaba tapado por la navegación, y no se puede repetir.
 
 ### Imprimir etiquetas QR
@@ -299,14 +360,14 @@ dejaría el inventario mintiendo.
 ```json
 [{ "detalle_id": "…", "llegaron": 8, "danadas": 2,
    "faltante_accion": "ajustar" | "reclamar",
-   "sobrante_accion": "entra" | "entra_y_reporta",
-   "tocada": true }]
+   "sobrante_accion": "entra" | "entra_y_reporta" }]
 ```
 
 Pasos:
 
-1. Valida rol, sede, que no esté recibida ni cancelada. Advisory lock sobre
-   `picking:<compra_id>`.
+1. Valida **rol Admin o Bodeguero**, sede, que la compra tenga líneas, que no
+   esté recibida ni cancelada, y que **vengan todas las líneas contadas**: la RPC
+   no acepta un picking a medias. Advisory lock sobre `picking:<compra_id>`.
 2. Guarda el conteo en `compra_picking` y `compra_picking_detalle`.
 3. Llama `fn_recibir_compra` con `p_recepciones` armado **solo con las líneas
    cuyo faltante se ajusta**. El trigger existente suma el stock.
@@ -330,13 +391,19 @@ comprada original, que sigue intacta porque esa línea no se ajustó.
 ```
 compra_picking
   id, compra_id (unique), usuario_id, fecha,
-  omitido boolean, lineas_tocadas int, lineas_total int, notas
+  omitido boolean, lineas_contadas int, lineas_total int, notas
 
 compra_picking_detalle
   id, picking_id, detalle_compra_id, producto_id,
   pedido, llegaron, danadas,
-  faltante_accion, sobrante_accion, tocada
+  faltante_accion, sobrante_accion, metodo_conteo
 ```
+
+`metodo_conteo` guarda **cómo** se contó cada línea: `manual`, `escaner`,
+`completo` (el atajo de un toque) o `nada`. No es adorno: si más adelante
+aparecen descuadres, permite ver si venían de líneas escaneadas una por una o de
+líneas despachadas con el botón de "llegó completo", que es justo la diferencia
+entre un conteo real y uno de trámite.
 
 No es burocracia. Cuando dentro de un mes pregunten *"¿por qué esta compra bajó
 $60.000?"*, la respuesta tiene que tener nombre y fecha.
@@ -359,8 +426,9 @@ La advertencia dice el daño concreto, no un genérico:
 ## Pruebas
 
 - **Vitest, lógica pura:** la derivación de buenas/faltan/sobran y qué se reclama,
-  incluido el caso mixto (faltante reclamado + dañadas en la misma línea), y el
-  armado de `p_recepciones` (que solo lleve las líneas de faltante ajustado).
+  incluido el caso mixto (faltante reclamado + dañadas en la misma línea); el
+  armado de `p_recepciones` (que solo lleve las líneas de faltante ajustado); y
+  que una línea sin contar nunca se confunda con una línea contada en cero.
 - **Contra producción, en transacciones revertidas:** recepción completa;
   faltante ajustado (baja la factura); faltante reclamado (abre garantía y saca
   stock); dañadas; sobrante (entra al costo de la línea); mixto; omitido; y las
