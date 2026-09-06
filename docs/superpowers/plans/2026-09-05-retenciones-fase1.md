@@ -3098,111 +3098,33 @@ git commit -m "feat(retenciones): el recibo POS muestra las retenciones y el net
 
 ---
 
-### Tarea 14: Retenciones en el PDF carta
+### Tarea 14: ~~Retenciones en el PDF carta~~ — la premisa era falsa
 
-**Archivos:**
+**No hay tal PDF carta de la venta.** Al ir a hacerlo se comprobó que
+`reciboPDF.js` no imprime facturas: imprime **recibos de caja** (tabla
+`recibos`), que es otro documento. La venta solo tiene el recibo POS, que ya
+quedó cubierto en la Tarea 13.
 
-- Modificar: `src/lib/pdf/reciboPDF.js:233-250`
+- [x] **Comprobado que las consultas traen las columnas nuevas**
 
-- [ ] **Paso 1: Añadir el caso a la prueba**
+Los tres sitios que alimentan el recibo POS —`VentaDetalle.jsx:107`,
+`PagoCuentaModal.jsx:168` y `OrdenDetalle.jsx:482`— usan `select("*")`, así que
+las siete columnas de retención llegan solas. No hay nada que cambiar.
 
-En `tests/integration/pos-retenciones.test.js`:
+- [ ] **Pendiente de decisión del usuario: el recibo de caja contra una OT retenida**
 
-```js
-describe("PDF carta con retenciones", () => {
-  it("no revienta con retencion ni sin ella", async () => {
-    const { generarReciboPDF } = await import("../../src/lib/pdf/reciboPDF");
-    const base = { numero: 1, subtotal: 1000000, iva_pct: 19, total: 1190000 };
-    expect(() => generarReciboPDF({ recibo: base, items: [] })).not.toThrow();
-    expect(() =>
-      generarReciboPDF({
-        recibo: {
-          ...base,
-          retefuente_valor: 25000,
-          retefuente_pct: 2.5,
-          retenciones_total: 25000,
-        },
-        items: [],
-      }),
-    ).not.toThrow();
-  });
-});
-```
+`fn_registrar_recibo` **no** lee `ordenes_servicio.total`: arma su propio total
+con los ítems que se le teclean (`subtotal * (1 + iva/100)`) y calcula
+`saldo = ese total − abonos_previos − monto_pagado`.
 
-Si el nombre exportado no es `generarReciboPDF`, tomarlo de
-`grep -n "^export" src/lib/pdf/reciboPDF.js` y ajustar el import y la llamada
-(incluida la forma del argumento, que puede no ser `{ recibo, items }`).
+Si se emite un recibo de caja contra una OT que tiene retención, ese saldo
+impreso ignora la retención y puede mostrar un saldo que el cliente nunca va a
+pagar. **No se tocó a propósito**: el total del recibo ni siquiera es el de la
+OT, así que netearlo es una decisión de negocio, no un arreglo obvio, y
+cambiarlo a ciegas distorsionaría un documento que no se estudió en este diseño.
 
-- [ ] **Paso 2: Añadir las filas**
-
-En `src/lib/pdf/reciboPDF.js`, después de
-`totRow("Total", formatCOP(total), { bold: true, color: INK, labColor: INK });`
-(línea ~240) y ANTES de `if (abonosPrev > 0)`:
-
-```js
-// Retenciones: lo que el cliente descuenta y consigna a la DIAN o al
-// municipio. Solo se imprimen si las hay; sin ellas el recibo sale idéntico.
-const retFuente = Number(recibo?.retefuente_valor ?? 0);
-const retIca = Number(recibo?.reteica_valor ?? 0);
-const retIva = Number(recibo?.reteiva_valor ?? 0);
-const retTotal = retFuente + retIca + retIva;
-if (retTotal > 0) {
-  if (retFuente > 0)
-    totRow(
-      `Retefuente ${Number(recibo?.retefuente_pct ?? 0)}%`,
-      `−${formatCOP(retFuente)}`,
-    );
-  if (retIca > 0)
-    totRow(
-      `ReteICA ${Number(recibo?.reteica_pct ?? 0)}%`,
-      `−${formatCOP(retIca)}`,
-    );
-  if (retIva > 0)
-    totRow(
-      `ReteIVA ${Number(recibo?.reteiva_pct ?? 0)}%`,
-      `−${formatCOP(retIva)}`,
-    );
-  doc.setDrawColor(...RULE);
-  doc.setLineWidth(0.2);
-  doc.line(tLabel, y - 1.5, R, y - 1.5);
-  y += 1.5;
-  totRow(
-    "Neto a recibir",
-    formatCOP(Math.max(0, Math.round(total - retTotal))),
-    {
-      bold: true,
-      color: INK,
-      labColor: INK,
-    },
-  );
-}
-```
-
-- [ ] **Paso 3: Verificar que la consulta trae las columnas nuevas**
-
-El PDF y el POS solo van a mostrar algo si quien los llama trae las columnas.
-
-```bash
-grep -rn "generarVentaPOS\|generarReciboPDF" src/pages/ | head
-```
-
-En cada sitio que aparezca, revisar el `.select(...)` que carga la venta: si
-enumera columnas en vez de usar `*`, hay que añadir `retefuente_pct`,
-`retefuente_valor`, `reteica_pct`, `reteica_valor`, `reteiva_pct`,
-`reteiva_valor`, `retenciones_total`. Si usa `*`, no hay nada que hacer.
-
-- [ ] **Paso 4: Correr todo**
-
-```bash
-npm test && npm run lint && npm run build
-```
-
-- [ ] **Paso 5: Commitear**
-
-```bash
-git add src/lib/pdf/reciboPDF.js src/pages/ tests/integration/pos-retenciones.test.js
-git commit -m "feat(retenciones): el PDF de venta muestra las retenciones y el neto"
-```
+Queda anotado para preguntarlo. No bloquea nada de la fase 1: es un documento
+aparte y hoy se comporta igual que siempre.
 
 ---
 

@@ -109,6 +109,15 @@ export function generarVentaPOS({
   // #S1-05: la marca de "ANULADA" agrega una línea de encabezado.
   const anulAlto = venta.anulada ? 6 : 0;
 
+  // Retenciones: una línea por cada una que exista, más la regla y el NETO. Si
+  // esto no se reserva, la tirilla sale cortada justo por abajo — la medición y
+  // el dibujo TIENEN que contar lo mismo.
+  const nRetenciones =
+    (Number(venta.retefuente_valor ?? 0) > 0 ? 1 : 0) +
+    (Number(venta.reteica_valor ?? 0) > 0 ? 1 : 0) +
+    (Number(venta.reteiva_valor ?? 0) > 0 ? 1 : 0);
+  const retencionesAlto = nRetenciones > 0 ? nRetenciones * 3.8 + 9 : 0;
+
   // Cuando una venta a CRÉDITO tiene abonos, la tirilla muestra el desglose de
   // abonos + saldo pendiente, así el mismo recibo sirve de comprobante del abono.
   const cobrosAbono = credito?.cobros ?? [];
@@ -137,6 +146,7 @@ export function generarVentaPOS({
       ctaAlto +
       pagosAlto +
       anulAlto +
+      retencionesAlto +
       abonosAlto +
       politicaAlto +
       50 +
@@ -302,6 +312,37 @@ export function generarVentaPOS({
   doc.setFontSize(9);
   fila("TOTAL:", formatCOP(total), true);
 
+  // Retenciones: solo si las hay. Sin retención el recibo sale idéntico a hoy.
+  // La factura no cambia — el TOTAL de arriba sigue siendo el facturado; lo que
+  // se agrega es cuánto se descuenta y cuánto entra de verdad.
+  const retFuente = Number(venta.retefuente_valor ?? 0);
+  const retIca = Number(venta.reteica_valor ?? 0);
+  const retIva = Number(venta.reteiva_valor ?? 0);
+  const retTotal = retFuente + retIca + retIva;
+  if (retTotal > 0) {
+    doc.setFontSize(7);
+    if (retFuente > 0)
+      fila(
+        `Retefuente ${Number(venta.retefuente_pct ?? 0)}%:`,
+        `-${formatCOP(retFuente)}`,
+      );
+    if (retIca > 0)
+      fila(
+        `ReteICA ${Number(venta.reteica_pct ?? 0)}%:`,
+        `-${formatCOP(retIca)}`,
+      );
+    if (retIva > 0)
+      fila(
+        `ReteIVA ${Number(venta.reteiva_pct ?? 0)}%:`,
+        `-${formatCOP(retIva)}`,
+      );
+    doc.line(MX, y - 1, W - MX, y - 1);
+    y += 1;
+    doc.setFontSize(8.5);
+    fila("NETO:", formatCOP(Math.max(0, Math.round(total - retTotal))), true);
+    doc.setFontSize(7);
+  }
+
   doc.setFontSize(7);
   doc.setFont("helvetica", "normal");
   // #S1-04: si hay desglose real (pago Mixto o electrónico), se imprime una
@@ -433,6 +474,9 @@ export function generarVentaPOS({
   return {
     blob,
     filename,
+    // Se expone para poder comprobar en pruebas que la pasada que MIDE y la que
+    // DIBUJA cuentan lo mismo. Ya paso una vez que no: la tirilla salio cortada.
+    altura,
     download() {
       doc.save(filename);
     },
