@@ -220,9 +220,18 @@ Con `mcp__supabase__apply_migration`, nombre `retenciones_helpers_inmutables`:
 -- va reteIVA. El domicilio queda FUERA a proposito: es transporte facturado
 -- aparte, no valor de la mercancia.
 --
--- OJO: estas funciones son IMMUTABLE y las usan columnas GENERATED STORED. Si
--- algun dia se cambia el cuerpo, Postgres NO recalcula las filas existentes.
--- Cambiarlas exige forzar un rewrite de la tabla en la misma migracion.
+-- OJO: estas funciones son IMMUTABLE y las usan columnas GENERATED STORED. Eso
+-- trae dos consecuencias que hay que tener presentes:
+--   1. Si se cambia el cuerpo, Postgres NO recalcula las filas existentes.
+--      Cambiarlas exige forzar un rewrite de la tabla en la misma migracion.
+--   2. Una vez creadas las columnas, Postgres BLOQUEA el CREATE OR REPLACE de
+--      estas funciones. Cualquier ajuste posterior va por ALTER FUNCTION.
+--
+-- Nacen con search_path fijo en vacio, que es lo que exigen los advisors de
+-- Supabase: sin eso, quien las llama podria anteponer un esquema propio y hacer
+-- que `round` resuelva a otra cosa. pg_catalog se busca siempre de forma
+-- implicita, asi que `round`, `least`, `greatest` y `coalesce` siguen sirviendo,
+-- y la llamada anidada ya va con `public.` delante.
 
 -- Espejo de trg_recalcular_total_venta:
 --   v_desc := coalesce(descuento_valor, subtotal * descuento_pct/100)
@@ -232,6 +241,7 @@ CREATE OR REPLACE FUNCTION public._fn_base_retencion_venta(
   p_subtotal numeric, p_descuento_valor numeric, p_descuento_pct numeric
 ) RETURNS numeric
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
+SET search_path = ''
 AS $$
   SELECT coalesce(p_subtotal, 0) - greatest(0::numeric, least(
            coalesce(p_descuento_valor, coalesce(p_subtotal,0) * coalesce(p_descuento_pct,0) / 100),
@@ -245,6 +255,7 @@ CREATE OR REPLACE FUNCTION public._fn_iva_venta(
   p_subtotal numeric, p_descuento_valor numeric, p_descuento_pct numeric, p_iva_pct numeric
 ) RETURNS numeric
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
+SET search_path = ''
 AS $$
   SELECT round(public._fn_base_retencion_venta(p_subtotal, p_descuento_valor, p_descuento_pct)
                * coalesce(p_iva_pct, 0) / 100)
@@ -257,6 +268,7 @@ CREATE OR REPLACE FUNCTION public._fn_base_retencion_ot(
   p_revision numeric, p_descuento numeric
 ) RETURNS numeric
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
+SET search_path = ''
 AS $$
   SELECT CASE WHEN p_estado_autorizacion = 'no_autorizado'
     THEN greatest(0::numeric, coalesce(p_revision, 0))
@@ -498,8 +510,25 @@ Esperado: `ERROR: column "retenciones_total" can only be updated to DEFAULT`.
 
 - [ ] **Paso 7: Revisar los advisors de Supabase**
 
-Correr `mcp__supabase__get_advisors` con `type: "security"`. No debe aparecer
-ningún hallazgo nuevo asociado a las columnas o funciones creadas.
+Correr `mcp__supabase__get_advisors` con `type: "security"`. Devuelve ~112
+hallazgos preexistentes, así que **no sirve mirarlos a ojo**: hay que contarlos
+y filtrar los propios.
+
+```bash
+python -c "
+import json,collections
+d=json.load(open(r'<ruta que devuelve la herramienta>'))
+ls=d['result']['lints']
+print('total:',len(ls))
+print(collections.Counter(l['name'] for l in ls).most_common())
+mios=[l for l in ls if any(k in l.get('detail','') for k in ('retencion','_fn_iva_venta'))]
+print('mios:',len(mios))
+for m in mios: print(' -',m['level'],m['name'],'|',m['detail'])
+"
+```
+
+Esperado: `mios: 0` y el total igual al de antes de empezar (112 el 2026-09-06).
+Si aparece `function_search_path_mutable`, falta el `SET search_path = ''`.
 
 - [ ] **Paso 8: Guardar el archivo y commitear**
 
