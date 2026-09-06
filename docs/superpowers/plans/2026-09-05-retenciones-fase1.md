@@ -267,12 +267,24 @@ AS $$
   END
 $$;
 
--- Son funciones internas de calculo, no API. Supabase concede EXECUTE a `anon`
--- por defecto en cada funcion nueva del esquema public, y REVOKE FROM PUBLIC
--- no lo quita: hay que nombrar el rol.
-REVOKE EXECUTE ON FUNCTION public._fn_base_retencion_venta(numeric, numeric, numeric) FROM anon;
-REVOKE EXECUTE ON FUNCTION public._fn_iva_venta(numeric, numeric, numeric, numeric) FROM anon;
-REVOKE EXECUTE ON FUNCTION public._fn_base_retencion_ot(text, numeric, numeric, numeric, numeric) FROM anon;
+-- Son funciones internas de calculo, no API.
+--
+-- Hay DOS caminos por los que `anon` puede terminar con EXECUTE, y hay que
+-- cerrar los dos: el grant por defecto que Postgres le pone a PUBLIC en toda
+-- funcion nueva, y el grant directo a `anon` de las default privileges de
+-- Supabase. Revocar solo uno deja el otro en pie y
+-- has_function_privilege('anon', ...) sigue diciendo true.
+--
+-- Y hay que volver a conceder a `authenticated`, que si lo necesita: las
+-- expresiones de las columnas generadas se evaluan con los privilegios de quien
+-- hace el INSERT o el UPDATE, y quien registra una venta es `authenticated`.
+REVOKE EXECUTE ON FUNCTION public._fn_base_retencion_venta(numeric, numeric, numeric) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public._fn_iva_venta(numeric, numeric, numeric, numeric) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public._fn_base_retencion_ot(text, numeric, numeric, numeric, numeric) FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public._fn_base_retencion_venta(numeric, numeric, numeric) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public._fn_iva_venta(numeric, numeric, numeric, numeric) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public._fn_base_retencion_ot(text, numeric, numeric, numeric, numeric) TO authenticated, service_role;
 ```
 
 - [ ] **Paso 3: Correr la prueba del paso 1 otra vez**
@@ -283,13 +295,17 @@ Cualquier otro mensaje es una fórmula que no coincide.
 - [ ] **Paso 4: Comprobar que `anon` no puede ejecutarlas**
 
 ```sql
-SELECT p.proname, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_puede
+SELECT p.proname,
+       has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+       has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth
 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
-  AND p.proname IN ('_fn_base_retencion_venta','_fn_iva_venta','_fn_base_retencion_ot');
+  AND p.proname IN ('_fn_base_retencion_venta','_fn_iva_venta','_fn_base_retencion_ot')
+ORDER BY 1;
 ```
 
-Esperado: `anon_puede = false` en las tres.
+Esperado: `anon = false` y `auth = true` en las tres. Si `anon` sale en `true`,
+falta el `REVOKE ... FROM PUBLIC`: revocar solo el rol no basta.
 
 - [ ] **Paso 5: Guardar el archivo de migración y commitear**
 
