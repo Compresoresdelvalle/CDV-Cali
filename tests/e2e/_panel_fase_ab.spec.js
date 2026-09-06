@@ -173,4 +173,35 @@ test.describe("Panel — fases A y B", () => {
       fullPage: true,
     });
   });
+
+  test("un egreso nuevo no se puede guardar sin categoría", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/ops/compras/nueva");
+
+    await page.getByRole("button", { name: "Caja menor", exact: true }).click();
+
+    // El campo tiene que estar: si solo se limpia lo viejo, la bandeja de
+    // clasificación se vuelve a llenar sola y el Resultado nunca cierra.
+    // El label lleva un asterisco de obligatorio, así que no es texto exacto.
+    await expect(page.getByText(/^Categoría/).first()).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Con concepto y monto pero SIN categoría, guardar sigue bloqueado.
+    await page
+      .locator('input[placeholder*="transporte"]')
+      .fill("PRUEBA CATEGORIA OBLIGATORIA");
+    await page.locator('input[type="number"]').first().fill("1000");
+
+    await expect(
+      page.getByRole("button", { name: "Registrar caja menor" }),
+    ).toBeDisabled();
+
+    await page.screenshot({
+      path: "tests/results/panel-07-caja-menor.png",
+      fullPage: true,
+    });
+  });
 });
