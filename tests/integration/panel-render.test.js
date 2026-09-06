@@ -1,7 +1,37 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
+import { MemoryRouter } from "react-router-dom";
 import BarraRango from "../../src/components/panel/BarraRango";
+
+vi.mock("../../src/lib/supabase", () => {
+  const q = {
+    select: () => q,
+    eq: () => q,
+    order: () => q,
+    then: (r) => Promise.resolve({ data: [], error: null }).then(r),
+  };
+  return {
+    supabase: {
+      from: () => q,
+      rpc: () => Promise.resolve({ data: null, error: null }),
+    },
+  };
+});
+
+let perfilActual = { rol: "Admin", sede_id: "BODEGA", nombre: "Admin Maritza" };
+vi.mock("../../src/stores/authStore", () => ({
+  get useAuthStore() {
+    const usar = (sel) =>
+      typeof sel === "function"
+        ? sel({ perfil: perfilActual })
+        : { perfil: perfilActual };
+    usar.getState = () => ({ perfil: perfilActual });
+    usar.setState = () => {};
+    usar.subscribe = () => () => {};
+    return usar;
+  },
+}));
 
 /**
  * Prueba de humo del panel.
@@ -83,5 +113,68 @@ describe("BarraRango", () => {
 
   it("aguanta que no haya sedes ni fecha de actualización", () => {
     expect(() => montar({ sedes: [], actualizado: null })).not.toThrow();
+  });
+});
+
+describe("Panel", () => {
+  const montar = async () => {
+    const Panel = (await import("../../src/pages/admin/Panel")).default;
+    return renderToStaticMarkup(
+      createElement(MemoryRouter, null, createElement(Panel)),
+    );
+  };
+
+  it("monta como Admin", async () => {
+    perfilActual = { rol: "Admin", sede_id: "BODEGA", nombre: "Admin Maritza" };
+    await expect(montar()).resolves.toBeTruthy();
+  });
+
+  it("el rango manda desde el primer render", async () => {
+    perfilActual = { rol: "Admin", sede_id: "BODEGA", nombre: "Admin Maritza" };
+    const html = await montar();
+    // La barra tiene que estar montada con su frase, no un placeholder.
+    expect(html).toContain("Actualizado");
+    expect(html).toContain("Este mes");
+  });
+
+  it("a una vendedora le explica por que no ve el margen, no le da error", async () => {
+    // Un error de permisos parece una falla; una explicacion no.
+    perfilActual = { rol: "Vendedor", sede_id: "CV", nombre: "Deyanira" };
+    const html = await montar();
+    expect(html).toContain("información de administración");
+    expect(html).not.toContain("Reintentar");
+  });
+});
+
+describe("Seccion", () => {
+  const montar = async (props) => {
+    const S = (await import("../../src/components/panel/Seccion")).default;
+    return renderToStaticMarkup(createElement(S, { titulo: "Prueba", ...props }));
+  };
+
+  it("cargando pinta un esqueleto con la forma del contenido", async () => {
+    const html = await montar({ cargando: true, filasEsqueleto: 3 });
+    expect(html).toContain('aria-busy="true"');
+    expect((html.match(/animate-pulse/g) ?? []).length).toBe(3);
+  });
+
+  it("vacio explica, no deja la tarjeta en blanco", async () => {
+    const html = await montar({
+      vacio: true,
+      mensajeVacio: "Ningún producto se vendió bajo costo.",
+    });
+    expect(html).toContain("Ningún producto se vendió bajo costo.");
+  });
+
+  it("el error se queda dentro de la seccion y ofrece reintentar solo esa", async () => {
+    const html = await montar({ error: "No se pudo cargar", onReintentar() {} });
+    expect(html).toContain("No se pudo cargar");
+    expect(html).toContain("Reintentar esta sección");
+  });
+
+  it("sin permiso explica en vez de parecer una falla", async () => {
+    const html = await montar({ sinPermiso: true });
+    expect(html).toContain("información de administración");
+    expect(html).not.toContain("Reintentar");
   });
 });

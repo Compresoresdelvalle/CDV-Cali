@@ -7,6 +7,7 @@
  */
 import {
   LayoutDashboard,
+  LineChart,
   Bell,
   BarChart3,
   TrendingUp,
@@ -35,6 +36,12 @@ export const SECCIONES_ADMIN = [
         label: "Dashboard",
         href: "/admin",
         icon: LayoutDashboard,
+      },
+      {
+        id: "panel",
+        label: "Panel",
+        href: "/admin/panel",
+        icon: LineChart,
       },
       { id: "alertas", label: "Alertas", href: "/admin/alertas", icon: Bell },
     ],

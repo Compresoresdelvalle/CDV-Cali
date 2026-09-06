@@ -58,6 +58,7 @@ import ReciboDetalle from "./pages/ops/Recibos/ReciboDetalle";
    TODO el mundo al entrar, incluida la que solo va a facturar.
    ────────────────────────────────────────────────────────────────────────── */
 const AdminDashboard = lazy(() => import("./pages/admin/Dashboard"));
+const Panel = lazy(() => import("./pages/admin/Panel"));
 const Cierres = lazy(() => import("./pages/admin/Cierres"));
 const Alertas = lazy(() => import("./pages/admin/Alertas"));
 const Reorden = lazy(() => import("./pages/admin/Reorden"));
@@ -519,6 +520,7 @@ export default function App() {
           }
         >
           <Route index element={<AdminDashboard />} />
+          <Route path="panel" element={<Panel />} />
           <Route path="cierres" element={<Cierres />} />
           <Route path="alertas" element={<Alertas />} />
           <Route path="conteo" element={<Conteo />} />
