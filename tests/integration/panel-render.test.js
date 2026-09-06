@@ -456,3 +456,126 @@ describe("PanelDetalle", () => {
     expect(html).toContain("buena noticia");
   });
 });
+
+describe("Composicion", () => {
+  const FILAS = [
+    {
+      clave: "CV",
+      etiqueta: "Cali Valle",
+      venta: 80000000,
+      costo: 20000000,
+      margen: 60000000,
+      margen_pct: 75,
+      n: 400,
+    },
+    {
+      clave: "CHV",
+      etiqueta: "Chipichape",
+      venta: 45000000,
+      costo: 15000000,
+      margen: 30000000,
+      margen_pct: 66.7,
+      n: 250,
+    },
+    {
+      clave: "L3",
+      etiqueta: "Local 3",
+      venta: 20000000,
+      costo: 12000000,
+      margen: 8000000,
+      margen_pct: 40,
+      n: 120,
+    },
+  ];
+
+  const montar = async (props) => {
+    const C = (await import("../../src/components/panel/Composicion")).default;
+    return renderToStaticMarkup(
+      createElement(C, {
+        dimension: "sede",
+        onDimension() {},
+        filas: FILAS,
+        peores: false,
+        onPeores() {},
+        ...props,
+      }),
+    );
+  };
+
+  it("trae las siete dimensiones para escoger", async () => {
+    const html = await montar();
+    for (const t of [
+      "Sede",
+      "Vendedora",
+      "Producto",
+      "Categoría",
+      "Tipo",
+      "Método de pago",
+      "Cliente",
+    ]) {
+      expect(html).toContain(t);
+    }
+  });
+
+  it("muestra el total al pie para poder verificar que las partes suman", async () => {
+    const html = await montar();
+    expect(html).toContain("Total");
+    // 80 + 45 + 20 millones. Si el pie no suma las filas, el desglose no sirve
+    // para verificar la cascada.
+    expect(html).toContain("145.000.000");
+  });
+
+  it("puede invertir el orden para ver los peores", async () => {
+    const html = await montar({ peores: true });
+    // Con "ver los peores" el de menor margen queda de primero.
+    expect(html.indexOf("Local 3")).toBeLessThan(html.indexOf("Cali Valle"));
+  });
+
+  it("por defecto ordena por venta, de mayor a menor", async () => {
+    const html = await montar();
+    expect(html.indexOf("Cali Valle")).toBeLessThan(html.indexOf("Local 3"));
+  });
+
+  it("sin ser Admin no se pintan costo ni margen", async () => {
+    const html = await montar({ admin: false });
+    expect(html).toContain("Cali Valle");
+    // 12.000.000 solo aparece como costo; 20.000.000 tambien es una venta.
+    expect(html).not.toContain("12.000.000");
+    expect(html).not.toContain("66.7%");
+    expect(html).not.toContain("Ver los peores");
+  });
+
+  it("sin ventas lo dice en vez de dejar una tabla vacía", async () => {
+    const html = await montar({ filas: [] });
+    expect(html).toContain("No hubo ventas en este rango");
+  });
+});
+
+describe("Composicion — el total de facturas no puede contar de mas", () => {
+  const FILAS = [
+    { clave: "a", etiqueta: "Filtro", venta: 100, costo: 40, margen: 60, margen_pct: 60, n: 9 },
+    { clave: "b", etiqueta: "Manguera", venta: 50, costo: 20, margen: 30, margen_pct: 60, n: 7 },
+  ];
+  const montar = async (dimension) => {
+    const C = (await import("../../src/components/panel/Composicion")).default;
+    return renderToStaticMarkup(
+      createElement(C, {
+        dimension,
+        onDimension() {},
+        filas: FILAS,
+        peores: false,
+        onPeores() {},
+      }),
+    );
+  };
+
+  it("por sede suma las facturas: cada venta cae en un renglon", async () => {
+    expect(await montar("sede")).toContain(">16<");
+  });
+
+  it("por producto NO las suma: una factura sale en varios renglones", async () => {
+    const html = await montar("producto");
+    expect(html).not.toContain(">16<");
+    expect(html).toContain("contaría de más");
+  });
+});

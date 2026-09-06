@@ -256,3 +256,77 @@ test.describe("Panel — fases A y B", () => {
     await expect(panel).toBeHidden({ timeout: 5_000 });
   });
 });
+
+test.describe("Panel — fase D", () => {
+  test("la composición cuadra con la cascada y cambia de eje", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+
+    const seccion = page
+      .locator("section")
+      .filter({ hasText: "CÓMO SE COMPONE LA VENTA" });
+    await expect(seccion).toBeVisible({ timeout: 30_000 });
+
+    // Lo único que de verdad hay que comprobar: el total del desglose tiene que
+    // ser el mismo número que las ventas netas de la cascada. Si no, hay dos
+    // cifras contradictorias en la misma pantalla.
+    const netas = await page
+      .locator("section")
+      .filter({ hasText: "RESULTADO DEL PERIODO" })
+      .getByText(/^\$\s?[\d.]+$/)
+      .first()
+      .innerText();
+    await expect(seccion.locator("tfoot")).toContainText(netas.trim(), {
+      timeout: 30_000,
+    });
+
+    // Cambiar de eje trae otras filas.
+    const primeraSede = await seccion
+      .locator("tbody tr td")
+      .first()
+      .innerText();
+    await seccion.getByRole("button", { name: "Vendedora" }).click();
+    await expect(seccion.locator("tbody tr td").first()).not.toHaveText(
+      primeraSede,
+      { timeout: 30_000 },
+    );
+
+    // Y el total sigue cuadrando después de cambiar de eje: el reparto de la
+    // venta neta entre las líneas no depende de la dimensión.
+    await expect(seccion.locator("tfoot")).toContainText(netas.trim());
+
+    await page.screenshot({
+      path: "tests/results/panel-10-composicion.png",
+      fullPage: false,
+    });
+  });
+
+  test("ver los peores deja de primero el de menor margen", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+
+    const seccion = page
+      .locator("section")
+      .filter({ hasText: "Cómo se compone la venta" });
+    await seccion.locator("tbody tr").first().waitFor({ timeout: 30_000 });
+
+    // No se puede afirmar que el primero CAMBIE: puede que quien más vende sea
+    // ya quien menos margen deja (con los datos de septiembre, Almacén CV es
+    // las dos cosas). Lo que sí se puede afirmar siempre es que después de
+    // pulsar, arriba queda el mínimo.
+    await seccion.getByRole("button", { name: /Ver los peores/ }).click();
+
+    const pcts = (
+      await seccion.locator("tbody tr td:nth-child(6)").allInnerTexts()
+    )
+      .map((t) => parseFloat(t.replace("%", "")))
+      .filter((n) => !Number.isNaN(n));
+
+    expect(pcts.length).toBeGreaterThan(1);
+    expect(pcts[0]).toBe(Math.min(...pcts));
+  });
+});
