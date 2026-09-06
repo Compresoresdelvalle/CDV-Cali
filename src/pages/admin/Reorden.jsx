@@ -751,7 +751,10 @@ const PARAM_LABELS = {
   minmax_factor_max: "Máx = mín ×",
 };
 
-function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
+// Se exporta solo para la prueba de humo: es un modal, asi que la pantalla no
+// lo monta hasta que alguien pulsa "Sugerir min/max" y un render de la pagina
+// no lo cubre.
+export function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
   // Las sugerencias son POR SEDE: la demanda de BODEGA (que despacha) no se
   // parece a la de CHV (que vende). Sin elegir sede, `fn_sugerir_minmax`
   // devolvería las cuatro y el mismo producto saldría repetido.
@@ -768,6 +771,9 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
   const [progresoAplicar, setProgresoAplicar] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [sugerencias, setSugerencias] = useState([]);
+  // Clase ABC a mostrar. El asistente lista cientos de productos —471 en
+  // BODEGA— y sin esto no hay forma de atacar primero lo que no puede faltar.
+  const [claseAbc, setClaseAbc] = useState("todas");
   const [soloSinConfigurar, setSoloSinConfigurar] = useState(true);
   const [seleccion, setSeleccion] = useState(() => new Set());
   const [parametros, setParametros] = useState({
@@ -892,13 +898,18 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
     }
   };
 
-  const visibles = useMemo(
-    () =>
-      soloSinConfigurar
-        ? sugerencias.filter((i) => !i.ya_configurado)
-        : sugerencias,
-    [sugerencias, soloSinConfigurar],
-  );
+  const visibles = useMemo(() => {
+    let out = soloSinConfigurar
+      ? sugerencias.filter((i) => !i.ya_configurado)
+      : sugerencias;
+    if (claseAbc !== "todas") {
+      // `claseReorden` decide cuál clase manda (la combinada, con respaldo en
+      // la de ventas). Se reutiliza para que el filtro y el distintivo de cada
+      // fila digan siempre lo mismo.
+      out = out.filter((i) => claseReorden(i) === claseAbc);
+    }
+    return out;
+  }, [sugerencias, soloSinConfigurar, claseAbc]);
 
   const toggle = (id) =>
     setSeleccion((prev) => {
@@ -1089,18 +1100,64 @@ function ModalMinMax({ onClose, onAplicado, sedes, sedeInicial }) {
             </button>
           </div>
 
-          {/* Toggle solo sin configurar */}
-          <label className="mb-3 flex w-fit cursor-pointer items-center gap-2 text-[12.5px]">
-            <input
-              type="checkbox"
-              checked={soloSinConfigurar}
-              onChange={(e) => setSoloSinConfigurar(e.target.checked)}
-              className="h-4 w-4 cursor-pointer"
+          {/* Filtros: sin configurar y clase ABC. Se combinan. */}
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <label className="flex w-fit cursor-pointer items-center gap-2 text-[12.5px]">
+              <input
+                type="checkbox"
+                checked={soloSinConfigurar}
+                onChange={(e) => setSoloSinConfigurar(e.target.checked)}
+                className="h-4 w-4 cursor-pointer"
+              />
+              <span style={{ color: "hsl(var(--foreground))" }}>
+                Solo sin configurar
+              </span>
+            </label>
+
+            <span
+              className="hidden h-5 w-px sm:block"
+              style={{ backgroundColor: "hsl(var(--border))" }}
             />
-            <span style={{ color: "hsl(var(--foreground))" }}>
-              Solo sin configurar
-            </span>
-          </label>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {["todas", "A", "B", "C"].map((c) => {
+                const on = claseAbc === c;
+                const n =
+                  c === "todas"
+                    ? null
+                    : (soloSinConfigurar
+                        ? sugerencias.filter((i) => !i.ya_configurado)
+                        : sugerencias
+                      ).filter((i) => claseReorden(i) === c).length;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setClaseAbc(c)}
+                    className="rounded-md border px-2.5 py-1 text-[12px] font-medium"
+                    style={{
+                      borderColor: on
+                        ? "hsl(var(--primary))"
+                        : "hsl(var(--border))",
+                      backgroundColor: on
+                        ? "hsl(var(--primary) / 0.1)"
+                        : "transparent",
+                      color: on
+                        ? "hsl(var(--primary))"
+                        : "hsl(var(--muted-foreground))",
+                    }}
+                    title={
+                      c === "todas"
+                        ? "Todas las clases"
+                        : `Solo los de clase ${c}`
+                    }
+                  >
+                    {c === "todas" ? "ABC: todas" : `${c} (${n})`}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {loading ? (
             <SkeletonList />
