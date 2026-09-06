@@ -141,3 +141,16 @@ describe("Nueva Venta con el bloque de retenciones", () => {
     await expect(montarVenta()).resolves.toBeTruthy();
   });
 });
+
+describe("OrdenDetalle con retenciones", () => {
+  it("monta sin reventar", async () => {
+    perfilActual = { rol: "Vendedor", sede_id: "CV", nombre: "Deyanira" };
+    const OrdenDetalle = (await import("../../src/pages/ops/OrdenDetalle"))
+      .default;
+    expect(() =>
+      renderToStaticMarkup(
+        createElement(MemoryRouter, null, createElement(OrdenDetalle)),
+      ),
+    ).not.toThrow();
+  });
+});
