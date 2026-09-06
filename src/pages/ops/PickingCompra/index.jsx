@@ -400,6 +400,28 @@ export default function PickingCompra() {
       // safeError conserva el mensaje P0001 tal cual lo redactó la RPC (el
       // "por qué" y qué hacer) — no se reemplaza por un texto genérico.
       avisarError(e, "No se pudo recibir la compra");
+
+      // Si el rechazo vino de que otro dispositivo ya recibió o canceló esta
+      // compra mientras se contaba, reintentar va a fallar exactamente igual, y
+      // la regla del proyecto es no dejar en pantalla un botón que no puede
+      // funcionar. Se relee el estado: si ya no se puede recibir, `bloqueo`
+      // recalcula solo y la pantalla pasa a explicarlo con salida.
+      //
+      // No es paranoia: en bodega es normal tener la tablet y el celular
+      // abiertos a la vez, y el conteo puede durar veinte minutos.
+      try {
+        const { data: fresca } = await supabase
+          .from("compras")
+          .select("recibida, fecha_recepcion, estado")
+          .eq("id", id)
+          .maybeSingle();
+        if (fresca && (fresca.recibida || fresca.estado === "cancelada")) {
+          setCompra((prev) => (prev ? { ...prev, ...fresca } : prev));
+        }
+      } catch {
+        // Si ni siquiera se puede releer (red caída), se deja la pantalla como
+        // está: el operario conserva su conteo y puede reintentar más tarde.
+      }
       return false;
     } finally {
       setProcesando(false);
