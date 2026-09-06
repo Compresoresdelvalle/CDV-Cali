@@ -1814,34 +1814,44 @@ END $$;
 
 Esperado: `ERROR: OK - la firma vieja se comporta igual (se revierte a proposito)`.
 
-- [ ] **Paso 5: Verificar que no quedó una sobrecarga huérfana**
+- [ ] **Paso 5: Borrar la firma vieja y cerrarle el paso a `anon`**
 
-`CREATE OR REPLACE` con parámetros nuevos crea una función **distinta** si la
-lista de argumentos cambia. Hay que confirmar que solo existe una.
+Estas dos cosas **siempre** ocurren, no son un "por si acaso": van en su propia
+migración inmediatamente después. Nombre `retenciones_registrar_venta_firma_unica`:
 
 ```sql
-SELECT pg_get_function_identity_arguments(p.oid) AS args
+-- 1. CREATE OR REPLACE con parametros nuevos NO reemplaza: crea una funcion
+--    DISTINTA. Quedan dos fn_registrar_venta, la de 12 y la de 15 argumentos, y
+--    con las dos vivas PostgREST no sabe cual llamar: cada venta desde la app
+--    falla por ambiguedad. Los llamados que solo mandan los 12 parametros
+--    siguen sirviendo, porque los tres nuevos tienen DEFAULT 0.
+--
+-- 2. La funcion nueva nace con EXECUTE para PUBLIC (el grant por defecto de
+--    Postgres), asi que `anon` puede registrar ventas. Es SECURITY DEFINER: se
+--    salta la RLS. La vieja tenia anon = false y hay que dejar la nueva igual.
+DROP FUNCTION public.fn_registrar_venta(
+  text, text, text, text, numeric, text, jsonb, numeric, text, numeric, numeric, jsonb);
+
+REVOKE EXECUTE ON FUNCTION public.fn_registrar_venta(
+  text, text, text, text, numeric, text, jsonb, numeric, text, numeric, numeric, jsonb,
+  numeric, numeric, numeric) FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public.fn_registrar_venta(
+  text, text, text, text, numeric, text, jsonb, numeric, text, numeric, numeric, jsonb,
+  numeric, numeric, numeric) TO authenticated, service_role;
+```
+
+- [ ] **Paso 6: Comprobar que quedó una sola firma y sin acceso anónimo**
+
+```sql
+SELECT count(*) AS n_firmas,
+       bool_or(has_function_privilege('anon', p.oid, 'EXECUTE')) AS algun_anon,
+       bool_and(has_function_privilege('authenticated', p.oid, 'EXECUTE')) AS todas_auth
 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public' AND p.proname = 'fn_registrar_venta';
 ```
 
-Esperado: **una sola fila**, la de 15 argumentos. Si aparecen dos, hay que
-`DROP FUNCTION` la vieja (por su firma exacta de 12 argumentos) y volver a
-comprobar; con dos, PostgREST no sabe cuál llamar y la venta falla por
-ambigüedad.
-
-- [ ] **Paso 6: Confirmar los permisos**
-
-```sql
-SELECT has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
-       has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth
-FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'public' AND p.proname = 'fn_registrar_venta';
-```
-
-Esperado: `auth = true`, `anon = false`. Si `anon` quedó en `true`, agregar a la
-migración `REVOKE EXECUTE ON FUNCTION public.fn_registrar_venta(text,text,text,text,numeric,text,jsonb,numeric,text,numeric,numeric,jsonb,numeric,numeric,numeric) FROM anon;`
-y volver a aplicar.
+Esperado: `n_firmas = 1`, `algun_anon = false`, `todas_auth = true`.
 
 - [ ] **Paso 7: Guardar el archivo y commitear**
 
