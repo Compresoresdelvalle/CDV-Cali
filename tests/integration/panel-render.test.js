@@ -149,7 +149,9 @@ describe("Panel", () => {
 describe("Seccion", () => {
   const montar = async (props) => {
     const S = (await import("../../src/components/panel/Seccion")).default;
-    return renderToStaticMarkup(createElement(S, { titulo: "Prueba", ...props }));
+    return renderToStaticMarkup(
+      createElement(S, { titulo: "Prueba", ...props }),
+    );
   };
 
   it("cargando pinta un esqueleto con la forma del contenido", async () => {
@@ -167,7 +169,10 @@ describe("Seccion", () => {
   });
 
   it("el error se queda dentro de la seccion y ofrece reintentar solo esa", async () => {
-    const html = await montar({ error: "No se pudo cargar", onReintentar() {} });
+    const html = await montar({
+      error: "No se pudo cargar",
+      onReintentar() {},
+    });
     expect(html).toContain("No se pudo cargar");
     expect(html).toContain("Reintentar esta sección");
   });
@@ -176,5 +181,68 @@ describe("Seccion", () => {
     const html = await montar({ sinPermiso: true });
     expect(html).toContain("información de administración");
     expect(html).not.toContain("Reintentar");
+  });
+});
+
+describe("ClasificarEgresos", () => {
+  const montar = async () => {
+    const P = (await import("../../src/pages/admin/ClasificarEgresos")).default;
+    return renderToStaticMarkup(
+      createElement(MemoryRouter, null, createElement(P)),
+    );
+  };
+
+  it("monta como Admin", async () => {
+    perfilActual = { rol: "Admin", sede_id: "BODEGA", nombre: "Admin Maritza" };
+    await expect(montar()).resolves.toBeTruthy();
+  });
+});
+
+describe("agruparEgresos", () => {
+  it("junta los conceptos escritos distinto", async () => {
+    // El caso real: 'NOMIN', 'NOMINAS', 'NOM E' son todos nomina. Sin agrupar,
+    // clasificar 465 movimientos uno por uno no lo hace nadie.
+    const { agruparEgresos } = await import("../../src/lib/panel-egresos");
+    const g = agruparEgresos([
+      { id: "1", concepto: "NOMINA", total: 100 },
+      { id: "2", concepto: "NOMINAS", total: 200 },
+      { id: "3", concepto: "nomina m", total: 300 },
+      { id: "4", concepto: "GASOLINA", total: 50 },
+    ]);
+    const nomina = g.find((x) => x.clave === "NOMINA");
+    expect(nomina.items).toHaveLength(2); // NOMINA y nomina m
+    expect(g.find((x) => x.clave === "NOMINAS").items).toHaveLength(1);
+  });
+
+  it("ordena por monto: bajar los pesos del margen de error es lo que importa", async () => {
+    // Por CANTIDAD manda gasolina (71 movimientos chicos); por MONTO manda la
+    // nomina. Se ordena por monto porque el aviso del Resultado se mide en
+    // pesos, no en cuantos movimientos faltan.
+    const { agruparEgresos } = await import("../../src/lib/panel-egresos");
+    const g = agruparEgresos([
+      { id: "1", concepto: "GASOLINA", total: 1000 },
+      { id: "2", concepto: "GASOLINA", total: 1000 },
+      { id: "3", concepto: "GASOLINA", total: 1000 },
+      { id: "4", concepto: "NOMINA", total: 10000 },
+    ]);
+    expect(g[0].clave).toBe("NOMINA");
+    expect(g[0].monto).toBe(10000);
+    expect(g[1].items).toHaveLength(3);
+  });
+
+  it("un concepto vacio no se pierde: cae en SIN CONCEPTO", async () => {
+    const { agruparEgresos } = await import("../../src/lib/panel-egresos");
+    const g = agruparEgresos([
+      { id: "1", concepto: null, total: 100 },
+      { id: "2", concepto: "   ", total: 200 },
+    ]);
+    expect(g).toHaveLength(1);
+    expect(g[0].clave).toBe("SIN CONCEPTO");
+    expect(g[0].items).toHaveLength(2);
+  });
+
+  it("aguanta una lista vacia", async () => {
+    const { agruparEgresos } = await import("../../src/lib/panel-egresos");
+    expect(agruparEgresos([])).toEqual([]);
   });
 });
