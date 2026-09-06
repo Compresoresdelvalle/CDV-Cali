@@ -440,7 +440,12 @@ export function generarOrdenPDF({
     // descuento, dando un total distinto al que realmente se le cobra al cliente.
     const total = Number(orden.total ?? 0);
     const abonado = abonos.reduce((s, a) => s + (Number(a.monto) || 0), 0);
-    const saldo = total - abonado;
+    // Retenciones: la factura sigue diciendo `total`, pero el cliente solo
+    // entrega el neto. El saldo se mide contra lo COBRABLE, igual que en la
+    // pantalla y que en las compuertas del servidor; si no, la constancia le
+    // imprime al cliente un saldo pendiente que no existe.
+    const retenciones = Number(orden.retenciones_total ?? 0);
+    const saldo = total - retenciones - abonado;
 
     const filaT = (label, valor) => {
       doc.setTextColor(...COLORES.textoMedio);

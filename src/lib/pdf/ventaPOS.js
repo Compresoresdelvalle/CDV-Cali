@@ -416,7 +416,10 @@ export function generarVentaPOS({
     y += 1;
     doc.setFontSize(7.5);
     fila("Abonado:", formatCOP(abonadoTotal));
-    const saldoPend = Math.max(0, total - abonadoTotal);
+    // Descuenta la retención: el cliente no debe esa plata, ya la consignó a la
+    // DIAN. Sin esto la tirilla le imprime al cliente un saldo que nunca va a
+    // pagar, y es el papel que se lleva en la mano.
+    const saldoPend = Math.max(0, total - retTotal - abonadoTotal);
     doc.setFontSize(9);
     fila("SALDO PENDIENTE:", formatCOP(saldoPend), true);
     doc.setFontSize(7);

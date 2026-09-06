@@ -42,7 +42,8 @@ const SEDES_OPCIONES = Object.entries(SEDE_LABELS_CUENTAS).map(([v, l]) => ({
 
 /**
  * Estado de cuenta: NO es una columna, se deriva de saldo vs total. Como
- * `saldo = total - abonado` en ambas vistas, "parcial" equivale a "abonado > 0",
+ * `saldo = total - retenciones - abonado` en ambas vistas (la retención de
+ * compras es fase 2 y hoy vale 0), "parcial" equivale a "abonado > 0",
  * y eso sí se puede preguntar en el servidor sin comparar columna contra columna
  * (PostgREST no sabe hacerlo). Mismos umbrales que `estadoCuenta()`.
  */
