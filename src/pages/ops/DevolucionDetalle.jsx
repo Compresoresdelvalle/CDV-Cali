@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import {
   ArrowLeftCircle,
   XCircle,
@@ -50,6 +50,9 @@ export default function DevolucionDetalle() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [anulando, setAnulando] = useState(false);
+  // Venta de la diferencia del cambio: es la pantalla desde donde se revierte
+  // el cambio completo, así que el aviso de abajo enlaza directo a ella.
+  const [ventaCambio, setVentaCambio] = useState(null);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -87,8 +90,40 @@ export default function DevolucionDetalle() {
   const esCambio = (dev?.motivo ?? "")
     .toLowerCase()
     .startsWith("cambio desde venta");
-  // No se ofrece "Anular" en devoluciones de un cambio (el backend las rechaza y
-  // el banner ya lo explica). El resto (incluidas las de reembolso, chatarra o
+
+  // Busca la venta pareja: por el enlace directo (`devolucion_cambio_id`, desde
+  // 2026-09-05) y, para los cambios anteriores, por el `fecha` exacto que las
+  // dos comparten por haber nacido en la misma transacción.
+  useEffect(() => {
+    if (!dev || !esCambio || dev.estado === "anulada") {
+      setVentaCambio(null);
+      return;
+    }
+    const cargarVentaCambio = async () => {
+      const { data: porEnlace } = await supabase
+        .from("ventas")
+        .select("id, numero")
+        .eq("devolucion_cambio_id", dev.id)
+        .eq("anulada", false)
+        .limit(1);
+      let v = porEnlace?.[0] ?? null;
+      if (!v && dev.venta_id) {
+        const { data } = await supabase
+          .from("ventas")
+          .select("id, numero")
+          .eq("cambio_de_venta_id", dev.venta_id)
+          .eq("fecha", dev.fecha)
+          .eq("anulada", false)
+          .limit(1);
+        v = data?.[0] ?? null;
+      }
+      setVentaCambio(v);
+    };
+    cargarVentaCambio();
+  }, [dev, esCambio]);
+  // No se ofrece "Anular" en devoluciones de un cambio: esas se revierten desde
+  // la venta del cambio con fn_anular_cambio, que mueve las dos patas juntas
+  // (el banner de abajo enlaza a esa venta). El resto (reembolso, chatarra o
   // no_reingresa) sí se puede anular: fn_anular_devolucion revierte el stock
   // según el destino y, al quedar 'anulada', el cierre deja de contar el reembolso.
   const anulable = esAdmin && dev?.estado === "procesada" && !esCambio;
@@ -266,10 +301,23 @@ export default function DevolucionDetalle() {
             style={{ color: "var(--p-600)" }}
           />
           <span>
-            Esta devolución es parte de un <b>cambio de producto</b>
-            {dev.venta?.numero ? ` de la venta V-${dev.venta.numero}` : ""}.
-            Para revertirla no se anula aquí: se anula la venta del cambio desde
-            Ventas, y así también se ajusta el producto entregado a cambio.
+            Esta devolución es una de las dos patas de un{" "}
+            <b>cambio de producto</b>
+            {dev.venta?.numero ? ` de la venta V-${dev.venta.numero}` : ""}. No
+            se anula sola: quedaría como si el cliente se hubiera llevado los
+            dos productos pagando solo la diferencia. El cambio se revierte
+            completo desde{" "}
+            {ventaCambio ? (
+              <Link
+                to={`/ops/ventas/${ventaCambio.id}`}
+                className="font-medium underline"
+              >
+                la venta #{ventaCambio.numero}
+              </Link>
+            ) : (
+              "la venta de la diferencia del cambio"
+            )}
+            , con el botón <b>“Anular cambio”</b> (solo Administración).
           </span>
         </div>
       )}
