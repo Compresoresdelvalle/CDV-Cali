@@ -8,6 +8,7 @@
 import {
   LayoutDashboard,
   LineChart,
+  Tags,
   Bell,
   BarChart3,
   TrendingUp,
@@ -92,6 +93,12 @@ export const SECCIONES_ADMIN = [
         label: "Conteo cíclico",
         href: "/admin/conteo",
         icon: ClipboardList,
+      },
+      {
+        id: "egresos",
+        label: "Clasificar egresos",
+        href: "/admin/egresos",
+        icon: Tags,
       },
       {
         id: "notas-credito",
