@@ -29,6 +29,7 @@ import Dashboard from "./pages/ops/Dashboard";
 import CompraHistorial from "./pages/ops/CompraHistorial";
 import CompraNueva from "./pages/ops/CompraNueva";
 import CompraDetalle from "./pages/ops/CompraDetalle";
+import PickingCompra from "./pages/ops/PickingCompra";
 import GarantiasIndex from "./pages/ops/Garantias";
 import GarantiaCompraDetalle from "./pages/ops/Garantias/GarantiaCompraDetalle";
 import GarantiaVentaDetalle from "./pages/ops/Garantias/GarantiaVentaDetalle";
@@ -225,6 +226,14 @@ export default function App() {
             element={
               <RoleGuard roles={["Admin", "Bodeguero", "Vendedor"]}>
                 <CompraDetalle />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="compras/:id/picking"
+            element={
+              <RoleGuard roles={["Admin", "Bodeguero"]}>
+                <PickingCompra />
               </RoleGuard>
             }
           />
