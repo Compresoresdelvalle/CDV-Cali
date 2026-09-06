@@ -579,6 +579,7 @@ import {
   derivar,
   resumen,
   construirPayload,
+  metodoReal,
   METODO,
   BADGE,
 } from "../../src/lib/picking-compras";
@@ -681,6 +682,46 @@ describe("resumen", () => {
     ]);
     expect(r.deMas).toBe(2);
     expect(r.listo).toBe(true);
+  });
+});
+
+describe("todo en cero", () => {
+  it("no deja recibir una compra en la que no llego nada: manda a cancelar", () => {
+    const l = { ...lineaNueva(det()), llegaron: 0, contada: true, faltante_accion: "ajustar" };
+    const r = resumen([l, { ...l, detalle_id: "d2" }]);
+    expect(r.todoEnCero).toBe(true);
+    expect(r.listo).toBe(false);
+    expect(r.motivoBloqueo).toMatch(/cancelarla/i);
+  });
+
+  it("si al menos una linea trae algo, no es el caso de todo en cero", () => {
+    const cero = { ...lineaNueva(det()), llegaron: 0, contada: true, faltante_accion: "ajustar" };
+    const algo = { ...lineaNueva(det({ id: "d2" })), llegaron: 10, contada: true };
+    const r = resumen([cero, algo]);
+    expect(r.todoEnCero).toBe(false);
+    expect(r.listo).toBe(true);
+  });
+});
+
+describe("metodoReal", () => {
+  it("'completo' que despues se corrige a mano deja de ser 'completo'", () => {
+    const l = { ...lineaNueva(det()), llegaron: 8, contada: true, metodo: METODO.COMPLETO };
+    expect(metodoReal(l)).toBe(METODO.MANUAL);
+  });
+
+  it("'completo' que sigue cuadrando con el pedido se conserva", () => {
+    const l = { ...lineaNueva(det()), llegaron: 10, contada: true, metodo: METODO.COMPLETO };
+    expect(metodoReal(l)).toBe(METODO.COMPLETO);
+  });
+
+  it("'nada' al que despues le suman unidades deja de ser 'nada'", () => {
+    const l = { ...lineaNueva(det()), llegaron: 2, contada: true, metodo: METODO.NADA };
+    expect(metodoReal(l)).toBe(METODO.MANUAL);
+  });
+
+  it("el escaner se respeta tal cual", () => {
+    const l = { ...lineaNueva(det()), llegaron: 7, contada: true, metodo: METODO.ESCANER };
+    expect(metodoReal(l)).toBe(METODO.ESCANER);
   });
 });
 
@@ -813,7 +854,7 @@ export function derivar(linea) {
   else if (faltan > 0) estado = "faltan";
   else if (sobran > 0) estado = "sobran";
 
-  return { llegaron, danadas, buenas, faltan, sobran, estado };
+  return { llegaron, danadas, buenas, faltan, sobran, pedido, estado };
 }
 
 /** Totales de la pantalla y si se puede confirmar (con el porqué si no). */
@@ -844,8 +885,17 @@ export function resumen(lineas) {
   }
 
   const sinContar = total - contadas;
+  // Todo en cero no es un picking, es una compra que no llego. fn_recibir_compra
+  // borraria TODAS las lineas y rebotaria con "usa Cancelar compra". Mejor
+  // atajarlo aqui y mandar a cancelar, que dejar que reviente contra la base.
+  const todoEnCero =
+    total > 0 && lineas.every((l) => l.contada && derivar(l).llegaron === 0);
+
   let motivoBloqueo = null;
-  if (sinContar > 0) {
+  if (todoEnCero) {
+    motivoBloqueo =
+      "No llegó nada de esta compra. Eso no se recibe: hay que cancelarla desde su detalle.";
+  } else if (sinContar > 0) {
     motivoBloqueo = `Faltan ${sinContar} línea${sinContar === 1 ? "" : "s"} por contar`;
   } else if (sinDecidirFaltante > 0) {
     motivoBloqueo = `Falta decidir qué se hace con el faltante en ${sinDecidirFaltante} línea${sinDecidirFaltante === 1 ? "" : "s"}`;
@@ -860,6 +910,7 @@ export function resumen(lineas) {
     aReclamar,
     aAjustar,
     deMas,
+    todoEnCero,
     listo: motivoBloqueo === null && total > 0,
     motivoBloqueo,
   };
@@ -881,16 +932,33 @@ export function construirPayload(lineas) {
       danadas: d.danadas,
       faltante_accion: d.faltan > 0 ? l.faltante_accion : null,
       sobrante_accion: d.sobran > 0 ? l.sobrante_accion : null,
-      metodo_conteo: l.metodo ?? METODO.MANUAL,
+      metodo_conteo: metodoReal(l),
     };
   });
+}
+
+/**
+ * El método que de verdad se usó.
+ *
+ * Si alguien pulsa "Llegó completo" y después corrige con +/−, el método ya no
+ * es 'completo'. Dejarlo así haría que la columna mienta justo en lo que se
+ * quiere medir: distinguir un conteo real de uno de trámite. Misma idea con
+ * 'nada' si después suma unidades.
+ */
+export function metodoReal(linea) {
+  const d = derivar(linea);
+  if (linea.metodo === METODO.COMPLETO && d.llegaron !== d.pedido) {
+    return METODO.MANUAL;
+  }
+  if (linea.metodo === METODO.NADA && d.llegaron !== 0) return METODO.MANUAL;
+  return linea.metodo ?? METODO.MANUAL;
 }
 ```
 
 - [ ] **Step 4: Correr los tests**
 
 Run: `npx vitest run tests/integration/picking-compras.test.js`
-Expected: PASS, 16 tests
+Expected: PASS, 22 tests
 
 - [ ] **Step 5: Commit**
 
@@ -1055,6 +1123,8 @@ DECLARE
   v_sobran     int;
   v_recep      jsonb := '[]'::jsonb;
   v_items_gar  jsonb := '[]'::jsonb;
+  v_recl_prod  jsonb := '{}'::jsonb;
+  v_distintas  int;
   v_reclamo    int;
   v_gar_id     uuid;
   v_contadas   int := 0;
@@ -1103,10 +1173,18 @@ BEGIN
   END IF;
 
   -- ── Validacion del conteo ─────────────────────────────────────────────
-  IF p_lineas IS NULL OR jsonb_typeof(p_lineas) <> 'array'
-     OR jsonb_array_length(p_lineas) <> v_total_lin THEN
-    RAISE EXCEPTION 'El conteo esta incompleto: la compra tiene % lineas y llegaron %. Vuelve a la pantalla y termina de contar.',
-      v_total_lin, COALESCE(jsonb_array_length(p_lineas), 0);
+  IF p_lineas IS NULL OR jsonb_typeof(p_lineas) <> 'array' THEN
+    RAISE EXCEPTION 'No llego ningun conteo. Vuelve a la pantalla y cuenta la mercancia.';
+  END IF;
+
+  -- Contar elementos NO alcanza: mandar dos veces la misma linea y omitir otra
+  -- daria la misma longitud y dejaria una linea sin contar recibiendose
+  -- completa. Se exige cobertura por lineas DISTINTAS.
+  SELECT count(DISTINCT (e->>'detalle_id')) INTO v_distintas
+    FROM jsonb_array_elements(p_lineas) e;
+  IF v_distintas <> v_total_lin THEN
+    RAISE EXCEPTION 'El conteo no cubre toda la compra: tiene % lineas y llegaron % distintas. Vuelve a la pantalla y termina de contar.',
+      v_total_lin, v_distintas;
   END IF;
 
   INSERT INTO compra_picking (compra_id, usuario_id, omitido, lineas_total, lineas_contadas)
@@ -1160,9 +1238,15 @@ BEGIN
     v_reclamo := v_danadas
                + CASE WHEN v_faltan > 0 AND v_l->>'faltante_accion' = 'reclamar'
                       THEN v_faltan ELSE 0 END;
+    -- Se acumula por PRODUCTO, no por linea. Nada impide que el mismo producto
+    -- venga en dos lineas de la misma compra (una para venta y otra para
+    -- insumo es un caso legitimo, y no hay constraint que lo prohiba). Con dos
+    -- entradas del mismo producto, el tope de fn_abrir_garantia_compra se
+    -- evaluaria por partes en vez de contra el total.
     IF v_reclamo > 0 THEN
-      v_items_gar := v_items_gar || jsonb_build_array(jsonb_build_object(
-        'producto_id', v_det.producto_id, 'cantidad', v_reclamo));
+      v_recl_prod := v_recl_prod || jsonb_build_object(
+        v_det.producto_id::text,
+        COALESCE((v_recl_prod->>v_det.producto_id::text)::int, 0) + v_reclamo);
       v_recl_tot := v_recl_tot + v_reclamo;
     END IF;
 
@@ -1174,6 +1258,12 @@ BEGIN
     CASE WHEN jsonb_array_length(v_recep) > 0 THEN v_recep ELSE NULL END);
 
   -- ── 2. Reclamar al proveedor, si hay que reclamar ─────────────────────
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+           'producto_id', e.k::uuid, 'cantidad', e.v::int)), '[]'::jsonb)
+    INTO v_items_gar
+    FROM jsonb_each_text(v_recl_prod) AS e(k, v)
+   WHERE e.v::int > 0;
+
   IF jsonb_array_length(v_items_gar) > 0 THEN
     v_gar_id := fn_abrir_garantia_compra(jsonb_build_object(
       'compra_id',  p_compra_id,
@@ -1251,7 +1341,29 @@ git commit -m "feat(picking): RPC que orquesta conteo, recepcion, reclamo y sobr
 
 ### Task 7: Probar la RPC contra producción
 
-Todas las pruebas van dentro de `BEGIN … ROLLBACK`, que es como se ha verificado el resto del proyecto. Antes de empezar, buscar una compra sin recibir con al menos 2 líneas en BODEGA; si no hay ninguna disponible, crear una con `fn_registrar_compra` usando los productos `INVENTARIO DE PRUEBA (999)` dentro de la misma transacción revertida.
+Todas las pruebas van dentro de `BEGIN … ROLLBACK`.
+
+**Cada prueba tiene que CREAR su propia compra**, no buscar una. Verificado
+contra producción: de 737 compras, **cero** están sin recibir, y el 98% se
+registran y reciben en el mismo segundo. Buscar una pendiente no encuentra nada.
+
+Al inicio de cada transacción:
+
+```sql
+SET LOCAL request.jwt.claims = '{"sub":"<uuid Bodeguero>","role":"authenticated"}';
+SELECT fn_registrar_compra(
+  'BODEGA', 'PROVEEDOR DE PRUEBA', 'FAC-TEST', 'Prueba de picking, se revierte',
+  false,  -- p_recibir: se deja SIN recibir, que es lo que el picking necesita
+  jsonb_build_array(
+    jsonb_build_object('producto_id', '<producto de prueba A>', 'cantidad', 10,
+                       'costo_unitario', 1000, 'destino', 'venta'),
+    jsonb_build_object('producto_id', '<producto de prueba B>', 'cantidad', 5,
+                       'costo_unitario', 2000, 'destino', 'venta')),
+  19, 'Efectivo', NULL, NULL
+) AS creada;
+```
+
+Devuelve `{compra_id, numero, …}`. Usar productos `INVENTARIO DE PRUEBA (999)`.
 
 - [ ] **Step 1: Caso completo — todo llegó bien**
 
@@ -1453,9 +1565,17 @@ try {
   const crudo = localStorage.getItem(CLAVE);
   if (crudo) {
     const { ts, lineas: guardadas } = JSON.parse(crudo);
-    // Solo se ofrece si corresponde a las mismas líneas: si la compra cambió,
-    // el borrador ya no sirve y reponerlo sería peor que perderlo.
-    if (guardadas?.length === lineasCompra.length) setBorrador({ ts, lineas: guardadas });
+    // Se compara el CONJUNTO de detalle_id, no la cantidad. Si alguien editó la
+    // compra entre el borrador y la vuelta, dos listas del mismo largo pueden
+    // ser de productos distintos, y restaurar ahí pondría los conteos sobre las
+    // líneas equivocadas. Perder el borrador es molesto; aplicarlo mal es peor.
+    const idsAhora = new Set(lineasCompra.map((d) => d.id));
+    const mismasLineas =
+      Array.isArray(guardadas) &&
+      guardadas.length === idsAhora.size &&
+      guardadas.every((g) => idsAhora.has(g.detalle_id));
+    if (mismasLineas) setBorrador({ ts, lineas: guardadas });
+    else localStorage.removeItem(CLAVE);
   }
 } catch {
   localStorage.removeItem(CLAVE);
@@ -1509,7 +1629,28 @@ Las preguntas de faltante y sobrante aparecen debajo solo cuando corresponden, c
 
 `QRScanner` acepta `{ onFound, onClose, continuo }`. Se usa **`continuo = true`**: en una descarga se escanean muchas piezas seguidas y cerrar el escáner en cada lectura sería inservible.
 
-En `onFound(texto)`: buscar la línea cuya `referencia` coincida; si existe, saltar a ella, sumarle 1, marcarla contada con `metodo = METODO.ESCANER`. Si no existe, avisar por su nombre — *"MAT6 no está en la compra #412"* — sin cerrar el escáner.
+En `onFound(texto)`: buscar **todas** las líneas cuya `referencia` coincida.
+
+```js
+const coincidencias = lineas.filter((l) => l.referencia === texto.trim());
+
+if (coincidencias.length === 0) {
+  // Por su nombre, no un error mudo: el operario tiene la pieza en la mano y
+  // necesita saber si se equivocó de caja o si falta registrarla.
+  avisarInfo(`${texto} no está en la compra #${compra.numero}`);
+} else if (coincidencias.length === 1) {
+  sumarUno(coincidencias[0].detalle_id, METODO.ESCANER);
+} else {
+  // Nada impide que el mismo producto venga en dos líneas de una compra (una
+  // para venta y otra para insumo es legítimo). Adivinar cuál sumar sería
+  // meter un error de inventario en silencio: se pregunta.
+  setDesambiguar(coincidencias);
+}
+```
+
+`setDesambiguar` abre una hoja con las líneas candidatas mostrando su **destino**
+(venta / insumo) y lo que lleva contado cada una, para que el operario elija.
+El escáner no se cierra en ningún caso: es modo continuo.
 
 - [ ] **Step 3: Lint y build**
 
@@ -1629,7 +1770,84 @@ git commit -m "feat(picking): entrada desde la compra, etiquetas QR y aviso al A
 
 ---
 
-### Task 12: Verificación final
+### Task 12: La puerta desde el registro de la compra
+
+**Files:**
+- Modify: `src/pages/ops/CompraNueva.jsx`
+
+Ésta es la tarea que decide si la feature se usa o no se usa nunca. Verificado
+contra producción: **de 737 compras, cero están sin recibir**, y 713 de 729 (98%)
+se registran y se reciben en el mismo segundo. La mercancía ya está en el
+mostrador cuando digitan la factura. Si el picking solo se alcanza desde el
+detalle de una compra pendiente, no lo alcanza nadie.
+
+El flujo que pidió el dueño: **llega la mercancía → la registran → pasan al
+picking → cuentan → recibido.** Y da igual si cuentan de una o si dejan la
+compra pendiente y cuentan después: las dos puertas quedan abiertas.
+
+- [ ] **Step 1: Capturar el `compra_id` que la RPC ya devuelve**
+
+Hoy `CompraNueva` descarta la respuesta (`const { error: rpcErr } = await …`).
+`fn_registrar_compra` devuelve `{compra_id, numero, subtotal, iva, total,
+recibida}`. Cambiar a:
+
+```js
+const { data: creada, error: rpcErr } = await supabase.rpc("fn_registrar_compra", {
+  /* … los mismos parámetros que ya se pasan … */
+});
+if (rpcErr) throw new Error(rpcErr.message);
+```
+
+- [ ] **Step 2: Decidir a dónde va después de guardar**
+
+```js
+// El picking solo tiene sentido si hay productos que contar y si quien registra
+// puede contarlos. Una compra de caja menor (un recibo de transporte) no se
+// cuenta, y meterle fricción sería castigar a la vendedora por hacer bien su
+// trabajo.
+const puedeContar = ["Admin", "Bodeguero"].includes(perfil?.rol);
+const hayQueContar = carrito.length > 0;
+
+if (!recibirAhora && hayQueContar && puedeContar) {
+  avisarOk(`Compra #${creada.numero} registrada. Ahora cuenta lo que llegó.`);
+  navigate(`/ops/compras/${creada.compra_id}/picking`);
+} else {
+  avisarOk(recibirAhora ? "Compra registrada y recibida." : "Compra registrada.");
+  navigate("/ops/compras");
+}
+```
+
+- [ ] **Step 3: Cambiar el checkbox por la decisión real**
+
+Donde hoy está el checkbox "Marcar como recibida ahora", para Admin/Bodeguero
+con carrito no vacío se muestran dos opciones, con el conteo como la principal:
+
+- **"Registrar y contar"** (por defecto, `recibirAhora = false`) → va al picking.
+- **"Registrar y recibir sin contar"** (`recibirAhora = true`) → como hoy, pero
+  con la advertencia concreta antes de ejecutar:
+
+  > Si recibes sin contar, el inventario va a decir que llegaron N unidades
+  > aunque hayan llegado menos. Cualquier faltante que aparezca después va a
+  > quedar como pérdida de bodega, no como algo que el proveedor debía.
+
+Para una vendedora, o para una compra sin productos, **la pantalla queda
+exactamente como está hoy**: el checkbox de siempre, sin fricción y sin
+advertencias.
+
+- [ ] **Step 4: Lint, build y suite**
+
+Run: `npx eslint src tests && npm run build && npm test`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/pages/ops/CompraNueva.jsx
+git commit -m "feat(picking): del registro de la compra se pasa a contar"
+```
+
+---
+
+### Task 13: Verificación final
 
 - [ ] **Step 1: Responsive de verdad**
 
@@ -1641,9 +1859,16 @@ Revisar a **360px**, **768px** y **1280px**:
 
 - [ ] **Step 2: Recorrido por rol**
 
-- **Bodeguero de BODEGA:** ve "Contar y recibir", cuenta, confirma.
+- **Bodeguero de BODEGA, camino principal:** registra una compra con productos,
+  cae directo en el picking, cuenta, confirma.
+- **Bodeguero de BODEGA, camino diferido:** registra sin recibir, sale de la
+  pantalla, y la encuentra después en Compras con el filtro "Registrada" (ese
+  filtro y su contador de pendientes ya existen en `CompraHistorial`).
+- **Bodeguero de BODEGA:** ve "Contar y recibir" en el detalle, cuenta, confirma.
 - **Bodeguero con una compra de CV:** el mensaje nombra las dos sedes.
-- **Vendedora:** no ve el picking; recibe como siempre.
+- **Vendedora:** no ve el picking ni en el registro ni en el detalle; su compra
+  de caja menor se registra y recibe como siempre, sin advertencias.
+- **Compra sin líneas de producto:** no ofrece picking a nadie.
 - **Admin:** puede en cualquier sede, y recibe el modal de escalamiento.
 
 - [ ] **Step 3: Suite completa y advisors**
@@ -1661,6 +1886,11 @@ git commit --allow-empty -m "chore(picking): verificacion responsive y por rol"
 
 ## Notas para quien ejecute
 
+- **`fn_tiempo_humano` se crea en su propia migración** y `fn_escalar_a_admin` la
+  usa. En plpgsql las llamadas a otras funciones se resuelven en tiempo de
+  EJECUCIÓN, no de creación, así que el orden entre las dos no rompe un replay
+  del repo desde cero. Aun así, si se toca alguna de las dos, conviene dejar la
+  del helper antes.
 - **Los timestamps de las migraciones:** `apply_migration` del MCP registra la migración con **su propio timestamp**, no con el del nombre del archivo. Después de aplicar cada una, consultar `supabase_migrations.schema_migrations` y renombrar el archivo local para que coincida. Si no, el repo y la base cuentan historias distintas.
 - **Producción es el único ambiente.** Todo lo que escriba se prueba dentro de `BEGIN … ROLLBACK`, y al terminar se verifica con un conteo que no quedó nada. Los productos de prueba son los `INVENTARIO DE PRUEBA (999)`.
 - **Hay otras sesiones trabajando en este repo.** Este plan vive en su propio worktree (`C:\Users\davi-\cdv-picking-compras`, rama `feat/picking-compras`); no cambiar de rama ahí ni hacer `git add .` a ciegas, que ya pasó una vez que un commit ajeno se llevó archivos de otra sesión.

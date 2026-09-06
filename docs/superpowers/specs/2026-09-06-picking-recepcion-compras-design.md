@@ -155,13 +155,28 @@ exactamente como hoy.
 
 ## Cómo se entra
 
-En el detalle de una compra sin recibir **que tenga líneas de producto**, y para
-Admin o Bodeguero, el botón principal pasa a ser **"Contar y recibir"**. Debajo,
-en texto pequeño y gris, **"Recibir sin contar"**. No es una puerta escondida,
-pero no compite.
+El flujo real es: **llega la mercancía → la registran → pasan al picking →
+cuentan → recibido.** Da igual si cuentan de una o si dejan la compra pendiente
+y cuentan más tarde; las dos puertas quedan abiertas.
 
-Para el resto de los casos —sin líneas, o rol Vendedor— la pantalla queda
-exactamente como está hoy.
+**La puerta principal es el registro de la compra.** Verificado contra
+producción: de 737 compras, **cero** están sin recibir, y 713 de 729 (98%) se
+registran y se reciben en el mismo segundo, porque la mercancía ya está en el
+mostrador cuando digitan la factura. Una pantalla a la que solo se llega desde
+una compra pendiente no la alcanzaría nadie: nacería muerta, como le pasó a la
+resolución "arreglar producto" de garantías, con cero usos en un año.
+
+Entonces, en `CompraNueva`, para Admin o Bodeguero con productos en el carrito,
+el botón principal pasa a ser **"Registrar y contar"**, que registra la compra
+sin recibir y salta al picking. Al lado queda **"Registrar y recibir sin
+contar"**, con su advertencia.
+
+**La puerta secundaria es el detalle de la compra**, para las que quedaron
+pendientes: el botón principal es **"Contar y recibir"** y debajo, en gris,
+**"Recibir sin contar"**. Cuesta casi nada y cubre el caso de contar después.
+
+Para el resto —compras sin líneas de producto, o rol Vendedor— las dos pantallas
+quedan exactamente como están hoy: sin picking, sin advertencias y sin fricción.
 
 ## Qué pide cada línea
 
