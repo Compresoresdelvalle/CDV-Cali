@@ -9,6 +9,7 @@ import {
   Shield,
   Activity,
   PackageCheck,
+  ClipboardCheck,
   Check,
   Printer,
   X,
@@ -32,13 +33,18 @@ import RecibirCompraModal from "../../components/compras/RecibirCompraModal";
  * número + proveedor, barra de acciones, columna izquierda (proveedor, items,
  * fechas clave, notas) y columna derecha con timeline.
  *
- * RECONCILIACIÓN del flujo de RECEPCIÓN (Lovable `ops.compras.$id.recepcion.tsx`):
- *   El diseño Lovable modela recepción línea-a-línea (parcial / faltante /
- *   excedente). El backend REAL solo soporta recepción TOTAL vía el booleano
- *   `compras.recibida` (UPDATE condicional anti-doble-recepción). Por eso el
- *   panel de recepción eleva el lenguaje visual de Lovable (card con borde
- *   primario, barra de progreso, checklist de items) pero confirma la
- *   recepción de forma total y honesta, sin inventar parciales inexistentes.
+ * RECEPCIÓN: hay dos caminos, y el principal es contar.
+ *   "Contar y recibir" lleva al picking (/ops/compras/:id/picking), donde se
+ *   cuenta línea por línea y las diferencias terminan donde corresponde: la
+ *   factura ajustada, un reclamo al proveedor, o un ingreso por sobrante.
+ *   "Recibir sin contar" hace lo de siempre y queda como enlace secundario.
+ *   Solo se ofrece contar a Admin/Bodeguero y solo si hay productos: una
+ *   compra de caja menor no se cuenta.
+ *
+ *   (Aquí decía que el backend "solo soporta recepción TOTAL". Era falso:
+ *   fn_recibir_compra acepta `p_recepciones` con la cantidad real por línea
+ *   desde hace rato, ajusta la factura y recalcula los totales. La pantalla
+ *   simplemente nunca le pasaba ese parámetro.)
  */
 export default function CompraDetalle() {
   const { id } = useParams();
@@ -267,6 +273,12 @@ export default function CompraDetalle() {
           puedeRecibir={puedeRecibir}
           recibiendo={false}
           onConfirmar={() => setModalRecibir(true)}
+          // Contar es cosa de Bodega o Administración, y solo tiene sentido si
+          // hay productos: una compra de caja menor no se cuenta.
+          puedeContar={
+            ["Admin", "Bodeguero"].includes(perfil?.rol) && items.length > 0
+          }
+          onContar={() => navigate(`/ops/compras/${id}/picking`)}
         />
       )}
 
@@ -575,7 +587,14 @@ export default function CompraDetalle() {
  * items se listan como referencia visual (no editables), reflejando esto
  * honestamente.
  */
-function PanelRecepcion({ items, puedeRecibir, recibiendo, onConfirmar }) {
+function PanelRecepcion({
+  items,
+  puedeRecibir,
+  recibiendo,
+  onConfirmar,
+  puedeContar,
+  onContar,
+}) {
   const totalItems = items.length;
   return (
     <div
@@ -685,19 +704,48 @@ function PanelRecepcion({ items, puedeRecibir, recibiendo, onConfirmar }) {
           ))}
         </ul>
 
+        {/* Contar es el camino principal cuando quien mira puede hacerlo. No es
+            una puerta escondida el recibir sin contar, pero tampoco compite:
+            un faltante que nadie contó reaparece semanas después como descuadre
+            de bodega, cuando ya no hay a quién reclamarle. */}
+        {puedeContar && (
+          <button
+            onClick={onContar}
+            className="inline-flex items-center justify-center gap-1.5 rounded-[10px] text-[13.5px] font-medium text-white transition-opacity"
+            style={{ height: 48, backgroundColor: "var(--p-cta)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+          >
+            <ClipboardCheck className="h-3.5 w-3.5" strokeWidth={2.5} />
+            Contar y recibir
+          </button>
+        )}
+
         {puedeRecibir ? (
           <button
             onClick={onConfirmar}
             disabled={recibiendo || totalItems === 0}
-            className="inline-flex items-center justify-center gap-1.5 rounded-[10px] text-[13.5px] font-medium text-white transition-opacity disabled:opacity-40"
-            style={{ height: 48, backgroundColor: "var(--p-cta)" }}
+            className={
+              puedeContar
+                ? "inline-flex items-center justify-center gap-1.5 text-[12.5px] underline underline-offset-2 transition-opacity disabled:opacity-40"
+                : "inline-flex items-center justify-center gap-1.5 rounded-[10px] text-[13.5px] font-medium text-white transition-opacity disabled:opacity-40"
+            }
+            style={
+              puedeContar
+                ? { minHeight: 48, color: "var(--n-500)" }
+                : { height: 48, backgroundColor: "var(--p-cta)" }
+            }
             onMouseEnter={(e) => {
               if (!recibiendo) e.currentTarget.style.opacity = "0.9";
             }}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
-            <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-            {recibiendo ? "Confirmando…" : "Confirmar recepción"}
+            {!puedeContar && <Check className="h-3.5 w-3.5" strokeWidth={2.5} />}
+            {recibiendo
+              ? "Confirmando…"
+              : puedeContar
+                ? "Recibir sin contar"
+                : "Confirmar recepción"}
           </button>
         ) : (
           <p
