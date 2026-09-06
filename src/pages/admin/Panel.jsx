@@ -8,6 +8,8 @@ import Cascada from "../../components/panel/Cascada";
 import Perdidas from "../../components/panel/Perdidas";
 import PanelDetalle from "../../components/panel/PanelDetalle";
 import Composicion from "../../components/panel/Composicion";
+import Cartera from "../../components/panel/Cartera";
+import Inventario from "../../components/panel/Inventario";
 import { rangoDeAtajo, etiquetaRango } from "../../lib/panel-rango";
 
 const CLAVE_RANGO = "cdv.panel.rango";
@@ -62,6 +64,12 @@ export default function Panel() {
   const [peores, setPeores] = useState(false);
   const claveComp = `${clave}|${dimension}`;
   const [composicion, setComposicion] = useState({ clave: null });
+
+  // Cartera e inventario son fotos de HOY: no dependen del rango, solo de la
+  // sede y del botón de actualizar. Por eso llevan su propia clave.
+  const claveFoto = `${sede}|${recarga}`;
+  const [cartera, setCartera] = useState({ clave: null });
+  const [inventario, setInventario] = useState({ clave: null });
 
   useEffect(() => {
     let vivo = true;
@@ -156,6 +164,48 @@ export default function Panel() {
     };
   }, [esAdmin, rango.desde, rango.hasta, sede, recarga, dimension, claveComp]);
 
+  useEffect(() => {
+    if (!esAdmin) return;
+    let vivo = true;
+    supabase
+      .rpc("fn_panel_cartera", { p_sede: sede || null })
+      .then(({ data, error }) => {
+        if (!vivo) return;
+        setCartera(
+          error
+            ? {
+                clave: claveFoto,
+                error: safeError(error, "No se pudo cargar la cartera"),
+              }
+            : { clave: claveFoto, datos: data },
+        );
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [esAdmin, sede, recarga, claveFoto]);
+
+  useEffect(() => {
+    if (!esAdmin) return;
+    let vivo = true;
+    supabase
+      .rpc("fn_panel_inventario", { p_sede: sede || null })
+      .then(({ data, error }) => {
+        if (!vivo) return;
+        setInventario(
+          error
+            ? {
+                clave: claveFoto,
+                error: safeError(error, "No se pudo cargar el inventario"),
+              }
+            : { clave: claveFoto, datos: data },
+        );
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [esAdmin, sede, recarga, claveFoto]);
+
   const cambiarRango = useCallback((nuevo, id) => {
     const sel = { rango: nuevo, atajo: id };
     setSeleccion(sel);
@@ -200,12 +250,28 @@ export default function Panel() {
     [rango.desde, rango.hasta, sede],
   );
 
+  // La cartera ya trae su detalle en la misma respuesta, así que la hoja se
+  // abre con lo que ya está en memoria: pedirlo otra vez sería un viaje al
+  // servidor para traer lo mismo.
+  const abrirLista = useCallback(
+    (titulo, subtitulo, filas) =>
+      setDetalle({ titulo, subtitulo, cargando: false, filas }),
+    [],
+  );
+
   // Está cargando mientras lo que hay en pantalla no corresponda a los
   // filtros de ahora.
   const cargaResultado = resultado.clave !== clave;
   const cargaPerdidas = perdidas.clave !== clave;
   const cargaComposicion = composicion.clave !== claveComp;
-  const cargando = cargaResultado || cargaPerdidas || cargaComposicion;
+  const cargaCartera = cartera.clave !== claveFoto;
+  const cargaInventario = inventario.clave !== claveFoto;
+  const cargando =
+    cargaResultado ||
+    cargaPerdidas ||
+    cargaComposicion ||
+    cargaCartera ||
+    cargaInventario;
 
   return (
     <div
@@ -268,12 +334,41 @@ export default function Panel() {
             />
           )}
         </Seccion>
+
+        <Seccion
+          titulo="Quién debe"
+          sinPermiso={!esAdmin}
+          cargando={cargaCartera}
+          error={cartera.error}
+          onReintentar={refrescar}
+          filasEsqueleto={5}
+        >
+          {cartera.datos && (
+            <Cartera
+              datos={cartera.datos}
+              onVerTodas={(filas) =>
+                abrirLista("Facturas sin cobrar", "Al día de hoy", filas)
+              }
+            />
+          )}
+        </Seccion>
+
+        <Seccion
+          titulo="Plata parada en inventario"
+          sinPermiso={!esAdmin}
+          cargando={cargaInventario}
+          error={inventario.error}
+          onReintentar={refrescar}
+          filasEsqueleto={3}
+        >
+          {inventario.datos && <Inventario datos={inventario.datos} />}
+        </Seccion>
       </div>
 
       <PanelDetalle
         abierto={Boolean(detalle)}
         titulo={detalle?.titulo ?? ""}
-        subtitulo={etiquetaRango(rango)}
+        subtitulo={detalle?.subtitulo ?? etiquetaRango(rango)}
         filas={detalle?.filas ?? []}
         cargando={detalle?.cargando}
         error={detalle?.error}
