@@ -3,7 +3,8 @@
 **Fecha:** 2026-09-06
 **Origen:** "hoy en día solo es bonito más que funcional real" — se pide un panel
 que permita tomar decisiones, con rangos de fecha reales y desagregación
-**Estado:** diseño, pendiente de aprobación
+**Estado:** diseño aprobado. Plan de implementación en
+`docs/superpowers/plans/2026-09-06-panel-decisiones.md`.
 
 ---
 
@@ -294,11 +295,11 @@ tokens en línea.
 
 La regla, entonces:
 
-| Para | Qué se usa | Por qué |
-| --- | --- | --- |
-| Gráficos | **recharts** (ya en `package.json`) | Dibujar a mano una cascada con ejes y tooltips es trabajo desperdiciado |
-| Calendario del rango | **react-day-picker** + **date-fns** (ya instalados) | Un selector de fechas correcto es más difícil de lo que parece |
-| Todo lo demás | A mano con tokens, como el resto de la app | Consistencia con las otras 40 pantallas pesa más que ahorrarse código |
+| Para                 | Qué se usa                                          | Por qué                                                                 |
+| -------------------- | --------------------------------------------------- | ----------------------------------------------------------------------- |
+| Gráficos             | **recharts** (ya en `package.json`)                 | Dibujar a mano una cascada con ejes y tooltips es trabajo desperdiciado |
+| Calendario del rango | **react-day-picker** + **date-fns** (ya instalados) | Un selector de fechas correcto es más difícil de lo que parece          |
+| Todo lo demás        | A mano con tokens, como el resto de la app          | Consistencia con las otras 40 pantallas pesa más que ahorrarse código   |
 
 No se adoptan las primitivas shadcn para el resto: serían el primer uso en toda
 la app y dejarían el panel visualmente aparte de todo lo demás.
