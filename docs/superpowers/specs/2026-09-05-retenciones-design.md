@@ -2,7 +2,15 @@
 
 **Fecha:** 2026-09-05
 **Origen:** solicitud de la dueña — a la empresa le aplican retenciones y necesitan verlo reflejado en el flujo de caja
-**Estado:** diseño aprobado, pendiente de plan de implementación
+**Estado:** diseño aprobado. Plan de implementación en
+`docs/superpowers/plans/2026-09-05-retenciones-fase1.md`.
+
+> **Corregido el 2026-09-05 al leer el código función por función.** Cuatro
+> cosas de este documento estaban mal y ya están arregladas abajo: el cierre
+> tiene seis sitios de `ventas.total`, no dos; los valores son columnas
+> generadas, no calculados por la RPC; las tarifas van en `parametros_sistema`,
+> no en `parametros`; y hay tres compuertas de la OT y una del cobro que había
+> que tocar o la funcionalidad no servía. El plan las explica en detalle.
 
 ---
 
@@ -80,9 +88,12 @@ tarifa, los documentos viejos conservan lo que se les aplicó de verdad.
 del detalle ni por error de código ni por un `UPDATE` a mano. Todas las
 consultas de dinero leen esa columna y solo esa.
 
-Los valores los calcula **el servidor** dentro de las RPC que ya registran cada
-documento, nunca el frontend. Es la misma regla que rige el resto de la app:
-todo lo que es plata se decide en el servidor.
+Los tres valores son **columnas generadas** igual que el total, no calculados
+por la RPC. Todo lo que entra en la fórmula —`subtotal`, `descuento_valor`,
+`descuento_pct`, `iva_pct`, `estado_autorizacion`— está en la misma fila, así
+que Postgres puede derivarlos solo. Sale gratis la venta que genera una OT y la
+que genera un cambio de producto, y no hay forma de que un bug los desincronice.
+La RPC solo guarda los porcentajes.
 
 ## Las bases de cálculo
 
@@ -102,8 +113,14 @@ Todo se redondea a pesos enteros, como el resto de la app.
 
 ## El impacto en el cierre — la parte delicada
 
-El cierre tiene doce sumas de dinero distintas. La buena noticia es que **solo
-dos caminos necesitan cambiar**, y el motivo es importante:
+El cierre lee `ventas.total` en **seis sitios**: el ingreso general, el desglose
+por sede, el de método de pago, el de sede y método, el de cuenta bancaria y el
+**arqueo de efectivo esperado**. Los seis cambian juntos.
+
+El sexto es el más delicado: es la plata que la vendedora debe tener en el cajón
+al cerrar. Sin él, el arqueo daría faltante todos los días.
+
+Lo que no cambia es el resto, y el motivo es importante:
 
 | Camino                  | Qué suma hoy                 | ¿Cambia?                                   |
 | ----------------------- | ---------------------------- | ------------------------------------------ |
@@ -125,16 +142,18 @@ lleva.
 
 ### Los desgloses también
 
-`sum(v.total)` aparece dos veces en la función: en el ingreso general y en el
-desglose por sede. `sum(total)` de compras, otras dos. Los cuatro sitios tienen
-que cambiar a la vez.
+Si se arregla el total pero no los desgloses, la suma de las sedes deja de
+coincidir con el total del día, y ese descuadre es peor que el original porque
+no se sabe cuál de los dos números creer.
 
-Si se arregla el total pero no el desglose por sede, la suma de las sedes deja
-de coincidir con el total del día, y ese descuadre es peor que el original
-porque no se sabe cuál de los dos números creer.
+Un detalle que obliga a más trabajo: las ventas **Mixto** no se cuentan por su
+total en los desgloses, sino por las filas de `pagos_venta`. Para que todo
+cuadre, en una venta Mixto los pagos tienen que sumar el **neto**, no el total.
+Eso cambia la validación de `fn_registrar_venta` y también la de la pantalla.
 
-El desglose por método de pago y el arqueo se alimentan de los mismos orígenes,
-así que se revisan uno por uno en la implementación.
+El desglose **por producto** no se toca: reparte el ingreso entre los ítems de
+la factura, una retención no es atribuible a un producto y ese bloque no
+alimenta ningún total.
 
 ## Cuentas por cobrar y por pagar
 
@@ -163,13 +182,22 @@ Lo mismo en `v_cuentas_por_pagar` para la fase 2.
 La OT calcula su saldo como `total − abonos`. Con retención pasa a
 `total − retenciones_total − abonos`, por la misma razón.
 
+Y hay **tres compuertas** que hoy miden contra el total facturado y hay que
+mover a lo cobrable, o una OT con retención no se puede entregar nunca: el tope
+de los abonos, la validación de entrega y la que impide dejar el total por
+debajo de lo abonado. Lo mismo con el tope del cobro en cuentas por cobrar: sin
+tocarlo, el último cobro de una factura retenida se rechaza y la factura queda
+abierta para siempre.
+
 Ojo con el orden: la OT entregada genera una venta. La retención se captura **en
 la OT**, y al convertirse se copia a la venta que genera, para que el documento
 final la lleve y no se cuente dos veces.
 
 ## Configuración de tarifas
 
-Van en la tabla `parametros`, que ya existe y ya se usa para los mínimos:
+Van en `parametros_sistema`, que es la que tiene pantalla en Configuración,
+validación por rango y auditoría de quién cambió el valor. (`parametros`, sin
+sufijo, es otra tabla: la de mínimos y máximos, que se edita desde Reorden.)
 
 ```
 retencion_retefuente_pct   default 2.5
@@ -177,9 +205,9 @@ retencion_reteica_pct      default 0.69
 retencion_reteiva_pct      default 15
 ```
 
-Maritza las edita en Configuración. Llegan precargadas a cada documento y se
-pueden cambiar ahí mismo sin afectar el valor por defecto. Si la ley cambia, se
-ajusta en un solo sitio.
+Maritza las edita en Configuración. Llegan **sugeridas**, no aplicadas: el
+bloque nace apagado y solo se precarga cuando alguien lo abre. Ahí se cambian
+sin afectar el valor configurado. Si la ley cambia, se ajusta en un solo sitio.
 
 ## La interfaz
 
