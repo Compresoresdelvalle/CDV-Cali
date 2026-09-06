@@ -38,6 +38,21 @@ const num = (v) => {
 const pct = (v) => Math.min(100, Math.max(0, num(v)));
 
 /**
+ * Normaliza lo que se escribió en un campo de porcentaje a un número guardable.
+ *
+ * Acepta la coma, que es como se escribe en Colombia ("0,69"), y recorta a
+ * [0, 100] igual que el CHECK de la tabla, para no mandar nunca algo que el
+ * servidor vaya a rechazar con un mensaje de constraint.
+ *
+ * Va aquí y no en el componente porque decide plata, y porque exportar una
+ * función desde un archivo de componente rompe el fast refresh de Vite.
+ */
+export function normalizarPct(texto) {
+  const crudo = String(texto ?? "").replace(",", ".");
+  return pct(crudo === "" ? 0 : crudo);
+}
+
+/**
  * @param {object} p
  * @param {number} p.base   subtotal menos descuento, sin IVA ni domicilio
  * @param {number} p.iva    IVA facturado
