@@ -707,6 +707,11 @@ mueve **exactamente** en la retención, ni un peso más, en los seis sitios.
 ```sql
 DO $$
 DECLARE
+  -- OJO: la fecha de Bogota, no current_date. El cierre filtra por
+  -- (fecha at time zone 'America/Bogota')::date y de noche el dia UTC ya es
+  -- otro: con current_date la venta recien creada queda fuera de la ventana y
+  -- la prueba pasa por la razon equivocada.
+  v_hoy date := (now() at time zone 'America/Bogota')::date;
   v_sede text; v_uid uuid; v_prod uuid;
   v_antes numeric; v_despues numeric;
   v_sede_antes numeric; v_sede_despues numeric;
@@ -727,7 +732,7 @@ BEGIN
   IF v_prod IS NULL THEN RAISE EXCEPTION 'no hay ningun producto con stock para probar'; END IF;
   SELECT id INTO v_uid FROM usuarios WHERE rol = 'Admin' LIMIT 1;
 
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   v_antes := (x->>'ingresos_productos')::numeric;
   SELECT coalesce(sum((e->>'productos')::numeric),0) INTO v_sede_antes
     FROM jsonb_array_elements(x->'detalle'->'por_sede') e;
@@ -748,7 +753,7 @@ BEGIN
   -- base 1.000.000 -> retefuente 25.000 + reteica 6.900 + reteiva 15% de 190.000 = 28.500
   IF v_ret <> 60400 THEN RAISE EXCEPTION 'retenciones = % (esperado 60400)', v_ret; END IF;
 
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   v_despues := (x->>'ingresos_productos')::numeric;
   SELECT coalesce(sum((e->>'productos')::numeric),0) INTO v_sede_despues
     FROM jsonb_array_elements(x->'detalle'->'por_sede') e;
@@ -870,6 +875,11 @@ pagar porque ya está en la DIAN — y peor: el **último cobro se rechaza**, po
 ```sql
 DO $$
 DECLARE
+  -- OJO: la fecha de Bogota, no current_date. El cierre filtra por
+  -- (fecha at time zone 'America/Bogota')::date y de noche el dia UTC ya es
+  -- otro: con current_date la venta recien creada queda fuera de la ventana y
+  -- la prueba pasa por la razon equivocada.
+  v_hoy date := (now() at time zone 'America/Bogota')::date;
   v_sede text; v_uid uuid; v_prod uuid; v_venta uuid;
   v_saldo numeric; v_ret numeric;
 BEGIN
@@ -1451,6 +1461,11 @@ así que la primera que se registre va a estar bien contada desde el minuto uno.
 ```sql
 DO $$
 DECLARE
+  -- OJO: la fecha de Bogota, no current_date. El cierre filtra por
+  -- (fecha at time zone 'America/Bogota')::date y de noche el dia UTC ya es
+  -- otro: con current_date la venta recien creada queda fuera de la ventana y
+  -- la prueba pasa por la razon equivocada.
+  v_hoy date := (now() at time zone 'America/Bogota')::date;
   v_sede text; v_uid uuid; v_prod uuid; v_r jsonb; v_venta uuid;
   v_ret numeric; v_total numeric;
 BEGIN
@@ -3190,6 +3205,11 @@ lo esperado, ni un peso más.**
 ```sql
 DO $$
 DECLARE
+  -- OJO: la fecha de Bogota, no current_date. El cierre filtra por
+  -- (fecha at time zone 'America/Bogota')::date y de noche el dia UTC ya es
+  -- otro: con current_date la venta recien creada queda fuera de la ventana y
+  -- la prueba pasa por la razon equivocada.
+  v_hoy date := (now() at time zone 'America/Bogota')::date;
   v_sede text; v_uid uuid; v_prod uuid; v_r jsonb; v_ot uuid; v_venta uuid;
   a1 numeric; a2 numeric; a3 numeric; a4 numeric; a5 numeric;
   s1 numeric; s5 numeric;
@@ -3209,7 +3229,7 @@ BEGIN
   PERFORM set_config('request.jwt.claims',
     json_build_object('sub', v_uid::text, 'role', 'authenticated')::text, true);
 
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   a1 := (x->>'ingresos_total')::numeric;
   SELECT coalesce(sum((e->>'productos')::numeric),0) + coalesce(sum((e->>'servicios')::numeric),0)
     INTO s1 FROM jsonb_array_elements(x->'detalle'->'por_sede') e;
@@ -3220,7 +3240,7 @@ BEGIN
     p_items => jsonb_build_array(jsonb_build_object(
       'producto_id', v_prod, 'cantidad', 1, 'precio_unitario', 1000000)),
     p_retefuente_pct => 2.5);
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   a2 := (x->>'ingresos_total')::numeric;
   IF a2 - a1 <> 1165000 THEN
     RAISE EXCEPTION 'CONTADO: subio % (esperado 1165000)', a2 - a1; END IF;
@@ -3233,7 +3253,7 @@ BEGIN
       'producto_id', v_prod, 'cantidad', 1, 'precio_unitario', 1000000)),
     p_retefuente_pct => 2.5);
   v_venta := (v_r->>'venta_id')::uuid;
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   a3 := (x->>'ingresos_total')::numeric;
   IF a3 <> a2 THEN
     RAISE EXCEPTION 'CREDITO: el ingreso se movio % al facturar (esperado 0)', a3 - a2; END IF;
@@ -3241,7 +3261,7 @@ BEGIN
   -- CAMINO 2b: al cobrar el neto, sube exactamente el neto UNA sola vez
   PERFORM public.fn_registrar_pago_cuenta(jsonb_build_object(
     'tipo','cobro','venta_id', v_venta, 'monto', 1165000, 'metodo_pago','Efectivo'));
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   a4 := (x->>'ingresos_total')::numeric;
   IF a4 - a3 <> 1165000 THEN
     RAISE EXCEPTION 'CREDITO COBRO: subio % (esperado 1165000 - ojo doble resta)', a4 - a3; END IF;
@@ -3257,14 +3277,14 @@ BEGIN
   RETURNING id INTO v_ot;
   INSERT INTO abonos (orden_id, monto, metodo_pago, registrado_por)
   VALUES (v_ot, 1150000, 'Efectivo', v_uid);
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   a5 := (x->>'ingresos_total')::numeric;
   IF a5 - a4 <> 1150000 THEN
     RAISE EXCEPTION 'OT: subio % (esperado 1150000 - ojo doble resta)', a5 - a4; END IF;
 
   -- CAMINO 3b: la OT retenida se puede entregar y NO vuelve a sumar
   PERFORM public.fn_generar_venta_ot(v_ot);
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   IF (x->>'ingresos_total')::numeric <> a5 THEN
     RAISE EXCEPTION 'OT ENTREGA: el ingreso se movio % al facturar (esperado 0)',
       (x->>'ingresos_total')::numeric - a5; END IF;
