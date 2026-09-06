@@ -246,3 +246,213 @@ describe("agruparEgresos", () => {
     expect(agruparEgresos([])).toEqual([]);
   });
 });
+
+const RESULTADO = {
+  ventas_netas: 436524418,
+  costo_vendido: 116922362,
+  margen_bruto: 319602056,
+  margen_pct: 73.2,
+  gastos: 111085943,
+  gastos_clasificados: 0,
+  resultado: 208516113,
+  n_ventas: 1879,
+  margen_productos: {
+    venta: 333310259,
+    costo: 116922362,
+    margen: 216387897,
+    pct: 64.9,
+  },
+  margen_servicios: { venta: 72189460, costo: 0, margen: 72189460, pct: 100 },
+  sin_clasificar: { n: 465, monto: 111085943, resultado_mejor_caso: 319602056 },
+};
+
+describe("Cascada", () => {
+  const montar = async (datos) => {
+    const C = (await import("../../src/components/panel/Cascada")).default;
+    return renderToStaticMarkup(
+      createElement(MemoryRouter, null, createElement(C, { datos })),
+    );
+  };
+
+  it("muestra los cinco renglones", async () => {
+    const html = await montar(RESULTADO);
+    for (const t of [
+      "Ventas netas",
+      "Costo de lo vendido",
+      "Margen bruto",
+      "Gastos operativos",
+      "Resultado",
+    ]) {
+      expect(html).toContain(t);
+    }
+  });
+
+  it("separa el margen de productos del de servicios", async () => {
+    // Mezclados dan 73,2%, que engaña: los servicios entran con costo cero.
+    const html = await montar(RESULTADO);
+    expect(html).toContain("productos 64.9%");
+    expect(html).toContain("servicios 100%");
+  });
+
+  it("el aviso es un incentivo, no una amenaza", async () => {
+    // Los sin clasificar YA están restados, así que el número mostrado es el
+    // peor caso y clasificar solo puede subirlo.
+    const html = await montar(RESULTADO);
+    expect(html).toContain("puede subir hasta");
+    expect(html).not.toContain("bajaría");
+    expect(html).toContain("Clasificarlos");
+  });
+
+  it("cuando no falta nada por clasificar, el aviso desaparece", async () => {
+    const html = await montar({
+      ...RESULTADO,
+      sin_clasificar: { n: 0, monto: 0, resultado_mejor_caso: 208516113 },
+    });
+    expect(html).not.toContain("Clasificarlos");
+    expect(html).toContain("Solo los egresos clasificados");
+  });
+
+  it("un resultado negativo se pinta en destructive", async () => {
+    const html = await montar({ ...RESULTADO, resultado: -5000000 });
+    expect(html).toContain("--destructive");
+  });
+});
+
+const PERDIDAS = {
+  bajo_costo: {
+    monto: 6535825,
+    n: 103,
+    etiqueta: "Vendido bajo costo",
+    unidad: "líneas",
+    suma_al_total: true,
+  },
+  descuentos: {
+    monto: 1522551,
+    n: 32,
+    etiqueta: "Descuentos otorgados",
+    unidad: "ventas",
+    suma_al_total: true,
+  },
+  devoluciones: {
+    monto: 0,
+    n: 0,
+    etiqueta: "Devoluciones reembolsadas",
+    unidad: "casos",
+    suma_al_total: true,
+  },
+  garantias: {
+    monto: 270000,
+    n: 4,
+    etiqueta: "Garantías reembolsadas",
+    unidad: "casos",
+    suma_al_total: true,
+  },
+  retenciones: {
+    monto: 0,
+    n: 0,
+    etiqueta: "Retenciones",
+    unidad: "facturas",
+    suma_al_total: true,
+  },
+  ot_no_autorizadas: {
+    monto: 1150300,
+    n: 54,
+    etiqueta: "OT diagnosticadas sin autorizar",
+    unidad: "OT",
+    suma_al_total: false,
+  },
+  total: 8328376,
+};
+
+describe("Perdidas", () => {
+  const montar = async (datos = PERDIDAS) => {
+    const P = (await import("../../src/components/panel/Perdidas")).default;
+    return renderToStaticMarkup(createElement(P, { datos, onAbrir() {} }));
+  };
+
+  it("ordena de mayor a menor: lo que más duele va primero", async () => {
+    const html = await montar();
+    expect(html.indexOf("Vendido bajo costo")).toBeLessThan(
+      html.indexOf("Descuentos otorgados"),
+    );
+  });
+
+  it("un concepto en cero se muestra: es una respuesta, no un hueco", async () => {
+    const html = await montar();
+    expect(html).toContain("Devoluciones reembolsadas");
+    expect(html).toContain("Retenciones");
+  });
+
+  it("las OT sin autorizar van DESPUÉS del total y dicen que no suman", async () => {
+    const html = await montar();
+    expect(html.indexOf("Total")).toBeLessThan(
+      html.indexOf("OT diagnosticadas sin autorizar"),
+    );
+    expect(html).toContain("no suma al total");
+  });
+});
+
+describe("PanelDetalle", () => {
+  const montar = async (props) => {
+    const P = (await import("../../src/components/panel/PanelDetalle")).default;
+    return renderToStaticMarkup(
+      createElement(MemoryRouter, null, createElement(P, props)),
+    );
+  };
+
+  it("cerrado no pinta nada", async () => {
+    expect(await montar({ abierto: false, titulo: "x", onCerrar() {} })).toBe(
+      "",
+    );
+  });
+
+  it("abierto lista las filas y enlaza a su documento", async () => {
+    const html = await montar({
+      abierto: true,
+      titulo: "Vendido bajo costo",
+      subtitulo: "Del 1 al 6 de septiembre de 2026",
+      filas: [
+        {
+          fecha: "2026-09-05",
+          referencia: "Venta #1234",
+          descripcion: "FILTRO × 2",
+          monto: 45000,
+          doc_tipo: "venta",
+          doc_id: "abc",
+        },
+      ],
+      onCerrar() {},
+    });
+    expect(html).toContain("Vendido bajo costo");
+    expect(html).toContain("/ops/ventas/abc");
+  });
+
+  it("una garantía enlaza a /ops/garantias/venta/:id, no a /ops/garantias/:id", async () => {
+    const html = await montar({
+      abierto: true,
+      titulo: "Garantías",
+      filas: [
+        {
+          fecha: "2026-09-05",
+          referencia: "Garantía #7",
+          descripcion: "Motivo",
+          monto: 1000,
+          doc_tipo: "garantia_venta",
+          doc_id: "g7",
+        },
+      ],
+      onCerrar() {},
+    });
+    expect(html).toContain("/ops/garantias/venta/g7");
+  });
+
+  it("vacío lo dice como buena noticia, no como hueco", async () => {
+    const html = await montar({
+      abierto: true,
+      titulo: "Vendido bajo costo",
+      filas: [],
+      onCerrar() {},
+    });
+    expect(html).toContain("buena noticia");
+  });
+});
