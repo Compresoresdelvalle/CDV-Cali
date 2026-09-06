@@ -13,6 +13,13 @@ const BOUNDS = {
   dias_alerta_ot_abandonada: { min: 1, max: 3650 },
   dias_garantia_venta: { min: 1, max: 3650 },
   dias_conteo_ciclico: { min: 1, max: 3650 },
+  // Retenciones: fn_validate_parametro_value() NO tiene regla para estas claves
+  // (solo comprueba que un decimal sea numérico). El rango 0–100 vive aquí y en
+  // el CHECK de las columnas de ventas, OT y compras, que es donde de verdad
+  // importa: ahí es donde un porcentaje absurdo movería plata.
+  retencion_retefuente_pct: { min: 0, max: 100 },
+  retencion_reteica_pct: { min: 0, max: 100 },
+  retencion_reteiva_pct: { min: 0, max: 100 },
 };
 
 // Sufijo legible por key (solo presentación)
@@ -22,6 +29,9 @@ const SUFFIX = {
   dias_alerta_ot_abandonada: "días",
   dias_garantia_venta: "días",
   dias_conteo_ciclico: "días",
+  retencion_retefuente_pct: "%",
+  retencion_reteica_pct: "%",
+  retencion_reteiva_pct: "%",
 };
 
 export default function Parametros() {
