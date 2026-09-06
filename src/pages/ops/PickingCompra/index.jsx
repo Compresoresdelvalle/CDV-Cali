@@ -1,26 +1,60 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, ScanLine, AlertTriangle } from "lucide-react";
+import { ArrowLeft, ScanLine, AlertTriangle, LayoutList, Rows3 } from "lucide-react";
 import { useAuthStore } from "../../../stores/authStore";
 import { supabase } from "../../../lib/supabase";
 import { formatDate, safeError } from "../../../lib/utils";
-import { avisarInfo } from "../../../lib/notify";
+import { avisarInfo, avisarOk, avisarError } from "../../../lib/notify";
 import PageHeader from "../../../components/layout/PageHeader";
 import QRScanner from "../../../components/forms/QRScanner";
 import { useConfirm } from "../../../components/ui/ConfirmDialog";
-import { lineaNueva, METODO } from "../../../lib/picking-compras";
+import {
+  lineaNueva,
+  METODO,
+  resumen as calcularResumen,
+  construirPayload,
+} from "../../../lib/picking-compras";
 import LineaEnfoque from "./LineaEnfoque";
+import LineaListaCard, { LineaListaFila } from "./LineaLista";
+import ModalConfirmar from "./ModalConfirmar";
 
 /**
- * Picking de recepción de compras — modo enfoque (Task 8 + Task 9 del plan).
+ * Picking de recepción de compras (Task 8 a 10 del plan).
  *
- * Cuenta lo que de verdad llegó ANTES de recibir la compra. El modo lista, el
- * resumen bloqueante y la confirmación contra `fn_procesar_picking_compra`
- * quedan para la Task 10: esta pantalla todavía no escribe nada en Supabase.
+ * Cuenta lo que de verdad llegó ANTES de recibir la compra. Modo enfoque
+ * (celular, un producto por pantalla) y modo lista (tablet/escritorio, todas
+ * las líneas a la vez) comparten el mismo estado y la misma aritmética
+ * (`derivar`/`resumen` de picking-compras.js): cambiar de modo nunca pierde
+ * ni recalcula distinto el conteo.
  */
 
 const claveBorrador = (id) => `picking:${id}`;
+const claveModo = "picking-modo";
 const clampEntero = (v) => Math.max(0, Math.round(Number(v) || 0));
+
+/**
+ * Valor inicial del conmutador Enfoque/Lista.
+ *
+ * Se lee la preferencia guardada primero; si nunca se eligió, se decide por
+ * el ancho de pantalla en el momento de montar (celular → enfoque, tablet o
+ * más ancho → lista), no preguntando. A propósito NO hay un listener de
+ * resize: rotar la tablet a mitad de un conteo no debe saltar de modo solo —
+ * el conteo (estado de `lineas`) es el mismo en los dos modos, así que nada
+ * se pierde, pero cambiar de vista sin que el operario lo pida sería más
+ * confuso que útil a mitad de tarea. El cambio explícito sigue disponible en
+ * el conmutador y esa elección sí se recuerda.
+ */
+function modoInicial() {
+  try {
+    const guardado = localStorage.getItem(claveModo);
+    if (guardado === "enfoque" || guardado === "lista") return guardado;
+  } catch {
+    /* localStorage no disponible: se decide por ancho */
+  }
+  return typeof window !== "undefined" && window.innerWidth >= 768
+    ? "lista"
+    : "enfoque";
+}
 
 function haceTiempo(ts) {
   const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
@@ -33,6 +67,7 @@ function haceTiempo(ts) {
 
 export default function PickingCompra() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -51,6 +86,18 @@ export default function PickingCompra() {
   // (p. ej. el mismo producto pedido para venta Y como insumo): se pregunta
   // en vez de adivinar cuál sumar.
   const [desambiguar, setDesambiguar] = useState(null);
+  const [modo, setModo] = useState(modoInicial);
+  const [confirmarOpen, setConfirmarOpen] = useState(false);
+  const [procesando, setProcesando] = useState(false);
+
+  const cambiarModo = useCallback((m) => {
+    setModo(m);
+    try {
+      localStorage.setItem(claveModo, m);
+    } catch {
+      /* preferencia no persistida: sigue funcionando solo en esta sesión */
+    }
+  }, []);
 
   /* ── Cargar la compra ─────────────────────────────────────── */
   useEffect(() => {
@@ -313,6 +360,52 @@ export default function PickingCompra() {
     setBorrador(null);
   };
 
+  /* ── Resumen y confirmación (Task 10) ─────────────────────────
+   * `resumen()` vive en picking-compras.js y es la MISMA función que decide
+   * el badge de cada línea (vía `derivar`): la barra fija de abajo y el modal
+   * de confirmación nunca pueden contradecir lo que ya se ve en pantalla.
+   */
+  const r = useMemo(() => calcularResumen(lineas), [lineas]);
+
+  const confirmarPicking = useCallback(async () => {
+    setProcesando(true);
+    try {
+      const { data, error: rpcErr } = await supabase.rpc(
+        "fn_procesar_picking_compra",
+        {
+          p_compra_id: id,
+          p_lineas: construirPayload(lineas),
+          p_omitido: false,
+        },
+      );
+      if (rpcErr) throw rpcErr;
+
+      // Solo se limpia el borrador CUANDO el servidor confirmó — si algo
+      // falla a mitad de camino (red, o la compra ya la recibieron desde
+      // otro dispositivo), el conteo sigue guardado y el operario puede
+      // reintentar sin volver a contar nada.
+      try {
+        localStorage.removeItem(claveBorrador(id));
+      } catch {
+        /* nada que limpiar si ya falló guardar */
+      }
+      avisarOk(
+        data?.reclamadas > 0
+          ? `Compra #${data.numero ?? compra?.numero} recibida · ${data.reclamadas} unidad${data.reclamadas === 1 ? "" : "es"} para reclamar`
+          : `Compra #${data?.numero ?? compra?.numero} recibida`,
+      );
+      navigate(`/ops/compras/${id}`);
+      return true;
+    } catch (e) {
+      // safeError conserva el mensaje P0001 tal cual lo redactó la RPC (el
+      // "por qué" y qué hacer) — no se reemplaza por un texto genérico.
+      avisarError(e, "No se pudo recibir la compra");
+      return false;
+    } finally {
+      setProcesando(false);
+    }
+  }, [id, lineas, navigate, compra]);
+
   /* ── Render ───────────────────────────────────────────────── */
   if (loading) {
     return (
@@ -362,7 +455,11 @@ export default function PickingCompra() {
 
   return (
     <div
-      className="p-4 sm:p-6 space-y-4 animate-fade-in"
+      // pb extra: deja espacio para la barra de resumen fija de abajo (ver
+      // más adelante) — el mismo patrón que ya usan RecepcionTraspaso y
+      // EtiquetasImprimir para no repetir el bug de FALLA 6 (botón tapado por
+      // el bottom-nav móvil).
+      className="p-4 sm:p-6 pb-36 lg:pb-28 space-y-4 animate-fade-in"
       style={{ backgroundColor: "hsl(var(--background))" }}
     >
       <PageHeader
@@ -373,18 +470,21 @@ export default function PickingCompra() {
             : compra.proveedor
         }
         actions={
-          <Link
-            to={`/ops/compras/${id}`}
-            className="inline-flex items-center gap-2 rounded-lg border px-4 text-sm font-medium"
-            style={{
-              minHeight: 48,
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-            }}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Volver
-          </Link>
+          <div className="flex items-center gap-2">
+            <ModoSwitch modo={modo} onChange={cambiarModo} />
+            <Link
+              to={`/ops/compras/${id}`}
+              className="inline-flex items-center gap-2 rounded-lg border px-4 text-sm font-medium"
+              style={{
+                minHeight: 48,
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--muted-foreground))",
+              }}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Volver
+            </Link>
+          </div>
         }
       />
 
@@ -441,9 +541,17 @@ export default function PickingCompra() {
         }}
       >
         <div className="flex items-center justify-between text-sm mb-2">
-          <span style={{ color: "hsl(var(--foreground))" }}>
-            Producto {index + 1} de {total}
-          </span>
+          {/* "Producto X de N" solo tiene sentido en enfoque: en lista no hay
+              una línea "actual", se ven todas a la vez. */}
+          {modo === "enfoque" ? (
+            <span style={{ color: "hsl(var(--foreground))" }}>
+              Producto {index + 1} de {total}
+            </span>
+          ) : (
+            <span style={{ color: "hsl(var(--foreground))" }}>
+              {total} producto{total === 1 ? "" : "s"} en esta compra
+            </span>
+          )}
           <span
             className="tabular-nums"
             style={{ color: "hsl(var(--muted-foreground))" }}
@@ -477,46 +585,111 @@ export default function PickingCompra() {
         Escanear producto
       </button>
 
-      {lineaActual && (
-        <LineaEnfoque
-          linea={lineaActual}
-          onCantidad={actualizarCantidad}
-          onDanadas={actualizarDanadas}
-          onCompleto={marcarCompleto}
-          onNada={marcarNada}
-          onFaltanteAccion={elegirFaltante}
-          onSobranteAccion={elegirSobrante}
-        />
-      )}
+      {modo === "enfoque" ? (
+        <>
+          {lineaActual && (
+            <LineaEnfoque
+              linea={lineaActual}
+              onCantidad={actualizarCantidad}
+              onDanadas={actualizarDanadas}
+              onCompleto={marcarCompleto}
+              onNada={marcarNada}
+              onFaltanteAccion={elegirFaltante}
+              onSobranteAccion={elegirSobrante}
+            />
+          )}
 
-      <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={index === 0}
-          onClick={() => setIndex((i) => Math.max(0, i - 1))}
-          className="flex-1 rounded-lg border text-sm font-medium disabled:opacity-40"
-          style={{
-            minHeight: 48,
-            borderColor: "hsl(var(--border))",
-            color: "hsl(var(--foreground))",
-          }}
-        >
-          Anterior
-        </button>
-        <button
-          type="button"
-          disabled={index >= total - 1}
-          onClick={() => setIndex((i) => Math.min(total - 1, i + 1))}
-          className="flex-1 rounded-lg border text-sm font-medium disabled:opacity-40"
-          style={{
-            minHeight: 48,
-            borderColor: "hsl(var(--border))",
-            color: "hsl(var(--foreground))",
-          }}
-        >
-          Siguiente
-        </button>
-      </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={index === 0}
+              onClick={() => setIndex((i) => Math.max(0, i - 1))}
+              className="flex-1 rounded-lg border text-sm font-medium disabled:opacity-40"
+              style={{
+                minHeight: 48,
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--foreground))",
+              }}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              disabled={index >= total - 1}
+              onClick={() => setIndex((i) => Math.min(total - 1, i + 1))}
+              className="flex-1 rounded-lg border text-sm font-medium disabled:opacity-40"
+              style={{
+                minHeight: 48,
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--foreground))",
+              }}
+            >
+              Siguiente
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Regla #5 — desktop tabla / mobile cards. Aquí el corte es `lg`
+              (no `md`) porque el conmutador ya deja "Enfoque" como la opción
+              de celular; "Lista" se usa desde tablet hacia arriba y hasta
+              ahí sigue rindiendo mejor como tarjetas de una columna. */}
+          <div
+            className="hidden lg:block overflow-x-auto rounded-xl border"
+            style={{ borderColor: "hsl(var(--border))" }}
+          >
+            <table className="w-full border-collapse">
+              <thead>
+                <tr
+                  className="text-left text-xs font-semibold uppercase tracking-wide border-b"
+                  style={{
+                    color: "hsl(var(--muted-foreground))",
+                    borderColor: "hsl(var(--border))",
+                    backgroundColor: "hsl(var(--muted) / 0.3)",
+                  }}
+                >
+                  <th className="px-3 py-2">Producto</th>
+                  <th className="px-3 py-2 text-center">Pedido</th>
+                  <th className="px-3 py-2">Llegaron</th>
+                  <th className="px-3 py-2">Dañadas</th>
+                  <th className="px-3 py-2">Estado</th>
+                  <th className="px-3 py-2">Decisión</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lineas.map((l) => (
+                  <LineaListaFila
+                    key={l.detalle_id}
+                    linea={l}
+                    onCantidad={actualizarCantidad}
+                    onDanadas={actualizarDanadas}
+                    onCompleto={marcarCompleto}
+                    onNada={marcarNada}
+                    onFaltanteAccion={elegirFaltante}
+                    onSobranteAccion={elegirSobrante}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <ul className="lg:hidden space-y-2.5" role="list">
+            {lineas.map((l) => (
+              <li key={l.detalle_id}>
+                <LineaListaCard
+                  linea={l}
+                  onCantidad={actualizarCantidad}
+                  onDanadas={actualizarDanadas}
+                  onCompleto={marcarCompleto}
+                  onNada={marcarNada}
+                  onFaltanteAccion={elegirFaltante}
+                  onSobranteAccion={elegirSobrante}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       {desambiguar && (
         <div
@@ -587,7 +760,113 @@ export default function PickingCompra() {
         />
       )}
 
+      {/* Barra de resumen — fija y por encima del bottom-nav móvil. Mismo
+          truco que RecepcionTraspaso (FALLA 6, botón antes tapado por el
+          bottom-nav): offset de 5rem + safe-area en móvil, `lg:bottom-0`
+          porque en escritorio no hay bottom-nav debajo. */}
+      <div
+        className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t p-4 lg:bottom-0"
+        style={{
+          backgroundColor: "hsl(var(--card))",
+          borderColor: "hsl(var(--border))",
+        }}
+      >
+        <div className="mx-auto max-w-3xl flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p
+              className="text-sm font-medium tabular-nums truncate"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
+              contadas {r.contadas} de {r.total}
+              {r.aReclamar > 0 && ` · ${r.aReclamar} a reclamar`}
+              {r.deMas > 0 && ` · ${r.deMas} de más`}
+            </p>
+            {r.motivoBloqueo && (
+              <p
+                className="text-xs"
+                style={{ color: "hsl(var(--warning))" }}
+              >
+                {r.motivoBloqueo}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            disabled={!r.listo || procesando}
+            onClick={() => setConfirmarOpen(true)}
+            className="rounded-xl font-semibold text-sm px-6 disabled:opacity-50 shrink-0"
+            style={{
+              minHeight: 48,
+              backgroundColor: "hsl(var(--primary))",
+              color: "hsl(var(--primary-foreground))",
+            }}
+          >
+            Confirmar recepción
+          </button>
+        </div>
+      </div>
+
+      {confirmarOpen && (
+        <ModalConfirmar
+          compra={compra}
+          lineas={lineas}
+          resumen={r}
+          onConfirm={confirmarPicking}
+          onClose={() => setConfirmarOpen(false)}
+        />
+      )}
+
       <ConfirmDialog />
+    </div>
+  );
+}
+
+function ModoSwitch({ modo, onChange }) {
+  return (
+    <div
+      className="inline-flex rounded-lg border p-0.5"
+      style={{ borderColor: "hsl(var(--border))" }}
+      role="tablist"
+      aria-label="Modo de conteo"
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={modo === "enfoque"}
+        onClick={() => onChange("enfoque")}
+        className="inline-flex items-center gap-1.5 rounded-md px-3 text-xs font-medium"
+        style={{
+          minHeight: 48,
+          backgroundColor:
+            modo === "enfoque" ? "hsl(var(--primary) / 0.12)" : "transparent",
+          color:
+            modo === "enfoque"
+              ? "hsl(var(--primary))"
+              : "hsl(var(--muted-foreground))",
+        }}
+      >
+        <Rows3 className="h-3.5 w-3.5" />
+        Enfoque
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={modo === "lista"}
+        onClick={() => onChange("lista")}
+        className="inline-flex items-center gap-1.5 rounded-md px-3 text-xs font-medium"
+        style={{
+          minHeight: 48,
+          backgroundColor:
+            modo === "lista" ? "hsl(var(--primary) / 0.12)" : "transparent",
+          color:
+            modo === "lista"
+              ? "hsl(var(--primary))"
+              : "hsl(var(--muted-foreground))",
+        }}
+      >
+        <LayoutList className="h-3.5 w-3.5" />
+        Lista
+      </button>
     </div>
   );
 }
