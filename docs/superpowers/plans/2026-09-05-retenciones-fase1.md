@@ -1139,9 +1139,12 @@ BEGIN
   IF v_total <> 1190000 THEN RAISE EXCEPTION 'total OT = % (esperado 1190000)', v_total; END IF;
   IF v_ret <> 40000 THEN RAISE EXCEPTION 'retencion OT = % (esperado 40000)', v_ret; END IF;
 
-  -- Compuerta 1: el abono por el NETO tiene que pasar el tope
+  -- Compuerta 1: el abono por el NETO tiene que pasar el tope.
+  -- OJO: abonos.metodo_pago tiene CHECK en MINUSCULA
+  -- ('efectivo','transferencia','tarjeta','otro'). Con 'Efectivo' la prueba
+  -- revienta por el constraint y no llega a probar nada.
   INSERT INTO abonos (orden_id, monto, metodo_pago, registrado_por)
-  VALUES (v_ot, 1150000, 'Efectivo', v_uid);
+  VALUES (v_ot, 1150000, 'efectivo', v_uid);
 
   RAISE EXCEPTION 'OK - el abono por el neto se acepta (se revierte a proposito)';
 END $$;
@@ -1169,7 +1172,7 @@ BEGIN
   RETURNING id INTO v_ot;
 
   INSERT INTO abonos (orden_id, monto, metodo_pago, registrado_por)
-  VALUES (v_ot, 1150000, 'Efectivo', v_uid);
+  VALUES (v_ot, 1150000, 'efectivo', v_uid);
 
   -- El cliente ya pago todo lo que le toca: la OT debe poder entregarse
   v_r := public.fn_generar_venta_ot(v_ot);
@@ -1419,14 +1422,14 @@ BEGIN
   -- Sin retencion, el tope sigue siendo el total: un abono de mas se rechaza
   BEGIN
     INSERT INTO abonos (orden_id, monto, metodo_pago, registrado_por)
-    VALUES (v_ot, 1190001, 'Efectivo', v_uid);
+    VALUES (v_ot, 1190001, 'efectivo', v_uid);
     RAISE EXCEPTION 'MAL: se acepto un abono por encima del total';
   EXCEPTION WHEN others THEN
     IF SQLERRM LIKE 'MAL:%' THEN RAISE; END IF;
   END;
 
   INSERT INTO abonos (orden_id, monto, metodo_pago, registrado_por)
-  VALUES (v_ot, 1190000, 'Efectivo', v_uid);
+  VALUES (v_ot, 1190000, 'efectivo', v_uid);
 
   RAISE EXCEPTION 'OK - sin retencion el tope sigue siendo el total (se revierte a proposito)';
 END $$;
@@ -3276,7 +3279,7 @@ BEGIN
           900000, 100000, 19, 'autorizado', 'terminada', 4)
   RETURNING id INTO v_ot;
   INSERT INTO abonos (orden_id, monto, metodo_pago, registrado_por)
-  VALUES (v_ot, 1150000, 'Efectivo', v_uid);
+  VALUES (v_ot, 1150000, 'efectivo', v_uid);
   x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   a5 := (x->>'ingresos_total')::numeric;
   IF a5 - a4 <> 1150000 THEN
