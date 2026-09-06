@@ -154,3 +154,42 @@ describe("OrdenDetalle con retenciones", () => {
     ).not.toThrow();
   });
 });
+
+/**
+ * El campo de porcentaje tiene que dejar escribir decimales.
+ *
+ * Con `value` atado al número ya parseado, `Number("2.")` da 2, el input se
+ * revierte a "2" y el dígito siguiente se concatena: escribir "2,5" dejaba 25%
+ * y "0,69" dejaba 69%. En una venta de un millón eso convierte $25.000 de
+ * retefuente en $250.000, en silencio.
+ *
+ * Misma familia que el bug del separador de miles en ModalCambioProducto.
+ *
+ * El arreglo es separar lo que se MUESTRA (texto crudo, para poder escribir un
+ * decimal a medias) de lo que se GUARDA (el número ya normalizado). Aquí se
+ * prueba la normalización, que es la parte que decide plata.
+ */
+describe("normalizarPct", () => {
+  it("acepta la coma, que es como se escribe en Colombia", async () => {
+    const { normalizarPct } = await import("../../src/lib/retenciones");
+    expect(normalizarPct("2,5")).toBe(2.5);
+    expect(normalizarPct("0,69")).toBe(0.69);
+    expect(normalizarPct("2.5")).toBe(2.5);
+  });
+
+  it("un decimal a medias no se convierte en otro numero", async () => {
+    const { normalizarPct } = await import("../../src/lib/retenciones");
+    // Mientras se escribe "2,5" pasa por "2," — que vale 2, no 25.
+    expect(normalizarPct("2,")).toBe(2);
+    expect(normalizarPct("0,")).toBe(0);
+  });
+
+  it("recorta a [0, 100] y nunca devuelve NaN", async () => {
+    const { normalizarPct } = await import("../../src/lib/retenciones");
+    expect(normalizarPct("")).toBe(0);
+    expect(normalizarPct("abc")).toBe(0);
+    expect(normalizarPct("-5")).toBe(0);
+    expect(normalizarPct("500")).toBe(100);
+    expect(normalizarPct(null)).toBe(0);
+  });
+});

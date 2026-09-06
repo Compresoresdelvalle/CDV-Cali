@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { calcularRetenciones } from "../../lib/retenciones";
+import { calcularRetenciones, normalizarPct } from "../../lib/retenciones";
 import { formatCOP } from "../../lib/utils";
 
 /**
@@ -33,8 +33,37 @@ import { formatCOP } from "../../lib/utils";
  * React la trata como un componente nuevo en cada pulsación y remonta el
  * input, que pierde el foco: escribir "0,69" era imposible porque el cursor
  * se salía después del primer dígito.
+ *
+ * Guarda el TEXTO mientras se escribe y solo entrega el NÚMERO al salir del
+ * campo. Con el value atado al número parseado, `Number("2,")` daba 2, el
+ * input se revertía a "2" y el siguiente dígito se concatenaba: "2,5" quedaba
+ * en 25% y "0,69" en 69%. En una venta de un millón eso convierte $25.000 de
+ * retefuente en $250.000, sin avisar.
+ *
+ * Persistir al salir del campo —y no en cada tecla— es además lo que hace el
+ * descuento de la OT, y evita una escritura a la base por cada dígito.
  */
 function Fila({ etiqueta, clave, valor, monto, soloLectura, onCambiar }) {
+  const [texto, setTexto] = useState(String(valor ?? 0));
+
+  // Si el valor cambia desde afuera (la precarga al abrir el bloque, o un
+  // refresco del documento), el campo tiene que reflejarlo. Se ajusta durante
+  // el render comparando contra el anterior —el patrón que recomienda React—
+  // en vez de un efecto, que encadenaría un render de más por cada tecla.
+  // No pelea con lo que se está escribiendo porque el valor de afuera solo
+  // cambia cuando ya se entregó.
+  const [valorPrevio, setValorPrevio] = useState(valor);
+  if (valor !== valorPrevio) {
+    setValorPrevio(valor);
+    setTexto(String(valor ?? 0));
+  }
+
+  const entregar = () => {
+    const n = normalizarPct(texto);
+    setTexto(String(n));
+    if (n !== Number(valor ?? 0)) onCambiar(n);
+  };
+
   return (
     <div className="flex items-center gap-3">
       <label
@@ -56,8 +85,10 @@ function Fila({ etiqueta, clave, valor, monto, soloLectura, onCambiar }) {
           id={`ret-${clave}`}
           type="text"
           inputMode="decimal"
-          value={valor ?? 0}
-          onChange={onCambiar}
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onBlur={entregar}
+          onFocus={(e) => e.target.select()}
           className="w-20 rounded-lg border px-2 py-2 text-right text-[13px] tabular-nums"
           style={{
             backgroundColor: "hsl(var(--card))",
@@ -117,15 +148,8 @@ export default function BloqueRetenciones({
     }
   };
 
-  const cambiar = (clave) => (e) => {
-    // Coma o punto: en Colombia se escribe "0,69". Se recorta a [0, 100] igual
-    // que el CHECK de la tabla, para que nunca se envíe algo que el servidor
-    // vaya a rechazar con un mensaje de constraint.
-    const crudo = String(e.target.value ?? "").replace(",", ".");
-    const n = crudo === "" ? 0 : Number(crudo);
-    const limpio = Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0;
-    onChange?.({ ...valores, [clave]: limpio });
-  };
+  // Recibe el número ya normalizado por la Fila, al salir del campo.
+  const cambiar = (clave) => (n) => onChange?.({ ...valores, [clave]: n });
 
   return (
     <div
