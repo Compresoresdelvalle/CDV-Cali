@@ -64,9 +64,13 @@ export default function BarraRango({
         borderColor: "hsl(var(--border))",
       }}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        {/* En móvil los chips ruedan en horizontal; no se apilan en tres filas. */}
-        <div className="-mx-1 flex flex-1 gap-1.5 overflow-x-auto px-1 pb-1">
+      {/* En celular los chips van en SU PROPIA fila. Compartiéndola con el
+          selector de sede y el botón, en 360 px solo se alcanzaban a ver
+          "Hoy" y medio "Ayer": había que adivinar que el resto se arrastra. */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center">
+        {/* En móvil ruedan en horizontal (no se apilan en tres filas); en
+            escritorio envuelven, para que el último chip no quede cortado. */}
+        <div className="-mx-1 flex gap-1.5 px-1 pb-1 max-md:overflow-x-auto md:flex-1 md:flex-wrap">
           {ATAJOS.map((a) => (
             <button
               key={a.id}
@@ -93,11 +97,14 @@ export default function BarraRango({
           </button>
         </div>
 
-        {sedes.length > 0 && (
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Siempre presente, aunque las sedes todavía no hayan llegado: si
+              apareciera al cargarlas, la barra entera daría un salto delante de
+              quien la está mirando. */}
           <select
             value={sede}
             onChange={(e) => onSede(e.target.value)}
-            className="rounded-lg border px-2 text-[12.5px]"
+            className="min-w-0 flex-1 rounded-lg border px-2 text-[12.5px] md:flex-none"
             style={{
               minHeight: 48,
               backgroundColor: "hsl(var(--card))",
@@ -113,26 +120,26 @@ export default function BarraRango({
               </option>
             ))}
           </select>
-        )}
 
-        <button
-          type="button"
-          onClick={onRefrescar}
-          disabled={cargando}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-medium disabled:opacity-50"
-          style={{
-            minHeight: 48,
-            borderColor: "hsl(var(--border))",
-            backgroundColor: "hsl(var(--card))",
-            color: "hsl(var(--muted-foreground))",
-          }}
-        >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${cargando ? "animate-spin" : ""}`}
-            strokeWidth={1.5}
-          />
-          {cargando ? "Actualizando…" : "Actualizar"}
-        </button>
+          <button
+            type="button"
+            onClick={onRefrescar}
+            disabled={cargando}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-medium disabled:opacity-50"
+            style={{
+              minHeight: 48,
+              borderColor: "hsl(var(--border))",
+              backgroundColor: "hsl(var(--card))",
+              color: "hsl(var(--muted-foreground))",
+            }}
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${cargando ? "animate-spin" : ""}`}
+              strokeWidth={1.5}
+            />
+            {cargando ? "Actualizando…" : "Actualizar"}
+          </button>
+        </div>
       </div>
 
       {/* La frase que quita el adivinar. */}

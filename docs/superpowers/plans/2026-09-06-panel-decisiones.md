@@ -22,13 +22,13 @@ recharts, react-day-picker, date-fns, vitest.
 
 ## Las fases
 
-| | Entrega | Por qué en este orden |
-|---|---|---|
+|       | Entrega                                      | Por qué en este orden                                                            |
+| ----- | -------------------------------------------- | -------------------------------------------------------------------------------- |
 | **A** | Lazy + rango de fechas + esqueleto del panel | Nada más se puede construir sin el rango: es lo que gobierna todas las consultas |
-| **B** | Categorías de gasto y su clasificación | Desbloquea el Resultado. Puede avanzar en paralelo con A |
-| **C** | Resultado y pérdidas | El corazón: la cascada y los $6,5M vendidos bajo costo |
-| **D** | Composición de la venta | El desglose por sede, vendedora, producto y cliente |
-| **E** | Cartera, inventario y exportar | Cierra el panel |
+| **B** | Categorías de gasto y su clasificación       | Desbloquea el Resultado. Puede avanzar en paralelo con A                         |
+| **C** | Resultado y pérdidas                         | El corazón: la cascada y los $6,5M vendidos bajo costo                           |
+| **D** | Composición de la venta                      | El desglose por sede, vendedora, producto y cliente                              |
+| **E** | Cartera, inventario y exportar               | Cierra el panel                                                                  |
 
 Cada fase deja algo usable. Al terminar A ya hay un panel con rango que
 funciona; al terminar C ya sirve para decidir.
@@ -73,6 +73,7 @@ El build es **un solo archivo de 2.439 KB sin ningún `React.lazy`**. Meter
 recharts ahí se lo cobra a la vendedora que solo entra a facturar.
 
 **Archivos:**
+
 - Modificar: `src/App.jsx`
 
 - [ ] **Paso 1: Medir el bundle ANTES**
@@ -159,6 +160,7 @@ Toda la aritmética de fechas vive aparte y se prueba sola. Es lo que evita que
 el "mes pasado" del panel y el "mes pasado" de la comparación se desincronicen.
 
 **Archivos:**
+
 - Crear: `src/lib/panel-rango.js`
 - Probar: `tests/integration/panel-rango.test.js`
 
@@ -348,7 +350,10 @@ export function rangoDeAtajo(id, hoy = new Date()) {
     }
     case "semana":
       // La semana arranca el lunes, como se cuenta aquí.
-      return { desde: iso(startOfWeek(hoy, { weekStartsOn: 1 })), hasta: iso(hoy) };
+      return {
+        desde: iso(startOfWeek(hoy, { weekStartsOn: 1 })),
+        hasta: iso(hoy),
+      };
     case "mes":
       // Hasta HOY, no hasta fin de mes: contar días que no han pasado haría
       // ver una caída que no existe.
@@ -431,6 +436,7 @@ git commit -m "feat(panel): la aritmetica de rangos, probada aparte"
 ### Tarea A3: La barra de rango
 
 **Archivos:**
+
 - Crear: `src/components/panel/BarraRango.jsx`
 - Probar: `tests/integration/panel-render.test.js`
 
@@ -676,7 +682,10 @@ export default function BarraRango({
             locale={es}
             numberOfMonths={1}
             defaultMonth={parseISO(rango.desde)}
-            selected={{ from: parseISO(rango.desde), to: parseISO(rango.hasta) }}
+            selected={{
+              from: parseISO(rango.desde),
+              to: parseISO(rango.hasta),
+            }}
             onSelect={(r) => {
               if (!r?.from) return;
               const desde = format(r.from, "yyyy-MM-dd");
@@ -749,6 +758,7 @@ git commit -m "feat(panel): barra de rango que dice en espanol que esta aplicado
 ### Tarea A4: El esqueleto del panel
 
 **Archivos:**
+
 - Crear: `src/pages/admin/Panel.jsx`
 - Crear: `src/components/panel/Seccion.jsx`
 - Modificar: `src/App.jsx`
@@ -828,7 +838,10 @@ export default function Seccion({
           </p>
         ) : error ? (
           <div className="space-y-2">
-            <p className="text-[13px]" style={{ color: "hsl(var(--destructive))" }}>
+            <p
+              className="text-[13px]"
+              style={{ color: "hsl(var(--destructive))" }}
+            >
               {error}
             </p>
             {onReintentar && (
@@ -993,7 +1006,6 @@ export default function Panel() {
       {/* `recarga` lo consumen las secciones desde la fase C: va en su lista de
           dependencias para que "Actualizar" las vuelva a pedir. */}
       <span hidden data-recarga={recarga} />
-
     </div>
   );
 }
@@ -1044,14 +1056,21 @@ vi.mock("../../src/lib/supabase", () => {
     order: () => q,
     then: (r) => Promise.resolve({ data: [], error: null }).then(r),
   };
-  return { supabase: { from: () => q, rpc: () => Promise.resolve({ data: null, error: null }) } };
+  return {
+    supabase: {
+      from: () => q,
+      rpc: () => Promise.resolve({ data: null, error: null }),
+    },
+  };
 });
 
 let perfilActual = { rol: "Admin", sede_id: "BODEGA", nombre: "Admin Maritza" };
 vi.mock("../../src/stores/authStore", () => ({
   get useAuthStore() {
     const usar = (sel) =>
-      typeof sel === "function" ? sel({ perfil: perfilActual }) : { perfil: perfilActual };
+      typeof sel === "function"
+        ? sel({ perfil: perfilActual })
+        : { perfil: perfilActual };
     usar.getState = () => ({ perfil: perfilActual });
     usar.setState = () => {};
     usar.subscribe = () => () => {};
@@ -1117,6 +1136,7 @@ Puede avanzar en paralelo con la fase A: no comparten archivos.
 ### Tarea B1: El catálogo y la columna
 
 **Archivos:**
+
 - Crear: `supabase/migrations/<TS>_panel_categorias_gasto.sql`
 
 - [ ] **Paso 1: Medir el punto de partida**
@@ -1261,6 +1281,7 @@ Son 465 movimientos: uno por uno no lo hace nadie. La pantalla agrupa por
 concepto parecido para poder marcar veinte "NOMINA" de un golpe.
 
 **Archivos:**
+
 - Crear: `supabase/migrations/<TS>_panel_clasificar_egresos.sql`
 
 - [ ] **Paso 1: Escribir la prueba que falla**
@@ -1399,6 +1420,7 @@ git commit -m "feat(panel): clasificar egresos por lotes, solo Admin"
 ### Tarea B3: La pantalla de clasificación
 
 **Archivos:**
+
 - Crear: `src/pages/admin/ClasificarEgresos.jsx`
 - Modificar: `src/App.jsx`, `src/lib/admin-shell-ui.js`
 - Probar: `tests/integration/panel-render.test.js`
@@ -1543,7 +1565,9 @@ export default function ClasificarEgresos() {
         p_categoria_id: categoriaId,
       });
       if (error) throw error;
-      avisarOk(`${data} egreso${data === 1 ? "" : "s"} clasificado${data === 1 ? "" : "s"}`);
+      avisarOk(
+        `${data} egreso${data === 1 ? "" : "s"} clasificado${data === 1 ? "" : "s"}`,
+      );
       await cargar();
     } catch (err) {
       avisarError(err, "No se pudo clasificar");
@@ -1641,7 +1665,10 @@ export default function ClasificarEgresos() {
             type="button"
             onClick={() => marcarGrupo(g.items)}
             className="flex w-full items-center justify-between px-4 py-3 text-left"
-            style={{ minHeight: 48, backgroundColor: "hsl(var(--muted) / 0.3)" }}
+            style={{
+              minHeight: 48,
+              backgroundColor: "hsl(var(--muted) / 0.3)",
+            }}
           >
             <span
               className="text-xs font-semibold uppercase tracking-wide"
@@ -1748,6 +1775,7 @@ git commit -m "feat(panel): bandeja para clasificar los egresos por lotes"
 Si solo se limpia lo viejo, la bandeja se vuelve a llenar sola.
 
 **Archivos:**
+
 - Modificar: `src/pages/ops/CompraNueva.jsx`
 
 - [ ] **Paso 1: Ver cómo se registra hoy un egreso de caja menor**
@@ -1763,8 +1791,8 @@ Cuando el formulario está en modo caja menor, junto al campo de concepto, un
 guardar `categoria_gasto_id` con el resto de la compra.
 
 Marcarlo **obligatorio en modo caja menor**: sin categoría no se puede guardar.
-El mensaje si falta: *"Elige la categoría del egreso: es lo que decide si esta
-plata resta del resultado del mes."* — dice la causa y la salida, como manda el
+El mensaje si falta: _"Elige la categoría del egreso: es lo que decide si esta
+plata resta del resultado del mes."_ — dice la causa y la salida, como manda el
 criterio de errores del proyecto.
 
 Las categorías con `afecta_resultado = false` se muestran al final del selector,
@@ -1798,6 +1826,7 @@ El corazón. Al terminar esta fase el panel ya sirve para decidir.
 ### Tarea C1: `fn_panel_resultado`
 
 **Archivos:**
+
 - Crear: `supabase/migrations/<TS>_panel_resultado.sql`
 
 - [ ] **Paso 1: Escribir la prueba que falla**
@@ -2047,6 +2076,7 @@ git commit -m "feat(panel): la cascada del resultado, con su margen de error dec
 ### Tarea C2: `fn_panel_perdidas`
 
 **Archivos:**
+
 - Crear: `supabase/migrations/<TS>_panel_perdidas.sql`
 
 - [ ] **Paso 1: Escribir la prueba que falla**
@@ -2237,6 +2267,7 @@ git commit -m "feat(panel): los seis conceptos de perdida"
 Lo que hace que cada cifra sea una puerta y no un callejón.
 
 **Archivos:**
+
 - Crear: `supabase/migrations/<TS>_panel_perdidas_detalle.sql`
 
 - [ ] **Paso 1: Escribir la prueba que falla**
@@ -2417,6 +2448,7 @@ git commit -m "feat(panel): detalle de cada perdida hasta el documento"
 ### Tarea C4: La cascada en pantalla
 
 **Archivos:**
+
 - Crear: `src/components/panel/Cascada.jsx`
 - Modificar: `src/pages/admin/Panel.jsx`
 - Probar: `tests/integration/panel-render.test.js`
@@ -2433,13 +2465,19 @@ describe("Cascada", () => {
     gastos: 61770000,
     resultado: 45230000,
     n_ventas: 1204,
-    margen_productos: { venta: 120000000, costo: 38000000, margen: 82000000, pct: 68.3 },
+    margen_productos: {
+      venta: 120000000,
+      costo: 38000000,
+      margen: 82000000,
+      pct: 68.3,
+    },
     margen_servicios: { venta: 25000000, costo: 0, margen: 25000000, pct: 100 },
     sin_clasificar: { n: 38, monto: 12400000, resultado_peor_caso: 32830000 },
   };
 
   const montar = async (datos) => {
-    const Cascada = (await import("../../src/components/panel/Cascada")).default;
+    const Cascada = (await import("../../src/components/panel/Cascada"))
+      .default;
     return renderToStaticMarkup(
       createElement(Cascada, { datos, onAbrir() {} }),
     );
@@ -2447,7 +2485,13 @@ describe("Cascada", () => {
 
   it("muestra los cinco renglones de la cascada", async () => {
     const html = await montar(DATOS);
-    for (const t of ["Ventas netas", "Costo de lo vendido", "Margen bruto", "Gastos", "Resultado"]) {
+    for (const t of [
+      "Ventas netas",
+      "Costo de lo vendido",
+      "Margen bruto",
+      "Gastos",
+      "Resultado",
+    ]) {
       expect(html).toContain(t);
     }
   });
@@ -2500,7 +2544,15 @@ export default function Cascada({ datos, onAbrir }) {
   const sc = datos.sin_clasificar ?? { n: 0, monto: 0 };
   const negativo = Number(datos.resultado) < 0;
 
-  const Renglon = ({ etiqueta, nota, valor, signo, fuerte, color, onClick }) => (
+  const Renglon = ({
+    etiqueta,
+    nota,
+    valor,
+    signo,
+    fuerte,
+    color,
+    onClick,
+  }) => (
     <button
       type="button"
       onClick={onClick}
@@ -2594,7 +2646,10 @@ export default function Cascada({ datos, onAbrir }) {
             strokeWidth={1.7}
           />
           <div className="min-w-0 flex-1">
-            <p className="text-[12.5px]" style={{ color: "hsl(var(--foreground))" }}>
+            <p
+              className="text-[12.5px]"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
               Faltan <b>{sc.n}</b> egresos sin clasificar por{" "}
               <b>{formatCOP(sc.monto)}</b>. Si todos fueran gasto, el resultado
               bajaría a <b>{formatCOP(sc.resultado_peor_caso)}</b>.
@@ -2663,6 +2718,7 @@ git commit -m "feat(panel): la cascada del resultado en pantalla"
 ### Tarea C5: Pérdidas y el panel lateral de detalle
 
 **Archivos:**
+
 - Crear: `src/components/panel/Perdidas.jsx`
 - Crear: `src/components/panel/PanelDetalle.jsx`
 - Modificar: `src/pages/admin/Panel.jsx`
@@ -2672,17 +2728,48 @@ git commit -m "feat(panel): la cascada del resultado en pantalla"
 ```js
 describe("Perdidas y su detalle", () => {
   const P = {
-    bajo_costo: { monto: 6535825, n: 103, etiqueta: "Vendido bajo costo", unidad: "líneas" },
-    descuentos: { monto: 1522551, n: 47, etiqueta: "Descuentos otorgados", unidad: "ventas" },
-    devoluciones: { monto: 0, n: 0, etiqueta: "Devoluciones reembolsadas", unidad: "casos" },
-    garantias: { monto: 271000, n: 3, etiqueta: "Garantías reembolsadas", unidad: "casos" },
-    retenciones: { monto: 0, n: 0, etiqueta: "Retenciones", unidad: "facturas" },
-    ot_no_autorizadas: { monto: 540000, n: 54, etiqueta: "OT diagnosticadas sin autorizar", unidad: "OT" },
+    bajo_costo: {
+      monto: 6535825,
+      n: 103,
+      etiqueta: "Vendido bajo costo",
+      unidad: "líneas",
+    },
+    descuentos: {
+      monto: 1522551,
+      n: 47,
+      etiqueta: "Descuentos otorgados",
+      unidad: "ventas",
+    },
+    devoluciones: {
+      monto: 0,
+      n: 0,
+      etiqueta: "Devoluciones reembolsadas",
+      unidad: "casos",
+    },
+    garantias: {
+      monto: 271000,
+      n: 3,
+      etiqueta: "Garantías reembolsadas",
+      unidad: "casos",
+    },
+    retenciones: {
+      monto: 0,
+      n: 0,
+      etiqueta: "Retenciones",
+      unidad: "facturas",
+    },
+    ot_no_autorizadas: {
+      monto: 540000,
+      n: 54,
+      etiqueta: "OT diagnosticadas sin autorizar",
+      unidad: "OT",
+    },
     total: 8329376,
   };
 
   it("ordena de mayor a menor: lo que mas duele va primero", async () => {
-    const Perdidas = (await import("../../src/components/panel/Perdidas")).default;
+    const Perdidas = (await import("../../src/components/panel/Perdidas"))
+      .default;
     const html = renderToStaticMarkup(
       createElement(Perdidas, { datos: P, onAbrir() {} }),
     );
@@ -2692,7 +2779,8 @@ describe("Perdidas y su detalle", () => {
   });
 
   it("un concepto en cero se muestra como respuesta, no se esconde", async () => {
-    const Perdidas = (await import("../../src/components/panel/Perdidas")).default;
+    const Perdidas = (await import("../../src/components/panel/Perdidas"))
+      .default;
     const html = renderToStaticMarkup(
       createElement(Perdidas, { datos: P, onAbrir() {} }),
     );
@@ -2700,10 +2788,16 @@ describe("Perdidas y su detalle", () => {
   });
 
   it("el panel de detalle monta cerrado y abierto", async () => {
-    const PD = (await import("../../src/components/panel/PanelDetalle")).default;
+    const PD = (await import("../../src/components/panel/PanelDetalle"))
+      .default;
     expect(() =>
       renderToStaticMarkup(
-        createElement(PD, { abierto: false, titulo: "x", filas: [], onCerrar() {} }),
+        createElement(PD, {
+          abierto: false,
+          titulo: "x",
+          filas: [],
+          onCerrar() {},
+        }),
       ),
     ).not.toThrow();
     expect(() =>
@@ -2713,7 +2807,14 @@ describe("Perdidas y su detalle", () => {
           titulo: "Vendido bajo costo",
           subtitulo: "Del 1 al 30 de septiembre",
           filas: [
-            { fecha: "2026-09-10", referencia: "Venta #1234", descripcion: "FILTRO × 2", monto: 45000, doc_tipo: "venta", doc_id: "abc" },
+            {
+              fecha: "2026-09-10",
+              referencia: "Venta #1234",
+              descripcion: "FILTRO × 2",
+              monto: 45000,
+              doc_tipo: "venta",
+              doc_id: "abc",
+            },
           ],
           onCerrar() {},
         }),
@@ -2777,6 +2878,7 @@ Una función con un parámetro de dimensión, no siete funciones. La forma de
 salida es siempre la misma, así el frontend tiene una sola tabla.
 
 **Archivos:**
+
 - Crear: `supabase/migrations/<TS>_panel_composicion.sql`
 
 - [ ] **Paso 1: Escribir la prueba que falla**
@@ -2972,6 +3074,7 @@ git commit -m "feat(panel): composicion de la venta por siete dimensiones"
 ### Tarea D2: La tabla de composición
 
 **Archivos:**
+
 - Crear: `src/components/panel/Composicion.jsx`
 - Modificar: `src/pages/admin/Panel.jsx`
 
@@ -2980,9 +3083,33 @@ git commit -m "feat(panel): composicion de la venta por siete dimensiones"
 ```js
 describe("Composicion", () => {
   const FILAS = [
-    { clave: "CV", etiqueta: "Cali Valle", venta: 80000000, costo: 20000000, margen: 60000000, margen_pct: 75, n: 400 },
-    { clave: "CHV", etiqueta: "Chipichape", venta: 45000000, costo: 15000000, margen: 30000000, margen_pct: 66.7, n: 250 },
-    { clave: "L3", etiqueta: "Local 3", venta: 20000000, costo: 12000000, margen: 8000000, margen_pct: 40, n: 120 },
+    {
+      clave: "CV",
+      etiqueta: "Cali Valle",
+      venta: 80000000,
+      costo: 20000000,
+      margen: 60000000,
+      margen_pct: 75,
+      n: 400,
+    },
+    {
+      clave: "CHV",
+      etiqueta: "Chipichape",
+      venta: 45000000,
+      costo: 15000000,
+      margen: 30000000,
+      margen_pct: 66.7,
+      n: 250,
+    },
+    {
+      clave: "L3",
+      etiqueta: "Local 3",
+      venta: 20000000,
+      costo: 12000000,
+      margen: 8000000,
+      margen_pct: 40,
+      n: 120,
+    },
   ];
 
   const montar = async (props) => {
@@ -3062,6 +3189,7 @@ Estas dos **no reciben rango**: son fotos de hoy. Quién debe ahora, cuánta pla
 hay dormida ahora. Aplicarles el rango del panel sería confuso.
 
 **Archivos:**
+
 - Crear: `supabase/migrations/<TS>_panel_cartera_inventario.sql`
 
 - [ ] **Paso 1: Escribir la prueba que falla**
@@ -3104,6 +3232,7 @@ en cuatro tramos por días desde la fecha de la venta: `0-30`, `31-60`, `61-90`,
 saldo ya viene neto de retenciones porque la vista lo descuenta.
 
 `fn_panel_inventario(p_sede text)` — devuelve:
+
 - `valor_costo`: `sum(cantidad × costo_promedio)` de `inventario` con
   `cantidad > 0`.
 - `dormido`: lo mismo, pero solo de productos sin ningún movimiento de salida en
@@ -3128,6 +3257,7 @@ git commit -m "feat(panel): cartera por antiguedad e inventario como capital"
 ### Tarea E2: Las dos secciones en pantalla
 
 **Archivos:**
+
 - Crear: `src/components/panel/Cartera.jsx`, `src/components/panel/Inventario.jsx`
 - Modificar: `src/pages/admin/Panel.jsx`
 
@@ -3155,6 +3285,7 @@ git commit -m "feat(panel): cartera por antiguedad e inventario en pantalla"
 ### Tarea E3: Exportar a Excel
 
 **Archivos:**
+
 - Crear: `src/lib/panel-exportar.js`
 - Modificar: los componentes de sección
 
@@ -3178,7 +3309,10 @@ describe("aCSV", () => {
   it("escapa las comas y las comillas de los nombres", () => {
     const csv = aCSV(
       [{ nombre: 'FILTRO 1/2", ROSCA', total: 1000 }],
-      [{ clave: "nombre", titulo: "Producto" }, { clave: "total", titulo: "Total" }],
+      [
+        { clave: "nombre", titulo: "Producto" },
+        { clave: "total", titulo: "Total" },
+      ],
     );
     expect(csv).toContain('"FILTRO 1/2"", ROSCA"');
   });
@@ -3194,8 +3328,8 @@ Los nombres de producto de esta empresa traen comillas y comas (`FILTRO 1/2"`),
 que es exactamente lo que rompe un CSV mal escapado.
 
 - [ ] **Paso 3: Botón de exportar en cada sección y en el detalle**, que exporta
-**lo que se ve**, con el rango aplicado en el nombre del archivo:
-`panel-perdidas-2026-09-01-a-2026-09-30.csv`.
+      **lo que se ve**, con el rango aplicado en el nombre del archivo:
+      `panel-perdidas-2026-09-01-a-2026-09-30.csv`.
 
 - [ ] **Paso 4: Verificar y commitear**
 
@@ -3230,7 +3364,9 @@ describe("el panel no usa colores fijos", () => {
       const src = readFileSync(join(dir, f), "utf8");
       expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
       expect(src).not.toMatch(/className="[^"]*\bbg-(?!transparent)[a-z]+-\d/);
-      expect(src).not.toMatch(/className="[^"]*\btext-(?:gray|red|green|blue|slate)-\d/);
+      expect(src).not.toMatch(
+        /className="[^"]*\btext-(?:gray|red|green|blue|slate)-\d/,
+      );
     });
   }
 });
@@ -3341,14 +3477,14 @@ causación ni cierres contables.
 
 ## Resumen de lo que se toca
 
-| Capa | Qué cambia | Tareas |
-|---|---|---|
-| Bundle | lazy en las rutas pesadas de admin | A1 |
-| Esquema | `categorias_gasto` + `compras.categoria_gasto_id` | B1 |
-| RPC nuevas | 7 (`fn_panel_*` y `fn_clasificar_egresos`) | B2, C1-C3, D1, E1 |
-| Rutas | `/admin/panel` y `/admin/egresos`, las dos con lazy | A4, B3 |
-| Frontend | 2 páginas y 9 componentes nuevos | A3-A4, B3, C4-C5, D2, E2 |
-| Existente | `App.jsx`, `admin-shell-ui.js`, `CompraNueva.jsx` | A1, A4, B3, B4 |
+| Capa       | Qué cambia                                          | Tareas                   |
+| ---------- | --------------------------------------------------- | ------------------------ |
+| Bundle     | lazy en las rutas pesadas de admin                  | A1                       |
+| Esquema    | `categorias_gasto` + `compras.categoria_gasto_id`   | B1                       |
+| RPC nuevas | 7 (`fn_panel_*` y `fn_clasificar_egresos`)          | B2, C1-C3, D1, E1        |
+| Rutas      | `/admin/panel` y `/admin/egresos`, las dos con lazy | A4, B3                   |
+| Frontend   | 2 páginas y 9 componentes nuevos                    | A3-A4, B3, C4-C5, D2, E2 |
+| Existente  | `App.jsx`, `admin-shell-ui.js`, `CompraNueva.jsx`   | A1, A4, B3, B4           |
 
 **Lo que no cambia:** ninguna función de dinero que ya existe. El panel solo
 lee. La única escritura que agrega es la categoría de un egreso, que es un campo

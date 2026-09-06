@@ -59,9 +59,7 @@ import ReciboDetalle from "./pages/ops/Recibos/ReciboDetalle";
    ────────────────────────────────────────────────────────────────────────── */
 const AdminDashboard = lazy(() => import("./pages/admin/Dashboard"));
 const Panel = lazy(() => import("./pages/admin/Panel"));
-const ClasificarEgresos = lazy(
-  () => import("./pages/admin/ClasificarEgresos"),
-);
+const ClasificarEgresos = lazy(() => import("./pages/admin/ClasificarEgresos"));
 const Cierres = lazy(() => import("./pages/admin/Cierres"));
 const Alertas = lazy(() => import("./pages/admin/Alertas"));
 const Reorden = lazy(() => import("./pages/admin/Reorden"));
