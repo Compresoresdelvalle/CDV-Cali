@@ -270,6 +270,7 @@ export default function Cuentas() {
       contraparte: esCobrar ? r.cliente_nombre : r.proveedor,
       total: Number(r.total ?? 0),
       abonosCotizacion: esCobrar ? Number(r.abonos_cotizacion ?? 0) : 0,
+      retenciones: Number(r.retenciones_total ?? 0),
     });
   };
 
@@ -484,7 +485,14 @@ export default function Cuentas() {
               </thead>
               <tbody>
                 {rows.map((r) => {
-                  const est = estadoCuenta(r.saldo, r.total);
+                  // Contra lo COBRABLE, no contra lo facturado: una factura
+                  // retenida nace con saldo menor que el total y sin este ajuste
+                  // apareceria como "Parcial" sin que el cliente haya pagado un
+                  // peso.
+                  const est = estadoCuenta(
+                    r.saldo,
+                    Number(r.total ?? 0) - Number(r.retenciones_total ?? 0),
+                  );
                   const id = esCobrar ? r.venta_id : r.compra_id;
                   const sede = esCobrar ? r.sede_id : r.sede_destino_id;
                   return (
