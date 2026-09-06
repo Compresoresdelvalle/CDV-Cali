@@ -7,6 +7,7 @@ import Seccion from "../../components/panel/Seccion";
 import Cascada from "../../components/panel/Cascada";
 import Perdidas from "../../components/panel/Perdidas";
 import PanelDetalle from "../../components/panel/PanelDetalle";
+import Composicion from "../../components/panel/Composicion";
 import { rangoDeAtajo, etiquetaRango } from "../../lib/panel-rango";
 
 const CLAVE_RANGO = "cdv.panel.rango";
@@ -53,6 +54,14 @@ export default function Panel() {
   const [resultado, setResultado] = useState({ clave: null });
   const [perdidas, setPerdidas] = useState({ clave: null });
   const [detalle, setDetalle] = useState(null);
+
+  // El eje de la composición es otro filtro más, así que entra en la clave: si
+  // no, cambiar de eje dejaría en pantalla la tabla del eje anterior sin decir
+  // que está cargando.
+  const [dimension, setDimension] = useState("sede");
+  const [peores, setPeores] = useState(false);
+  const claveComp = `${clave}|${dimension}`;
+  const [composicion, setComposicion] = useState({ clave: null });
 
   useEffect(() => {
     let vivo = true;
@@ -121,6 +130,32 @@ export default function Panel() {
     };
   }, [esAdmin, rango.desde, rango.hasta, sede, recarga, clave]);
 
+  useEffect(() => {
+    if (!esAdmin) return;
+    let vivo = true;
+    supabase
+      .rpc("fn_panel_composicion", {
+        p_dimension: dimension,
+        p_desde: rango.desde,
+        p_hasta: rango.hasta,
+        p_sede: sede || null,
+      })
+      .then(({ data, error }) => {
+        if (!vivo) return;
+        setComposicion(
+          error
+            ? {
+                clave: claveComp,
+                error: safeError(error, "No se pudo cargar la composición"),
+              }
+            : { clave: claveComp, datos: data ?? [] },
+        );
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [esAdmin, rango.desde, rango.hasta, sede, recarga, dimension, claveComp]);
+
   const cambiarRango = useCallback((nuevo, id) => {
     const sel = { rango: nuevo, atajo: id };
     setSeleccion(sel);
@@ -169,7 +204,8 @@ export default function Panel() {
   // filtros de ahora.
   const cargaResultado = resultado.clave !== clave;
   const cargaPerdidas = perdidas.clave !== clave;
-  const cargando = cargaResultado || cargaPerdidas;
+  const cargaComposicion = composicion.clave !== claveComp;
+  const cargando = cargaResultado || cargaPerdidas || cargaComposicion;
 
   return (
     <div
@@ -215,9 +251,23 @@ export default function Panel() {
 
         <Seccion
           titulo="Cómo se compone la venta"
-          vacio
-          mensajeVacio="Se construye en la fase D."
-        />
+          subtitulo="El total de aquí abajo tiene que dar lo mismo que las ventas netas de arriba"
+          sinPermiso={!esAdmin}
+          cargando={cargaComposicion}
+          error={composicion.error}
+          onReintentar={refrescar}
+          filasEsqueleto={8}
+        >
+          {composicion.datos && (
+            <Composicion
+              dimension={dimension}
+              onDimension={setDimension}
+              filas={composicion.datos}
+              peores={peores}
+              onPeores={setPeores}
+            />
+          )}
+        </Seccion>
       </div>
 
       <PanelDetalle
