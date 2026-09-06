@@ -11,6 +11,8 @@
  * OrdenStepper, OrdenHistorial y los paneles de paso.
  */
 
+import { calcularRetenciones } from "./retenciones";
+
 /* ───────────────────────────── Textos (revisados) ─────────────────────────── */
 // Centralizados para mantener una voz consistente y fácil de ajustar.
 export const TX = {
@@ -195,7 +197,24 @@ export function calcularMontos(orden = {}, detalles = null, abonos = []) {
   // se podía saldar ni entregar.
   const total = Math.round(base + iva);
   const anticipos = abonos.reduce((s, a) => s + (Number(a.monto) || 0), 0);
-  const saldo = Math.max(0, Math.round(total - anticipos));
+
+  // Retenciones: la factura sigue diciendo `total`, pero el cliente entrega
+  // menos porque el resto lo consigna a la DIAN o al municipio. El saldo se
+  // mide contra lo COBRABLE; si se midiera contra el total, la OT nunca se
+  // podría entregar, porque las compuertas del servidor exigen abonado >=
+  // cobrable y el cliente nunca va a abonar la retención.
+  //
+  // Misma fórmula que las columnas generadas de `ordenes_servicio`.
+  const ret = calcularRetenciones({
+    base,
+    iva,
+    total,
+    retefuentePct: orden.retefuente_pct,
+    reteicaPct: orden.reteica_pct,
+    reteivaPct: orden.reteiva_pct,
+  });
+  const cobrable = ret.neto;
+  const saldo = Math.max(0, Math.round(cobrable - anticipos));
 
   return {
     repuestos,
@@ -206,6 +225,11 @@ export function calcularMontos(orden = {}, detalles = null, abonos = []) {
     base,
     iva,
     total,
+    retenciones: ret.total,
+    retefuente: ret.retefuente,
+    reteica: ret.reteica,
+    reteiva: ret.reteiva,
+    cobrable,
     anticipos,
     saldo,
   };
