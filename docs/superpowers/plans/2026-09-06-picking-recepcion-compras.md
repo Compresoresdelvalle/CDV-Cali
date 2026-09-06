@@ -1623,21 +1623,38 @@ import { derivar, BADGE } from "../../../lib/picking-compras";
 
 Se usa como `<StatusBadge status={BADGE[d.estado].status}>{BADGE[d.estado].texto}</StatusBadge>`, y al lado el detalle numérico (*"faltan 2 · 1 dañada"*).
 
+**El control de dañadas hay que construirlo, no solo mencionarlo.** En la primera
+versión del plan las dañadas aparecían únicamente como *texto de salida* (ese
+"1 dañada" de arriba), sin ningún control para ponerlas en más de cero: toda la
+rama de `danadas` y `aReclamar` de la lógica pura —probada con 23 tests— habría
+quedado inalcanzable desde la pantalla. Va un segundo stepper pequeño, **"De
+esas, ¿cuántas llegaron dañadas?"**, que solo aparece cuando `llegaron > 0` y
+queda acotado a `[0, llegaron]`.
+
 Las preguntas de faltante y sobrante aparecen debajo solo cuando corresponden, como dos botones grandes cada una.
 
 - [ ] **Step 2: Conectar el escáner**
 
 `QRScanner` acepta `{ onFound, onClose, continuo }`. Se usa **`continuo = true`**: en una descarga se escanean muchas piezas seguidas y cerrar el escáner en cada lectura sería inservible.
 
-En `onFound(texto)`: buscar **todas** las líneas cuya `referencia` coincida.
+**OJO, esto lo tuve mal en la primera version del plan.** `QRScanner` NO entrega
+el texto crudo del QR: entrega `data.id`, el **uuid del producto**. Se ve en
+`QRScanner.jsx` (`onFoundRef.current(data.id)`) y es como lo consumen todas las
+pantallas que ya lo usan — `PickingPage`, `CompraNueva`, `CotizacionNueva`,
+`TraspasoNuevo`, `EnsambleNuevo` — que comparan por `producto_id`. Comparar
+contra `referencia` no habria hecho match jamas: cada escaneo habria respondido
+"este producto no esta en la compra", y el escaner es el metodo principal para
+contar.
+
+En `onFound(productoId)`: buscar **todas** las lineas de ese producto.
 
 ```js
-const coincidencias = lineas.filter((l) => l.referencia === texto.trim());
+const coincidencias = lineas.filter((l) => l.producto_id === productoId);
 
 if (coincidencias.length === 0) {
   // Por su nombre, no un error mudo: el operario tiene la pieza en la mano y
   // necesita saber si se equivocó de caja o si falta registrarla.
-  avisarInfo(`${texto} no está en la compra #${compra.numero}`);
+  avisarInfo(`Ese producto no está en la compra #${compra.numero}`);
 } else if (coincidencias.length === 1) {
   sumarUno(coincidencias[0].detalle_id, METODO.ESCANER);
 } else {
