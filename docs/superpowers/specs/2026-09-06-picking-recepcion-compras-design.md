@@ -79,8 +79,7 @@ tipo        = 'escalamiento'
 para_rol    = 'Admin'
 titulo      = 'Bodega necesita ayuda con la compra #412'
 mensaje     = el motivo que escribió el operario
-data        = { origen, origen_id, numero, sede_id, usuario_nombre,
-                usuario_telefono, ruta }
+data        = { origen, origen_id, numero, sede_id, usuario_nombre, ruta }
 dedupe_key  = 'escalamiento:compra:<compra_id>'
 ```
 
@@ -92,11 +91,14 @@ recargar se reinicia y el spam vuelve. Se cuenta contra `dedupe_key`.
 Al agotarse no falla en seco, dice qué hacer:
 
 > Ya le avisaste 2 veces a Maritza por esta compra (la última hace 12 minutos).
-> Si es urgente, llámala al 3XX XXX XXXX.
+> Si es urgente, búscala directamente: el sistema no va a insistir más.
 
-Devuelve `{ avisos_enviados, restantes, admin_nombre, admin_telefono,
-ultimo_aviso }` para que el botón pueda decir **"Ya se le avisó a Admin Maritza ·
-queda 1 aviso"**.
+(No se pone un teléfono porque **no hay ninguno guardado**: `usuarios` no tiene
+columna de contacto y `parametros_sistema` solo tiene tres claves, ninguna de
+teléfono. Inventar un dato de contacto sería peor que no darlo.)
+
+Devuelve `{ avisos_enviados, restantes, admin_nombre, ultimo_aviso }` para que el
+botón pueda decir **"Ya se le avisó a Admin Maritza · queda 1 aviso"**.
 
 `SECURITY DEFINER`, `search_path` fijo, `EXECUTE` solo para `authenticated`.
 
@@ -117,7 +119,7 @@ Si hay varios sin leer salen en cola, uno por uno.
 
 **`BotonAvisarAdmin`** — componente reutilizable. Pide el motivo en un campo
 corto, llama la RPC, y queda en estado informativo con los avisos restantes.
-Deshabilitado cuando se agotan, con el teléfono a la vista.
+Deshabilitado cuando se agotan, diciendo a quién se le avisó y hace cuánto.
 
 ---
 
@@ -270,8 +272,10 @@ Es el idioma de `PickingPage`. Un producto llena la pantalla.
                         (◎ escáner)
 ```
 
-- Tocar el número abre el `NumericKeypad` del proyecto, no el teclado del
-  sistema.
+- El número es un `<input type="number">` grande flanqueado por los botones
+  +/− de 56px, que es el patrón que ya usa `PickingPage` con su `QtyBtn`.
+  **No existe ningún `NumericKeypad` en el proyecto** — CLAUDE.md lo menciona
+  pero nunca se construyó, así que no se puede referenciar.
 - Los dos botones de atajo desaparecen en cuanto la línea queda contada, y en su
   lugar sale el estado y un "corregir" discreto. No se deja el atajo puesto para
   que nadie lo pulse por inercia sobre una línea ya contada.
@@ -299,7 +303,7 @@ guantes, polvo y contraluz, el color solo no alcanza.
 | Sin contar | `--muted-foreground` |
 | Completo | `--success` |
 | Faltan | `--warning` |
-| Dañadas | `--destructive` |
+| Dañadas | `--destructive` (en `StatusBadge`: `danger`) |
 | Sobran | `--info` |
 
 ### Escáner
