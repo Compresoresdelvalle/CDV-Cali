@@ -185,3 +185,37 @@ describe("paridad con las columnas generadas del servidor", () => {
     });
   }
 });
+
+/**
+ * Estado de una cuenta con retención.
+ *
+ * `estadoCuenta` compara el saldo contra un techo. Si ese techo es el total
+ * facturado, una factura retenida nace con saldo menor y aparece como
+ * "Parcial" — como si el cliente ya hubiera abonado algo— sin que haya pagado
+ * un peso. El techo tiene que ser lo COBRABLE.
+ */
+describe("estadoCuenta con retencion", () => {
+  it("una factura retenida sin ningun abono sale Pendiente, no Parcial", async () => {
+    const { estadoCuenta } = await import("../../src/lib/cuentas-ui");
+    const total = 1190000;
+    const retenciones = 60400;
+    const saldoInicial = total - retenciones; // nadie ha pagado nada
+
+    expect(estadoCuenta(saldoInicial, total).label).toBe("Parcial"); // el bug
+    expect(estadoCuenta(saldoInicial, total - retenciones).label).toBe(
+      "Pendiente",
+    );
+  });
+
+  it("al pagar el neto queda Saldada", async () => {
+    const { estadoCuenta } = await import("../../src/lib/cuentas-ui");
+    expect(estadoCuenta(0, 1190000 - 60400).label).toBe("Saldada");
+  });
+
+  it("sin retencion se comporta igual que siempre", async () => {
+    const { estadoCuenta } = await import("../../src/lib/cuentas-ui");
+    expect(estadoCuenta(1190000, 1190000).label).toBe("Pendiente");
+    expect(estadoCuenta(500000, 1190000).label).toBe("Parcial");
+    expect(estadoCuenta(0, 1190000).label).toBe("Saldada");
+  });
+});
