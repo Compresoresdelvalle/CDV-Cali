@@ -1,22 +1,26 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { ArrowLeft, ScanLine, AlertTriangle } from "lucide-react";
 import { useAuthStore } from "../../../stores/authStore";
 import { supabase } from "../../../lib/supabase";
 import { formatDate, safeError } from "../../../lib/utils";
+import { avisarInfo } from "../../../lib/notify";
 import PageHeader from "../../../components/layout/PageHeader";
-import { lineaNueva } from "../../../lib/picking-compras";
+import QRScanner from "../../../components/forms/QRScanner";
+import { useConfirm } from "../../../components/ui/ConfirmDialog";
+import { lineaNueva, METODO } from "../../../lib/picking-compras";
+import LineaEnfoque from "./LineaEnfoque";
 
 /**
- * Picking de recepción de compras — esqueleto (Task 8 del plan).
+ * Picking de recepción de compras — modo enfoque (Task 8 + Task 9 del plan).
  *
- * Carga la compra, aplica las guardas y ofrece retomar un conteo sin
- * terminar. El modo enfoque (Task 9), el modo lista y la confirmación contra
- * `fn_procesar_picking_compra` (Task 10) llegan después: esta pantalla
- * todavía no escribe nada en Supabase.
+ * Cuenta lo que de verdad llegó ANTES de recibir la compra. El modo lista, el
+ * resumen bloqueante y la confirmación contra `fn_procesar_picking_compra`
+ * quedan para la Task 10: esta pantalla todavía no escribe nada en Supabase.
  */
 
 const claveBorrador = (id) => `picking:${id}`;
+const clampEntero = (v) => Math.max(0, Math.round(Number(v) || 0));
 
 function haceTiempo(ts) {
   const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
@@ -30,6 +34,7 @@ function haceTiempo(ts) {
 export default function PickingCompra() {
   const { id } = useParams();
   const perfil = useAuthStore((s) => s.perfil);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [compra, setCompra] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -41,6 +46,11 @@ export default function PickingCompra() {
   // una escritura a mitad de camino.
   const [borrador, setBorrador] = useState(null);
   const [index, setIndex] = useState(0);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  // Más de una línea de esta compra comparte la misma referencia escaneada
+  // (p. ej. el mismo producto pedido para venta Y como insumo): se pregunta
+  // en vez de adivinar cuál sumar.
+  const [desambiguar, setDesambiguar] = useState(null);
 
   /* ── Cargar la compra ─────────────────────────────────────── */
   useEffect(() => {
@@ -115,6 +125,23 @@ export default function PickingCompra() {
     }
   }, [id, lineas, loading, borrador]);
 
+  // Si el mismo conteo se abre en otra pestaña del mismo navegador, no hay
+  // bloqueo entre ambas: la última que escriba gana y la otra pierde sus
+  // conteos en silencio. Este listener no lo evita (mezclar los dos estados
+  // en caliente sería peor), pero al menos avisa para que el operario no siga
+  // contando a ciegas sobre una copia que ya quedó vieja.
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key !== claveBorrador(id) || !e.newValue) return;
+      avisarInfo(
+        "Este conteo se actualizó desde otra pestaña. Antes de seguir, recarga esta página para no perder trabajo.",
+        { duration: 8000 },
+      );
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [id]);
+
   const lineasCompra = compra?.detalle_compra ?? [];
 
   /* ── Guardas — antes de pintar nada ───────────────────────────
@@ -149,6 +176,128 @@ export default function PickingCompra() {
       };
     return null;
   }, [compra, lineasCompra.length, perfil, id]);
+
+  /* ── Handlers de conteo ───────────────────────────────────── */
+  const actualizarCantidad = useCallback((detalleId, valor) => {
+    const n = clampEntero(valor);
+    setLineas((prev) =>
+      prev.map((l) =>
+        l.detalle_id === detalleId
+          ? { ...l, llegaron: n, contada: true, metodo: METODO.MANUAL }
+          : l,
+      ),
+    );
+  }, []);
+
+  const actualizarDanadas = useCallback((detalleId, valor) => {
+    const n = clampEntero(valor);
+    setLineas((prev) =>
+      prev.map((l) => (l.detalle_id === detalleId ? { ...l, danadas: n } : l)),
+    );
+  }, []);
+
+  const marcarCompleto = useCallback((detalleId, pedido) => {
+    setLineas((prev) =>
+      prev.map((l) =>
+        l.detalle_id === detalleId
+          ? { ...l, llegaron: pedido, contada: true, metodo: METODO.COMPLETO }
+          : l,
+      ),
+    );
+  }, []);
+
+  const marcarNada = useCallback(
+    async (detalleId) => {
+      const ok = await confirm({
+        titulo: "¿No llegó nada de este producto?",
+        mensaje:
+          "Esa línea se borra de la factura: no queda nada que ajustar ni reclamar por separado, porque no llegó ni una unidad.",
+        confirmLabel: "Sí, no llegó nada",
+        cancelLabel: "Cancelar",
+        danger: true,
+      });
+      if (!ok) return;
+      setLineas((prev) =>
+        prev.map((l) =>
+          l.detalle_id === detalleId
+            ? {
+                ...l,
+                llegaron: 0,
+                danadas: 0,
+                contada: true,
+                metodo: METODO.NADA,
+                faltante_accion: null,
+                sobrante_accion: null,
+              }
+            : l,
+        ),
+      );
+    },
+    [confirm],
+  );
+
+  const elegirFaltante = useCallback((detalleId, accion) => {
+    setLineas((prev) =>
+      prev.map((l) =>
+        l.detalle_id === detalleId ? { ...l, faltante_accion: accion } : l,
+      ),
+    );
+  }, []);
+
+  const elegirSobrante = useCallback((detalleId, accion) => {
+    setLineas((prev) =>
+      prev.map((l) =>
+        l.detalle_id === detalleId ? { ...l, sobrante_accion: accion } : l,
+      ),
+    );
+  }, []);
+
+  const sumarUno = useCallback((detalleId, metodo) => {
+    setLineas((prev) =>
+      prev.map((l) =>
+        l.detalle_id === detalleId
+          ? { ...l, llegaron: l.llegaron + 1, contada: true, metodo }
+          : l,
+      ),
+    );
+  }, []);
+
+  const irALinea = useCallback(
+    (detalleId) => {
+      const idx = lineas.findIndex((l) => l.detalle_id === detalleId);
+      if (idx !== -1) setIndex(idx);
+    },
+    [lineas],
+  );
+
+  /* ── Escáner (Task 9) ─────────────────────────────────────────
+   * OJO: QRScanner entrega el `id` del producto (uuid), NUNCA el texto crudo
+   * leído — lo valida y lo resuelve él mismo contra `productos` antes de
+   * llamar a onFound (ver src/components/forms/QRScanner.jsx). Por eso se
+   * compara contra `producto_id`, no contra `referencia`.
+   */
+  const handleScanFound = useCallback(
+    (productoId) => {
+      const coincidencias = lineas.filter((l) => l.producto_id === productoId);
+      if (coincidencias.length === 0) {
+        avisarInfo(
+          `Ese producto no está en la compra #${compra?.numero ?? ""}.`,
+        );
+      } else if (coincidencias.length === 1) {
+        sumarUno(coincidencias[0].detalle_id, METODO.ESCANER);
+        irALinea(coincidencias[0].detalle_id);
+      } else {
+        setDesambiguar(coincidencias);
+      }
+    },
+    [lineas, compra, sumarUno, irALinea],
+  );
+
+  const elegirDesambiguacion = (detalleId) => {
+    sumarUno(detalleId, METODO.ESCANER);
+    irALinea(detalleId);
+    setDesambiguar(null);
+  };
 
   const retomarBorrador = () => {
     setLineas(borrador.lineas);
@@ -313,36 +462,31 @@ export default function PickingCompra() {
         </div>
       </div>
 
-      {/* Placeholder de la línea actual — el modo enfoque real llega en la
-          Task 9 (LineaEnfoque + escáner). Por ahora solo confirma que la
-          carga y el recorrido funcionan. */}
+      <button
+        type="button"
+        onClick={() => setScannerOpen(true)}
+        className="w-full inline-flex items-center justify-center gap-2 rounded-xl font-semibold text-sm"
+        style={{
+          minHeight: 48,
+          backgroundColor: "hsl(var(--primary) / 0.1)",
+          color: "hsl(var(--primary))",
+          border: "1px solid hsl(var(--primary) / 0.35)",
+        }}
+      >
+        <ScanLine className="h-4 w-4" />
+        Escanear producto
+      </button>
+
       {lineaActual && (
-        <div
-          className="rounded-xl border p-5"
-          style={{
-            backgroundColor: "hsl(var(--card))",
-            borderColor: "hsl(var(--border))",
-          }}
-        >
-          <p
-            className="font-mono text-xs"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            {lineaActual.referencia || "Sin referencia"}
-          </p>
-          <p
-            className="text-lg font-bold"
-            style={{ color: "hsl(var(--foreground))" }}
-          >
-            {lineaActual.nombre || "Producto sin nombre"}
-          </p>
-          <p
-            className="text-xs tabular-nums"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-          >
-            Pedido: {lineaActual.pedido}
-          </p>
-        </div>
+        <LineaEnfoque
+          linea={lineaActual}
+          onCantidad={actualizarCantidad}
+          onDanadas={actualizarDanadas}
+          onCompleto={marcarCompleto}
+          onNada={marcarNada}
+          onFaltanteAccion={elegirFaltante}
+          onSobranteAccion={elegirSobrante}
+        />
       )}
 
       <div className="flex gap-2">
@@ -373,6 +517,77 @@ export default function PickingCompra() {
           Siguiente
         </button>
       </div>
+
+      {desambiguar && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => setDesambiguar(null)}
+        >
+          <div
+            className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 space-y-3"
+            style={{ backgroundColor: "hsl(var(--card))" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              className="text-base font-semibold"
+              style={{ color: "hsl(var(--foreground))" }}
+            >
+              Este producto está en más de una línea. ¿Cuál sumas?
+            </h3>
+            <div className="space-y-2">
+              {desambiguar.map((l) => (
+                <button
+                  key={l.detalle_id}
+                  type="button"
+                  onClick={() => elegirDesambiguacion(l.detalle_id)}
+                  className="w-full text-left rounded-lg border px-4 py-3"
+                  style={{
+                    minHeight: 56,
+                    borderColor: "hsl(var(--border))",
+                    backgroundColor: "hsl(var(--background))",
+                  }}
+                >
+                  <p
+                    className="text-sm font-medium"
+                    style={{ color: "hsl(var(--foreground))" }}
+                  >
+                    {l.nombre} · {l.destino === "insumo" ? "Insumo" : "Venta"}
+                  </p>
+                  <p
+                    className="text-xs tabular-nums"
+                    style={{ color: "hsl(var(--muted-foreground))" }}
+                  >
+                    Llevaba {l.llegaron} de {l.pedido}
+                  </p>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setDesambiguar(null)}
+              className="w-full rounded-lg border text-sm font-medium"
+              style={{
+                minHeight: 48,
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--muted-foreground))",
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {scannerOpen && (
+        <QRScanner
+          onFound={handleScanFound}
+          onClose={() => setScannerOpen(false)}
+          continuo
+        />
+      )}
+
+      <ConfirmDialog />
     </div>
   );
 }
