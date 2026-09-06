@@ -110,18 +110,69 @@ describe("calcularRetenciones", () => {
  */
 describe("paridad con las columnas generadas del servidor", () => {
   const CASOS = [
-    { base: 1000000, iva: 190000, retefuentePct: 2.5, reteicaPct: 0.69, reteivaPct: 15,
-      esperado: { retefuente: 25000, reteica: 6900, reteiva: 28500, total: 60400 } },
-    { base: 333333, iva: 63333, retefuentePct: 2.5, reteicaPct: 0, reteivaPct: 0,
-      esperado: { retefuente: 8333, reteica: 0, reteiva: 0, total: 8333 } },
-    { base: 876542, iva: 166543, retefuentePct: 4, reteicaPct: 0.966, reteivaPct: 15,
-      esperado: { retefuente: 35062, reteica: 8467, reteiva: 24981, total: 68510 } },
-    { base: 86420, iva: 0, retefuentePct: 3.5, reteicaPct: 1.104, reteivaPct: 15,
-      esperado: { retefuente: 3025, reteica: 954, reteiva: 0, total: 3979 } },
-    { base: 1000000, iva: 190000, retefuentePct: 11, reteicaPct: 0.69, reteivaPct: 15,
-      esperado: { retefuente: 110000, reteica: 6900, reteiva: 28500, total: 145400 } },
-    { base: 1, iva: 0, retefuentePct: 100, reteicaPct: 100, reteivaPct: 100,
-      esperado: { retefuente: 1, reteica: 1, reteiva: 0, total: 2 } },
+    {
+      base: 1000000,
+      iva: 190000,
+      retefuentePct: 2.5,
+      reteicaPct: 0.69,
+      reteivaPct: 15,
+      esperado: {
+        retefuente: 25000,
+        reteica: 6900,
+        reteiva: 28500,
+        total: 60400,
+      },
+    },
+    {
+      base: 333333,
+      iva: 63333,
+      retefuentePct: 2.5,
+      reteicaPct: 0,
+      reteivaPct: 0,
+      esperado: { retefuente: 8333, reteica: 0, reteiva: 0, total: 8333 },
+    },
+    {
+      base: 876542,
+      iva: 166543,
+      retefuentePct: 4,
+      reteicaPct: 0.966,
+      reteivaPct: 15,
+      esperado: {
+        retefuente: 35062,
+        reteica: 8467,
+        reteiva: 24981,
+        total: 68510,
+      },
+    },
+    {
+      base: 86420,
+      iva: 0,
+      retefuentePct: 3.5,
+      reteicaPct: 1.104,
+      reteivaPct: 15,
+      esperado: { retefuente: 3025, reteica: 954, reteiva: 0, total: 3979 },
+    },
+    {
+      base: 1000000,
+      iva: 190000,
+      retefuentePct: 11,
+      reteicaPct: 0.69,
+      reteivaPct: 15,
+      esperado: {
+        retefuente: 110000,
+        reteica: 6900,
+        reteiva: 28500,
+        total: 145400,
+      },
+    },
+    {
+      base: 1,
+      iva: 0,
+      retefuentePct: 100,
+      reteicaPct: 100,
+      reteivaPct: 100,
+      esperado: { retefuente: 1, reteica: 1, reteiva: 0, total: 2 },
+    },
   ];
 
   for (const c of CASOS) {
