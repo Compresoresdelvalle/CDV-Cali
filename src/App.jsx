@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 
 import { useAuthStore } from "./stores/authStore";
 import {
@@ -32,7 +32,6 @@ import CompraDetalle from "./pages/ops/CompraDetalle";
 import GarantiasIndex from "./pages/ops/Garantias";
 import GarantiaCompraDetalle from "./pages/ops/Garantias/GarantiaCompraDetalle";
 import GarantiaVentaDetalle from "./pages/ops/Garantias/GarantiaVentaDetalle";
-import NotasCredito from "./pages/admin/NotasCredito";
 import DevolucionHistorial from "./pages/ops/DevolucionHistorial";
 import DevolucionNueva from "./pages/ops/DevolucionNueva";
 import DevolucionDetalle from "./pages/ops/DevolucionDetalle";
@@ -52,19 +51,42 @@ import EnsambleDetalle from "./pages/ops/EnsambleDetalle";
 import ReciboHistorial from "./pages/ops/Recibos/ReciboHistorial";
 import ReciboNuevo from "./pages/ops/Recibos/ReciboNuevo";
 import ReciboDetalle from "./pages/ops/Recibos/ReciboDetalle";
-import AdminDashboard from "./pages/admin/Dashboard";
-import Cierres from "./pages/admin/Cierres";
-import Alertas from "./pages/admin/Alertas";
-import Reorden from "./pages/admin/Reorden";
-import Slotting from "./pages/admin/Slotting";
-import Top10 from "./pages/admin/Top10";
-import Configuracion from "./pages/admin/Configuracion";
-import AnalisisABC from "./pages/admin/AnalisisABC";
-import Auditoria from "./pages/admin/Auditoria";
-import Usuarios from "./pages/admin/Usuarios";
-import Conteo from "./pages/admin/Conteo";
+
+/* ── Panel Admin: se carga aparte ─────────────────────────────────────────
+   Ninguna de estas pantallas la abre una vendedora, y entre todas pesan buena
+   parte del bundle. Cargarlas con `lazy` saca ese peso del archivo que baja
+   TODO el mundo al entrar, incluida la que solo va a facturar.
+   ────────────────────────────────────────────────────────────────────────── */
+const AdminDashboard = lazy(() => import("./pages/admin/Dashboard"));
+const Cierres = lazy(() => import("./pages/admin/Cierres"));
+const Alertas = lazy(() => import("./pages/admin/Alertas"));
+const Reorden = lazy(() => import("./pages/admin/Reorden"));
+const Slotting = lazy(() => import("./pages/admin/Slotting"));
+const Top10 = lazy(() => import("./pages/admin/Top10"));
+const Configuracion = lazy(() => import("./pages/admin/Configuracion"));
+const AnalisisABC = lazy(() => import("./pages/admin/AnalisisABC"));
+const Auditoria = lazy(() => import("./pages/admin/Auditoria"));
+const Usuarios = lazy(() => import("./pages/admin/Usuarios"));
+const Conteo = lazy(() => import("./pages/admin/Conteo"));
+const NotasCredito = lazy(() => import("./pages/admin/NotasCredito"));
 import Cuentas from "./pages/ops/Cuentas";
 import EtiquetasImprimir from "./pages/ops/EtiquetasImprimir";
+
+/**
+ * Lo que se ve mientras baja el trozo de una pantalla cargada con `lazy`.
+ * Deliberadamente sobrio: aparece por milisegundos y solo la primera vez que se
+ * entra a cada pantalla.
+ */
+function CargandoPagina() {
+  return (
+    <div
+      className="p-6 text-[13px]"
+      style={{ color: "hsl(var(--muted-foreground))" }}
+    >
+      Cargando…
+    </div>
+  );
+}
 
 // Placeholder genérico para módulos aún no implementados
 function Placeholder({ name }) {
@@ -490,7 +512,9 @@ export default function App() {
           path="/admin"
           element={
             <RoleGuard roles={["Admin"]}>
-              <AdminShell />
+              <Suspense fallback={<CargandoPagina />}>
+                <AdminShell />
+              </Suspense>
             </RoleGuard>
           }
         >
