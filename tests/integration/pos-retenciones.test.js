@@ -30,7 +30,8 @@ const ITEMS = [
   },
 ];
 
-const alto = (venta) => generarVentaPOS({ venta, items: ITEMS, pagos: [] }).altura;
+const alto = (venta) =>
+  generarVentaPOS({ venta, items: ITEMS, pagos: [] }).altura;
 
 const CON_RETENCION = {
   ...VENTA_BASE,
@@ -74,6 +75,35 @@ describe("recibo POS con retenciones", () => {
   it("sin retencion el alto es identico al de antes de esta funcionalidad", () => {
     expect(alto(VENTA_BASE)).toBe(
       alto({ ...VENTA_BASE, retenciones_total: 0 }),
+    );
+  });
+});
+
+/**
+ * El saldo impreso de una venta a crédito.
+ *
+ * Es el papel que el cliente se lleva en la mano. Si no descuenta la retención,
+ * le imprime un saldo que nunca va a pagar porque esa plata ya está en la DIAN.
+ */
+describe("saldo pendiente en la tirilla de una venta a credito", () => {
+  const credito = (venta) =>
+    generarVentaPOS({
+      venta: { ...venta, metodo_pago: "Crédito" },
+      items: ITEMS,
+      pagos: [],
+      credito: { abonosCotiz: 400000, cobros: [] },
+    });
+
+  it("sin retencion imprime total menos abonado", () => {
+    expect(() => credito(VENTA_BASE)).not.toThrow();
+  });
+
+  it("con retencion el papel es mas largo y no revienta", () => {
+    // El bloque de abonos y el de retenciones conviven: las dos pasadas
+    // (medir y dibujar) tienen que seguir contando lo mismo.
+    expect(() => credito(CON_RETENCION)).not.toThrow();
+    expect(credito(CON_RETENCION).altura).toBeGreaterThan(
+      credito(VENTA_BASE).altura,
     );
   });
 });
