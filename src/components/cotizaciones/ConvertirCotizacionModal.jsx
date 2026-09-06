@@ -5,6 +5,11 @@ import {
   METODOS_ELECTRONICOS,
   cuentaBancariaLabel,
 } from "../../lib/cuentas-ui";
+import BloqueRetenciones from "../ventas/BloqueRetenciones";
+import {
+  calcularRetenciones,
+  CLAVES_TARIFA_RETENCION,
+} from "../../lib/retenciones";
 
 /**
  * Modal de conversión cotización → venta con captura del pago del saldo
@@ -25,6 +30,19 @@ export default function ConvertirCotizacionModal({
   onDone,
 }) {
   const [abonado, setAbonado] = useState(null); // null = cargando
+  // Retenciones. Arrancan en cero: sin tocarlas la conversión se comporta
+  // exactamente igual que antes.
+  const [retenciones, setRetenciones] = useState({
+    retefuentePct: 0,
+    reteicaPct: 0,
+    reteivaPct: 0,
+  });
+  const [tarifasSugeridas, setTarifasSugeridas] = useState(null);
+  // Base gravable de la cotización. El modal la consulta él mismo en vez de
+  // confiar en lo que le pasó quien lo abrió: desde el Historial la fila NO
+  // trae subtotal, descuento ni iva_pct, y sin esto la retención habría dado
+  // cero en silencio justo en la pantalla desde la que más se convierte.
+  const [baseCot, setBaseCot] = useState(null); // null = cargando
   const [loadError, setLoadError] = useState(false);
   const [cuentasBanco, setCuentasBanco] = useState([]);
   // 'credito' | 'Efectivo' | 'Transferencia' | 'Tarjeta'
@@ -64,8 +82,70 @@ export default function ConvertirCotizacionModal({
     };
   }, [cotizacion.id]);
 
+  // Base gravable, leída de la cotización misma. La venta hereda subtotal,
+  // descuento e iva_pct tal cual, así que la base coincide con la que va a
+  // calcular la columna generada del servidor.
+  useEffect(() => {
+    let vivo = true;
+    supabase
+      .from("cotizaciones")
+      .select("subtotal, descuento_valor, descuento_pct, iva_pct")
+      .eq("id", cotizacion.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!vivo || !data) return;
+        const sub = Number(data.subtotal ?? 0);
+        const descRaw =
+          data.descuento_valor != null
+            ? Number(data.descuento_valor)
+            : (sub * Number(data.descuento_pct ?? 0)) / 100;
+        const base = sub - Math.min(Math.max(0, descRaw), sub);
+        setBaseCot({
+          base,
+          iva: Math.round((base * Number(data.iva_pct ?? 0)) / 100),
+        });
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [cotizacion.id]);
+
+  useEffect(() => {
+    let vivo = true;
+    supabase
+      .from("parametros_sistema")
+      .select("key, value")
+      .in("key", Object.values(CLAVES_TARIFA_RETENCION))
+      .then(({ data }) => {
+        if (!vivo || !data) return;
+        const porClave = Object.fromEntries(
+          data.map((r) => [r.key, Number(r.value)]),
+        );
+        setTarifasSugeridas({
+          retefuentePct: porClave[CLAVES_TARIFA_RETENCION.retefuentePct] ?? 0,
+          reteicaPct: porClave[CLAVES_TARIFA_RETENCION.reteicaPct] ?? 0,
+          reteivaPct: porClave[CLAVES_TARIFA_RETENCION.reteivaPct] ?? 0,
+        });
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
   const total = Number(cotizacion.total ?? 0);
-  const saldo = abonado == null ? null : Math.max(0, total - abonado);
+  const ret = calcularRetenciones({
+    base: baseCot?.base ?? 0,
+    iva: baseCot?.iva ?? 0,
+    total,
+    retefuentePct: retenciones.retefuentePct,
+    reteicaPct: retenciones.reteicaPct,
+    reteivaPct: retenciones.reteivaPct,
+  });
+  // Lo cobrable es el NETO: la retención no la paga el cliente. Tiene que
+  // coincidir con fn_convertir_cotizacion, que registra el cobro por este
+  // mismo monto — si la pantalla dijera el total, se cobraría de más.
+  const saldo =
+    abonado == null ? null : Math.max(0, total - ret.total - abonado);
   const hayPagoAhora = saldo > 0 && metodo !== "credito";
   const esElectronico = hayPagoAhora && METODOS_ELECTRONICOS.includes(metodo);
 
@@ -85,6 +165,9 @@ export default function ConvertirCotizacionModal({
           p_cotizacion_id: cotizacion.id,
           p_pago_metodo: hayPagoAhora ? metodo : null,
           p_pago_cuenta_bancaria: esElectronico ? cuentaBancaria : null,
+          p_retefuente_pct: retenciones.retefuentePct,
+          p_reteica_pct: retenciones.reteicaPct,
+          p_reteiva_pct: retenciones.reteivaPct,
         },
       );
       if (rpcErr) throw new Error(rpcErr.message);
@@ -144,6 +227,12 @@ export default function ConvertirCotizacionModal({
                 <span>Total cotizado</span>
                 <b className="font-mono">{formatCOP(total)}</b>
               </div>
+              {ret.total > 0 && (
+                <div className="flex justify-between">
+                  <span>Retenciones</span>
+                  <b className="font-mono">−{formatCOP(ret.total)}</b>
+                </div>
+              )}
               {abonado > 0 && (
                 <div className="flex justify-between">
                   <span>Ya abonado</span>
@@ -159,6 +248,17 @@ export default function ConvertirCotizacionModal({
                   {formatCOP(saldo)}
                 </b>
               </div>
+            </div>
+
+            <div className="mb-3">
+              <BloqueRetenciones
+                base={baseCot?.base ?? 0}
+                iva={baseCot?.iva ?? 0}
+                total={total}
+                valores={retenciones}
+                onChange={setRetenciones}
+                sugeridas={tarifasSugeridas}
+              />
             </div>
 
             {saldo > 0 ? (
