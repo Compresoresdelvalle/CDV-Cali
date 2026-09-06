@@ -49,6 +49,12 @@ export default function VentaDetalle() {
   const [motivoAnular, setMotivoAnular] = useState("");
   const [modalGarantia, setModalGarantia] = useState(false);
   const [modalCambio, setModalCambio] = useState(false);
+  // Devolución que forma pareja con esta venta cuando salió de un cambio. Se
+  // carga para poder decir, ANTES de anular, qué unidades se mueven y a dónde.
+  const [devCambio, setDevCambio] = useState(null);
+  const [confirmCambio, setConfirmCambio] = useState(false);
+  const [motivoCambio, setMotivoCambio] = useState("");
+  const [anulandoCambio, setAnulandoCambio] = useState(false);
   const [imprimiendo, setImprimiendo] = useState(false);
   const [reciboUrl, setReciboUrl] = useState(null);
   // B10: saldo de una venta a crédito (abonos de cotización + cobros directos).
@@ -163,6 +169,37 @@ export default function VentaDetalle() {
     cargarVinculos();
   }, [id]);
 
+  // La otra pata del cambio. El enlace directo (`devolucion_cambio_id`) existe
+  // desde 2026-09-05; para los cambios anteriores se cae en el `fecha` exacto
+  // que la devolución comparte con su venta por haber nacido en la misma
+  // transacción. Si no aparece, el aviso de anulación lo dice y no inventa.
+  useEffect(() => {
+    if (!venta) return;
+    const esVentaDeCambio =
+      venta.cambio_de_venta_id != null ||
+      (venta.observaciones || "").startsWith("Cambio por venta #");
+    if (!esVentaDeCambio || venta.anulada) {
+      setDevCambio(null);
+      return;
+    }
+    const cargarDevCambio = async () => {
+      const base = supabase
+        .from("devoluciones")
+        .select(
+          "id, numero, cantidad, sede_id, estado, producto:producto_id(nombre, referencia)",
+        );
+      const q = venta.devolucion_cambio_id
+        ? base.eq("id", venta.devolucion_cambio_id)
+        : base
+            .eq("venta_id", venta.cambio_de_venta_id)
+            .eq("fecha", venta.fecha)
+            .neq("estado", "anulada");
+      const { data } = await q.limit(1);
+      setDevCambio(data?.[0] ?? null);
+    };
+    cargarDevCambio();
+  }, [venta]);
+
   // B10: carga abonos de la cotización de origen + cobros directos (pagos_cuenta).
   // El bloque "Saldo a crédito" y el recibo solo los muestran en ventas a CRÉDITO
   // (en una de contado ya están pagados: un saldo pendiente ahí sería falso). Solo
@@ -212,6 +249,30 @@ export default function VentaDetalle() {
       avisarError(e, "Error al anular la venta");
     } finally {
       setAnulando(false);
+    }
+  };
+
+  // Un cambio son DOS registros (esta venta y su devolución) y se revierten
+  // juntos: anular uno solo descuadra el inventario. Por eso esta pantalla no
+  // ofrece "Anular venta" en un cambio, sino esto, que el backend hace en una
+  // sola transacción. Se recarga la página porque cambia el stock.
+  const anularCambio = async () => {
+    setAnulandoCambio(true);
+    try {
+      const { error: fnErr } = await supabase.rpc("fn_anular_cambio", {
+        p_venta_id: id,
+        p_motivo: motivoCambio.trim() || null,
+      });
+      if (fnErr) throw new Error(fnErr.message);
+      setConfirmCambio(false);
+      avisarOk("Cambio anulado: la venta y su devolución quedaron revertidas");
+      navigate(0);
+    } catch (e) {
+      // El backend explica el caso exacto (stock insuficiente, devolución ya
+      // anulada, pareja ambigua). Se muestra tal cual, sin genéricos.
+      avisarError(e, "No se pudo anular el cambio");
+    } finally {
+      setAnulandoCambio(false);
     }
   };
 
@@ -456,7 +517,7 @@ export default function VentaDetalle() {
         )}
       </div>
 
-      {/* ── Nota: venta generada por un cambio (no se anula por separado) ── */}
+      {/* ── Venta de un cambio: las dos patas se revierten juntas ──── */}
       {esCambio && !venta.anulada && (
         <div
           className="mt-4 rounded-[10px] border px-4 py-3"
@@ -468,10 +529,108 @@ export default function VentaDetalle() {
           <p className="text-[13px]" style={{ color: "var(--info-700)" }}>
             Esta venta es la <b>diferencia de un cambio</b>
             {cambioRefNum ? ` sobre la venta #${cambioRefNum}` : ""}. No se
-            anula por separado (dejaría el inventario descuadrado). Para
-            revertir el cambio, usa <b>“Registrar cambio”</b> a la inversa:
-            devuelve el producto nuevo y entrega de vuelta el original.
+            anula por separado —dejaría reingresados los dos productos y el
+            inventario quedaría inflado—: se revierte junto con su devolución
+            {devCambio ? ` #${devCambio.numero}` : ""}, en una sola operación.
           </p>
+          {esAdmin && !confirmCambio && (
+            <button
+              onClick={() => setConfirmCambio(true)}
+              className="btn btn-out mt-3"
+              style={{ height: 48, color: "var(--dang-700)" }}
+              title="Revertir la venta y la devolución de este cambio"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+              Anular cambio
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Confirmación: se dice qué se mueve antes de mover nada ──── */}
+      {confirmCambio && (
+        <div
+          className="mt-4 rounded-[10px] border p-4 space-y-3"
+          style={{
+            backgroundColor: "var(--dang-50)",
+            borderColor: "var(--dang-border)",
+          }}
+        >
+          <p
+            className="text-sm font-medium"
+            style={{ color: "var(--dang-700)" }}
+          >
+            ¿Anular el cambio completo? Esto pasa:
+          </p>
+          <ul
+            className="list-disc space-y-1 pl-5 text-[13px]"
+            style={{ color: "var(--dang-700)" }}
+          >
+            {items
+              .filter((i) => i.producto_id != null)
+              .map((i) => (
+                <li key={i.id}>
+                  Vuelven al stock de {venta.sede_id} <b>{i.cantidad}</b> u. de{" "}
+                  {i.producto?.nombre ?? "—"} (lo que se llevó el cliente).
+                </li>
+              ))}
+            {devCambio ? (
+              <li>
+                Salen del stock de {devCambio.sede_id}{" "}
+                <b>{devCambio.cantidad}</b> u. de{" "}
+                {devCambio.producto?.nombre ?? "—"}: es lo que el cliente había
+                devuelto y se lo vuelve a llevar.
+              </li>
+            ) : (
+              <li>
+                No se pudo ubicar la devolución de este cambio desde aquí. El
+                servidor la busca de nuevo al anular y, si tampoco la encuentra,
+                no toca nada y avisa.
+              </li>
+            )}
+            <li>
+              Quedan anuladas esta venta #{venta.numero}
+              {devCambio ? ` y la devolución #${devCambio.numero}` : ""}
+              {totalCalc > 0
+                ? `, y el día deja de contar ${formatCOP(totalCalc)}`
+                : ""}
+              .
+            </li>
+          </ul>
+          <textarea
+            value={motivoCambio}
+            onChange={(e) => setMotivoCambio(e.target.value)}
+            placeholder="Motivo (opcional, queda en la auditoría)"
+            rows={2}
+            className="w-full rounded-[8px] border px-3 py-2 text-sm"
+            style={{
+              backgroundColor: "hsl(var(--card))",
+              borderColor: "hsl(var(--border))",
+              color: "hsl(var(--foreground))",
+            }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setConfirmCambio(false)}
+              className="btn btn-out"
+              style={{ height: 48 }}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={anularCambio}
+              disabled={anulandoCambio}
+              className="btn disabled:opacity-50"
+              style={{
+                height: 48,
+                backgroundColor: "var(--dang-600)",
+                borderColor: "var(--dang-600)",
+                color: "#fff",
+              }}
+            >
+              {anulandoCambio ? "Anulando…" : "Sí, anular el cambio"}
+            </button>
+          </div>
         </div>
       )}
 
