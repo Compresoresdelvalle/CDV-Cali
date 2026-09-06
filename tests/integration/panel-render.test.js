@@ -553,8 +553,24 @@ describe("Composicion", () => {
 
 describe("Composicion — el total de facturas no puede contar de mas", () => {
   const FILAS = [
-    { clave: "a", etiqueta: "Filtro", venta: 100, costo: 40, margen: 60, margen_pct: 60, n: 9 },
-    { clave: "b", etiqueta: "Manguera", venta: 50, costo: 20, margen: 30, margen_pct: 60, n: 7 },
+    {
+      clave: "a",
+      etiqueta: "Filtro",
+      venta: 100,
+      costo: 40,
+      margen: 60,
+      margen_pct: 60,
+      n: 9,
+    },
+    {
+      clave: "b",
+      etiqueta: "Manguera",
+      venta: 50,
+      costo: 20,
+      margen: 30,
+      margen_pct: 60,
+      n: 7,
+    },
   ];
   const montar = async (dimension) => {
     const C = (await import("../../src/components/panel/Composicion")).default;
@@ -577,5 +593,102 @@ describe("Composicion — el total de facturas no puede contar de mas", () => {
     const html = await montar("producto");
     expect(html).not.toContain(">16<");
     expect(html).toContain("contaría de más");
+  });
+});
+
+describe("Cartera", () => {
+  const DATOS = {
+    total: 5_000_000,
+    tramos: [
+      { rango: "0-30", monto: 3_000_000, n: 4 },
+      { rango: "31-60", monto: 2_000_000, n: 2 },
+      { rango: "61-90", monto: 0, n: 0 },
+      { rango: "+90", monto: 0, n: 0 },
+    ],
+    detalle: [
+      {
+        doc_tipo: "venta",
+        doc_id: "11111111-1111-1111-1111-111111111111",
+        referencia: "Venta #900",
+        descripcion: "TALLERES DEL SUR",
+        fecha: "2026-08-20",
+        monto: 3_000_000,
+        dias: 17,
+      },
+    ],
+  };
+
+  const montar = async (datos = DATOS) => {
+    const C = (await import("../../src/components/panel/Cartera")).default;
+    return renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(C, { datos, onVerTodas() {} }),
+      ),
+    );
+  };
+
+  it("muestra los cuatro tramos aunque dos estén en cero", async () => {
+    const html = await montar();
+    for (const t of [
+      "Hasta 30 días",
+      "De 31 a 60",
+      "De 61 a 90",
+      "Más de 90 días",
+    ]) {
+      expect(html).toContain(t);
+    }
+  });
+
+  it("avisa que es una foto de hoy y que el rango no la filtra", async () => {
+    expect(await montar()).toContain("el rango de arriba no la filtra");
+  });
+
+  it("cada factura lleva directo a su venta", async () => {
+    expect(await montar()).toContain(
+      "/ops/ventas/11111111-1111-1111-1111-111111111111",
+    );
+  });
+
+  it("sin cartera lo dice como la buena noticia que es", async () => {
+    const html = await montar({ total: 0, tramos: [], detalle: [] });
+    expect(html).toContain("Nadie debe nada");
+  });
+});
+
+describe("Inventario", () => {
+  const montar = async (datos) => {
+    const I = (await import("../../src/components/panel/Inventario")).default;
+    return renderToStaticMarkup(
+      createElement(MemoryRouter, null, createElement(I, { datos })),
+    );
+  };
+
+  it("dice qué parte del capital está dormida, en plata y en porcentaje", async () => {
+    const html = await montar({
+      valor_costo: 400_000_000,
+      dormido: 300_000_000,
+      n_dormido: 1500,
+      agotados_a: 150,
+    });
+    expect(html).toContain("1500 productos sin salir en 90 días");
+    expect(html).toContain("75% del capital");
+  });
+
+  it("cada cifra que exige actuar lleva a dónde hacerlo", async () => {
+    const html = await montar({
+      valor_costo: 1,
+      dormido: 0,
+      n_dormido: 0,
+      agotados_a: 0,
+    });
+    expect(html).toContain("/admin/reorden");
+    expect(html).toContain("/admin/alertas");
+  });
+
+  it("no revienta si la RPC todavía no trajo nada", async () => {
+    const html = await montar(undefined);
+    expect(html).toContain("Capital en inventario");
   });
 });

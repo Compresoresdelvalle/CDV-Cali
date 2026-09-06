@@ -330,3 +330,73 @@ test.describe("Panel — fase D", () => {
     expect(pcts[0]).toBe(Math.min(...pcts));
   });
 });
+
+test.describe("Panel — fase E", () => {
+  test("cartera e inventario se ven y dicen que no dependen del rango", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+
+    const cartera = page.locator("section").filter({ hasText: "Quién debe" });
+    const inv = page
+      .locator("section")
+      .filter({ hasText: "Plata parada en inventario" });
+
+    await expect(cartera).toBeVisible({ timeout: 30_000 });
+    await expect(inv).toBeVisible({ timeout: 30_000 });
+
+    // Los cuatro tramos salen siempre, incluso los que están en cero.
+    for (const t of [
+      "Hasta 30 días",
+      "De 31 a 60",
+      "De 61 a 90",
+      "Más de 90 días",
+    ]) {
+      await expect(cartera.getByText(t)).toBeVisible();
+    }
+
+    // Decir que es una foto de hoy es lo que evita que alguien crea que el
+    // rango de arriba la está filtrando.
+    await expect(
+      cartera.getByText(/el rango de arriba no la filtra/),
+    ).toBeVisible();
+    await expect(
+      inv.getByText(/el rango de arriba no la filtra/),
+    ).toBeVisible();
+
+    await expect(inv.getByText("Capital en inventario")).toBeVisible();
+    await expect(inv.getByRole("link", { name: "Ver reorden" })).toBeVisible();
+    await expect(inv.getByRole("link", { name: "Ver alertas" })).toBeVisible();
+
+    await cartera.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: "tests/results/panel-11-cartera-inventario.png",
+      fullPage: false,
+    });
+  });
+
+  test("cambiar de sede no toca el rango pero sí recarga las fotos", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+
+    const inv = page
+      .locator("section")
+      .filter({ hasText: "Plata parada en inventario" });
+    await expect(inv.getByText("Capital en inventario")).toBeVisible({
+      timeout: 30_000,
+    });
+    const todas = await inv.locator("p.tabular-nums").first().innerText();
+
+    await page.locator("select").first().selectOption({ index: 1 });
+
+    // Con una sola sede el capital tiene que ser menor que con todas.
+    await expect
+      .poll(async () => inv.locator("p.tabular-nums").first().innerText(), {
+        timeout: 30_000,
+      })
+      .not.toBe(todas);
+  });
+});
