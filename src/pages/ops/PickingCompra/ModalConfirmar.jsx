@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { derivar } from "../../../lib/picking-compras";
 import { formatCOP } from "../../../lib/utils";
 
@@ -35,17 +35,28 @@ function calcularConsecuencias(compra, lineas) {
 
 export default function ModalConfirmar({ compra, lineas, resumen, onConfirm, onClose }) {
   const [enviando, setEnviando] = useState(false);
+  // Guarda SINCRONA. El `disabled` de React no sirve contra un doble toque
+  // rapido: el segundo evento puede entrar antes del re-render. En una tablet
+  // de bodega, con guantes, la repeticion de evento tactil es comun, y aqui el
+  // costo de disparar dos veces es llamar dos veces a la RPC que recibe la
+  // compra.
+  const enviandoRef = useRef(false);
   const c = calcularConsecuencias(compra, lineas);
   const proveedor = compra?.proveedor || "el proveedor";
 
   const handleConfirmar = async () => {
+    if (enviandoRef.current) return;
+    enviandoRef.current = true;
     setEnviando(true);
     const ok = await onConfirm();
     // Si falló, el padre ya avisó el porqué (safeError) — se reactiva el botón
     // y el modal queda abierto con el conteo intacto para que se pueda
     // reintentar o cerrar sin perder nada. Si funcionó, el padre navega y este
     // modal se desmonta con la pantalla; no hace falta tocar el estado.
-    if (!ok) setEnviando(false);
+    if (!ok) {
+      enviandoRef.current = false;
+      setEnviando(false);
+    }
   };
 
   return (

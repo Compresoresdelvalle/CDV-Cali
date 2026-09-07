@@ -76,9 +76,10 @@ export default function PickingCompra() {
   const [error, setError] = useState(null);
   const [lineas, setLineas] = useState([]);
   // Borrador recuperado de localStorage, pendiente de que el operario decida
-  // si lo retoma o empieza de nuevo. Mientras esté sin decidir NO se persiste
-  // (ver el efecto de guardado más abajo): así "Retomar" nunca compite contra
-  // una escritura a mitad de camino.
+  // si lo retoma o empieza de nuevo. Mientras no haya tocado nada no se
+  // persiste, para que "Retomar" no compita contra una escritura a mitad de
+  // camino; pero en cuanto cuenta una línea sí se guarda, aunque el banner
+  // siga arriba (ver el efecto de guardado más abajo).
   const [borrador, setBorrador] = useState(null);
   const [index, setIndex] = useState(0);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -161,7 +162,14 @@ export default function PickingCompra() {
    * puede tumbar la pantalla — de ahí el try/catch mudo.
    */
   useEffect(() => {
-    if (loading || borrador || lineas.length === 0) return;
+    // Ojo con `borrador`: NO se puede saltar el guardado solo porque el banner
+    // de "retomar" siga en pantalla. Nada impide contar con el banner puesto, y
+    // un operario que lo ignora porque va a contar de cero perdia todo su
+    // trabajo en silencio si se le apagaba el celular. Solo se salta mientras
+    // no haya tocado nada: en cuanto hay una linea contada, se persiste.
+    const hayConteo = lineas.some((l) => l.contada);
+    if (loading || lineas.length === 0) return;
+    if (borrador && !hayConteo) return;
     try {
       localStorage.setItem(
         claveBorrador(id),
@@ -230,7 +238,17 @@ export default function PickingCompra() {
     setLineas((prev) =>
       prev.map((l) =>
         l.detalle_id === detalleId
-          ? { ...l, llegaron: n, contada: true, metodo: METODO.MANUAL }
+          ? {
+              ...l,
+              llegaron: n,
+              // Las dañadas se recortan AQUI, no solo al pintar. Si no, bajar
+              // "llegaron" y volver a subirlo resucitaba un conteo viejo de
+              // dañadas sobre unidades distintas, y eso si llega al reclamo
+              // que se le manda al proveedor.
+              danadas: Math.min(l.danadas ?? 0, n),
+              contada: true,
+              metodo: METODO.MANUAL,
+            }
           : l,
       ),
     );
@@ -334,6 +352,11 @@ export default function PickingCompra() {
         sumarUno(coincidencias[0].detalle_id, METODO.ESCANER);
         irALinea(coincidencias[0].detalle_id);
       } else {
+        // Se cierra el escaner: los dos overlays viven en z-50 sin portal, y
+        // el del escaner se pinta despues en el DOM, asi que ganaba el y el
+        // dialogo quedaba montado pero invisible. El operario veia que "no
+        // paso nada" al escanear y no tenia con que interactuar.
+        setScannerOpen(false);
         setDesambiguar(coincidencias);
       }
     },

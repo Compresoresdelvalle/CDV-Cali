@@ -1,3 +1,7 @@
+-- NOTA: esta version quedo superada por
+-- 20260907_picking_tres_agujeros_de_la_revision.sql, que corrige tres agujeros
+-- que encontro la revision adversarial. Se conserva por historia.
+
 -- La bitacora del conteo tiene que sobrevivir a que fn_recibir_compra BORRE la
 -- linea que reciba en cero, por eso no lleva FK a detalle_compra. Pero el bucle
 -- del sobrante leia `destino` y `costo_unitario` con un JOIN contra esa misma
