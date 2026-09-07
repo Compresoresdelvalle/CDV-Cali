@@ -41,7 +41,10 @@ import OrdenStepper from "../../components/ot/OrdenStepper";
 import { generarOrdenPDF } from "../../lib/pdf/ordenPDF";
 import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
 import BloqueRetenciones from "../../components/ventas/BloqueRetenciones";
-import { CLAVES_TARIFA_RETENCION } from "../../lib/retenciones";
+import {
+  CLAVES_TARIFA_RETENCION,
+  calcularRetenciones,
+} from "../../lib/retenciones";
 import {
   PASOS,
   pasoActual,
@@ -1922,13 +1925,32 @@ function PasoCotizacion({
         }}
         sugeridas={tarifasSugeridas}
         soloLectura={ro}
-        onChange={(v) =>
+        onChange={(v) => {
+          // La OT no pasa por una RPC: guarda los tres porcentajes con un
+          // UPDATE directo, así que el CHECK del servidor
+          // (ordenes_retencion_no_supera_total) devolvería un error crudo de
+          // constraint. Se comprueba aquí para dar el mensaje bueno y no
+          // escribir nada que la base vaya a rechazar.
+          const nueva = calcularRetenciones({
+            base: montos.base,
+            iva: montos.iva,
+            total: montos.total,
+            retefuentePct: v.retefuentePct,
+            reteicaPct: v.reteicaPct,
+            reteivaPct: v.reteivaPct,
+          });
+          if (nueva.total > montos.total) {
+            avisarError(
+              `Las retenciones (${formatCOP(nueva.total)}) se pasan del total (${formatCOP(montos.total)}). Revisa los porcentajes: si querías 2,5% escribe 2,5, no 25.`,
+            );
+            return;
+          }
           updateOrden({
             retefuente_pct: v.retefuentePct,
             reteica_pct: v.reteicaPct,
             reteiva_pct: v.reteivaPct,
-          }).catch((err) => avisarError(err))
-        }
+          }).catch((err) => avisarError(err));
+        }}
       />
 
       {/* Resumen */}
