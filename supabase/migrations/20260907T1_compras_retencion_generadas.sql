@@ -73,7 +73,12 @@ comment on column compras.retenciones_total is
 -- restarla dos veces: el saldo ya nace neto, asi que el pago que se registra
 -- contra el ya es plata real.
 
-create view v_cuentas_por_pagar as
+-- OJO: recrear una vista NO conserva sus reloptions. security_invoker viene
+-- desde 20260613000001 y sin el la vista corre con los derechos del dueno y se
+-- salta la RLS de compras: cualquier usuario autenticado veria la deuda con
+-- proveedores de TODAS las sedes. Hay que repetirlo aqui.
+create view v_cuentas_por_pagar
+with (security_invoker = true) as
  select c.id as compra_id,
     c.numero,
     c.fecha,
