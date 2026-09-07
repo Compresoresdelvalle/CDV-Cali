@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Novedades de septiembre</title>
+<style>
+  :root{
+    --tinta:#15263b;
+    --tinta-2:#5c6b7e;
+    --tinta-3:#8291a2;
+    --acento:#245a8c;
+    --acento-oscuro:#183f62;
+    --oscuro:#0f2036;
+    --borde:#e2e8f1;
+    --borde-suave:#dae3ed;
+    --fondo:#f7fafd;
+    --fondo-2:#f1f5fa;
+    --info:#e8f1f9;
+    --ok-bg:#e6f5ec;
+    --ok:#1a8a4d;
+    --ambar:#9a5409;
+    --ambar-bg:#fdf4e7;
+  }
+  @page{ size:letter; margin:15mm 15mm 14mm 15mm; }
+  *{ box-sizing:border-box; }
+  html{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{
+    font-family:"Segoe UI","IBM Plex Sans",system-ui,sans-serif;
+    font-size:15.5px; line-height:1.45; color:var(--tinta); margin:0;
+  }
+  p{ margin:0 0 9px; }
+
+  /* ---------- portada ---------- */
+  .antetitulo{
+    font-size:10.5px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--tinta-3); font-weight:600; margin-bottom:10px;
+  }
+  h1{ font-size:40px; line-height:1.08; margin:0 0 8px; letter-spacing:-.02em; font-weight:600; }
+  .firma{ font-size:14px; color:var(--tinta-2); margin:0 0 22px; }
+  .regla{ height:3px; width:64px; background:var(--acento); border-radius:2px; margin:0 0 22px; }
+  .entrada{ font-size:16px; color:var(--tinta); max-width:60ch; }
+
+  .indice{ margin-top:26px; border-top:1px solid var(--borde); padding-top:16px; }
+  .indice h2{
+    font-size:10.5px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--tinta-3); font-weight:600; margin:0 0 10px;
+  }
+  .indice ol{ margin:0; padding-left:20px; columns:2; column-gap:28px; }
+  .indice li{ font-size:14px; margin-bottom:5px; break-inside:avoid; }
+
+  /* ---------- secciones ---------- */
+  /* Las secciones fluyen en vez de empezar cada una en hoja nueva: pesan algo mas
+     de una pagina, asi que forzar el corte dejaba una hoja casi vacia detras de
+     cada una. Lo que se protege son los titulos y las cajas, que es lo que de
+     verdad se ve mal partido. */
+  .seccion{ margin-top:28px; }
+  .seccion.primera{ break-before:page; margin-top:0; }
+  .cabecera{ break-after:avoid; page-break-after:avoid; }
+  /* La primera seccion sigue en la portada, como en las guias anteriores:
+     una hoja con solo el titulo y el indice desperdicia media guia. */
+  p, li{ orphans:3; widows:3; }
+  .cabecera{ display:flex; align-items:baseline; gap:12px; margin:0 0 10px; }
+  .num{
+    font-size:34px; font-weight:600; color:var(--borde); line-height:1;
+    letter-spacing:-.02em; min-width:34px;
+  }
+  h2.titulo{ font-size:21px; font-weight:600; margin:0; letter-spacing:-.01em; }
+  h3{
+    font-size:16px; font-weight:600; margin:14px 0 6px;
+    break-after:avoid; page-break-after:avoid;
+  }
+
+  /* ---------- tablas ---------- */
+  table{ width:100%; border-collapse:collapse; margin:10px 0 12px; break-inside:avoid; }
+  th{
+    font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--tinta-3);
+    font-weight:600; text-align:left; padding:0 10px 6px; border-bottom:1px solid var(--borde);
+  }
+  td{
+    font-size:13.5px; padding:6px 10px; border-bottom:1px solid var(--borde-suave);
+    vertical-align:top;
+  }
+  td.dato{ font-variant-numeric:tabular-nums; white-space:nowrap; }
+  tr{ break-inside:avoid; }
+
+  /* ---------- maqueta de pantalla ---------- */
+  .maqueta{
+    border:1px solid var(--borde); border-radius:8px; overflow:hidden;
+    margin:12px 0 5px; break-inside:avoid; background:#fff;
+    /* El pie tiene que viajar con su figura: si se separan, la pagina siguiente
+       abre con una frase suelta que no se sabe a que se refiere. */
+    break-after:avoid; page-break-after:avoid;
+  }
+  .maqueta .barra{
+    background:var(--oscuro); color:#fff; padding:7px 12px;
+    font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:600;
+  }
+  .maqueta .cuerpo{ padding:11px; }
+  .maqueta h4{ font-size:15px; margin:0 0 10px; font-weight:600; }
+  .pie{ font-size:11px; color:var(--tinta-3); margin:0 0 13px; }
+
+  .chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .chip{
+    font-size:11.5px; padding:4px 10px; border-radius:999px;
+    border:1px solid var(--borde); color:var(--tinta-2); background:#fff;
+  }
+  .chip.on{ background:var(--acento); border-color:var(--acento); color:#fff; font-weight:600; }
+
+  .fila{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:5px 0; border-bottom:1px solid var(--borde-suave); font-size:13.5px;
+  }
+  .fila:last-child{ border-bottom:0; }
+  .fila .v{ font-variant-numeric:tabular-nums; }
+  .fila.total{ border-top:1px solid var(--borde); border-bottom:0; padding-top:9px; font-weight:600; }
+  .neg{ color:var(--ambar); }
+  .lbl{ color:var(--tinta-2); }
+
+  .campo{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:6px 0; font-size:13.5px;
+  }
+  .caja-num{
+    border:1px solid var(--borde); border-radius:6px; padding:4px 10px;
+    font-variant-numeric:tabular-nums; min-width:62px; text-align:right; background:#fff;
+    margin-right:10px;
+  }
+  .campo > span:last-child{ display:flex; align-items:center; }
+  .boton{
+    display:inline-block; border:1px solid var(--acento); color:var(--acento);
+    background:rgba(36,90,140,.06); border-radius:8px; padding:9px 14px;
+    font-size:13.5px; font-weight:600; text-align:center;
+  }
+  .boton.solido{ background:var(--acento); color:#fff; }
+  .plegado{
+    background:var(--fondo-2); border-radius:6px; padding:10px 12px;
+    display:flex; justify-content:space-between; font-size:13.5px;
+  }
+  .plegado .k{ font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--tinta-3); font-weight:600; }
+
+  /* ---------- avisos ---------- */
+  .nota{
+    border:1px solid var(--borde); background:var(--fondo); border-radius:8px;
+    padding:10px 12px; margin:10px 0; break-inside:avoid;
+  }
+  .nota .k{
+    font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--tinta-3); font-weight:600; display:block; margin-bottom:5px;
+  }
+  .nota p:last-child{ margin-bottom:0; }
+  .nota.info{ background:var(--info); border-color:#cdd9e4; }
+  .nota.info .k{ color:var(--acento-oscuro); }
+  .nota.ojo{ background:var(--ambar-bg); border-color:#f0dcc0; }
+  .nota.ojo .k{ color:var(--ambar); }
+  .nota.ok{ background:var(--ok-bg); border-color:#c6e6d3; }
+  .nota.ok .k{ color:var(--ok); }
+
+  .cierre{
+    margin-top:24px; padding-top:14px; border-top:1px solid var(--borde);
+    font-size:12px; color:var(--tinta-3);
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ PORTADA ============ -->
+<div class="antetitulo">Cambios recientes de la app</div>
+<h1>Novedades de septiembre</h1>
+<p class="firma">Compresores del Valle S.A.S. · Guía de novedades</p>
+<div class="regla"></div>
+
+<p class="entrada">
+  Esta tanda es la más grande hasta ahora y casi toda gira alrededor de una misma
+  idea: que la app sepa cuánta plata entra y sale de verdad, no cuánta dice el
+  papel. Entran las retenciones en los dos sentidos, aparece un Panel que explica
+  el resultado del mes, la mercancía que llega se cuenta antes de darla por
+  recibida, y hay un botón para llamar al administrador cuando algo no da espera.
+  Cada sección dice qué cambió, dónde se ve y qué hacer.
+</p>
+
+<div class="indice">
+  <h2>En esta guía</h2>
+  <ol>
+    <li>Qué hay de nuevo</li>
+    <li>Cuando el cliente nos retiene</li>
+    <li>Cuando nosotros le retenemos al proveedor</li>
+    <li>Panel: por qué dio lo que dio</li>
+    <li>Contar la mercancía que llega</li>
+    <li>Avisarle al administrador</li>
+    <li>Garantía desde una orden entregada</li>
+    <li>Deshacer un cambio de producto</li>
+    <li>Mínimos y Reorden por clase ABC</li>
+  </ol>
+</div>
+
+<!-- ============ 1 ============ -->
+<div class="seccion primera">
+  <div class="cabecera"><span class="num">1</span><h2 class="titulo">Qué hay de nuevo</h2></div>
+
+  <p>
+    Ocho cambios. Los dos primeros tocan plata directamente, así que valen la pena
+    leerlos completos aunque el resto se hojee.
+  </p>
+
+  <table>
+    <thead><tr><th>Cambio</th><th>Dónde se ve</th><th>A quién le sirve</th></tr></thead>
+    <tbody>
+      <tr><td>Retenciones cuando el cliente nos retiene</td><td>Nueva Venta, la orden de trabajo y al convertir una cotización</td><td>Vendedoras, Admin</td></tr>
+      <tr><td>Retenciones cuando nosotros retenemos</td><td>Nueva Compra y el detalle de la compra</td><td>Bodega, Admin</td></tr>
+      <tr><td>Panel de decisiones</td><td>Panel Admin, Panel</td><td>Admin</td></tr>
+      <tr><td>Conteo de la mercancía que llega</td><td>Al registrar una compra con productos</td><td>Bodega, Admin</td></tr>
+      <tr><td>Aviso urgente al administrador</td><td>Botón dentro del conteo</td><td>Bodega, Admin</td></tr>
+      <tr><td>Garantía desde una orden entregada</td><td>Detalle de la orden de trabajo</td><td>Admin, vendedoras</td></tr>
+      <tr><td>Deshacer un cambio de producto</td><td>Detalle de la venta</td><td>Admin</td></tr>
+      <tr><td>Mínimos y Reorden filtrados por clase ABC</td><td>Panel Admin, Mínimos y Reorden</td><td>Admin</td></tr>
+    </tbody>
+  </table>
+
+  <div class="nota info">
+    <span class="k">Lo que no cambia</span>
+    <p>
+      Mientras nadie abra el bloque de retenciones, todas las pantallas se ven y se
+      comportan exactamente igual que antes. Ninguna venta, orden o compra sale con
+      una retención que alguien no haya puesto a propósito.
+    </p>
+  </div>
+</div>
+
+<!-- ============ 2 ============ -->
+<div class="seccion">
+  <div class="cabecera"><span class="num">2</span><h2 class="titulo">Cuando el cliente nos retiene</h2></div>
+
+  <p>
+    Cuando un cliente grande compra, muchas veces no paga el total de la factura:
+    descuenta las retenciones y las consigna a la DIAN o al municipio a nombre de
+    la empresa. La factura sigue diciendo diez millones, pero al banco entran nueve
+    y medio.
+  </p>
+  <p>
+    Antes la app no sabía nada de eso. El cierre contaba como ingreso una plata que
+    nunca llegó, y Cuentas por Cobrar dejaba al cliente debiendo un saldo que jamás
+    iba a pagar porque ya se había ido a la DIAN. Ahora la retención se registra en
+    el documento y todo lo demás se acomoda solo.
+  </p>
+
+  <h3>Dónde está</h3>
+  <p>
+    En Nueva Venta, en la orden de trabajo y en la ventana de convertir una
+    cotización, hay un bloque plegado que dice <strong>¿El cliente retiene?</strong>
+    Mientras nadie lo toque, no pasa nada.
+  </p>
+
+  <div class="maqueta">
+    <div class="barra">Ventas · Nueva venta</div>
+    <div class="cuerpo">
+      <div class="plegado">
+        <span class="k">Retenciones</span>
+        <span style="color:var(--acento)">¿El cliente retiene? Tocar para aplicar ▾</span>
+      </div>
+    </div>
+  </div>
+  <p class="pie">El bloque cerrado. Así se ve mientras la venta no lleva retención.</p>
+
+  <p>
+    Al abrirlo aparecen los tres campos en cero y un botón con las tarifas que
+    Maritza tenga guardadas en Configuración. Los porcentajes <strong>no se ponen
+    solos</strong>: hay que pulsar el botón o escribirlos. Retener es una decisión,
+    no un valor por defecto.
+  </p>
+
+  <div class="maqueta">
+    <div class="barra">Ventas · Nueva venta</div>
+    <div class="cuerpo">
+      <div class="plegado" style="margin-bottom:10px">
+        <span class="k">Retenciones</span>
+        <span class="neg">- $ 57.640 ▴</span>
+      </div>
+      <div class="boton" style="display:block;margin-bottom:8px">Aplicar las tarifas de siempre (2,5% · 0,414% · 15%)</div>
+      <div class="campo"><span>Retefuente (sobre la base)</span><span><span class="caja-num">2,5</span> <span class="lbl">- $ 25.000</span></span></div>
+      <div class="campo"><span>ReteICA (sobre la base)</span><span><span class="caja-num">0,414</span> <span class="lbl">- $ 4.140</span></span></div>
+      <div class="campo"><span>ReteIVA (sobre el IVA)</span><span><span class="caja-num">15</span> <span class="lbl">- $ 28.500</span></span></div>
+      <div class="fila" style="margin-top:8px"><span class="lbl">Total facturado</span><span class="v">$ 1.190.000</span></div>
+      <div class="fila total"><span>Neto a recibir</span><span class="v neg">$ 1.132.360</span></div>
+    </div>
+  </div>
+  <p class="pie">El bloque abierto con las tres retenciones aplicadas, datos de ejemplo.</p>
+
+  <h3>Cómo se calcula cada una</h3>
+  <table>
+    <thead><tr><th>Retención</th><th>Sobre qué se calcula</th></tr></thead>
+    <tbody>
+      <tr><td>Retefuente</td><td>Sobre la base, que es el subtotal menos el descuento. No sobre el IVA ni sobre el domicilio.</td></tr>
+      <tr><td>ReteICA</td><td>Sobre la misma base. Es municipal y cambia según el municipio y la actividad.</td></tr>
+      <tr><td>ReteIVA</td><td>Sobre el IVA facturado, no sobre la base.</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    Los porcentajes se escriben con coma, como se escriben en Colombia. Se pueden
+    cambiar documento por documento, porque las tarifas cambian por ley y por
+    municipio y la app no puede quedar amarrada a un número.
+  </p>
+
+  <div class="nota ojo">
+    <span class="k">Si querías 2,5% escribe 2,5, no 25</span>
+    <p>
+      Es el error fácil de cometer y el más caro: en una venta de un millón, escribir
+      25 en vez de 2,5 convierte $25.000 de retefuente en $250.000. La pantalla
+      siempre muestra el <strong>Neto a recibir</strong> justo debajo; si ese número
+      no se parece a lo que el cliente va a consignar, algo está mal escrito.
+    </p>
+  </div>
+
+  <h3>Qué se acomoda solo</h3>
+  <p>
+    <strong>El recibo y la constancia.</strong> La tirilla de venta y el documento de
+    la orden de trabajo desglosan cada retención con su porcentaje, en negativo, y
+    destacan el NETO A PAGAR. Antes el papel decía un total y un saldo que no
+    cuadraban con la resta, y no había forma de explicarlo.
+  </p>
+  <p>
+    <strong>Cuentas por Cobrar.</strong> El saldo nace neto. Una factura retenida ya
+    no aparece con el cliente debiendo la parte que se fue a la DIAN, y al registrar
+    el cobro la app propone el monto correcto.
+  </p>
+  <p>
+    <strong>El cierre.</strong> Cuenta lo que de verdad entró. Una venta de contado
+    entra por el neto, y un cobro de cartera entra por lo que se recibió, sin contar
+    la retención dos veces.
+  </p>
+  <p>
+    <strong>La orden de trabajo.</strong> El saldo se mide contra lo cobrable, no
+    contra lo facturado. Si se midiera contra el total, la orden nunca se podría
+    entregar, porque el cliente jamás va a abonar la parte retenida.
+  </p>
+
+  <h3>Las tarifas de siempre</h3>
+  <p>
+    En Panel Admin, Configuración, Parámetros, hay tres campos para las tarifas
+    sugeridas de retefuente, reteICA y reteIVA. Son solo una sugerencia detrás de un
+    botón: cambiarlas no toca ningún documento ya hecho.
+  </p>
+</div>
+
+<!-- ============ 3 ============ -->
+<div class="seccion">
+  <div class="cabecera"><span class="num">3</span><h2 class="titulo">Cuando nosotros le retenemos al proveedor</h2></div>
+
+  <p>
+    Es lo mismo al revés. Compresores del Valle también es agente retenedor: cuando
+    le compra a un proveedor pequeño, le descuenta la retención de la factura y la
+    consigna ella misma a la DIAN. La factura dice un millón, del cajón salen
+    novecientos setenta y cinco mil, y el resto se gira a nombre del proveedor.
+  </p>
+
+  <h3>Dónde está</h3>
+  <p>
+    En Nueva Compra, debajo de la forma de pago, con el mismo bloque pero
+    preguntando al revés: <strong>¿Le retenemos al proveedor?</strong> Solo sale en
+    la orden de compra; un recibo de caja menor no lleva retención.
+  </p>
+
+  <div class="maqueta">
+    <div class="barra">Compras · Nueva compra</div>
+    <div class="cuerpo">
+      <div class="plegado" style="margin-bottom:10px">
+        <span class="k">Retenciones</span>
+        <span class="neg">- $ 25.000 ▴</span>
+      </div>
+      <div class="campo"><span>Retefuente (sobre la base)</span><span><span class="caja-num">2,5</span> <span class="lbl">- $ 25.000</span></span></div>
+      <div class="fila" style="margin-top:8px"><span class="lbl">Total de la factura</span><span class="v">$ 1.000.000</span></div>
+      <div class="fila total"><span>Neto a pagar</span><span class="v neg">$ 975.000</span></div>
+    </div>
+  </div>
+  <p class="pie">La compra retenida. El resumen de la derecha también muestra el neto a pagar.</p>
+
+  <div class="nota ok">
+    <span class="k">Si el conteo ajusta la factura</span>
+    <p>
+      Cuando la mercancía llega incompleta y se ajusta la factura, la retención se
+      recalcula sola sobre el nuevo valor. Si de diez unidades llegaron seis, la
+      retención pasa de $25.000 a $15.000 sin que nadie tenga que tocarla.
+    </p>
+  </div>
+  <h3>Qué se acomoda solo</h3>
+  <table>
+    <thead><tr><th>Dónde</th><th>Qué pasa</th></tr></thead>
+    <tbody>
+      <tr><td>El cierre</td><td>Una compra de contado saca del cajón el neto. Con una factura de un millón al 2,5%, el egreso del día son $975.000 y el efectivo esperado del arqueo baja en esa misma cifra, no en el millón.</td></tr>
+      <tr><td>Cuentas por Pagar</td><td>El saldo del proveedor nace neto. Al pagarle se registra lo que de verdad se le entrega y la compra queda saldada.</td></tr>
+      <tr><td>Detalle de la compra</td><td>Muestra el desglose con su porcentaje y el neto a pagar, para que quien le gire al proveedor vea de dónde salió la cifra.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="nota info">
+    <span class="k">Una retención no abarata la mercancía</span>
+    <p>
+      El Panel y el Dashboard siguen contando el gasto por el total de la factura, y
+      eso es correcto: el costo de lo que se compró es el mismo. Lo único que cambia
+      es a quién se le paga, una parte al proveedor y otra a la DIAN.
+    </p>
+  </div>
+
+</div>
+
+<!-- ============ 4 ============ -->
+<div class="seccion">
+  <div class="cabecera"><span class="num">4</span><h2 class="titulo">Panel: por qué dio lo que dio</h2></div>
+
+  <p>
+    El Dashboard dice cómo va el negocio hoy. El Panel responde la pregunta de fin
+    de mes: por qué el resultado dio lo que dio y dónde se está yendo la plata.
+    Está en el Panel Admin, en Panel.
+  </p>
+  <p>
+    Todo el Panel obedece a una barra de rango arriba. Lo que se elija ahí manda
+    sobre las cinco secciones, y la barra dice en castellano qué rango está aplicado
+    para que nunca se lea un número creyendo que es de otro periodo.
+  </p>
+
+  <div class="maqueta">
+    <div class="barra">Panel Admin · Panel de decisiones</div>
+    <div class="cuerpo">
+      <div class="chips">
+        <span class="chip">Hoy</span><span class="chip">Semana</span>
+        <span class="chip on">Este mes</span><span class="chip">Trimestre</span><span class="chip">Personalizado</span>
+      </div>
+      <h4>Resultado del mes</h4>
+      <div class="fila"><span class="lbl">Ventas netas</span><span class="v">$ 44.553.612</span></div>
+      <div class="fila"><span class="lbl">Costo de lo vendido</span><span class="v neg">- $ 14.191.099</span></div>
+      <div class="fila"><span class="lbl">Margen bruto</span><span class="v">$ 30.362.513</span></div>
+      <div class="fila"><span class="lbl">Gastos</span><span class="v neg">- $ 20.189.419</span></div>
+      <div class="fila total"><span>Resultado</span><span class="v">$ 10.173.094</span></div>
+    </div>
+  </div>
+  <p class="pie">La cascada del resultado, con datos reales del mes. Cada renglón se puede abrir.</p>
+
+  <h3>Las cinco secciones</h3>
+  <table>
+    <thead><tr><th>Sección</th><th>Qué responde</th></tr></thead>
+    <tbody>
+      <tr><td>Resultado</td><td>De las ventas al resultado, renglón por renglón, y qué hay dentro de cada pérdida.</td></tr>
+      <tr><td>Composición</td><td>De dónde sale la venta, mirada por siete ejes distintos: sede, vendedora, categoría, producto y otros. Se pueden ver los peores por margen y también por volumen.</td></tr>
+      <tr><td>Cartera</td><td>Cuánto deben los clientes y desde hace cuánto, agrupado por antigüedad.</td></tr>
+      <tr><td>Inventario</td><td>Cuánta plata hay quieta en las bodegas, tratada como capital y no como una lista de productos.</td></tr>
+      <tr><td>Egresos por clasificar</td><td>La bandeja de gastos a los que todavía no se les ha dicho de qué son.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Llevarse los números</h3>
+  <p>
+    Cada tabla del Panel tiene un botón para exportar a CSV exactamente lo que se ve
+    en pantalla, con el mismo rango y los mismos filtros. Se abre en Excel sin
+    pelear con nada.
+  </p>
+  <h3>Clasificar los gastos</h3>
+  <p>
+    Para que el resultado sea confiable, cada egreso necesita una categoría. Los
+    gastos nuevos ya nacen con la suya, y los viejos se resuelven por lotes desde la
+    bandeja: se marcan varios y se les pone la categoría de una sola vez. Mientras
+    un gasto siga sin clasificar, el Panel lo cuenta como gasto y lo dice, para no
+    prometer un resultado mejor del real.
+  </p>
+
+</div>
+
+<!-- ============ 5 ============ -->
+<div class="seccion">
+  <div class="cabecera"><span class="num">5</span><h2 class="titulo">Contar la mercancía que llega</h2></div>
+
+  <p>
+    Hasta ahora, marcar una compra como recibida daba por bueno que llegó todo lo
+    que decía la factura. Ahora el bodeguero cuenta lo que de verdad llegó, y las
+    diferencias tienen a dónde ir.
+  </p>
+
+  <h3>Cómo se entra</h3>
+  <p>
+    Al registrar una compra con productos, el botón dice <strong>Registrar y
+    contar</strong> y lleva directo a la pantalla del conteo. Es el momento
+    correcto, porque la mercancía casi siempre está en el mostrador cuando se digita
+    la factura. El paso se puede omitir; la compra queda registrada igual.
+  </p>
+  <p>
+    Solo lo ven el administrador y bodega. Las vendedoras siguen registrando y
+    recibiendo compras como siempre.
+  </p>
+
+  <div class="maqueta">
+    <div class="barra">Compras · Contar lo que llegó</div>
+    <div class="cuerpo">
+      <h4>Compra #868 · CABEZOTES DEL PACÍFICO</h4>
+      <div class="fila"><span>CTA2155T · CABEZOTE 30 HP<br><span class="lbl" style="font-size:12px">Pedidas 10</span></span><span><span class="caja-num">10</span></span></div>
+      <div class="fila"><span>AM501/4 · ACEITE MONOGRADO 50<br><span class="lbl" style="font-size:12px">Pedidas 24</span></span><span><span class="caja-num">20</span></span></div>
+      <div class="fila total"><span>2 de 2 contados</span><span class="boton solido">Confirmar recepción</span></div>
+    </div>
+  </div>
+  <p class="pie">El conteo en modo lista, para tablet y computador. En celular es una tarjeta por producto.</p>
+
+  <h3>Cómo se cuenta</h3>
+  <p>
+    Cada producto arranca en cero y se va sumando, que es como se cuenta de verdad
+    una caja. Hay botones grandes, teclado numérico y el escáner de QR, que suma de
+    a uno sin salir de la pantalla.
+  </p>
+
+  <div class="nota info">
+    <span class="k">Al inventario entra lo que sirve</span>
+    <p>
+      La regla es sencilla: entra lo que llegó menos lo dañado. Una unidad que llegó
+      rota no suma al stock aunque la factura la cobre.
+    </p>
+  </div>
+  <h3>Qué se hace con las diferencias</h3>
+  <table>
+    <thead><tr><th>Diferencia</th><th>Qué se puede hacer</th></tr></thead>
+    <tbody>
+      <tr><td>Llegó menos</td><td>Ajustar la factura, si el proveedor no lo va a mandar, o dejarlo como reclamo al proveedor.</td></tr>
+      <tr><td>Llegó dañado</td><td>Se cuenta aparte y se le reclama al proveedor. Al inventario solo entra lo que sirve.</td></tr>
+      <tr><td>Llegó de más</td><td>Se puede aceptar el sobrante y meterlo al inventario, o dejarlo por fuera.</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    Antes de confirmar, la app muestra en palabras lo que va a pasar: cuántas
+    unidades entran al inventario, qué se le reclama al proveedor y cómo queda la
+    factura. Después de confirmar, la compra queda recibida y el reclamo queda
+    abierto como una garantía de compra.
+  </p>
+
+</div>
+
+<!-- ============ 6 ============ -->
+<div class="seccion">
+  <div class="cabecera"><span class="num">6</span><h2 class="titulo">Avisarle al administrador</h2></div>
+
+  <p>
+    A veces el bodeguero se topa con algo que no puede resolver solo y que no da
+    espera: llegó la mitad del pedido, o llegó algo que nadie pidió. Dentro del
+    conteo hay un botón para escalarlo al administrador.
+  </p>
+  <p>
+    Cuando Maritza abre la app, le sale un aviso que tapa la pantalla y que hay que
+    atender antes de seguir. No es una campanita que se pueda pasar por alto. Si no
+    está conectada en ese momento, el aviso la espera y le sale cuando entre.
+  </p>
+
+  <div class="nota ojo">
+    <span class="k">Máximo dos avisos por situación</span>
+    <p>
+      Para que el aviso siga significando algo, cada situación admite hasta dos.
+      Insistir una tercera vez no manda nada nuevo. Si es urgente de verdad y ya se
+      avisó dos veces, toca el teléfono.
+    </p>
+  </div>
+</div>
+
+<!-- ============ 7 ============ -->
+<div class="seccion">
+  <div class="cabecera"><span class="num">7</span><h2 class="titulo">Garantía desde una orden entregada</h2></div>
+
+  <p>
+    Cuando un cliente reclama por un trabajo ya entregado, antes había que buscar la
+    venta que la orden generó y abrir la garantía desde ahí. Casi nadie llegaba por
+    ese camino. Ahora el detalle de la orden de trabajo entregada tiene su propio
+    botón para reclamar la garantía.
+  </p>
+
+  <h3>Un solo cupo de reembolso</h3>
+  <p>
+    Una orden de trabajo y las ventas que salen de ella son el mismo negocio, así
+    que comparten un solo cupo de devolución. Si por una orden de un millón ya se
+    devolvieron seiscientos mil, por cualquier vía quedan cuatrocientos mil, y la app
+    no deja pasar de ahí. Antes cada camino llevaba su propia cuenta y entre los dos
+    se podía devolver más de lo que el cliente pagó.
+  </p>
+  <p>
+    Cuando un reembolso queda topado, el mensaje dice cuánto se ha devuelto ya y
+    cuánto queda, en vez de solo negarse.
+  </p>
+</div>
+
+<!-- ============ 8 ============ -->
+<div class="seccion">
+  <div class="cabecera"><span class="num">8</span><h2 class="titulo">Deshacer un cambio de producto</h2></div>
+
+  <p>
+    Los cambios de producto con diferencia de precio ya se podían registrar. Lo que
+    faltaba era poder deshacerlos cuando se registraban mal, y eso obligaba a pedir
+    ayuda por fuera de la app.
+  </p>
+  <p>
+    Ahora el detalle de la venta tiene la opción de anular el cambio completo. Se
+    deshacen las dos partes a la vez, la devolución y la venta nueva, y el
+    inventario y la caja vuelven a donde estaban. Es una acción del administrador.
+  </p>
+</div>
+
+<!-- ============ 9 ============ -->
+<div class="seccion">
+  <div class="cabecera"><span class="num">9</span><h2 class="titulo">Mínimos y Reorden por clase ABC</h2></div>
+
+  <p>
+    Las dos pantallas de reposición ahora se pueden filtrar por clase A, B o C. Es
+    útil para trabajar por tandas: revisar primero los A, que son los que mueven la
+    plata, sin que la lista se llene de productos de clase C.
+  </p>
+  <p>
+    De paso se corrigió un error en la clase combinada, que contaba dos veces los
+    repuestos usados en órdenes de trabajo. Eso inflaba a algunos productos y podía
+    subirlos de clase sin merecerlo, así que unas cuantas clasificaciones van a
+    verse distintas después de recalcular.
+  </p>
+
+  <div class="cierre">
+    Compresores del Valle S.A.S. · Guía de novedades de septiembre de 2026.
+    Cualquier cosa que no cuadre con lo que se ve en pantalla, vale la pena avisarla:
+    esta guía se corrige.
+  </div>
+</div>
+
+</body>
+</html>
