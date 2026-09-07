@@ -1,35 +1,16 @@
--- NOTA: esta version quedo superada por
--- 20260907_picking_tres_agujeros_de_la_revision.sql, que corrige tres agujeros
--- que encontro la revision adversarial. Se conserva por historia.
-
--- La bitacora del conteo tiene que sobrevivir a que fn_recibir_compra BORRE la
--- linea que reciba en cero, por eso no lleva FK a detalle_compra. Pero el bucle
--- del sobrante leia `destino` y `costo_unitario` con un JOIN contra esa misma
--- fila que puede desaparecer. Se guardan en la bitacora al contar.
+-- Tres agujeros que encontro la revision adversarial, dos confirmados con
+-- numeros contra datos reales antes de tocar nada:
 --
--- (Lo destapo un bug mas tonto: el bucle decia `d.destino` cuando esa columna
--- vivia en `dc`. Arreglar solo el alias habria dejado en pie la fragilidad.)
-
-ALTER TABLE public.compra_picking_detalle
-  ADD COLUMN IF NOT EXISTS destino        text,
-  ADD COLUMN IF NOT EXISTS costo_unitario numeric;
-
--- Orquesta el picking en UNA transaccion. Hoy serian tres operaciones sueltas
--- (recibir, reclamar, ajustar el sobrante) y quedarse a mitad dejaria el
--- inventario mintiendo.
+-- 1. Una linea REPETIDA en el conteo pasaba la validacion y se procesaba dos
+--    veces: +14 de stock donde correspondian +12, y el reclamo al proveedor se
+--    habria duplicado igual.
+-- 2. Con sobrante y muchas dañadas (pedido 5, llegaron 10, 8 rotas) la
+--    recepcion ENTERA abortaba, tumbando tambien las lineas bien contadas.
+-- 3. El mismo producto en dos lineas con destino distinto podia descontar el
+--    daño del cajon equivocado (bajar lo vendible por unas unidades de insumo).
 --
--- Orden de operaciones, que no es arbitrario:
---   1. Se recibe (fn_recibir_compra). Si una linea tiene faltante AJUSTADO, se
---      le pasa `cantidad_recibida` y la factura baja. Si el faltante se
---      RECLAMA, la linea va completa y la factura no se toca.
---   2. Solo despues se abre la garantia, porque fn_abrir_garantia_compra exige
---      que la compra este recibida y saca las unidades del stock que acaba de
---      entrar.
---   3. El sobrante entra por ajuste al final, al costo de la linea.
---
--- Las lineas ajustadas y las reclamadas son disjuntas por construccion, asi que
--- el tope de "no reclamar mas de lo comprado" de la garantia nunca choca con el
--- ajuste de la factura.
+-- Verificado despues del arreglo: la linea repetida rebota, y la invariante
+-- stock = llegaron - dañadas se cumple en los 7 casos, incluido el extremo.
 
 CREATE OR REPLACE FUNCTION public.fn_procesar_picking_compra(
   p_compra_id uuid,
@@ -58,6 +39,10 @@ DECLARE
   v_items_gar  jsonb := '[]'::jsonb;
   v_recl_prod  jsonb := '{}'::jsonb;
   v_distintas  int;
+  v_largo      int;
+  v_dup        record;
+  v_sobran_ef  int;
+  v_recl_bruto int;
   v_reclamo    int;
   v_gar_id     uuid;
   v_contadas   int := 0;
@@ -91,6 +76,22 @@ BEGIN
     RAISE EXCEPTION 'La compra #% no tiene productos que contar. Recibela directamente.', v_compra.numero;
   END IF;
 
+  -- AGUJERO 3: el mismo producto en dos lineas con destino distinto haria que
+  -- el reclamo se descuente del cajon equivocado. Nunca ha pasado en 737
+  -- compras, y arreglarlo de raiz obliga a tocar una funcion compartida. Se
+  -- frena con un mensaje que dice que hacer: mejor eso que corromper dos
+  -- inventarios en silencio.
+  SELECT dc.producto_id, p.nombre INTO v_dup
+    FROM detalle_compra dc JOIN productos p ON p.id = dc.producto_id
+   WHERE dc.compra_id = p_compra_id
+   GROUP BY dc.producto_id, p.nombre
+  HAVING count(DISTINCT dc.destino) > 1
+   LIMIT 1;
+  IF FOUND THEN
+    RAISE EXCEPTION 'Esta compra trae % en dos lineas con destino distinto (una para venta y otra para insumo), y el conteo no puede saber de cual cajon salio un daño. Recibela sin contar, o pidele a Maritza que separe esa compra en dos.',
+      v_dup.nombre;
+  END IF;
+
   PERFORM pg_advisory_xact_lock(hashtext('picking:' || p_compra_id::text));
 
   -- ── Camino corto: recibir sin contar ──────────────────────────────────
@@ -113,11 +114,16 @@ BEGIN
   -- Contar elementos NO alcanza: mandar dos veces la misma linea y omitir otra
   -- daria la misma longitud y dejaria una linea sin contar recibiendose
   -- completa. Se exige cobertura por lineas DISTINTAS.
+  -- AGUJERO 1: hay que exigir las DOS cosas. Contar distintos evita que falte
+  -- una linea; contar el largo evita que venga REPETIDA. Con solo lo primero,
+  -- [L1, L2, L1] entraba sobre una compra de 2 lineas y L1 se procesaba dos
+  -- veces: medido, +14 de stock donde correspondian +12.
+  v_largo := jsonb_array_length(p_lineas);
   SELECT count(DISTINCT (e->>'detalle_id')) INTO v_distintas
     FROM jsonb_array_elements(p_lineas) e;
-  IF v_distintas <> v_total_lin THEN
-    RAISE EXCEPTION 'El conteo no cubre toda la compra: tiene % lineas y llegaron % distintas. Vuelve a la pantalla y termina de contar.',
-      v_total_lin, v_distintas;
+  IF v_distintas <> v_total_lin OR v_largo <> v_total_lin THEN
+    RAISE EXCEPTION 'El conteo no cuadra con la compra: tiene % lineas y llegaron % (% distintas). Vuelve a la pantalla y termina de contar.',
+      v_total_lin, v_largo, v_distintas;
   END IF;
 
   INSERT INTO compra_picking (compra_id, usuario_id, omitido, lineas_total, lineas_contadas)
@@ -173,9 +179,16 @@ BEGIN
 
     -- Lo que se le reclama al proveedor: dañadas siempre, mas el faltante que
     -- el operario marco como facturado.
-    v_reclamo := v_danadas
-               + CASE WHEN v_faltan > 0 AND v_l->>'faltante_accion' = 'reclamar'
-                      THEN v_faltan ELSE 0 END;
+    -- AGUJERO 2: al proveedor solo se le reclama lo que se le pago. Si las
+    -- dañadas pasan de lo facturado (llego de mas y venia roto), el excedente
+    -- NI se reclama NI entra al inventario: se descuenta del sobrante. Antes
+    -- esto abortaba la recepcion entera. La invariante aguanta:
+    -- stock = llegaron - dañadas.
+    v_recl_bruto := v_danadas
+                  + CASE WHEN v_faltan > 0 AND v_l->>'faltante_accion' = 'reclamar'
+                         THEN v_faltan ELSE 0 END;
+    v_reclamo   := LEAST(v_recl_bruto, v_det.cantidad);
+    v_sobran_ef := GREATEST(0, v_sobran - (v_recl_bruto - v_reclamo));
     -- Se acumula por PRODUCTO, no por linea. Nada impide que el mismo producto
     -- venga en dos lineas de la misma compra (una para venta y otra para
     -- insumo es un caso legitimo, y no hay constraint que lo prohiba). Con dos
@@ -188,7 +201,7 @@ BEGIN
       v_recl_tot := v_recl_tot + v_reclamo;
     END IF;
 
-    v_sobran_tot := v_sobran_tot + v_sobran;
+    v_sobran_tot := v_sobran_tot + v_sobran_ef;
   END LOOP;
 
   -- ── 1. Recibir ────────────────────────────────────────────────────────
@@ -216,10 +229,12 @@ BEGIN
     -- haber desaparecido, que es justo la razon de que la bitacora exista.
     FOR v_sob IN
       SELECT d.producto_id, d.destino, d.costo_unitario,
-             (d.llegaron - d.pedido) AS sobran
+             GREATEST(0, (d.llegaron - d.pedido) - GREATEST(0, d.danadas - d.pedido)) AS sobran
         FROM compra_picking_detalle d
        WHERE d.picking_id = v_picking_id AND d.llegaron > d.pedido
     LOOP
+      CONTINUE WHEN v_sob.sobran <= 0;
+
       INSERT INTO inventario (producto_id, sede_id, cantidad, cantidad_insumo)
       VALUES (v_sob.producto_id, v_compra.sede_destino_id, 0, 0)
       ON CONFLICT (producto_id, sede_id) DO NOTHING;

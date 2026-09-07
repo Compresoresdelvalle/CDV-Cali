@@ -237,7 +237,7 @@ export default function LineaListaCard({
               onChange={(v) =>
                 onDanadas(linea.detalle_id, Math.min(d.llegaron, Number(v) || 0))
               }
-              size={40}
+              size={48}
               ariaPrefix="Unidades dañadas"
             />
           </div>
@@ -333,13 +333,18 @@ export function LineaListaFila({
       </td>
       <td className="px-3 py-2 align-top">
         {/* Steppers de 40px en vez de 48px: esta fila es densa a propósito
-            (Regla #5 — tabla de escritorio) y aquí se opera con mouse, no con
+            (Regla #5). Pero los controles SIGUEN en 48px: `lg` son 1024px, o
+            sea un iPad en horizontal, y ahí se opera con dedos y guantes. Los
+            steppers son además lo que más se toca de toda la pantalla, mucho
+            más que los atajos. Lo denso es la tabla, no el objetivo táctil. La
+            versión anterior decía aquí "se opera con mouse" y se contradecía
+            con el comentario de los atajos diez líneas más arriba, no con
             guantes. El mínimo de 48px de CLAUDE.md protege el uso industrial
             de campo; en el modo enfoque (celular) sí se respeta. */}
         <Stepper
           value={d.llegaron}
           onChange={(v) => onCantidad(linea.detalle_id, v)}
-          size={40}
+          size={48}
           ariaPrefix="Unidades que llegaron"
         />
       </td>
@@ -350,7 +355,7 @@ export function LineaListaFila({
             onChange={(v) =>
               onDanadas(linea.detalle_id, Math.min(d.llegaron, Number(v) || 0))
             }
-            size={36}
+            size={48}
             ariaPrefix="Unidades dañadas"
           />
         ) : (
