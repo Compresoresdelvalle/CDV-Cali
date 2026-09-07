@@ -22,6 +22,7 @@ import {
 } from "../../hooks/useReposicionCount";
 import { useNotificaciones } from "../../hooks/useNotificaciones";
 import ReposicionButton from "./ReposicionButton";
+import AvisoUrgenteModal from "../avisos/AvisoUrgenteModal";
 
 /* ── Sidebar admin (desktop ≥ lg) ─────────────────────────────────────── */
 function SidebarAdminItem({ href, label, icon }) {
@@ -550,6 +551,12 @@ export default function AdminShell() {
         perfil={perfil}
         initials={initials}
         onLogout={handleLogout}
+      />
+
+      <AvisoUrgenteModal
+        items={notifs.items}
+        perfil={perfil}
+        onMarcar={notifs.marcarUna}
       />
     </div>
   );

@@ -34,6 +34,7 @@ import {
 import { useNotificaciones } from "../../hooks/useNotificaciones";
 import ReposicionButton from "./ReposicionButton";
 import NotificacionesBell from "./NotificacionesBell";
+import AvisoUrgenteModal from "../avisos/AvisoUrgenteModal";
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 const getInitials = (name = "") =>
@@ -820,6 +821,12 @@ export default function AppShell() {
         rol={rol}
         initials={initials}
         onLogout={handleLogout}
+      />
+
+      <AvisoUrgenteModal
+        items={notifs.items}
+        perfil={perfil}
+        onMarcar={notifs.marcarUna}
       />
     </div>
   );

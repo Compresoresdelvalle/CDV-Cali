@@ -280,6 +280,13 @@ export default function CompraNueva() {
   const total = subtotal - descuento + iva;
   const totalItems = carrito.reduce((s, i) => s + i.cantidad, 0);
 
+  // Quién puede contar la recepción: los mismos dos roles que acepta
+  // fn_procesar_picking_compra. La vendedora sigue registrando y recibiendo
+  // como siempre — sus compras son casi todas caja menor sin productos, y
+  // meterle fricción por algo que no le toca sería castigarla.
+  const puedeContar = ["Admin", "Bodeguero"].includes(perfil?.rol);
+  const ofreceConteo = puedeContar && carrito.length > 0;
+
   // Pasos del wizard: el paso "Proveedor" se considera completo cuando hay
   // nombre; "Productos" activo cuando hay al menos un item; el envío final
   // (registrar) hace las veces del paso "Confirmación".
@@ -311,7 +318,7 @@ export default function CompraNueva() {
     try {
       // RPC server-authoritative: registra compra + detalle en una sola
       // transacción, fija `registrado_por` y recalcula los totales.
-      const { error: rpcErr } = await supabase.rpc("fn_registrar_compra", {
+      const { data: creada, error: rpcErr } = await supabase.rpc("fn_registrar_compra", {
         p_sede_id: perfil?.sede_id,
         p_proveedor: proveedor.trim(),
         p_factura_proveedor: facturaProveedor.trim() || null,
@@ -329,6 +336,23 @@ export default function CompraNueva() {
         p_descuento_valor: descuento,
       });
       if (rpcErr) throw new Error(rpcErr.message);
+
+      // La mercancía ya está en el mostrador cuando digitan la factura: de 737
+      // compras no hay ninguna pendiente, y 713 de 729 se registran y reciben
+      // en el mismo segundo. Por eso el conteo se ofrece AQUÍ y no esperando a
+      // que alguien entre al detalle de una compra pendiente, por donde no
+      // llegaría nadie.
+      //
+      // Solo si hay productos que contar y si quien registra puede contarlos.
+      // Una compra de caja menor (un recibo de transporte) no se cuenta, y a la
+      // vendedora no se le mete fricción por algo que no le toca.
+      if (!recibirAhora && puedeContar && carrito.length > 0) {
+        avisarOk(
+          `Compra #${creada?.numero} registrada. Ahora cuenta lo que llegó.`,
+        );
+        navigate(`/ops/compras/${creada?.compra_id}/picking`);
+        return;
+      }
 
       avisarOk(
         recibirAhora ? "Compra registrada y recibida." : "Compra registrada.",
@@ -1218,10 +1242,21 @@ export default function CompraNueva() {
                   className="text-sm font-semibold"
                   style={{ color: "var(--n-950)" }}
                 >
-                  Marcar como recibida ahora
+                  {ofreceConteo
+                    ? "Recibir sin contar"
+                    : "Marcar como recibida ahora"}
                 </p>
+                {/* La advertencia dice el daño CONCRETO, con las unidades de
+                    esta compra, no un genérico. Un faltante que nadie contó no
+                    aparece como algo que el proveedor debía: aparece semanas
+                    después como pérdida de bodega, cuando ya no hay a quién
+                    reclamarle. */}
                 <p className="text-xs" style={{ color: "var(--n-500)" }}>
-                  El stock se sumará automáticamente al confirmar
+                  {ofreceConteo
+                    ? recibirAhora
+                      ? `El inventario va a decir que llegaron ${totalItems} unidades aunque hayan llegado menos, y cualquier faltante quedará como pérdida de bodega, no como algo que el proveedor debía.`
+                      : "Déjalo sin marcar y al guardar pasas a contar lo que llegó."
+                    : "El stock se sumará automáticamente al confirmar"}
                 </p>
               </div>
             </label>
@@ -1314,6 +1349,11 @@ export default function CompraNueva() {
               <>
                 <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
                 Registrar y recibir
+              </>
+            ) : ofreceConteo ? (
+              <>
+                Registrar y contar
+                <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />
               </>
             ) : (
               <>
