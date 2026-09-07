@@ -296,7 +296,11 @@ export function LineaListaFila({
               onClick={() => onCompleto(linea.detalle_id, d.pedido)}
               className="rounded-md text-xs font-semibold px-2"
               style={{
-                minHeight: 40,
+                // 48 y no 40: la tabla arranca en `lg`, o sea 1024px, que es
+                // exactamente el ancho de un iPad en horizontal. Ahi no hay
+                // mouse, hay dedos con guantes, y la tablet es el aparato
+                // principal en bodega.
+                minHeight: 48,
                 backgroundColor: "hsl(var(--success) / 0.1)",
                 color: "hsl(var(--success))",
                 border: "1px solid hsl(var(--success) / 0.4)",
@@ -309,7 +313,11 @@ export function LineaListaFila({
               onClick={() => onNada(linea.detalle_id)}
               className="rounded-md text-xs font-semibold px-2"
               style={{
-                minHeight: 40,
+                // 48 y no 40: la tabla arranca en `lg`, o sea 1024px, que es
+                // exactamente el ancho de un iPad en horizontal. Ahi no hay
+                // mouse, hay dedos con guantes, y la tablet es el aparato
+                // principal en bodega.
+                minHeight: 48,
                 backgroundColor: "hsl(var(--destructive) / 0.08)",
                 color: "hsl(var(--destructive))",
                 border: "1px solid hsl(var(--destructive) / 0.35)",
