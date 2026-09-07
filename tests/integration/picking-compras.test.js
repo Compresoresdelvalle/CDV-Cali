@@ -36,21 +36,41 @@ describe("derivar", () => {
 
   it("llegó todo", () => {
     const d = derivar({ ...lineaNueva(det()), llegaron: 10, contada: true });
-    expect(d).toMatchObject({ buenas: 10, faltan: 0, sobran: 0, estado: "completo" });
+    expect(d).toMatchObject({
+      buenas: 10,
+      faltan: 0,
+      sobran: 0,
+      estado: "completo",
+    });
   });
 
   it("faltaron", () => {
     const d = derivar({ ...lineaNueva(det()), llegaron: 8, contada: true });
-    expect(d).toMatchObject({ buenas: 8, faltan: 2, sobran: 0, estado: "faltan" });
+    expect(d).toMatchObject({
+      buenas: 8,
+      faltan: 2,
+      sobran: 0,
+      estado: "faltan",
+    });
   });
 
   it("sobraron", () => {
     const d = derivar({ ...lineaNueva(det()), llegaron: 12, contada: true });
-    expect(d).toMatchObject({ buenas: 12, faltan: 0, sobran: 2, estado: "sobran" });
+    expect(d).toMatchObject({
+      buenas: 12,
+      faltan: 0,
+      sobran: 2,
+      estado: "sobran",
+    });
   });
 
   it("dañadas mandan sobre el resto en el semáforo", () => {
-    const d = derivar({ ...lineaNueva(det()), llegaron: 8, danadas: 2, contada: true });
+    const d = derivar({
+      ...lineaNueva(det()),
+      llegaron: 8,
+      danadas: 2,
+      contada: true,
+    });
     expect(d).toMatchObject({ buenas: 6, faltan: 2, estado: "danadas" });
   });
 
@@ -65,7 +85,10 @@ describe("resumen", () => {
   const base = lineaNueva(det());
 
   it("no deja confirmar mientras falten líneas por contar", () => {
-    const r = resumen([base, { ...base, detalle_id: "d2", llegaron: 5, contada: true }]);
+    const r = resumen([
+      base,
+      { ...base, detalle_id: "d2", llegaron: 5, contada: true },
+    ]);
     expect(r.contadas).toBe(1);
     expect(r.total).toBe(2);
     expect(r.listo).toBe(false);
@@ -73,20 +96,30 @@ describe("resumen", () => {
   });
 
   it("no deja confirmar si hay faltante sin decidir qué hacer", () => {
-    const r = resumen([{ ...base, llegaron: 8, contada: true, faltante_accion: null }]);
+    const r = resumen([
+      { ...base, llegaron: 8, contada: true, faltante_accion: null },
+    ]);
     expect(r.listo).toBe(false);
     expect(r.motivoBloqueo).toMatch(/faltante/i);
   });
 
   it("no deja confirmar si hay sobrante sin decidir", () => {
-    const r = resumen([{ ...base, llegaron: 12, contada: true, sobrante_accion: null }]);
+    const r = resumen([
+      { ...base, llegaron: 12, contada: true, sobrante_accion: null },
+    ]);
     expect(r.listo).toBe(false);
     expect(r.motivoBloqueo).toMatch(/sobrante/i);
   });
 
   it("suma lo que se reclama: faltante reclamado más dañadas", () => {
     const r = resumen([
-      { ...base, llegaron: 8, danadas: 1, contada: true, faltante_accion: "reclamar" },
+      {
+        ...base,
+        llegaron: 8,
+        danadas: 1,
+        contada: true,
+        faltante_accion: "reclamar",
+      },
     ]);
     expect(r.aReclamar).toBe(3);
     expect(r.aAjustar).toBe(0);
@@ -112,7 +145,12 @@ describe("resumen", () => {
 
 describe("todo en cero", () => {
   it("no deja recibir una compra en la que no llego nada: manda a cancelar", () => {
-    const l = { ...lineaNueva(det()), llegaron: 0, contada: true, faltante_accion: "ajustar" };
+    const l = {
+      ...lineaNueva(det()),
+      llegaron: 0,
+      contada: true,
+      faltante_accion: "ajustar",
+    };
     const r = resumen([l, { ...l, detalle_id: "d2" }]);
     expect(r.todoEnCero).toBe(true);
     expect(r.listo).toBe(false);
@@ -120,8 +158,17 @@ describe("todo en cero", () => {
   });
 
   it("si al menos una linea trae algo, no es el caso de todo en cero", () => {
-    const cero = { ...lineaNueva(det()), llegaron: 0, contada: true, faltante_accion: "ajustar" };
-    const algo = { ...lineaNueva(det({ id: "d2" })), llegaron: 10, contada: true };
+    const cero = {
+      ...lineaNueva(det()),
+      llegaron: 0,
+      contada: true,
+      faltante_accion: "ajustar",
+    };
+    const algo = {
+      ...lineaNueva(det({ id: "d2" })),
+      llegaron: 10,
+      contada: true,
+    };
     const r = resumen([cero, algo]);
     expect(r.todoEnCero).toBe(false);
     expect(r.listo).toBe(true);
@@ -130,22 +177,42 @@ describe("todo en cero", () => {
 
 describe("metodoReal", () => {
   it("'completo' que despues se corrige a mano deja de ser 'completo'", () => {
-    const l = { ...lineaNueva(det()), llegaron: 8, contada: true, metodo: METODO.COMPLETO };
+    const l = {
+      ...lineaNueva(det()),
+      llegaron: 8,
+      contada: true,
+      metodo: METODO.COMPLETO,
+    };
     expect(metodoReal(l)).toBe(METODO.MANUAL);
   });
 
   it("'completo' que sigue cuadrando con el pedido se conserva", () => {
-    const l = { ...lineaNueva(det()), llegaron: 10, contada: true, metodo: METODO.COMPLETO };
+    const l = {
+      ...lineaNueva(det()),
+      llegaron: 10,
+      contada: true,
+      metodo: METODO.COMPLETO,
+    };
     expect(metodoReal(l)).toBe(METODO.COMPLETO);
   });
 
   it("'nada' al que despues le suman unidades deja de ser 'nada'", () => {
-    const l = { ...lineaNueva(det()), llegaron: 2, contada: true, metodo: METODO.NADA };
+    const l = {
+      ...lineaNueva(det()),
+      llegaron: 2,
+      contada: true,
+      metodo: METODO.NADA,
+    };
     expect(metodoReal(l)).toBe(METODO.MANUAL);
   });
 
   it("el escaner se respeta tal cual", () => {
-    const l = { ...lineaNueva(det()), llegaron: 7, contada: true, metodo: METODO.ESCANER };
+    const l = {
+      ...lineaNueva(det()),
+      llegaron: 7,
+      contada: true,
+      metodo: METODO.ESCANER,
+    };
     expect(metodoReal(l)).toBe(METODO.ESCANER);
   });
 
@@ -200,7 +267,9 @@ describe("construirPayload", () => {
   });
 
   it("el servidor deriva: el payload no lleva buenas ni faltan", () => {
-    const p = construirPayload([{ ...lineaNueva(det()), llegaron: 10, contada: true }]);
+    const p = construirPayload([
+      { ...lineaNueva(det()), llegaron: 10, contada: true },
+    ]);
     expect(p[0]).not.toHaveProperty("buenas");
     expect(p[0]).not.toHaveProperty("faltan");
   });

@@ -33,12 +33,12 @@ desactualizado.
 
 **Lo que sí falta:**
 
-| Caso | Hoy |
-| --- | --- |
-| Llegó menos | El backend ya lo hace; la UI no lo usa |
-| Llegó de más | Bloqueado: la RPC lanza excepción si recibido > pedido |
-| Llegó dañado | El concepto no existe |
-| Contar / escanear | No hay pantalla |
+| Caso                        | Hoy                                                         |
+| --------------------------- | ----------------------------------------------------------- |
+| Llegó menos                 | El backend ya lo hace; la UI no lo usa                      |
+| Llegó de más                | Bloqueado: la RPC lanza excepción si recibido > pedido      |
+| Llegó dañado                | El concepto no existe                                       |
+| Contar / escanear           | No hay pantalla                                             |
 | Imprimir QR de lo que llegó | Existe `/ops/etiquetas`, suelta, sin conexión con la compra |
 
 **Moldes que se reutilizan sin inventar nada:**
@@ -132,12 +132,12 @@ Deshabilitado cuando se agotan, diciendo a quién se le avisó y hace cuánto.
 
 Los datos de los últimos 120 días dicen dónde está la mercancía de verdad:
 
-| Sede | Compras | Caja menor | Líneas de producto (prom.) | Total prom. |
-| --- | --- | --- | --- | --- |
-| CV | 475 | 77% | 0,4 | $88.816 |
-| **BODEGA** | 159 | 19% | **2,5** (máx. 17) | **$1.454.534** |
-| L3 | 56 | 73% | 0,3 | $61.776 |
-| CHV | 39 | 64% | 0,4 | $124.067 |
+| Sede       | Compras | Caja menor | Líneas de producto (prom.) | Total prom.    |
+| ---------- | ------- | ---------- | -------------------------- | -------------- |
+| CV         | 475     | 77%        | 0,4                        | $88.816        |
+| **BODEGA** | 159     | 19%        | **2,5** (máx. 17)          | **$1.454.534** |
+| L3         | 56      | 73%        | 0,3                        | $61.776        |
+| CHV        | 39      | 64%        | 0,4                        | $124.067       |
 
 En CV, L3 y CHV las compras son mayoritariamente **caja menor sin productos**:
 transporte, papelería, gastos. Promedian menos de media línea, o sea que la
@@ -182,10 +182,10 @@ quedan exactamente como están hoy: sin picking, sin advertencias y sin fricció
 
 Dos números. El resto lo deriva el sistema.
 
-| Campo | Quién |
-| --- | --- |
-| Pedido | el sistema |
-| **Llegaron** | el operario |
+| Campo                | Quién                             |
+| -------------------- | --------------------------------- |
+| Pedido               | el sistema                        |
+| **Llegaron**         | el operario                       |
 | **De esas, dañadas** | el operario, solo si llegaron > 0 |
 
 Derivados, mostrados en lenguaje llano:
@@ -223,18 +223,18 @@ explícito de **contada / sin contar**, y tres formas de contarla:
   cero, y va con confirmación porque borra la línea de la factura.
 
 **No se puede confirmar con líneas sin contar.** El botón queda deshabilitado y
-dice qué falta: *"Faltan 3 líneas por contar"*, con un enlace que salta a la
+dice qué falta: _"Faltan 3 líneas por contar"_, con un enlace que salta a la
 primera. La barra de progreso cuenta líneas contadas, no líneas vistas.
 
 ## Las preguntas, solo cuando hacen falta
 
-- **Faltan** → *¿el proveedor lo facturó?*
+- **Faltan** → _¿el proveedor lo facturó?_
   - **No lo despacharon ni lo cobran** → se ajusta la factura hacia abajo
     (`p_recepciones`, que ya existe).
   - **Sí, hay que reclamarlo** → la factura no se toca, se recibe completo y esas
     unidades se reclaman.
 - **Dañadas** → siempre reclamo, sin preguntar. Llegó, pero no sirve.
-- **Sobran** → *¿entra y ya, o entra y hay que reportarlo?* En los dos casos entra
+- **Sobran** → _¿entra y ya, o entra y hay que reportarlo?_ En los dos casos entra
   al inventario, porque físicamente está en la bodega. Si no entra, el conteo
   cíclico lo va a marcar como descuadre semanas después.
 
@@ -313,20 +313,20 @@ no de una decisión del usuario que tenga que tomar cada vez.
 Con `StatusBadge` y los tokens del sistema, **siempre color + texto**: con
 guantes, polvo y contraluz, el color solo no alcanza.
 
-| Situación | Token |
-| --- | --- |
-| Sin contar | `--muted-foreground` |
-| Completo | `--success` |
-| Faltan | `--warning` |
-| Dañadas | `--destructive` (en `StatusBadge`: `danger`) |
-| Sobran | `--info` |
+| Situación  | Token                                        |
+| ---------- | -------------------------------------------- |
+| Sin contar | `--muted-foreground`                         |
+| Completo   | `--success`                                  |
+| Faltan     | `--warning`                                  |
+| Dañadas    | `--destructive` (en `StatusBadge`: `danger`) |
+| Sobran     | `--info`                                     |
 
 ### Escáner
 
 Botón flotante siempre visible, como manda la convención del proyecto. Al leer
 una referencia: salta a esa línea, le suma uno, vibra corto y avisa. Si la
-referencia no pertenece a la compra, lo dice con nombre propio — *"MAT6 no está
-en la compra #412"* — y ofrece ver qué sí está, en vez de un error mudo.
+referencia no pertenece a la compra, lo dice con nombre propio — _"MAT6 no está
+en la compra #412"_ — y ofrece ver qué sí está, en vez de un error mudo.
 
 ### Barra de resumen
 
@@ -343,8 +343,8 @@ Reusa `generarEtiquetasPDF` y respeta su `MAX_COPIAS_POR_PRODUCTO`.
 ### El conteo no se pierde
 
 El progreso se guarda en `localStorage` por compra en cada cambio. Si se apaga el
-celular a la línea 38 de 40, al volver ofrece: *"Tienes un conteo sin terminar de
-hace 12 minutos, ¿lo retomo?"*. Se borra al confirmar.
+celular a la línea 38 de 40, al volver ofrece: _"Tienes un conteo sin terminar de
+hace 12 minutos, ¿lo retomo?"_. Se borra al confirmar.
 
 ### Estados que hay que cubrir
 
@@ -424,8 +424,8 @@ aparecen descuadres, permite ver si venían de líneas escaneadas una por una o 
 líneas despachadas con el botón de "llegó completo", que es justo la diferencia
 entre un conteo real y uno de trámite.
 
-No es burocracia. Cuando dentro de un mes pregunten *"¿por qué esta compra bajó
-$60.000?"*, la respuesta tiene que tener nombre y fecha.
+No es burocracia. Cuando dentro de un mes pregunten _"¿por qué esta compra bajó
+$60.000?"_, la respuesta tiene que tener nombre y fecha.
 
 RLS: lectura para Admin y para quien sea de la sede de la compra; escritura solo
 por la RPC.

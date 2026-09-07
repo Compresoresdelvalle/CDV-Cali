@@ -103,7 +103,10 @@ export default function BotonAvisarAdmin({ origen, origenId, className = "" }) {
             >
               ¿Qué está pasando?
             </h3>
-            <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+            <p
+              className="text-xs"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
               Escríbelo corto y concreto. Le va a salir en pantalla apenas abra
               la aplicación, así que entre más claro, menos llamadas.
             </p>
@@ -139,7 +142,10 @@ export default function BotonAvisarAdmin({ origen, origenId, className = "" }) {
                 onClick={enviar}
                 disabled={enviando || motivo.trim().length < 5}
                 className="flex-1 rounded-lg text-sm font-medium text-white disabled:opacity-40"
-                style={{ minHeight: 48, backgroundColor: "hsl(var(--warning))" }}
+                style={{
+                  minHeight: 48,
+                  backgroundColor: "hsl(var(--warning))",
+                }}
               >
                 {enviando ? "Avisando…" : "Avisar"}
               </button>

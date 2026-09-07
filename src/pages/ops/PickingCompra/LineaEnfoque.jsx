@@ -189,8 +189,7 @@ export default function LineaEnfoque({
             className="text-sm font-medium"
             style={{ color: "hsl(var(--foreground))" }}
           >
-            Faltan {d.faltan} unidad{d.faltan === 1 ? "" : "es"}. ¿Qué
-            hacemos?
+            Faltan {d.faltan} unidad{d.faltan === 1 ? "" : "es"}. ¿Qué hacemos?
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <ChoiceBtn

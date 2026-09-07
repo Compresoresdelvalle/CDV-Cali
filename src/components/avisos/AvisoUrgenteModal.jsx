@@ -23,7 +23,8 @@ import { formatDate } from "../../lib/utils";
 // AnularGarantiaModal, Clientes y VentaNueva ya viven en z-[100]. Con empate
 // decide el orden del DOM, y éste es justamente el aviso que NO se puede perder
 // debajo de otra cosa.
-const Z_ENCIMA_DE_TODO = "fixed inset-0 z-[200] flex items-center justify-center p-4";
+const Z_ENCIMA_DE_TODO =
+  "fixed inset-0 z-[200] flex items-center justify-center p-4";
 
 export default function AvisoUrgenteModal({ items, perfil, onMarcar }) {
   const navigate = useNavigate();
@@ -102,7 +103,10 @@ export default function AvisoUrgenteModal({ items, perfil, onMarcar }) {
         </p>
 
         {pendientes.length > 1 && (
-          <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+          <p
+            className="text-xs"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
             Hay {pendientes.length - 1} aviso
             {pendientes.length - 1 === 1 ? "" : "s"} más esperando.
           </p>

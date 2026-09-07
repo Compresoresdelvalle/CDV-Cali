@@ -172,7 +172,10 @@ export function construirPayload(lineas) {
  */
 export function metodoReal(linea) {
   const d = derivar(linea);
-  if (linea.metodo === METODO.COMPLETO && (d.llegaron !== d.pedido || d.danadas > 0)) {
+  if (
+    linea.metodo === METODO.COMPLETO &&
+    (d.llegaron !== d.pedido || d.danadas > 0)
+  ) {
     return METODO.MANUAL;
   }
   if (linea.metodo === METODO.NADA && d.llegaron !== 0) return METODO.MANUAL;
