@@ -85,7 +85,7 @@ export default function Inventario({ datos }) {
           rotulo="Plata dormida"
           valor={formatCOP(dormido)}
           color={pct >= 50 ? "hsl(var(--warning))" : undefined}
-          explicacion={`${num(datos?.n_dormido)} productos sin salir en 90 días — el ${pct.toFixed(0)}% del capital.`}
+          explicacion={`${num(datos?.n_dormido)} productos sin un solo movimiento en 90 días — el ${pct.toFixed(0)}% del capital.`}
           a="/admin/reorden"
           accion="Ver reorden"
         />

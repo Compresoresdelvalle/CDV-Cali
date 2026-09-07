@@ -31,6 +31,11 @@ export default function PanelDetalle({
   cargando,
   error,
   onCerrar,
+  // El servidor corta el detalle en 200 filas. Si el concepto tiene más, el
+  // pie tiene que decir el total DE VERDAD, no la suma de lo que alcanzó a
+  // traer: si no, contradice en silencio la cifra de la sección que lo abrió.
+  totalReal,
+  nReal,
 }) {
   const cerrarRef = useRef(null);
   const focoPrevio = useRef(null);
@@ -53,7 +58,10 @@ export default function PanelDetalle({
 
   if (!abierto) return null;
 
-  const total = filas.reduce((s, f) => s + Number(f.monto ?? 0), 0);
+  const sumaVisible = filas.reduce((s, f) => s + Number(f.monto ?? 0), 0);
+  const total = totalReal == null ? sumaVisible : Number(totalReal);
+  const n = nReal == null ? filas.length : Number(nReal);
+  const recortado = n > filas.length;
 
   return (
     <>
@@ -234,7 +242,9 @@ export default function PanelDetalle({
               className="text-[12px]"
               style={{ color: "hsl(var(--muted-foreground))" }}
             >
-              {filas.length} {filas.length === 1 ? "registro" : "registros"}
+              {recortado
+                ? `${filas.length} de ${n} registros`
+                : `${n} ${n === 1 ? "registro" : "registros"}`}
             </span>
             <span
               className="text-[15px] font-semibold tabular-nums"
