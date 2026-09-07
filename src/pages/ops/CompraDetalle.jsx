@@ -78,6 +78,8 @@ export default function CompraDetalle() {
             `id, numero, fecha, fecha_recepcion, proveedor, factura_proveedor,
              observaciones, subtotal, iva, total, recibida, estado, sede_destino_id,
              metodo_pago, cuenta_bancaria, descuento_valor, es_caja_menor, concepto,
+             retefuente_pct, reteica_pct, reteiva_pct,
+             retefuente_valor, reteica_valor, reteiva_valor, retenciones_total,
              registrador:registrado_por(nombre)`,
           )
           .eq("id", id)
@@ -378,6 +380,52 @@ export default function CompraDetalle() {
                 <span>Total</span>
                 <span className="v">{formatCOP(compra.total)}</span>
               </div>
+              {/* Lo que le retenemos al proveedor y consignamos a la DIAN.
+                  La factura no cambia: cambia cuánta plata sale del cajón.
+                  Cada línea aparece solo si tiene valor — una compra rara vez
+                  lleva las tres y tres ceros seguidos no informan nada. */}
+              {Number(compra.retenciones_total ?? 0) > 0 && (
+                <>
+                  {Number(compra.retefuente_valor ?? 0) > 0 && (
+                    <div className="ln">
+                      <span>
+                        Retefuente {Number(compra.retefuente_pct ?? 0)}%
+                      </span>
+                      <span className="v">
+                        −{formatCOP(Number(compra.retefuente_valor))}
+                      </span>
+                    </div>
+                  )}
+                  {Number(compra.reteica_valor ?? 0) > 0 && (
+                    <div className="ln">
+                      <span>ReteICA {Number(compra.reteica_pct ?? 0)}%</span>
+                      <span className="v">
+                        −{formatCOP(Number(compra.reteica_valor))}
+                      </span>
+                    </div>
+                  )}
+                  {Number(compra.reteiva_valor ?? 0) > 0 && (
+                    <div className="ln">
+                      <span>ReteIVA {Number(compra.reteiva_pct ?? 0)}%</span>
+                      <span className="v">
+                        −{formatCOP(Number(compra.reteiva_valor))}
+                      </span>
+                    </div>
+                  )}
+                  <div className="ln tot">
+                    <span>Neto a pagar</span>
+                    <span className="v">
+                      {formatCOP(
+                        Math.max(
+                          0,
+                          Number(compra.total ?? 0) -
+                            Number(compra.retenciones_total ?? 0),
+                        ),
+                      )}
+                    </span>
+                  </div>
+                </>
+              )}
               {/* B9: forma de pago + cuenta destino / crédito */}
               <div
                 className="ln"
