@@ -80,9 +80,12 @@ function Dialog({ state, close }) {
         >
           {state.titulo}
         </h2>
+        {/* whitespace-pre-line: los mensajes de verdad tienen párrafos (qué
+            pasa, qué revisar después, que no se puede deshacer). Sin esto se
+            apelotonaban en un bloque que nadie lee. */}
         {state.mensaje && (
           <p
-            className="text-sm mb-4"
+            className="text-sm mb-4 whitespace-pre-line"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
             {state.mensaje}

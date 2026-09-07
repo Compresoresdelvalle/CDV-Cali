@@ -495,6 +495,9 @@ export default function PickingCompra() {
 
   const total = lineas.length;
   const contadas = lineas.filter((l) => l.contada).length;
+  // Primera linea sin contar, para poder saltar directo a lo que falta en vez
+  // de hacer que el operario recorra de a una buscandola.
+  const indiceSinContar = lineas.findIndex((l) => !l.contada);
   const pct = total > 0 ? (contadas / total) * 100 : 0;
   const lineaActual = lineas[index] ?? null;
 
@@ -644,6 +647,11 @@ export default function PickingCompra() {
             />
           )}
 
+          {/* En la ultima linea NO se pinta "Siguiente": tener dos botones de
+              avanzar (uno que no lleva a ningun lado y otro que recibe la
+              compra) confunde, y lo reporto el dueño probandolo. Si quedan
+              lineas sin contar, el boton lleva a la primera que falta en vez de
+              avanzar de a una. */}
           <div className="flex gap-2">
             <button
               type="button"
@@ -658,19 +666,34 @@ export default function PickingCompra() {
             >
               Anterior
             </button>
-            <button
-              type="button"
-              disabled={index >= total - 1}
-              onClick={() => setIndex((i) => Math.min(total - 1, i + 1))}
-              className="flex-1 rounded-lg border text-sm font-medium disabled:opacity-40"
-              style={{
-                minHeight: 48,
-                borderColor: "hsl(var(--border))",
-                color: "hsl(var(--foreground))",
-              }}
-            >
-              Siguiente
-            </button>
+            {index < total - 1 ? (
+              <button
+                type="button"
+                onClick={() => setIndex((i) => Math.min(total - 1, i + 1))}
+                className="flex-1 rounded-lg border text-sm font-medium"
+                style={{
+                  minHeight: 48,
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--foreground))",
+                }}
+              >
+                Siguiente
+              </button>
+            ) : indiceSinContar >= 0 ? (
+              <button
+                type="button"
+                onClick={() => setIndex(indiceSinContar)}
+                className="flex-1 rounded-lg border text-sm font-medium"
+                style={{
+                  minHeight: 48,
+                  borderColor: "hsl(var(--warning) / 0.5)",
+                  backgroundColor: "hsl(var(--warning) / 0.08)",
+                  color: "hsl(var(--warning))",
+                }}
+              >
+                Ir a lo que falta
+              </button>
+            ) : null}
           </div>
         </>
       ) : (
@@ -822,9 +845,13 @@ export default function PickingCompra() {
               className="text-sm font-medium tabular-nums truncate"
               style={{ color: "hsl(var(--foreground))" }}
             >
-              contadas {r.contadas} de {r.total}
-              {r.aReclamar > 0 && ` · ${r.aReclamar} a reclamar`}
-              {r.deMas > 0 && ` · ${r.deMas} de más`}
+              {r.contadas === r.total
+                ? `Ya contaste las ${r.total} línea${r.total === 1 ? "" : "s"}`
+                : `Llevas ${r.contadas} de ${r.total} línea${r.total === 1 ? "" : "s"}`}
+              {r.aReclamar > 0 &&
+                ` · ${r.aReclamar} unidad${r.aReclamar === 1 ? "" : "es"} para reclamarle al proveedor`}
+              {r.deMas > 0 &&
+                ` · ${r.deMas} de más que entran al inventario`}
             </p>
             {r.motivoBloqueo && (
               <p
