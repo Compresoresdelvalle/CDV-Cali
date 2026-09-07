@@ -245,8 +245,9 @@ export default function BloqueRetenciones({
                 color: "hsl(var(--primary))",
               }}
             >
-              Aplicar las tarifas de siempre ({Number(sugeridas.retefuentePct) || 0}
-              % · {Number(sugeridas.reteicaPct) || 0}% ·{" "}
+              Aplicar las tarifas de siempre (
+              {Number(sugeridas.retefuentePct) || 0}% ·{" "}
+              {Number(sugeridas.reteicaPct) || 0}% ·{" "}
               {Number(sugeridas.reteivaPct) || 0}%)
             </button>
           )}
