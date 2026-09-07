@@ -3,7 +3,10 @@ import { calcularRetenciones, normalizarPct } from "../../lib/retenciones";
 import { formatCOP } from "../../lib/utils";
 
 /**
- * Bloque plegable de retenciones, compartido por Nueva Venta y la OT.
+ * Bloque plegable de retenciones, compartido por Nueva Venta, la OT y Nueva
+ * Compra. En venta el cliente nos retiene y nos entra menos; en compra nosotros
+ * le retenemos al proveedor y le pagamos menos. La aritmética es idéntica: lo
+ * único que cambia son las palabras (ver `modo`).
  *
  * Apagado por defecto: mientras nadie lo abra, la pantalla se ve y se comporta
  * exactamente igual que antes de que esto existiera. Ese es el criterio de
@@ -23,6 +26,7 @@ import { formatCOP } from "../../lib/utils";
  * @param {object}   p.valores     { retefuentePct, reteicaPct, reteivaPct }
  * @param {Function} p.onChange    recibe el objeto de valores completo
  * @param {object}   [p.sugeridas] tarifas de Configuración con que precargar
+ * @param {"venta"|"compra"} [p.modo] cambia las palabras, no la aritmética
  * @param {boolean}  [p.abierto]   fuerza el estado abierto (para pruebas)
  * @param {boolean}  [p.soloLectura]
  */
@@ -115,6 +119,7 @@ export default function BloqueRetenciones({
   valores = {},
   onChange,
   sugeridas = null,
+  modo = "venta",
   abierto: abiertoInicial = false,
   soloLectura = false,
 }) {
@@ -152,6 +157,19 @@ export default function BloqueRetenciones({
       reteivaPct: Number(sugeridas.reteivaPct) || 0,
     });
   };
+
+  // El sentido del dinero es el opuesto en cada lado: en venta el cliente nos
+  // retiene y nos entra menos; en compra nosotros le retenemos al proveedor y
+  // le pagamos menos. La aritmética es idéntica, solo cambian las palabras.
+  const esCompra = modo === "compra";
+  const invitacion = esCompra
+    ? "¿Le retenemos al proveedor? Tocar para aplicar"
+    : "¿El cliente retiene? Tocar para aplicar";
+  const explicacion = esCompra
+    ? "Lo que le descontamos al proveedor y consignamos a la DIAN o al municipio. La factura no cambia: solo cambia cuánta plata sale."
+    : "Lo que el cliente descuenta y consigna a la DIAN o al municipio. La factura no cambia: solo cambia cuánta plata entra.";
+  const etiquetaTotal = esCompra ? "Total de la factura" : "Total facturado";
+  const etiquetaNeto = esCompra ? "Neto a pagar" : "Neto a recibir";
 
   // Recibe el número ya normalizado por la Fila, al salir del campo.
   const cambiar = (clave) => (n) => onChange?.({ ...valores, [clave]: n });
@@ -194,7 +212,7 @@ export default function BloqueRetenciones({
             ? `- ${formatCOP(ret.total)}`
             : soloLectura
               ? "Sin retenciones"
-              : "¿El cliente retiene? Tocar para aplicar"}
+              : invitacion}
           <span aria-hidden="true">{abierto ? "▴" : "▾"}</span>
         </span>
       </button>
@@ -205,8 +223,7 @@ export default function BloqueRetenciones({
             className="text-[12px]"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            Lo que el cliente descuenta y consigna a la DIAN o al municipio. La
-            factura no cambia: solo cambia cuánta plata entra.
+            {explicacion}
           </p>
 
           {/* Las tarifas de Configuración quedan a un toque, pero no se ponen
@@ -262,7 +279,7 @@ export default function BloqueRetenciones({
               className="text-[13px]"
               style={{ color: "hsl(var(--muted-foreground))" }}
             >
-              Total facturado
+              {etiquetaTotal}
             </span>
             <span
               className="text-[13px] tabular-nums"
@@ -276,7 +293,7 @@ export default function BloqueRetenciones({
               className="text-[13px] font-semibold"
               style={{ color: "hsl(var(--foreground))" }}
             >
-              Neto a recibir
+              {etiquetaNeto}
             </span>
             <span
               className="text-[15px] font-semibold tabular-nums"
