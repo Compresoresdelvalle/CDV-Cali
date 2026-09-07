@@ -144,6 +144,11 @@ const PARAM_LABELS = {
   dias_alerta_ot_abandonada: "Alerta de OT sin recoger",
   dias_garantia_venta: "Garantía default en ventas",
   dias_conteo_ciclico: "Cadencia de conteo cíclico",
+  // Retenciones: son SUGERENCIAS. Cada venta y cada OT las precargan al abrir
+  // el bloque y se pueden cambiar ahí mismo sin tocar estos valores.
+  retencion_retefuente_pct: "Retefuente sugerida",
+  retencion_reteica_pct: "ReteICA sugerida",
+  retencion_reteiva_pct: "ReteIVA sugerida",
 };
 export function paramLabel(key) {
   return PARAM_LABELS[key] ?? key;

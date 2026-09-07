@@ -51,6 +51,10 @@ export default function CompraNueva() {
       .then(({ data }) => setCuentasBanco(data ?? []));
   }, []);
   const [concepto, setConcepto] = useState(""); // #31 caja menor
+  // Categoría del gasto. Es lo que decide si esta plata resta del Resultado
+  // del panel: sin ella el egreso cae a la bandeja de clasificación.
+  const [categoriaGasto, setCategoriaGasto] = useState("");
+  const [catsGasto, setCatsGasto] = useState([]);
   const [monto, setMonto] = useState(""); // #31 caja menor (total manual)
   // estado_compra removido del form: se asigna 'completada' en BD por default.
   // Las garantías se gestionarán desde la compra ya recibida (Fase 13).
@@ -68,6 +72,22 @@ export default function CompraNueva() {
 
   // Precarga del carrito desde Reorden ("Generar orden de compra").
   //
+  // Catálogo de categorías de gasto, para el modo caja menor.
+  useEffect(() => {
+    let vivo = true;
+    supabase
+      .from("categorias_gasto")
+      .select("id, nombre, afecta_resultado")
+      .eq("activa", true)
+      .order("orden")
+      .then(({ data }) => {
+        if (vivo) setCatsGasto(data ?? []);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
   // Se hace una sola vez. Si el usuario ya empezó a armar el carrito no se le
   // pisa, y se limpia el state del historial para que un F5 no vuelva a
   // precargar encima de lo que ya haya.
@@ -373,6 +393,12 @@ export default function CompraNueva() {
       setError("El concepto es obligatorio.");
       return;
     }
+    if (!categoriaGasto) {
+      setError(
+        "Elige la categoría del egreso: es lo que decide si esta plata resta del resultado del mes.",
+      );
+      return;
+    }
     if (!m || m <= 0) {
       setError("Ingresa un monto mayor a 0.");
       return;
@@ -396,6 +422,7 @@ export default function CompraNueva() {
         p_observaciones: observaciones.trim() || null,
         p_metodo_pago: metodoPago,
         p_cuenta_bancaria: esElectronico ? cuentaBancaria : null,
+        p_categoria_gasto_id: Number(categoriaGasto),
       });
       if (rpcErr) throw new Error(rpcErr.message);
       avisarOk("Gasto de caja menor registrado.");
@@ -1129,6 +1156,34 @@ export default function CompraNueva() {
                     className="finput"
                   />
                 </Field>
+                <Field label="Categoría" req>
+                  <select
+                    value={categoriaGasto}
+                    onChange={(e) => setCategoriaGasto(e.target.value)}
+                    className="finput sans"
+                  >
+                    <option value="">Elige una…</option>
+                    {catsGasto
+                      .filter((c) => c.afecta_resultado)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nombre}
+                        </option>
+                      ))}
+                    {/* Estas NO restan del resultado: pagan mercancía ya contada
+                        en el costo, o mueven plata de un lado a otro. Van
+                        aparte para que nadie las elija creyendo que es un gasto. */}
+                    <optgroup label="No son gasto del periodo">
+                      {catsGasto
+                        .filter((c) => !c.afecta_resultado)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nombre}
+                          </option>
+                        ))}
+                    </optgroup>
+                  </select>
+                </Field>
               </div>
 
               {/* S6-E: método de pago del gasto (antes siempre quedaba Efectivo). */}
@@ -1333,7 +1388,7 @@ export default function CompraNueva() {
               guardando ||
               (modo === "normal"
                 ? carrito.length === 0 || !proveedor.trim()
-                : !concepto.trim() || !(Number(monto) > 0))
+                : !concepto.trim() || !categoriaGasto || !(Number(monto) > 0))
             }
             className="btn btn-pri mt-2 w-full justify-center disabled:opacity-40"
             style={{ height: 48 }}

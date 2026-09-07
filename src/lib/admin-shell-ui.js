@@ -7,6 +7,8 @@
  */
 import {
   LayoutDashboard,
+  LineChart,
+  Tags,
   Bell,
   BarChart3,
   TrendingUp,
@@ -35,6 +37,12 @@ export const SECCIONES_ADMIN = [
         label: "Dashboard",
         href: "/admin",
         icon: LayoutDashboard,
+      },
+      {
+        id: "panel",
+        label: "Panel",
+        href: "/admin/panel",
+        icon: LineChart,
       },
       { id: "alertas", label: "Alertas", href: "/admin/alertas", icon: Bell },
     ],
@@ -85,6 +93,12 @@ export const SECCIONES_ADMIN = [
         label: "Conteo cíclico",
         href: "/admin/conteo",
         icon: ClipboardList,
+      },
+      {
+        id: "egresos",
+        label: "Clasificar egresos",
+        href: "/admin/egresos",
+        icon: Tags,
       },
       {
         id: "notas-credito",

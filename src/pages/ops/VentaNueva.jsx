@@ -18,6 +18,11 @@ import { supabase } from "../../lib/supabase";
 import { formatCOP, formatDate } from "../../lib/utils";
 import { avisarOk, avisarError } from "../../lib/notify";
 import { applyKeywordSearch } from "../../lib/search";
+import BloqueRetenciones from "../../components/ventas/BloqueRetenciones";
+import {
+  calcularRetenciones,
+  CLAVES_TARIFA_RETENCION,
+} from "../../lib/retenciones";
 import QRScanner from "../../components/forms/QRScanner";
 import ClientePicker from "../../components/forms/ClientePicker";
 import UbicacionChip from "../../components/ui/UbicacionChip";
@@ -85,6 +90,38 @@ export default function VentaNueva() {
   }, []);
   const [descuentoValor, setDescuentoValor] = useState(0); // B3: descuento en $
   const [domicilio, setDomicilio] = useState(0); // B3: valor de domicilio en $
+  // Retenciones. Arrancan en cero: mientras nadie abra el bloque, la venta se
+  // registra exactamente igual que siempre.
+  const [retenciones, setRetenciones] = useState({
+    retefuentePct: 0,
+    reteicaPct: 0,
+    reteivaPct: 0,
+  });
+  // Tarifas sugeridas de Configuración, solo para precargar el bloque cuando
+  // la vendedora lo abre. Si la consulta falla, abre en cero y ella escribe
+  // los porcentajes a mano: no es motivo para bloquear una venta.
+  const [tarifasSugeridas, setTarifasSugeridas] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    supabase
+      .from("parametros_sistema")
+      .select("key, value")
+      .in("key", Object.values(CLAVES_TARIFA_RETENCION))
+      .then(({ data }) => {
+        if (!vivo || !data) return;
+        const porClave = Object.fromEntries(
+          data.map((r) => [r.key, Number(r.value)]),
+        );
+        setTarifasSugeridas({
+          retefuentePct: porClave[CLAVES_TARIFA_RETENCION.retefuentePct] ?? 0,
+          reteicaPct: porClave[CLAVES_TARIFA_RETENCION.reteicaPct] ?? 0,
+          reteivaPct: porClave[CLAVES_TARIFA_RETENCION.reteivaPct] ?? 0,
+        });
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
   const [ivaPct, setIvaPct] = useState(IVA_DEFAULT);
   const [observaciones, setObservaciones] = useState("");
   const [confirmando, setConfirmando] = useState(false);
@@ -398,8 +435,20 @@ export default function VentaNueva() {
     baseIva * (1 + ivaPct / 100) + Math.max(0, domicilio),
   );
 
-  // Pago mixto: la suma de las formas debe igualar el total (COP, tolerancia 1).
-  const totalRedondeado = Math.round(total);
+  // Pago mixto: la suma de las formas debe igualar lo que el cliente ENTREGA,
+  // que con retención es el neto, no el total facturado. Tiene que coincidir con
+  // fn_registrar_venta: si la pantalla midiera contra el total, habilitaría el
+  // botón y el servidor rechazaría la venta.
+  const retencionesCalculadas = calcularRetenciones({
+    base: baseIva,
+    iva,
+    total,
+    retefuentePct: retenciones.retefuentePct,
+    reteicaPct: retenciones.reteicaPct,
+    reteivaPct: retenciones.reteivaPct,
+  });
+  const hayRetencion = retencionesCalculadas.hay;
+  const totalRedondeado = retencionesCalculadas.neto;
   const sumaMixto =
     Math.round(Number(pagoEfectivo) || 0) +
     Math.round(Number(pagoTransfer) || 0);
@@ -428,7 +477,9 @@ export default function VentaNueva() {
     if (metodoPago === "Mixto") {
       if (!mixtoCuadra) {
         setError(
-          `La suma de los pagos (${formatCOP(sumaMixto)}) no coincide con el total (${formatCOP(totalRedondeado)}).`,
+          hayRetencion
+            ? `La suma de los pagos (${formatCOP(sumaMixto)}) no coincide con lo que el cliente entrega (${formatCOP(totalRedondeado)}): el total es ${formatCOP(total)} y le retienen ${formatCOP(retencionesCalculadas.total)}.`
+            : `La suma de los pagos (${formatCOP(sumaMixto)}) no coincide con el total (${formatCOP(totalRedondeado)}).`,
         );
         return;
       }
@@ -469,6 +520,9 @@ export default function VentaNueva() {
         p_descuento_valor: descuento,
         p_domicilio: Math.max(0, domicilio),
         p_iva_pct: ivaPct,
+        p_retefuente_pct: retenciones.retefuentePct,
+        p_reteica_pct: retenciones.reteicaPct,
+        p_reteiva_pct: retenciones.reteivaPct,
         p_cuenta_bancaria:
           metodoPago === "Mixto" ? null : cuentaBancaria || null,
         p_pagos:
@@ -1181,7 +1235,8 @@ export default function VentaNueva() {
                 }}
               >
                 <span>
-                  Suma: {formatCOP(sumaMixto)} / Total:{" "}
+                  Suma: {formatCOP(sumaMixto)} /{" "}
+                  {hayRetencion ? "A recibir" : "Total"}:{" "}
                   {formatCOP(totalRedondeado)}
                 </span>
                 <span>
@@ -1313,6 +1368,15 @@ export default function VentaNueva() {
             <span>Total</span>
             <span className="v">{formatCOP(total)}</span>
           </div>
+
+          <BloqueRetenciones
+            base={baseIva}
+            iva={iva}
+            total={total}
+            valores={retenciones}
+            onChange={setRetenciones}
+            sugeridas={tarifasSugeridas}
+          />
           <button
             onClick={confirmarVenta}
             disabled={carrito.length === 0 || confirmando || !mixtoCuadra}
