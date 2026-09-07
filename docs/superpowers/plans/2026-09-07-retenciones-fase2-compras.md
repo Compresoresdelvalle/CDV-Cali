@@ -1282,3 +1282,13 @@ está desplegada y en uso. Cerrarlo exige tocar `fn_registrar_venta`,
 `fn_convertir_cotizacion` y el camino de la OT: es su propio cambio, con su
 propia verificación. El aviso en pantalla sí lo hereda, porque el bloque es
 compartido.
+
+**Nota sobre los nombres de archivo.** Este plan nombra las migraciones
+`20260907T1…T7`, que fue como se escribieron. Al terminar se renombraron a la
+versión con la que quedaron realmente aplicadas en producción
+(`20260907191803`, `20260907191853`, `20260907192244`, `20260907192555`,
+`20260907194526`, `20260907200433`, `20260907201713`), que es la convención del
+repositorio. No es cosmético: con el nombre viejo, un `supabase db push` habría
+tratado la primera como pendiente y habría vuelto a **bajar las columnas de
+retención**, perdiendo lo que hubiera guardado para entonces. La `T3` no existe:
+se fundió en la primera.
