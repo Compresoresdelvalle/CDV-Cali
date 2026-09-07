@@ -596,7 +596,9 @@ test.describe("Panel — poco margen Y volumen", () => {
     const seccion = page
       .locator("section")
       .filter({ hasText: "Cómo se compone la venta" });
-    await seccion.getByRole("button", { name: "Producto", exact: true }).click();
+    await seccion
+      .getByRole("button", { name: "Producto", exact: true })
+      .click();
     await expect(seccion.locator("tbody tr").first()).toBeVisible({
       timeout: 30_000,
     });
@@ -618,9 +620,9 @@ test.describe("Panel — poco margen Y volumen", () => {
     const sinFiltro = await parteDe();
 
     await seccion.getByRole("button", { name: "≥ 3%", exact: true }).click();
-    await expect(
-      seccion.getByText(/Mostrando \d+ de \d+/),
-    ).toBeVisible({ timeout: 30_000 });
+    await expect(seccion.getByText(/Mostrando \d+ de \d+/)).toBeVisible({
+      timeout: 30_000,
+    });
 
     // Con el filtro puesto, el de arriba pesa al menos 3% de la venta: ya no es
     // una venta suelta, es plata que mueve el negocio.
@@ -649,7 +651,9 @@ test.describe("Panel — poco margen Y volumen", () => {
     const seccion = page
       .locator("section")
       .filter({ hasText: "Cómo se compone la venta" });
-    await seccion.getByRole("button", { name: "Producto", exact: true }).click();
+    await seccion
+      .getByRole("button", { name: "Producto", exact: true })
+      .click();
     await expect(seccion.locator("tbody tr").first()).toBeVisible({
       timeout: 30_000,
     });
@@ -668,5 +672,47 @@ test.describe("Panel — poco margen Y volumen", () => {
     expect(typeof porPct).toBe("string");
     expect(typeof porPlata).toBe("string");
     expect(porPlata.length).toBeGreaterThan(0);
+  });
+});
+
+test.describe("Panel — el CSV es lo que se ve", () => {
+  test("con filtro puesto el archivo trae solo las filas visibles", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+    await page.getByRole("button", { name: "Este año" }).click();
+
+    const seccion = page
+      .locator("section")
+      .filter({ hasText: "Cómo se compone la venta" });
+    await seccion
+      .getByRole("button", { name: "Producto", exact: true })
+      .click();
+    await expect(seccion.locator("tbody tr").first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await seccion.getByRole("button", { name: "≥ 3%", exact: true }).click();
+    await expect(seccion.getByText(/Mostrando \d+ de \d+/)).toBeVisible({
+      timeout: 30_000,
+    });
+
+    const visibles = await seccion.locator("tbody tr").count();
+
+    const [descarga] = await Promise.all([
+      page.waitForEvent("download"),
+      seccion.getByRole("button", { name: "Exportar" }).click(),
+    ]);
+    const texto = (await import("node:fs")).readFileSync(
+      await descarga.path(),
+      "utf8",
+    );
+    const filas = texto.trim().split(/\r?\n/).length - 1; // menos el encabezado
+
+    // El boton promete exportar lo que se ve. Antes traia las 101 filas del
+    // servidor aunque la pantalla mostrara 3.
+    expect(filas).toBe(visibles);
+    expect(filas).toBeLessThan(20);
+    expect(texto).not.toContain("Otros ");
   });
 });
