@@ -42,7 +42,8 @@ const SEDES_OPCIONES = Object.entries(SEDE_LABELS_CUENTAS).map(([v, l]) => ({
 
 /**
  * Estado de cuenta: NO es una columna, se deriva de saldo vs total. Como
- * `saldo = total - abonado` en ambas vistas, "parcial" equivale a "abonado > 0",
+ * `saldo = total - retenciones - abonado` en ambas vistas (la retención de
+ * compras es fase 2 y hoy vale 0), "parcial" equivale a "abonado > 0",
  * y eso sí se puede preguntar en el servidor sin comparar columna contra columna
  * (PostgREST no sabe hacerlo). Mismos umbrales que `estadoCuenta()`.
  */
@@ -270,6 +271,7 @@ export default function Cuentas() {
       contraparte: esCobrar ? r.cliente_nombre : r.proveedor,
       total: Number(r.total ?? 0),
       abonosCotizacion: esCobrar ? Number(r.abonos_cotizacion ?? 0) : 0,
+      retenciones: Number(r.retenciones_total ?? 0),
     });
   };
 
@@ -484,7 +486,14 @@ export default function Cuentas() {
               </thead>
               <tbody>
                 {rows.map((r) => {
-                  const est = estadoCuenta(r.saldo, r.total);
+                  // Contra lo COBRABLE, no contra lo facturado: una factura
+                  // retenida nace con saldo menor que el total y sin este ajuste
+                  // apareceria como "Parcial" sin que el cliente haya pagado un
+                  // peso.
+                  const est = estadoCuenta(
+                    r.saldo,
+                    Number(r.total ?? 0) - Number(r.retenciones_total ?? 0),
+                  );
                   const id = esCobrar ? r.venta_id : r.compra_id;
                   const sede = esCobrar ? r.sede_id : r.sede_destino_id;
                   return (

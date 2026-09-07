@@ -220,9 +220,18 @@ Con `mcp__supabase__apply_migration`, nombre `retenciones_helpers_inmutables`:
 -- va reteIVA. El domicilio queda FUERA a proposito: es transporte facturado
 -- aparte, no valor de la mercancia.
 --
--- OJO: estas funciones son IMMUTABLE y las usan columnas GENERATED STORED. Si
--- algun dia se cambia el cuerpo, Postgres NO recalcula las filas existentes.
--- Cambiarlas exige forzar un rewrite de la tabla en la misma migracion.
+-- OJO: estas funciones son IMMUTABLE y las usan columnas GENERATED STORED. Eso
+-- trae dos consecuencias que hay que tener presentes:
+--   1. Si se cambia el cuerpo, Postgres NO recalcula las filas existentes.
+--      Cambiarlas exige forzar un rewrite de la tabla en la misma migracion.
+--   2. Una vez creadas las columnas, Postgres BLOQUEA el CREATE OR REPLACE de
+--      estas funciones. Cualquier ajuste posterior va por ALTER FUNCTION.
+--
+-- Nacen con search_path fijo en vacio, que es lo que exigen los advisors de
+-- Supabase: sin eso, quien las llama podria anteponer un esquema propio y hacer
+-- que `round` resuelva a otra cosa. pg_catalog se busca siempre de forma
+-- implicita, asi que `round`, `least`, `greatest` y `coalesce` siguen sirviendo,
+-- y la llamada anidada ya va con `public.` delante.
 
 -- Espejo de trg_recalcular_total_venta:
 --   v_desc := coalesce(descuento_valor, subtotal * descuento_pct/100)
@@ -232,6 +241,7 @@ CREATE OR REPLACE FUNCTION public._fn_base_retencion_venta(
   p_subtotal numeric, p_descuento_valor numeric, p_descuento_pct numeric
 ) RETURNS numeric
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
+SET search_path = ''
 AS $$
   SELECT coalesce(p_subtotal, 0) - greatest(0::numeric, least(
            coalesce(p_descuento_valor, coalesce(p_subtotal,0) * coalesce(p_descuento_pct,0) / 100),
@@ -245,6 +255,7 @@ CREATE OR REPLACE FUNCTION public._fn_iva_venta(
   p_subtotal numeric, p_descuento_valor numeric, p_descuento_pct numeric, p_iva_pct numeric
 ) RETURNS numeric
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
+SET search_path = ''
 AS $$
   SELECT round(public._fn_base_retencion_venta(p_subtotal, p_descuento_valor, p_descuento_pct)
                * coalesce(p_iva_pct, 0) / 100)
@@ -257,6 +268,7 @@ CREATE OR REPLACE FUNCTION public._fn_base_retencion_ot(
   p_revision numeric, p_descuento numeric
 ) RETURNS numeric
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
+SET search_path = ''
 AS $$
   SELECT CASE WHEN p_estado_autorizacion = 'no_autorizado'
     THEN greatest(0::numeric, coalesce(p_revision, 0))
@@ -267,12 +279,24 @@ AS $$
   END
 $$;
 
--- Son funciones internas de calculo, no API. Supabase concede EXECUTE a `anon`
--- por defecto en cada funcion nueva del esquema public, y REVOKE FROM PUBLIC
--- no lo quita: hay que nombrar el rol.
-REVOKE EXECUTE ON FUNCTION public._fn_base_retencion_venta(numeric, numeric, numeric) FROM anon;
-REVOKE EXECUTE ON FUNCTION public._fn_iva_venta(numeric, numeric, numeric, numeric) FROM anon;
-REVOKE EXECUTE ON FUNCTION public._fn_base_retencion_ot(text, numeric, numeric, numeric, numeric) FROM anon;
+-- Son funciones internas de calculo, no API.
+--
+-- Hay DOS caminos por los que `anon` puede terminar con EXECUTE, y hay que
+-- cerrar los dos: el grant por defecto que Postgres le pone a PUBLIC en toda
+-- funcion nueva, y el grant directo a `anon` de las default privileges de
+-- Supabase. Revocar solo uno deja el otro en pie y
+-- has_function_privilege('anon', ...) sigue diciendo true.
+--
+-- Y hay que volver a conceder a `authenticated`, que si lo necesita: las
+-- expresiones de las columnas generadas se evaluan con los privilegios de quien
+-- hace el INSERT o el UPDATE, y quien registra una venta es `authenticated`.
+REVOKE EXECUTE ON FUNCTION public._fn_base_retencion_venta(numeric, numeric, numeric) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public._fn_iva_venta(numeric, numeric, numeric, numeric) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public._fn_base_retencion_ot(text, numeric, numeric, numeric, numeric) FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public._fn_base_retencion_venta(numeric, numeric, numeric) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public._fn_iva_venta(numeric, numeric, numeric, numeric) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public._fn_base_retencion_ot(text, numeric, numeric, numeric, numeric) TO authenticated, service_role;
 ```
 
 - [ ] **Paso 3: Correr la prueba del paso 1 otra vez**
@@ -283,13 +307,17 @@ Cualquier otro mensaje es una fórmula que no coincide.
 - [ ] **Paso 4: Comprobar que `anon` no puede ejecutarlas**
 
 ```sql
-SELECT p.proname, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_puede
+SELECT p.proname,
+       has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+       has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth
 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
-  AND p.proname IN ('_fn_base_retencion_venta','_fn_iva_venta','_fn_base_retencion_ot');
+  AND p.proname IN ('_fn_base_retencion_venta','_fn_iva_venta','_fn_base_retencion_ot')
+ORDER BY 1;
 ```
 
-Esperado: `anon_puede = false` en las tres.
+Esperado: `anon = false` y `auth = true` en las tres. Si `anon` sale en `true`,
+falta el `REVOKE ... FROM PUBLIC`: revocar solo el rol no basta.
 
 - [ ] **Paso 5: Guardar el archivo de migración y commitear**
 
@@ -482,8 +510,25 @@ Esperado: `ERROR: column "retenciones_total" can only be updated to DEFAULT`.
 
 - [ ] **Paso 7: Revisar los advisors de Supabase**
 
-Correr `mcp__supabase__get_advisors` con `type: "security"`. No debe aparecer
-ningún hallazgo nuevo asociado a las columnas o funciones creadas.
+Correr `mcp__supabase__get_advisors` con `type: "security"`. Devuelve ~112
+hallazgos preexistentes, así que **no sirve mirarlos a ojo**: hay que contarlos
+y filtrar los propios.
+
+```bash
+python -c "
+import json,collections
+d=json.load(open(r'<ruta que devuelve la herramienta>'))
+ls=d['result']['lints']
+print('total:',len(ls))
+print(collections.Counter(l['name'] for l in ls).most_common())
+mios=[l for l in ls if any(k in l.get('detail','') for k in ('retencion','_fn_iva_venta'))]
+print('mios:',len(mios))
+for m in mios: print(' -',m['level'],m['name'],'|',m['detail'])
+"
+```
+
+Esperado: `mios: 0` y el total igual al de antes de empezar (112 el 2026-09-06).
+Si aparece `function_search_path_mutable`, falta el `SET search_path = ''`.
 
 - [ ] **Paso 8: Guardar el archivo y commitear**
 
@@ -662,6 +707,11 @@ mueve **exactamente** en la retención, ni un peso más, en los seis sitios.
 ```sql
 DO $$
 DECLARE
+  -- OJO: la fecha de Bogota, no current_date. El cierre filtra por
+  -- (fecha at time zone 'America/Bogota')::date y de noche el dia UTC ya es
+  -- otro: con current_date la venta recien creada queda fuera de la ventana y
+  -- la prueba pasa por la razon equivocada.
+  v_hoy date := (now() at time zone 'America/Bogota')::date;
   v_sede text; v_uid uuid; v_prod uuid;
   v_antes numeric; v_despues numeric;
   v_sede_antes numeric; v_sede_despues numeric;
@@ -682,7 +732,7 @@ BEGIN
   IF v_prod IS NULL THEN RAISE EXCEPTION 'no hay ningun producto con stock para probar'; END IF;
   SELECT id INTO v_uid FROM usuarios WHERE rol = 'Admin' LIMIT 1;
 
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   v_antes := (x->>'ingresos_productos')::numeric;
   SELECT coalesce(sum((e->>'productos')::numeric),0) INTO v_sede_antes
     FROM jsonb_array_elements(x->'detalle'->'por_sede') e;
@@ -703,7 +753,7 @@ BEGIN
   -- base 1.000.000 -> retefuente 25.000 + reteica 6.900 + reteiva 15% de 190.000 = 28.500
   IF v_ret <> 60400 THEN RAISE EXCEPTION 'retenciones = % (esperado 60400)', v_ret; END IF;
 
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   v_despues := (x->>'ingresos_productos')::numeric;
   SELECT coalesce(sum((e->>'productos')::numeric),0) INTO v_sede_despues
     FROM jsonb_array_elements(x->'detalle'->'por_sede') e;
@@ -825,6 +875,11 @@ pagar porque ya está en la DIAN — y peor: el **último cobro se rechaza**, po
 ```sql
 DO $$
 DECLARE
+  -- OJO: la fecha de Bogota, no current_date. El cierre filtra por
+  -- (fecha at time zone 'America/Bogota')::date y de noche el dia UTC ya es
+  -- otro: con current_date la venta recien creada queda fuera de la ventana y
+  -- la prueba pasa por la razon equivocada.
+  v_hoy date := (now() at time zone 'America/Bogota')::date;
   v_sede text; v_uid uuid; v_prod uuid; v_venta uuid;
   v_saldo numeric; v_ret numeric;
 BEGIN
@@ -1084,9 +1139,12 @@ BEGIN
   IF v_total <> 1190000 THEN RAISE EXCEPTION 'total OT = % (esperado 1190000)', v_total; END IF;
   IF v_ret <> 40000 THEN RAISE EXCEPTION 'retencion OT = % (esperado 40000)', v_ret; END IF;
 
-  -- Compuerta 1: el abono por el NETO tiene que pasar el tope
+  -- Compuerta 1: el abono por el NETO tiene que pasar el tope.
+  -- OJO: abonos.metodo_pago tiene CHECK en MINUSCULA
+  -- ('efectivo','transferencia','tarjeta','otro'). Con 'Efectivo' la prueba
+  -- revienta por el constraint y no llega a probar nada.
   INSERT INTO abonos (orden_id, monto, metodo_pago, registrado_por)
-  VALUES (v_ot, 1150000, 'Efectivo', v_uid);
+  VALUES (v_ot, 1150000, 'efectivo', v_uid);
 
   RAISE EXCEPTION 'OK - el abono por el neto se acepta (se revierte a proposito)';
 END $$;
@@ -1114,7 +1172,7 @@ BEGIN
   RETURNING id INTO v_ot;
 
   INSERT INTO abonos (orden_id, monto, metodo_pago, registrado_por)
-  VALUES (v_ot, 1150000, 'Efectivo', v_uid);
+  VALUES (v_ot, 1150000, 'efectivo', v_uid);
 
   -- El cliente ya pago todo lo que le toca: la OT debe poder entregarse
   v_r := public.fn_generar_venta_ot(v_ot);
@@ -1364,14 +1422,14 @@ BEGIN
   -- Sin retencion, el tope sigue siendo el total: un abono de mas se rechaza
   BEGIN
     INSERT INTO abonos (orden_id, monto, metodo_pago, registrado_por)
-    VALUES (v_ot, 1190001, 'Efectivo', v_uid);
+    VALUES (v_ot, 1190001, 'efectivo', v_uid);
     RAISE EXCEPTION 'MAL: se acepto un abono por encima del total';
   EXCEPTION WHEN others THEN
     IF SQLERRM LIKE 'MAL:%' THEN RAISE; END IF;
   END;
 
   INSERT INTO abonos (orden_id, monto, metodo_pago, registrado_por)
-  VALUES (v_ot, 1190000, 'Efectivo', v_uid);
+  VALUES (v_ot, 1190000, 'efectivo', v_uid);
 
   RAISE EXCEPTION 'OK - sin retencion el tope sigue siendo el total (se revierte a proposito)';
 END $$;
@@ -1406,6 +1464,11 @@ así que la primera que se registre va a estar bien contada desde el minuto uno.
 ```sql
 DO $$
 DECLARE
+  -- OJO: la fecha de Bogota, no current_date. El cierre filtra por
+  -- (fecha at time zone 'America/Bogota')::date y de noche el dia UTC ya es
+  -- otro: con current_date la venta recien creada queda fuera de la ventana y
+  -- la prueba pasa por la razon equivocada.
+  v_hoy date := (now() at time zone 'America/Bogota')::date;
   v_sede text; v_uid uuid; v_prod uuid; v_r jsonb; v_venta uuid;
   v_ret numeric; v_total numeric;
 BEGIN
@@ -1751,34 +1814,44 @@ END $$;
 
 Esperado: `ERROR: OK - la firma vieja se comporta igual (se revierte a proposito)`.
 
-- [ ] **Paso 5: Verificar que no quedó una sobrecarga huérfana**
+- [ ] **Paso 5: Borrar la firma vieja y cerrarle el paso a `anon`**
 
-`CREATE OR REPLACE` con parámetros nuevos crea una función **distinta** si la
-lista de argumentos cambia. Hay que confirmar que solo existe una.
+Estas dos cosas **siempre** ocurren, no son un "por si acaso": van en su propia
+migración inmediatamente después. Nombre `retenciones_registrar_venta_firma_unica`:
 
 ```sql
-SELECT pg_get_function_identity_arguments(p.oid) AS args
+-- 1. CREATE OR REPLACE con parametros nuevos NO reemplaza: crea una funcion
+--    DISTINTA. Quedan dos fn_registrar_venta, la de 12 y la de 15 argumentos, y
+--    con las dos vivas PostgREST no sabe cual llamar: cada venta desde la app
+--    falla por ambiguedad. Los llamados que solo mandan los 12 parametros
+--    siguen sirviendo, porque los tres nuevos tienen DEFAULT 0.
+--
+-- 2. La funcion nueva nace con EXECUTE para PUBLIC (el grant por defecto de
+--    Postgres), asi que `anon` puede registrar ventas. Es SECURITY DEFINER: se
+--    salta la RLS. La vieja tenia anon = false y hay que dejar la nueva igual.
+DROP FUNCTION public.fn_registrar_venta(
+  text, text, text, text, numeric, text, jsonb, numeric, text, numeric, numeric, jsonb);
+
+REVOKE EXECUTE ON FUNCTION public.fn_registrar_venta(
+  text, text, text, text, numeric, text, jsonb, numeric, text, numeric, numeric, jsonb,
+  numeric, numeric, numeric) FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public.fn_registrar_venta(
+  text, text, text, text, numeric, text, jsonb, numeric, text, numeric, numeric, jsonb,
+  numeric, numeric, numeric) TO authenticated, service_role;
+```
+
+- [ ] **Paso 6: Comprobar que quedó una sola firma y sin acceso anónimo**
+
+```sql
+SELECT count(*) AS n_firmas,
+       bool_or(has_function_privilege('anon', p.oid, 'EXECUTE')) AS algun_anon,
+       bool_and(has_function_privilege('authenticated', p.oid, 'EXECUTE')) AS todas_auth
 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public' AND p.proname = 'fn_registrar_venta';
 ```
 
-Esperado: **una sola fila**, la de 15 argumentos. Si aparecen dos, hay que
-`DROP FUNCTION` la vieja (por su firma exacta de 12 argumentos) y volver a
-comprobar; con dos, PostgREST no sabe cuál llamar y la venta falla por
-ambigüedad.
-
-- [ ] **Paso 6: Confirmar los permisos**
-
-```sql
-SELECT has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
-       has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth
-FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'public' AND p.proname = 'fn_registrar_venta';
-```
-
-Esperado: `auth = true`, `anon = false`. Si `anon` quedó en `true`, agregar a la
-migración `REVOKE EXECUTE ON FUNCTION public.fn_registrar_venta(text,text,text,text,numeric,text,jsonb,numeric,text,numeric,numeric,jsonb,numeric,numeric,numeric) FROM anon;`
-y volver a aplicar.
+Esperado: `n_firmas = 1`, `algun_anon = false`, `todas_auth = true`.
 
 - [ ] **Paso 7: Guardar el archivo y commitear**
 
@@ -3025,111 +3098,33 @@ git commit -m "feat(retenciones): el recibo POS muestra las retenciones y el net
 
 ---
 
-### Tarea 14: Retenciones en el PDF carta
+### Tarea 14: ~~Retenciones en el PDF carta~~ — la premisa era falsa
 
-**Archivos:**
+**No hay tal PDF carta de la venta.** Al ir a hacerlo se comprobó que
+`reciboPDF.js` no imprime facturas: imprime **recibos de caja** (tabla
+`recibos`), que es otro documento. La venta solo tiene el recibo POS, que ya
+quedó cubierto en la Tarea 13.
 
-- Modificar: `src/lib/pdf/reciboPDF.js:233-250`
+- [x] **Comprobado que las consultas traen las columnas nuevas**
 
-- [ ] **Paso 1: Añadir el caso a la prueba**
+Los tres sitios que alimentan el recibo POS —`VentaDetalle.jsx:107`,
+`PagoCuentaModal.jsx:168` y `OrdenDetalle.jsx:482`— usan `select("*")`, así que
+las siete columnas de retención llegan solas. No hay nada que cambiar.
 
-En `tests/integration/pos-retenciones.test.js`:
+- [ ] **Pendiente de decisión del usuario: el recibo de caja contra una OT retenida**
 
-```js
-describe("PDF carta con retenciones", () => {
-  it("no revienta con retencion ni sin ella", async () => {
-    const { generarReciboPDF } = await import("../../src/lib/pdf/reciboPDF");
-    const base = { numero: 1, subtotal: 1000000, iva_pct: 19, total: 1190000 };
-    expect(() => generarReciboPDF({ recibo: base, items: [] })).not.toThrow();
-    expect(() =>
-      generarReciboPDF({
-        recibo: {
-          ...base,
-          retefuente_valor: 25000,
-          retefuente_pct: 2.5,
-          retenciones_total: 25000,
-        },
-        items: [],
-      }),
-    ).not.toThrow();
-  });
-});
-```
+`fn_registrar_recibo` **no** lee `ordenes_servicio.total`: arma su propio total
+con los ítems que se le teclean (`subtotal * (1 + iva/100)`) y calcula
+`saldo = ese total − abonos_previos − monto_pagado`.
 
-Si el nombre exportado no es `generarReciboPDF`, tomarlo de
-`grep -n "^export" src/lib/pdf/reciboPDF.js` y ajustar el import y la llamada
-(incluida la forma del argumento, que puede no ser `{ recibo, items }`).
+Si se emite un recibo de caja contra una OT que tiene retención, ese saldo
+impreso ignora la retención y puede mostrar un saldo que el cliente nunca va a
+pagar. **No se tocó a propósito**: el total del recibo ni siquiera es el de la
+OT, así que netearlo es una decisión de negocio, no un arreglo obvio, y
+cambiarlo a ciegas distorsionaría un documento que no se estudió en este diseño.
 
-- [ ] **Paso 2: Añadir las filas**
-
-En `src/lib/pdf/reciboPDF.js`, después de
-`totRow("Total", formatCOP(total), { bold: true, color: INK, labColor: INK });`
-(línea ~240) y ANTES de `if (abonosPrev > 0)`:
-
-```js
-// Retenciones: lo que el cliente descuenta y consigna a la DIAN o al
-// municipio. Solo se imprimen si las hay; sin ellas el recibo sale idéntico.
-const retFuente = Number(recibo?.retefuente_valor ?? 0);
-const retIca = Number(recibo?.reteica_valor ?? 0);
-const retIva = Number(recibo?.reteiva_valor ?? 0);
-const retTotal = retFuente + retIca + retIva;
-if (retTotal > 0) {
-  if (retFuente > 0)
-    totRow(
-      `Retefuente ${Number(recibo?.retefuente_pct ?? 0)}%`,
-      `−${formatCOP(retFuente)}`,
-    );
-  if (retIca > 0)
-    totRow(
-      `ReteICA ${Number(recibo?.reteica_pct ?? 0)}%`,
-      `−${formatCOP(retIca)}`,
-    );
-  if (retIva > 0)
-    totRow(
-      `ReteIVA ${Number(recibo?.reteiva_pct ?? 0)}%`,
-      `−${formatCOP(retIva)}`,
-    );
-  doc.setDrawColor(...RULE);
-  doc.setLineWidth(0.2);
-  doc.line(tLabel, y - 1.5, R, y - 1.5);
-  y += 1.5;
-  totRow(
-    "Neto a recibir",
-    formatCOP(Math.max(0, Math.round(total - retTotal))),
-    {
-      bold: true,
-      color: INK,
-      labColor: INK,
-    },
-  );
-}
-```
-
-- [ ] **Paso 3: Verificar que la consulta trae las columnas nuevas**
-
-El PDF y el POS solo van a mostrar algo si quien los llama trae las columnas.
-
-```bash
-grep -rn "generarVentaPOS\|generarReciboPDF" src/pages/ | head
-```
-
-En cada sitio que aparezca, revisar el `.select(...)` que carga la venta: si
-enumera columnas en vez de usar `*`, hay que añadir `retefuente_pct`,
-`retefuente_valor`, `reteica_pct`, `reteica_valor`, `reteiva_pct`,
-`reteiva_valor`, `retenciones_total`. Si usa `*`, no hay nada que hacer.
-
-- [ ] **Paso 4: Correr todo**
-
-```bash
-npm test && npm run lint && npm run build
-```
-
-- [ ] **Paso 5: Commitear**
-
-```bash
-git add src/lib/pdf/reciboPDF.js src/pages/ tests/integration/pos-retenciones.test.js
-git commit -m "feat(retenciones): el PDF de venta muestra las retenciones y el neto"
-```
+Queda anotado para preguntarlo. No bloquea nada de la fase 1: es un documento
+aparte y hoy se comporta igual que siempre.
 
 ---
 
@@ -3145,6 +3140,11 @@ lo esperado, ni un peso más.**
 ```sql
 DO $$
 DECLARE
+  -- OJO: la fecha de Bogota, no current_date. El cierre filtra por
+  -- (fecha at time zone 'America/Bogota')::date y de noche el dia UTC ya es
+  -- otro: con current_date la venta recien creada queda fuera de la ventana y
+  -- la prueba pasa por la razon equivocada.
+  v_hoy date := (now() at time zone 'America/Bogota')::date;
   v_sede text; v_uid uuid; v_prod uuid; v_r jsonb; v_ot uuid; v_venta uuid;
   a1 numeric; a2 numeric; a3 numeric; a4 numeric; a5 numeric;
   s1 numeric; s5 numeric;
@@ -3164,7 +3164,7 @@ BEGIN
   PERFORM set_config('request.jwt.claims',
     json_build_object('sub', v_uid::text, 'role', 'authenticated')::text, true);
 
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   a1 := (x->>'ingresos_total')::numeric;
   SELECT coalesce(sum((e->>'productos')::numeric),0) + coalesce(sum((e->>'servicios')::numeric),0)
     INTO s1 FROM jsonb_array_elements(x->'detalle'->'por_sede') e;
@@ -3175,7 +3175,7 @@ BEGIN
     p_items => jsonb_build_array(jsonb_build_object(
       'producto_id', v_prod, 'cantidad', 1, 'precio_unitario', 1000000)),
     p_retefuente_pct => 2.5);
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   a2 := (x->>'ingresos_total')::numeric;
   IF a2 - a1 <> 1165000 THEN
     RAISE EXCEPTION 'CONTADO: subio % (esperado 1165000)', a2 - a1; END IF;
@@ -3188,7 +3188,7 @@ BEGIN
       'producto_id', v_prod, 'cantidad', 1, 'precio_unitario', 1000000)),
     p_retefuente_pct => 2.5);
   v_venta := (v_r->>'venta_id')::uuid;
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   a3 := (x->>'ingresos_total')::numeric;
   IF a3 <> a2 THEN
     RAISE EXCEPTION 'CREDITO: el ingreso se movio % al facturar (esperado 0)', a3 - a2; END IF;
@@ -3196,7 +3196,7 @@ BEGIN
   -- CAMINO 2b: al cobrar el neto, sube exactamente el neto UNA sola vez
   PERFORM public.fn_registrar_pago_cuenta(jsonb_build_object(
     'tipo','cobro','venta_id', v_venta, 'monto', 1165000, 'metodo_pago','Efectivo'));
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   a4 := (x->>'ingresos_total')::numeric;
   IF a4 - a3 <> 1165000 THEN
     RAISE EXCEPTION 'CREDITO COBRO: subio % (esperado 1165000 - ojo doble resta)', a4 - a3; END IF;
@@ -3211,15 +3211,15 @@ BEGIN
           900000, 100000, 19, 'autorizado', 'terminada', 4)
   RETURNING id INTO v_ot;
   INSERT INTO abonos (orden_id, monto, metodo_pago, registrado_por)
-  VALUES (v_ot, 1150000, 'Efectivo', v_uid);
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  VALUES (v_ot, 1150000, 'efectivo', v_uid);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   a5 := (x->>'ingresos_total')::numeric;
   IF a5 - a4 <> 1150000 THEN
     RAISE EXCEPTION 'OT: subio % (esperado 1150000 - ojo doble resta)', a5 - a4; END IF;
 
   -- CAMINO 3b: la OT retenida se puede entregar y NO vuelve a sumar
   PERFORM public.fn_generar_venta_ot(v_ot);
-  x := public._fn_cierre_totales(current_date, current_date, NULL);
+  x := public._fn_cierre_totales(v_hoy, v_hoy, NULL);
   IF (x->>'ingresos_total')::numeric <> a5 THEN
     RAISE EXCEPTION 'OT ENTREGA: el ingreso se movio % al facturar (esperado 0)',
       (x->>'ingresos_total')::numeric - a5; END IF;

@@ -3968,3 +3968,34 @@ body {
   background-color: var(--n-25);
   color: var(--n-900);
 }
+
+/* ── Calendario del panel (react-day-picker) ─────────────────────────────
+ * La librería trae su propia paleta con colores fijos, que es justo donde
+ * tienta romper la Regla #1 del sistema de diseño. Aquí se la amarra a los
+ * tokens, así el calendario respeta el modo oscuro sin reglas duplicadas.
+ * Es la única librería de UI de terceros que pinta superficies en la app.
+ *
+ * El selector va DUPLICADO (.rdp-root.rdp-root) a propósito, para subir la
+ * especificidad. Su hoja se importa dentro del componente, así que viaja en el
+ * trozo del panel y carga DESPUÉS de este archivo: con la misma especificidad
+ * ganaba la de la librería y el rango salía con fondo claro y texto claro
+ * encima, o sea los días del medio invisibles en modo oscuro. */
+.rdp-root.rdp-root {
+  --rdp-accent-color: hsl(var(--primary));
+  --rdp-accent-background-color: hsl(var(--primary) / 0.15);
+  --rdp-background-color: hsl(var(--card));
+  --rdp-today-color: hsl(var(--primary));
+  --rdp-range_middle-background-color: hsl(var(--primary) / 0.12);
+  --rdp-range_middle-color: hsl(var(--foreground));
+  --rdp-day-height: 40px;
+  --rdp-day-width: 40px;
+  color: hsl(var(--foreground));
+}
+
+.rdp-root.rdp-root .rdp-day_button:hover:not([disabled]) {
+  background-color: hsl(var(--muted));
+}
+
+.rdp-root.rdp-root .rdp-disabled {
+  color: hsl(var(--muted-foreground));
+}

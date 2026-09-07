@@ -18,7 +18,7 @@ import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
  *
  * Props:
  *   - cuenta: { tipo:'cobro'|'pago', refId:uuid, numero, contraparte:string,
- *               total:number, abonosCotizacion?:number }
+ *               total:number, abonosCotizacion?:number, retenciones?:number }
  *   - onClose: () => void
  *   - onChanged: () => void   // se llama tras registrar/eliminar para refrescar la lista
  */
@@ -81,7 +81,12 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
   const abonosCotiz = Number(cuenta.abonosCotizacion ?? 0);
   const pagado = pagos.reduce((s, p) => s + Number(p.monto ?? 0), 0);
   const total = Number(cuenta.total ?? 0);
-  const saldo = Math.max(0, total - abonosCotiz - pagado);
+  // La retención no la paga el cliente: la consigna a la DIAN. Si el saldo no la
+  // descontara, "Saldar todo" ofrecería un monto que fn_registrar_pago_cuenta
+  // rechaza — un botón condenado a fallar, que es justo lo que no se debe hacer.
+  // Misma fórmula que v_cuentas_por_cobrar.saldo.
+  const retenciones = Number(cuenta.retenciones ?? 0);
+  const saldo = Math.max(0, total - retenciones - abonosCotiz - pagado);
   const esElectronico = METODOS_ELECTRONICOS.includes(metodo);
 
   const elegirMetodo = (m) => {
@@ -315,10 +320,19 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
             <>
               {/* Resumen de saldo */}
               <div
-                className="mb-4 grid grid-cols-3 gap-2 rounded-lg border p-3 text-center"
+                className={`mb-4 grid gap-2 rounded-lg border p-3 text-center ${
+                  retenciones > 0 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"
+                }`}
                 style={{ borderColor: "hsl(var(--border))" }}
               >
                 <Resumen label="Total" value={formatCOP(total)} />
+                {retenciones > 0 && (
+                  <Resumen
+                    label="Retenciones"
+                    value={`−${formatCOP(retenciones)}`}
+                    token="--warning"
+                  />
+                )}
                 <Resumen
                   label={esCobro ? "Abonado" : "Pagado"}
                   value={formatCOP(abonosCotiz + pagado)}
