@@ -3,7 +3,10 @@ import { calcularRetenciones, normalizarPct } from "../../lib/retenciones";
 import { formatCOP } from "../../lib/utils";
 
 /**
- * Bloque plegable de retenciones, compartido por Nueva Venta y la OT.
+ * Bloque plegable de retenciones, compartido por Nueva Venta, la OT y Nueva
+ * Compra. En venta el cliente nos retiene y nos entra menos; en compra nosotros
+ * le retenemos al proveedor y le pagamos menos. La aritmética es idéntica: lo
+ * único que cambia son las palabras (ver `modo`).
  *
  * Apagado por defecto: mientras nadie lo abra, la pantalla se ve y se comporta
  * exactamente igual que antes de que esto existiera. Ese es el criterio de
@@ -23,6 +26,7 @@ import { formatCOP } from "../../lib/utils";
  * @param {object}   p.valores     { retefuentePct, reteicaPct, reteivaPct }
  * @param {Function} p.onChange    recibe el objeto de valores completo
  * @param {object}   [p.sugeridas] tarifas de Configuración con que precargar
+ * @param {"venta"|"compra"} [p.modo] cambia las palabras, no la aritmética
  * @param {boolean}  [p.abierto]   fuerza el estado abierto (para pruebas)
  * @param {boolean}  [p.soloLectura]
  */
@@ -115,6 +119,7 @@ export default function BloqueRetenciones({
   valores = {},
   onChange,
   sugeridas = null,
+  modo = "venta",
   abierto: abiertoInicial = false,
   soloLectura = false,
 }) {
@@ -134,19 +139,42 @@ export default function BloqueRetenciones({
     !Number(valores.reteicaPct) &&
     !Number(valores.reteivaPct);
 
-  const alternar = () => {
-    const abriendo = !abierto;
-    setAbierto(abriendo);
-    // Solo al ABRIR y solo si no hay nada puesto: así, si alguien deja las tres
-    // en cero a propósito y vuelve a abrir, no se le repone la sugerencia.
-    if (abriendo && vacio && sugeridas && !soloLectura) {
-      onChange?.({
-        retefuentePct: Number(sugeridas.retefuentePct) || 0,
-        reteicaPct: Number(sugeridas.reteicaPct) || 0,
-        reteivaPct: Number(sugeridas.reteivaPct) || 0,
-      });
-    }
+  // Abrir el bloque NO pone tarifas. Antes se rellenaban solas con las
+  // sugeridas, y eso descuadra una caja: basta que alguien lo abra por
+  // curiosidad y lo cierre para que la venta salga con una retención que nadie
+  // quiso. El sistema diría que entran $950.000 y en el cajón habría
+  // $1.000.000, y el descuadre aparece al cerrar, cuando ya nadie se acuerda.
+  //
+  // Las sugeridas siguen a la mano, pero hay que pulsarlas (ver "Aplicar
+  // sugeridas" abajo): retener es una decisión, no un valor por defecto.
+  const alternar = () => setAbierto((a) => !a);
+
+  const aplicarSugeridas = () => {
+    if (!sugeridas || soloLectura) return;
+    onChange?.({
+      retefuentePct: Number(sugeridas.retefuentePct) || 0,
+      reteicaPct: Number(sugeridas.reteicaPct) || 0,
+      reteivaPct: Number(sugeridas.reteivaPct) || 0,
+    });
   };
+
+  // El sentido del dinero es el opuesto en cada lado: en venta el cliente nos
+  // retiene y nos entra menos; en compra nosotros le retenemos al proveedor y
+  // le pagamos menos. La aritmética es idéntica, solo cambian las palabras.
+  const esCompra = modo === "compra";
+  const invitacion = esCompra
+    ? "¿Le retenemos al proveedor? Tocar para aplicar"
+    : "¿El cliente retiene? Tocar para aplicar";
+  const explicacion = esCompra
+    ? "Lo que le descontamos al proveedor y consignamos a la DIAN o al municipio. La factura no cambia: solo cambia cuánta plata sale."
+    : "Lo que el cliente descuenta y consigna a la DIAN o al municipio. La factura no cambia: solo cambia cuánta plata entra.";
+  const etiquetaTotal = esCompra ? "Total de la factura" : "Total facturado";
+  const etiquetaNeto = esCompra ? "Neto a pagar" : "Neto a recibir";
+
+  // Cada porcentaje está recortado a [0,100], pero la SUMA sí puede pasarse del
+  // total, y entonces el servidor rechaza el documento. Se avisa aquí en vez de
+  // dejar que el operador pulse un botón que va a fallar igual.
+  const seExcede = ret.total > total;
 
   // Recibe el número ya normalizado por la Fila, al salir del campo.
   const cambiar = (clave) => (n) => onChange?.({ ...valores, [clave]: n });
@@ -166,17 +194,31 @@ export default function BloqueRetenciones({
         style={{ minHeight: 48, backgroundColor: "hsl(var(--muted) / 0.3)" }}
         aria-expanded={abierto}
       >
+        {/* Plegado decía "RETENCIONES / Sin retenciones", una franja gris que
+            parecía un dato y no un control: nadie la abría. Ahora, mientras no
+            haya ninguna, invita a usarla; cuando ya hay, manda el monto. */}
         <span
           className="text-xs font-semibold uppercase tracking-wide"
-          style={{ color: "hsl(var(--muted-foreground))" }}
+          style={{
+            color: ret.hay
+              ? "hsl(var(--foreground))"
+              : "hsl(var(--muted-foreground))",
+          }}
         >
           Retenciones
         </span>
         <span
-          className="text-[13px]"
-          style={{ color: "hsl(var(--muted-foreground))" }}
+          className="flex items-center gap-1.5 text-[13px]"
+          style={{
+            color: ret.hay ? "hsl(var(--warning))" : "hsl(var(--primary))",
+          }}
         >
-          {ret.hay ? `- ${formatCOP(ret.total)}` : "Sin retenciones"}
+          {ret.hay
+            ? `- ${formatCOP(ret.total)}`
+            : soloLectura
+              ? "Sin retenciones"
+              : invitacion}
+          <span aria-hidden="true">{abierto ? "▴" : "▾"}</span>
         </span>
       </button>
 
@@ -186,9 +228,43 @@ export default function BloqueRetenciones({
             className="text-[12px]"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
-            Lo que el cliente descuenta y consigna a la DIAN o al municipio. La
-            factura no cambia: solo cambia cuánta plata entra.
+            {explicacion}
           </p>
+
+          {/* Las tarifas de Configuración quedan a un toque, pero no se ponen
+              solas: aplicarlas es una decisión de quien está atendiendo. */}
+          {!soloLectura && sugeridas && vacio && (
+            <button
+              type="button"
+              onClick={aplicarSugeridas}
+              className="w-full rounded-lg border text-[13px] font-medium"
+              style={{
+                minHeight: 48,
+                borderColor: "hsl(var(--primary) / 0.4)",
+                backgroundColor: "hsl(var(--primary) / 0.06)",
+                color: "hsl(var(--primary))",
+              }}
+            >
+              Aplicar las tarifas de siempre ({Number(sugeridas.retefuentePct) || 0}
+              % · {Number(sugeridas.reteicaPct) || 0}% ·{" "}
+              {Number(sugeridas.reteivaPct) || 0}%)
+            </button>
+          )}
+
+          {seExcede && (
+            <p
+              className="rounded-lg px-3 py-2 text-[12px]"
+              style={{
+                backgroundColor: "hsl(var(--destructive) / 0.08)",
+                color: "hsl(var(--destructive))",
+              }}
+              role="alert"
+            >
+              Las retenciones ({formatCOP(ret.total)}) se pasan del total (
+              {formatCOP(total)}). Así no se puede guardar. Revisa los
+              porcentajes: si querías 2,5% escribe 2,5, no 25.
+            </p>
+          )}
 
           <Fila
             etiqueta="Retefuente (sobre la base)"
@@ -223,7 +299,7 @@ export default function BloqueRetenciones({
               className="text-[13px]"
               style={{ color: "hsl(var(--muted-foreground))" }}
             >
-              Total facturado
+              {etiquetaTotal}
             </span>
             <span
               className="text-[13px] tabular-nums"
@@ -237,7 +313,7 @@ export default function BloqueRetenciones({
               className="text-[13px] font-semibold"
               style={{ color: "hsl(var(--foreground))" }}
             >
-              Neto a recibir
+              {etiquetaNeto}
             </span>
             <span
               className="text-[15px] font-semibold tabular-nums"

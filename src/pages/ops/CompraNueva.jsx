@@ -19,6 +19,11 @@ import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import QRScanner from "../../components/forms/QRScanner";
 import NumeroInput from "../../components/forms/NumeroInput";
+import BloqueRetenciones from "../../components/ventas/BloqueRetenciones";
+import {
+  calcularRetenciones,
+  CLAVES_TARIFA_RETENCION,
+} from "../../lib/retenciones";
 
 const IVA_DEFAULT = 19;
 const IVA_PRESETS = [0, 19];
@@ -49,6 +54,37 @@ export default function CompraNueva() {
       .eq("activo", true)
       .order("banco")
       .then(({ data }) => setCuentasBanco(data ?? []));
+  }, []);
+  // Retenciones: la empresa como agente retenedor, o sea le pagamos menos al
+  // proveedor y consignamos la diferencia a la DIAN. Arrancan en CERO, nunca en
+  // las tarifas sugeridas: si se precargaran solas bastaría abrir el bloque por
+  // curiosidad para que el sistema diera por salidos $950.000 mientras del
+  // cajón salió un millón, y el descuadre aparece al cerrar, cuando ya nadie se
+  // acuerda de por qué.
+  const [retenciones, setRetenciones] = useState({
+    retefuentePct: 0,
+    reteicaPct: 0,
+    reteivaPct: 0,
+  });
+  // Las mismas tres claves que usa Nueva Venta: son las tarifas de ley, y
+  // duplicarlas solo crearía un segundo sitio donde quedarse desactualizado.
+  const [tarifasSugeridas, setTarifasSugeridas] = useState(null);
+  useEffect(() => {
+    supabase
+      .from("parametros_sistema")
+      .select("key, value")
+      .in("key", Object.values(CLAVES_TARIFA_RETENCION))
+      .then(({ data }) => {
+        if (!data) return;
+        const porClave = Object.fromEntries(
+          data.map((p) => [p.key, Number(p.value) || 0]),
+        );
+        setTarifasSugeridas({
+          retefuentePct: porClave[CLAVES_TARIFA_RETENCION.retefuentePct] ?? 0,
+          reteicaPct: porClave[CLAVES_TARIFA_RETENCION.reteicaPct] ?? 0,
+          reteivaPct: porClave[CLAVES_TARIFA_RETENCION.reteivaPct] ?? 0,
+        });
+      });
   }, []);
   const [concepto, setConcepto] = useState(""); // #31 caja menor
   // Categoría del gasto. Es lo que decide si esta plata resta del Resultado
@@ -298,6 +334,18 @@ export default function CompraNueva() {
   const descuento = Math.min(Math.max(0, descuentoValor), subtotal);
   const iva = (subtotal - descuento) * (ivaPct / 100);
   const total = subtotal - descuento + iva;
+  // Espejo exacto de las columnas generadas de `compras`: la base es el
+  // subtotal menos el descuento y el reteIVA va sobre el IVA. Si esta fórmula y
+  // la del servidor divergen, la pantalla promete un neto distinto del que va a
+  // salir del cajón.
+  const retencionesCalculadas = calcularRetenciones({
+    base: subtotal - descuento,
+    iva,
+    total,
+    retefuentePct: retenciones.retefuentePct,
+    reteicaPct: retenciones.reteicaPct,
+    reteivaPct: retenciones.reteivaPct,
+  });
   const totalItems = carrito.reduce((s, i) => s + i.cantidad, 0);
 
   // Quién puede contar la recepción: los mismos dos roles que acepta
@@ -330,6 +378,14 @@ export default function CompraNueva() {
       setError("Selecciona la cuenta bancaria desde donde se pagó.");
       return;
     }
+    // Espeja el bloqueo del servidor, para no mandar al operador contra un
+    // error del backend cuando la pantalla ya sabe que no va a pasar.
+    if (retencionesCalculadas.total > total) {
+      setError(
+        `Las retenciones (${formatCOP(retencionesCalculadas.total)}) se pasan del total (${formatCOP(total)}). Revisa los porcentajes: si querías 2,5% escribe 2,5, no 25.`,
+      );
+      return;
+    }
     // Guard síncrono: el `disabled` de React no evita el doble-clic veloz.
     if (guardandoRef.current) return;
     guardandoRef.current = true;
@@ -356,6 +412,9 @@ export default function CompraNueva() {
           p_metodo_pago: metodoPago,
           p_cuenta_bancaria: cuentaBancaria || null,
           p_descuento_valor: descuento,
+          p_retefuente_pct: retenciones.retefuentePct,
+          p_reteica_pct: retenciones.reteicaPct,
+          p_reteiva_pct: retenciones.reteivaPct,
         },
       );
       if (rpcErr) throw new Error(rpcErr.message);
@@ -1129,6 +1188,21 @@ export default function CompraNueva() {
             </div>
           )}
 
+          {/* Retenciones: nosotros como agente retenedor. Solo en orden de
+              compra — un recibo de caja menor no lleva retención, y además se
+              guarda por otro camino (guardarCajaMenor). */}
+          {modo === "normal" && (
+            <BloqueRetenciones
+              modo="compra"
+              base={subtotal - descuento}
+              iva={iva}
+              total={total}
+              valores={retenciones}
+              onChange={setRetenciones}
+              sugeridas={tarifasSugeridas}
+            />
+          )}
+
           {/* #31 — Caja menor: concepto + monto (no inventariable) */}
           {modo === "caja_menor" && (
             <div className="iblock flex flex-col gap-3.5">
@@ -1369,6 +1443,29 @@ export default function CompraNueva() {
                 <span>Total estimado</span>
                 <span className="v">{formatCOP(total)}</span>
               </div>
+              {/* Se usan las clases locales de esta tarjeta (cart-line, tot,
+                  var(--warn-700)) porque es lo que ya usa para el descuento;
+                  mezclar aquí los tokens del sistema de diseño se vería como un
+                  parche. */}
+              {retencionesCalculadas.hay && (
+                <>
+                  <div
+                    className="cart-line"
+                    style={{ color: "var(--warn-700)" }}
+                  >
+                    <span>Retenciones</span>
+                    <span className="v" style={{ color: "var(--warn-700)" }}>
+                      −{formatCOP(retencionesCalculadas.total)}
+                    </span>
+                  </div>
+                  <div className="cart-line tot">
+                    <span>Neto a pagar</span>
+                    <span className="v">
+                      {formatCOP(retencionesCalculadas.neto)}
+                    </span>
+                  </div>
+                </>
+              )}
               <div className="text-[11.5px]" style={{ color: "var(--n-500)" }}>
                 Pago: {metodoPago}
                 {metodoPago === "Crédito" ? " (pendiente)" : ""}

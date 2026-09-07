@@ -1,0 +1,16 @@
+-- La vista tenia security_invoker = true desde 20260613000001, y el
+-- create view de 20260907T1 lo perdio porque no repitio la opcion.
+--
+-- Sin security_invoker la vista corre con los derechos del dueno y se salta la
+-- RLS de compras y pagos_cuenta: cualquier usuario autenticado habria visto la
+-- deuda con proveedores de todas las sedes, no solo la suya. El linter de
+-- Supabase lo marca como ERROR (security_definer_view) y asi fue como salio.
+--
+-- Recordatorio para la proxima: recrear una vista NO conserva ni sus reloptions
+-- ni sus grants. Hay que reponer las dos cosas y verificarlas.
+--
+-- Queda como migracion aparte porque 20260907T1 ya se habia aplicado en
+-- produccion sin la opcion. El archivo de T1 ya trae el create corregido, asi
+-- que una reproduccion desde cero no necesita esta, y aplicarla igual es
+-- inocuo.
+alter view public.v_cuentas_por_pagar set (security_invoker = true);
