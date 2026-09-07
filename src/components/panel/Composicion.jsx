@@ -33,6 +33,23 @@ const COLUMNAS = [
   { id: "participacion", rotulo: "Participación", ordenaPor: "venta" },
 ];
 
+/**
+ * Umbrales de "peso en la venta" para quitar el ruido de la cola.
+ *
+ * El piso es 1% A PROPOSITO, no por gusto: el servidor devuelve los 100 grupos
+ * mas grandes, y como mucho 100 grupos pueden pesar 1% o mas cada uno. Es
+ * decir, con 1% la tabla ya trae con seguridad TODOS los que pasan el filtro.
+ * Con 0,5% podria haber hasta 200 candidatos y algunos se quedarian afuera sin
+ * que nadie se entere, que es exactamente la clase de mentira silenciosa que
+ * este panel no puede permitirse.
+ */
+const UMBRALES = [
+  { id: 0, rotulo: "Todos" },
+  { id: 0.01, rotulo: "≥ 1%" },
+  { id: 0.03, rotulo: "≥ 3%" },
+  { id: 0.05, rotulo: "≥ 5%" },
+];
+
 const num = (v) => Number(v ?? 0);
 
 /**
@@ -85,18 +102,53 @@ export default function Composicion({
   admin = true,
 }) {
   const [orden, setOrden] = useState({ col: "venta", dir: "desc" });
+  // Cuánto tiene que pesar un grupo para aparecer. Un margen malo sobre una
+  // unidad vendida es ruido; el mismo margen sobre el 8% de la venta es plata.
+  const [minParte, setMinParte] = useState(0);
+  // "Peor" tiene dos respuestas legítimas y distintas: el que deja menos
+  // porcentaje, y el que deja menos plata. Se elige, no se supone.
+  const [criterio, setCriterio] = useState("pct");
 
   // "Ver los peores" manda sobre el orden manual: es un atajo a una pregunta
   // concreta —quién deja menos margen— no una preferencia de columna.
-  const activo = peores ? { col: "margen_pct", dir: "asc" } : orden;
+  const activo = peores
+    ? { col: criterio === "pct" ? "margen_pct" : "margen", dir: "asc" }
+    : orden;
 
   const columnas = COLUMNAS.filter((c) => admin || !c.soloAdmin);
 
+  // El total DE TODO, sin filtrar: es contra este que cuadran las ventas netas
+  // de la cascada, y es la base de la participación de cada fila.
+  const general = useMemo(
+    () =>
+      filas.reduce(
+        (acc, f) => ({
+          venta: acc.venta + num(f.venta),
+          costo: acc.costo + num(f.costo),
+          margen: acc.margen + num(f.margen),
+          n: acc.n + num(f.n),
+        }),
+        { venta: 0, costo: 0, margen: 0, n: 0 },
+      ),
+    [filas],
+  );
+
   const { ordenadas, total } = useMemo(() => {
+    // La fila "Otros N" sale al filtrar: es una bolsa de grupos que justamente
+    // NO pasan el umbral, así que dejarla dentro contradiría el filtro.
+    const base =
+      minParte > 0
+        ? filas.filter(
+            (f) =>
+              !f.es_resto &&
+              general.venta > 0 &&
+              num(f.venta) / general.venta >= minParte,
+          )
+        : filas;
     const campo =
       COLUMNAS.find((c) => c.id === activo.col)?.ordenaPor ?? activo.col;
     const signo = activo.dir === "asc" ? 1 : -1;
-    const copia = [...filas].sort((a, b) => {
+    const copia = [...base].sort((a, b) => {
       // "Otros N productos" es un agregado de todo lo que no cupo, no un grupo
       // que compita con los demás: se queda al final se ordene por lo que se
       // ordene. Arriba del todo diría que lo peor del negocio es una bolsa.
@@ -115,7 +167,7 @@ export default function Composicion({
       if (vb == null) return -1;
       return signo * (va - vb);
     });
-    const t = filas.reduce(
+    const t = base.reduce(
       (acc, f) => ({
         venta: acc.venta + num(f.venta),
         costo: acc.costo + num(f.costo),
@@ -125,9 +177,10 @@ export default function Composicion({
       { venta: 0, costo: 0, margen: 0, n: 0 },
     );
     return { ordenadas: copia, total: t };
-  }, [filas, activo.col, activo.dir]);
+  }, [filas, activo.col, activo.dir, minParte, general.venta]);
 
-  const parteDe = (f) => (total.venta > 0 ? num(f.venta) / total.venta : 0);
+  const parteDe = (f) => (general.venta > 0 ? num(f.venta) / general.venta : 0);
+  const filtrando = minParte > 0;
   // Solo se suman las facturas cuando cada una cae en un renglón. Ver DIMENSIONES.
   const sumaFacturas =
     DIMENSIONES.find((d) => d.id === dimension)?.parte !== false;
@@ -176,31 +229,102 @@ export default function Composicion({
       </div>
 
       {admin && (
-        <button
-          type="button"
-          onClick={() => onPeores(!peores)}
-          aria-pressed={Boolean(peores)}
-          className="flex items-center gap-2 rounded-lg border px-3 text-[12.5px] font-medium"
-          style={{
-            minHeight: 48,
-            borderColor: peores ? "hsl(var(--warning))" : "hsl(var(--border))",
-            backgroundColor: peores
-              ? "hsl(var(--warning) / 0.12)"
-              : "hsl(var(--card))",
-            color: "hsl(var(--foreground))",
-          }}
-        >
-          <TrendingDown className="h-4 w-4 shrink-0" strokeWidth={1.7} />
-          <span className="whitespace-nowrap">Ver los peores</span>
-          {/* La coletilla se esconde en móvil: partía "Ver los / peores" en dos
-              líneas y el botón dejaba de leerse como una sola cosa. */}
-          <span
-            className="hidden text-[11.5px] sm:inline"
-            style={{ color: "hsl(var(--muted-foreground))" }}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <button
+            type="button"
+            onClick={() => onPeores(!peores)}
+            aria-pressed={Boolean(peores)}
+            className="flex items-center gap-2 rounded-lg border px-3 text-[12.5px] font-medium"
+            style={{
+              minHeight: 48,
+              borderColor: peores
+                ? "hsl(var(--warning))"
+                : "hsl(var(--border))",
+              backgroundColor: peores
+                ? "hsl(var(--warning) / 0.12)"
+                : "hsl(var(--card))",
+              color: "hsl(var(--foreground))",
+            }}
           >
-            {peores ? "· menor margen primero" : "· los que menos margen dejan"}
-          </span>
-        </button>
+            <TrendingDown className="h-4 w-4 shrink-0" strokeWidth={1.7} />
+            <span className="whitespace-nowrap">Ver los peores</span>
+          </button>
+
+          {/* Dos preguntas distintas, las dos legítimas: quién deja menos
+              porcentaje y quién deja menos plata. El que vende poquísimo con
+              mal porcentaje encabeza la primera; el que mueve mucho a margen
+              flaco encabeza la segunda. */}
+          {peores && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className="text-[11.5px]"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                Peor según
+              </span>
+              {[
+                { id: "pct", rotulo: "% de margen" },
+                { id: "plata", rotulo: "plata que deja" },
+              ].map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setCriterio(c.id)}
+                  aria-pressed={criterio === c.id}
+                  className="rounded-lg border px-3 text-[12px] font-medium"
+                  style={{
+                    minHeight: 48,
+                    borderColor:
+                      criterio === c.id
+                        ? "hsl(var(--warning))"
+                        : "hsl(var(--border))",
+                    backgroundColor:
+                      criterio === c.id
+                        ? "hsl(var(--warning) / 0.12)"
+                        : "hsl(var(--card))",
+                    color: "hsl(var(--foreground))",
+                  }}
+                >
+                  {c.rotulo}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* El filtro de volumen. Sin esto, "el peor margen" lo gana siempre
+              una venta suelta de una unidad y la lista no sirve para decidir. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="text-[11.5px]"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              Peso en la venta
+            </span>
+            {UMBRALES.map((u) => (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => setMinParte(u.id)}
+                aria-pressed={minParte === u.id}
+                className="rounded-lg border px-3 text-[12px] font-medium"
+                style={{
+                  minHeight: 48,
+                  borderColor:
+                    minParte === u.id
+                      ? "hsl(var(--primary))"
+                      : "hsl(var(--border))",
+                  backgroundColor:
+                    minParte === u.id
+                      ? "hsl(var(--primary) / 0.10)"
+                      : "hsl(var(--card))",
+                  color: "hsl(var(--foreground))",
+                }}
+              >
+                {u.rotulo}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {filas.length === 0 ? (
@@ -209,6 +333,14 @@ export default function Composicion({
           style={{ color: "hsl(var(--muted-foreground))" }}
         >
           No hubo ventas en este rango.
+        </p>
+      ) : ordenadas.length === 0 ? (
+        <p
+          className="text-[13px]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Ninguno pesa {(minParte * 100).toFixed(0)}% o más de la venta. Baja el
+          filtro para ver los que sí aparecen.
         </p>
       ) : (
         <>
@@ -450,6 +582,18 @@ export default function Composicion({
               </span>
             </li>
           </ul>
+
+          {/* Con el filtro puesto el pie YA NO es el total del periodo, y hay
+              que decirlo: toda la sección se apoya en que sus cifras cuadren
+              con la cascada de arriba. */}
+          <p
+            className="text-[11.5px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            {filtrando
+              ? `Mostrando ${ordenadas.length} de ${filas.length}: los que pesan ${(minParte * 100).toFixed(0)}% o más de la venta. El total de arriba es el de estos ${ordenadas.length}, no el del periodo (${formatCOP(general.venta)}).`
+              : "El total cuadra con las ventas netas de la cascada."}
+          </p>
         </>
       )}
     </div>

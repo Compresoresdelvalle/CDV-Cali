@@ -388,7 +388,10 @@ export default function Panel() {
 
         <Seccion
           titulo="Cómo se compone la venta"
-          subtitulo="El total de aquí abajo tiene que dar lo mismo que las ventas netas de arriba"
+          // La promesa de que el total cuadra la hace ahora la propia tabla, al
+          // pie: es la única que sabe si hay un filtro puesto. Dejarla aquí
+          // arriba la volvía mentira en cuanto se filtraba.
+          subtitulo="La misma plata de arriba, vista por el eje que se escoja"
           acciones={
             esAdmin && (
               <BotonExportar
