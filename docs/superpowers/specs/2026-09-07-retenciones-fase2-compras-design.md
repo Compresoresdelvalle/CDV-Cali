@@ -1,9 +1,9 @@
 # Retenciones fase 2: la empresa como agente retenedor
 
 **Fecha:** 2026-09-07
-**Origen:** el dueño, al probar fase 1: *"compras es porque nosotros podemos
+**Origen:** el dueño, al probar fase 1: _"compras es porque nosotros podemos
 retener, o sea pagamos menos, y en ventas podrían retenernos, o sea nos entra
-menos. Si estaba en el plan y no se hizo, retómalo y acábalo."*
+menos. Si estaba en el plan y no se hizo, retómalo y acábalo."_
 **Rama:** `feat/retenciones-compras`
 **Antecede:** `docs/superpowers/specs/2026-09-05-retenciones-design.md` (fase 1,
 ventas y OT, en producción).
@@ -35,8 +35,8 @@ fase 1, con el signo cambiado.
 
 ## Dos cosas que el spec de fase 1 dejó mal
 
-Fase 1 anticipó fase 2 en una línea: *"solo se agregan los dos sitios de
-`compras.total` y la vista de cuentas por pagar"*. Al ir a buscarlos, ninguna de
+Fase 1 anticipó fase 2 en una línea: _"solo se agregan los dos sitios de
+`compras.total` y la vista de cuentas por pagar"_. Al ir a buscarlos, ninguna de
 las dos afirmaciones resiste.
 
 ### Son seis sitios, no dos
@@ -78,12 +78,12 @@ No lo es, y hay que corregirlo junto con la vista.
 Esta es la tabla que evita el descuadre. Restar la retención en el sitio de más
 es tan grave como no restarla.
 
-| Camino | Qué suma hoy | ¿Cambia en fase 2? |
-| --- | --- | --- |
-| Compra de **contado** | `compras.total` | **Sí**, pasa a `total - retenciones_total` |
-| **Pago a proveedor** de una compra a crédito | los pagos de `pagos_cuenta` | **No**: eso ya es plata real que salió |
-| **Saldo** de Cuentas por Pagar | `total - pagos` | **Sí**, pasa a `total - retenciones - pagos` |
-| Panel de decisiones y Dashboard | `compras.total` | **No** |
+| Camino                                       | Qué suma hoy                | ¿Cambia en fase 2?                           |
+| -------------------------------------------- | --------------------------- | -------------------------------------------- |
+| Compra de **contado**                        | `compras.total`             | **Sí**, pasa a `total - retenciones_total`   |
+| **Pago a proveedor** de una compra a crédito | los pagos de `pagos_cuenta` | **No**: eso ya es plata real que salió       |
+| **Saldo** de Cuentas por Pagar               | `total - pagos`             | **Sí**, pasa a `total - retenciones - pagos` |
+| Panel de decisiones y Dashboard              | `compras.total`             | **No**                                       |
 
 Las dos filas del medio son las que se hacen mal con más facilidad.
 
@@ -149,11 +149,11 @@ cuál de los dos números era el bueno.
 `BloqueRetenciones` se reutiliza tal cual, con una prop nueva `modo` que solo
 cambia las palabras, porque el sentido del dinero es el opuesto:
 
-| | `modo="venta"` (actual) | `modo="compra"` (nuevo) |
-| --- | --- | --- |
+|                    | `modo="venta"` (actual)                 | `modo="compra"` (nuevo)                        |
+| ------------------ | --------------------------------------- | ---------------------------------------------- |
 | Invitación plegada | ¿El cliente retiene? Tocar para aplicar | ¿Le retenemos al proveedor? Tocar para aplicar |
-| Pie del bloque | Neto a recibir | Neto a pagar |
-| Total de arriba | Total facturado | Total de la factura |
+| Pie del bloque     | Neto a recibir                          | Neto a pagar                                   |
+| Total de arriba    | Total facturado                         | Total de la factura                            |
 
 Todo lo demás se queda igual: plegado por defecto, en cero por defecto, y las
 tarifas de Configuración detrás del botón explícito "Aplicar las tarifas de

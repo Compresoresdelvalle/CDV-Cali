@@ -25,17 +25,17 @@ rama `feat/retenciones-compras`.
 
 ## Estructura de archivos
 
-| Archivo | Responsabilidad | Acción |
-| --- | --- | --- |
-| `supabase/migrations/20260907T1_compras_retencion_generadas.sql` | Recrear las 4 columnas de retención de `compras` como generadas | Crear |
-| `supabase/migrations/20260907T2_fn_registrar_compra_retenciones.sql` | `fn_registrar_compra` acepta y guarda los 3 porcentajes | Crear |
-| `supabase/migrations/20260907T3_cxp_saldo_neto.sql` | `v_cuentas_por_pagar.saldo` neto de retención | Crear |
-| `supabase/migrations/20260907T4_cierre_compras_netas.sql` | Los 6 sitios de `compras.total` en `_fn_cierre_totales` | Crear |
-| `src/components/ventas/BloqueRetenciones.jsx` | Prop `modo` que cambia los tres textos | Modificar |
-| `src/pages/ops/CompraNueva.jsx` | Captura de porcentajes y envío al RPC | Modificar |
-| `src/pages/ops/CompraDetalle.jsx` | Desglose en solo lectura | Modificar |
-| `src/pages/ops/Cuentas.jsx` | Corregir el comentario de la fórmula del saldo | Modificar |
-| `tests/integration/retenciones-compra-render.test.js` | Render de `modo="compra"` | Crear |
+| Archivo                                                              | Responsabilidad                                                 | Acción    |
+| -------------------------------------------------------------------- | --------------------------------------------------------------- | --------- |
+| `supabase/migrations/20260907T1_compras_retencion_generadas.sql`     | Recrear las 4 columnas de retención de `compras` como generadas | Crear     |
+| `supabase/migrations/20260907T2_fn_registrar_compra_retenciones.sql` | `fn_registrar_compra` acepta y guarda los 3 porcentajes         | Crear     |
+| `supabase/migrations/20260907T3_cxp_saldo_neto.sql`                  | `v_cuentas_por_pagar.saldo` neto de retención                   | Crear     |
+| `supabase/migrations/20260907T4_cierre_compras_netas.sql`            | Los 6 sitios de `compras.total` en `_fn_cierre_totales`         | Crear     |
+| `src/components/ventas/BloqueRetenciones.jsx`                        | Prop `modo` que cambia los tres textos                          | Modificar |
+| `src/pages/ops/CompraNueva.jsx`                                      | Captura de porcentajes y envío al RPC                           | Modificar |
+| `src/pages/ops/CompraDetalle.jsx`                                    | Desglose en solo lectura                                        | Modificar |
+| `src/pages/ops/Cuentas.jsx`                                          | Corregir el comentario de la fórmula del saldo                  | Modificar |
+| `tests/integration/retenciones-compra-render.test.js`                | Render de `modo="compra"`                                       | Crear     |
 
 **Reglas del proyecto que aplican aquí** (ver `CLAUDE.md`): nunca hardcodear
 colores (usar `hsl(var(--token))`), botones de 48px mínimo, y `CompraNueva` /
@@ -51,6 +51,7 @@ verificación con datos va dentro de `BEGIN ... ROLLBACK` y usa los productos
 ### Task 1: Columnas de retención de `compras` como generadas
 
 **Files:**
+
 - Create: `supabase/migrations/20260907T1_compras_retencion_generadas.sql`
 
 Hoy `retefuente_valor`, `reteica_valor` y `reteiva_valor` son columnas normales
@@ -197,6 +198,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 2: `fn_registrar_compra` recibe los tres porcentajes
 
 **Files:**
+
 - Create: `supabase/migrations/20260907T2_fn_registrar_compra_retenciones.sql`
 
 Los tres parámetros van **al final** de la firma y con default 0. Así la llamada
@@ -237,7 +239,7 @@ y estos cuatro cambios exactos:
 ```
 
 4. En el `insert into compras (...)`, agregar a la lista de columnas, después de
-`descuento_valor`:
+   `descuento_valor`:
 
 ```sql
     , retefuente_pct, reteica_pct, reteiva_pct
@@ -316,6 +318,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 3: El saldo de Cuentas por Pagar nace neto
 
 **Files:**
+
 - Create: `supabase/migrations/20260907T3_cxp_saldo_neto.sql`
 - Modify: `src/pages/ops/Cuentas.jsx:44-46`
 
@@ -443,6 +446,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 4: Los seis sitios de `compras.total` en el cierre
 
 **Files:**
+
 - Create: `supabase/migrations/20260907T4_cierre_compras_netas.sql`
 
 El spec de fase 1 decía "dos sitios". Son seis. Si se arreglan unos y se olvidan
@@ -467,14 +471,14 @@ y crear `supabase/migrations/20260907T4_cierre_compras_netas.sql` con ese cuerpo
 y **exactamente seis** reemplazos. Estos son los seis, con su contexto para no
 confundirlos:
 
-| # | Variable | Texto actual | Texto nuevo |
-| --- | --- | --- | --- |
-| 1 | `v_egresos` | `sum(total) from compras` | `sum(total - coalesce(retenciones_total,0)) from compras` |
-| 2 | `v_por_sede` (subconsulta `egresos`) | `sum(c.total) from compras c where c.sede_destino_id=se.id` | `sum(c.total - coalesce(c.retenciones_total,0)) from compras c where c.sede_destino_id=se.id` |
-| 3 | `v_por_sede_metodo` | `select c.sede_destino_id, lower(c.metodo_pago), 0::numeric, c.total from compras c` | `select c.sede_destino_id, lower(c.metodo_pago), 0::numeric, c.total - coalesce(c.retenciones_total,0) from compras c` |
-| 4 | `v_por_cuenta` | `select c.sede_destino_id, nullif(trim(c.cuenta_bancaria),''), 0::numeric, c.total from compras c` | `select c.sede_destino_id, nullif(trim(c.cuenta_bancaria),''), 0::numeric, c.total - coalesce(c.retenciones_total,0) from compras c` |
-| 5 | `v_egresos_detalle` | `'total', c.total, 'fecha', (c.fecha at time zone 'America/Bogota')::date) as obj` | `'total', c.total - coalesce(c.retenciones_total,0), 'fecha', (c.fecha at time zone 'America/Bogota')::date) as obj` |
-| 6 | `v_arqueo_esp` | `sum(case when lower(c.metodo_pago)='efectivo' then c.total else 0 end)` | `sum(case when lower(c.metodo_pago)='efectivo' then c.total - coalesce(c.retenciones_total,0) else 0 end)` |
+| #   | Variable                             | Texto actual                                                                                       | Texto nuevo                                                                                                                          |
+| --- | ------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `v_egresos`                          | `sum(total) from compras`                                                                          | `sum(total - coalesce(retenciones_total,0)) from compras`                                                                            |
+| 2   | `v_por_sede` (subconsulta `egresos`) | `sum(c.total) from compras c where c.sede_destino_id=se.id`                                        | `sum(c.total - coalesce(c.retenciones_total,0)) from compras c where c.sede_destino_id=se.id`                                        |
+| 3   | `v_por_sede_metodo`                  | `select c.sede_destino_id, lower(c.metodo_pago), 0::numeric, c.total from compras c`               | `select c.sede_destino_id, lower(c.metodo_pago), 0::numeric, c.total - coalesce(c.retenciones_total,0) from compras c`               |
+| 4   | `v_por_cuenta`                       | `select c.sede_destino_id, nullif(trim(c.cuenta_bancaria),''), 0::numeric, c.total from compras c` | `select c.sede_destino_id, nullif(trim(c.cuenta_bancaria),''), 0::numeric, c.total - coalesce(c.retenciones_total,0) from compras c` |
+| 5   | `v_egresos_detalle`                  | `'total', c.total, 'fecha', (c.fecha at time zone 'America/Bogota')::date) as obj`                 | `'total', c.total - coalesce(c.retenciones_total,0), 'fecha', (c.fecha at time zone 'America/Bogota')::date) as obj`                 |
+| 6   | `v_arqueo_esp`                       | `sum(case when lower(c.metodo_pago)='efectivo' then c.total else 0 end)`                           | `sum(case when lower(c.metodo_pago)='efectivo' then c.total - coalesce(c.retenciones_total,0) else 0 end)`                           |
 
 **Lo que NO se toca, y es igual de importante:**
 
@@ -574,6 +578,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 5: `BloqueRetenciones` aprende el modo compra
 
 **Files:**
+
 - Create: `tests/integration/retenciones-compra-render.test.js`
 - Modify: `src/components/ventas/BloqueRetenciones.jsx`
 
@@ -677,15 +682,15 @@ Agregar a la lista de props de `BloqueRetenciones`, después de `sugeridas = nul
 Justo antes del `return (`, agregar:
 
 ```js
-  // El sentido del dinero es el opuesto en cada lado: en venta el cliente nos
-  // retiene y nos entra menos; en compra nosotros le retenemos al proveedor y
-  // le pagamos menos. La aritmética es idéntica, solo cambian las palabras.
-  const esCompra = modo === "compra";
-  const invitacion = esCompra
-    ? "¿Le retenemos al proveedor? Tocar para aplicar"
-    : "¿El cliente retiene? Tocar para aplicar";
-  const etiquetaNeto = esCompra ? "Neto a pagar" : "Neto a recibir";
-  const etiquetaTotal = esCompra ? "Total de la factura" : "Total facturado";
+// El sentido del dinero es el opuesto en cada lado: en venta el cliente nos
+// retiene y nos entra menos; en compra nosotros le retenemos al proveedor y
+// le pagamos menos. La aritmética es idéntica, solo cambian las palabras.
+const esCompra = modo === "compra";
+const invitacion = esCompra
+  ? "¿Le retenemos al proveedor? Tocar para aplicar"
+  : "¿El cliente retiene? Tocar para aplicar";
+const etiquetaNeto = esCompra ? "Neto a pagar" : "Neto a recibir";
+const etiquetaTotal = esCompra ? "Total de la factura" : "Total facturado";
 ```
 
 Reemplazar el ternario del encabezado:
@@ -754,6 +759,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 6: Nueva Compra captura la retención
 
 **Files:**
+
 - Modify: `src/pages/ops/CompraNueva.jsx`
 
 Solo en `modo === "normal"` (orden de compra). Caja menor es un recibo de
@@ -783,16 +789,16 @@ import {
 Después de la línea 43 (`const [descuentoValor, setDescuentoValor] = useState(0);`), agregar:
 
 ```js
-  // Retenciones: la empresa como agente retenedor. Arrancan en CERO, nunca en
-  // las tarifas sugeridas. Si se precargaran solas, bastaría abrir el bloque
-  // por curiosidad para que el sistema diera por salidos $950.000 mientras del
-  // cajón salió un millón, y el descuadre aparece al cerrar.
-  const [retenciones, setRetenciones] = useState({
-    retefuentePct: 0,
-    reteicaPct: 0,
-    reteivaPct: 0,
-  });
-  const [tarifasSugeridas, setTarifasSugeridas] = useState(null);
+// Retenciones: la empresa como agente retenedor. Arrancan en CERO, nunca en
+// las tarifas sugeridas. Si se precargaran solas, bastaría abrir el bloque
+// por curiosidad para que el sistema diera por salidos $950.000 mientras del
+// cajón salió un millón, y el descuadre aparece al cerrar.
+const [retenciones, setRetenciones] = useState({
+  retefuentePct: 0,
+  reteicaPct: 0,
+  reteivaPct: 0,
+});
+const [tarifasSugeridas, setTarifasSugeridas] = useState(null);
 ```
 
 Agregar un `useEffect` **nuevo** (no meterlo en el que carga `cuentasBanco`: ese
@@ -802,27 +808,27 @@ ventas**, porque son las tarifas de ley y duplicarlas solo crearía un segundo
 sitio donde quedarse desactualizado:
 
 ```js
-  useEffect(() => {
-    let vivo = true;
-    supabase
-      .from("parametros_sistema")
-      .select("key, value")
-      .in("key", Object.values(CLAVES_TARIFA_RETENCION))
-      .then(({ data }) => {
-        if (!vivo || !data) return;
-        const porClave = Object.fromEntries(
-          data.map((p) => [p.key, Number(p.value) || 0]),
-        );
-        setTarifasSugeridas({
-          retefuentePct: porClave[CLAVES_TARIFA_RETENCION.retefuentePct] ?? 0,
-          reteicaPct: porClave[CLAVES_TARIFA_RETENCION.reteicaPct] ?? 0,
-          reteivaPct: porClave[CLAVES_TARIFA_RETENCION.reteivaPct] ?? 0,
-        });
+useEffect(() => {
+  let vivo = true;
+  supabase
+    .from("parametros_sistema")
+    .select("key, value")
+    .in("key", Object.values(CLAVES_TARIFA_RETENCION))
+    .then(({ data }) => {
+      if (!vivo || !data) return;
+      const porClave = Object.fromEntries(
+        data.map((p) => [p.key, Number(p.value) || 0]),
+      );
+      setTarifasSugeridas({
+        retefuentePct: porClave[CLAVES_TARIFA_RETENCION.retefuentePct] ?? 0,
+        reteicaPct: porClave[CLAVES_TARIFA_RETENCION.reteicaPct] ?? 0,
+        reteivaPct: porClave[CLAVES_TARIFA_RETENCION.reteivaPct] ?? 0,
       });
-    return () => {
-      vivo = false;
-    };
-  }, []);
+    });
+  return () => {
+    vivo = false;
+  };
+}, []);
 ```
 
 - [ ] **Paso 3: Calcular el neto**
@@ -830,18 +836,18 @@ sitio donde quedarse desactualizado:
 Después de la línea 300 (`const total = subtotal - descuento + iva;`), agregar:
 
 ```js
-  // Espejo exacto de las columnas generadas de `compras`: la base es el
-  // subtotal menos el descuento, y el reteIVA va sobre el IVA. Si esta fórmula
-  // y la del servidor divergen, la pantalla promete un neto distinto del que
-  // va a salir del cajón.
-  const retencionesCalculadas = calcularRetenciones({
-    base: subtotal - descuento,
-    iva,
-    total,
-    retefuentePct: retenciones.retefuentePct,
-    reteicaPct: retenciones.reteicaPct,
-    reteivaPct: retenciones.reteivaPct,
-  });
+// Espejo exacto de las columnas generadas de `compras`: la base es el
+// subtotal menos el descuento, y el reteIVA va sobre el IVA. Si esta fórmula
+// y la del servidor divergen, la pantalla promete un neto distinto del que
+// va a salir del cajón.
+const retencionesCalculadas = calcularRetenciones({
+  base: subtotal - descuento,
+  iva,
+  total,
+  retefuentePct: retenciones.retefuentePct,
+  reteicaPct: retenciones.reteicaPct,
+  reteivaPct: retenciones.reteivaPct,
+});
 ```
 
 - [ ] **Paso 4: Montar el bloque en la columna principal**
@@ -851,19 +857,23 @@ contiene "Pago de la compra" (el que termina alrededor de la línea 1127 con el
 texto "Se resta del subtotal antes del IVA."), agregar:
 
 ```jsx
-          {/* Retenciones: nosotros como agente retenedor. Solo en orden de
-              compra — un recibo de caja menor no lleva retención. */}
-          {modo === "normal" && (
-            <BloqueRetenciones
-              modo="compra"
-              base={subtotal - descuento}
-              iva={iva}
-              total={total}
-              valores={retenciones}
-              onChange={setRetenciones}
-              sugeridas={tarifasSugeridas}
-            />
-          )}
+{
+  /* Retenciones: nosotros como agente retenedor. Solo en orden de
+              compra — un recibo de caja menor no lleva retención. */
+}
+{
+  modo === "normal" && (
+    <BloqueRetenciones
+      modo="compra"
+      base={subtotal - descuento}
+      iva={iva}
+      total={total}
+      valores={retenciones}
+      onChange={setRetenciones}
+      sugeridas={tarifasSugeridas}
+    />
+  );
+}
 ```
 
 - [ ] **Paso 5: Mostrar el neto en el resumen pegajoso**
@@ -872,25 +882,22 @@ En el `aside.cart`, justo después del bloque `<div className="cart-line tot">`
 que dice "Total estimado", agregar:
 
 ```jsx
-              {retencionesCalculadas.hay && (
-                <>
-                  <div
-                    className="cart-line"
-                    style={{ color: "var(--warn-700)" }}
-                  >
-                    <span>Retenciones</span>
-                    <span className="v" style={{ color: "var(--warn-700)" }}>
-                      −{formatCOP(retencionesCalculadas.total)}
-                    </span>
-                  </div>
-                  <div className="cart-line tot">
-                    <span>Neto a pagar</span>
-                    <span className="v">
-                      {formatCOP(retencionesCalculadas.neto)}
-                    </span>
-                  </div>
-                </>
-              )}
+{
+  retencionesCalculadas.hay && (
+    <>
+      <div className="cart-line" style={{ color: "var(--warn-700)" }}>
+        <span>Retenciones</span>
+        <span className="v" style={{ color: "var(--warn-700)" }}>
+          −{formatCOP(retencionesCalculadas.total)}
+        </span>
+      </div>
+      <div className="cart-line tot">
+        <span>Neto a pagar</span>
+        <span className="v">{formatCOP(retencionesCalculadas.neto)}</span>
+      </div>
+    </>
+  );
+}
 ```
 
 Se usan las clases locales `cart-line` / `tot` y `var(--warn-700)` porque es lo
@@ -943,6 +950,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 7: El detalle de la compra muestra el desglose
 
 **Files:**
+
 - Modify: `src/pages/ops/CompraDetalle.jsx`
 
 Quien va a pagarle al proveedor tiene que ver de dónde salió el neto. Acá **no**
@@ -973,50 +981,47 @@ En el `<div className="totals">`, justo **después** del `<div className="ln tot
 que muestra "Total", agregar:
 
 ```jsx
-              {/* Lo que le retenemos al proveedor y consignamos a la DIAN. La
-                  factura no cambia: cambia cuánta plata sale del cajón. */}
-              {Number(compra.retenciones_total ?? 0) > 0 && (
-                <>
-                  {Number(compra.retefuente_valor ?? 0) > 0 && (
-                    <div className="ln">
-                      <span>
-                        Retefuente {Number(compra.retefuente_pct ?? 0)}%
-                      </span>
-                      <span className="v">
-                        −{formatCOP(Number(compra.retefuente_valor))}
-                      </span>
-                    </div>
-                  )}
-                  {Number(compra.reteica_valor ?? 0) > 0 && (
-                    <div className="ln">
-                      <span>ReteICA {Number(compra.reteica_pct ?? 0)}%</span>
-                      <span className="v">
-                        −{formatCOP(Number(compra.reteica_valor))}
-                      </span>
-                    </div>
-                  )}
-                  {Number(compra.reteiva_valor ?? 0) > 0 && (
-                    <div className="ln">
-                      <span>ReteIVA {Number(compra.reteiva_pct ?? 0)}%</span>
-                      <span className="v">
-                        −{formatCOP(Number(compra.reteiva_valor))}
-                      </span>
-                    </div>
-                  )}
-                  <div className="ln tot">
-                    <span>Neto a pagar</span>
-                    <span className="v">
-                      {formatCOP(
-                        Math.max(
-                          0,
-                          Number(compra.total ?? 0) -
-                            Number(compra.retenciones_total ?? 0),
-                        ),
-                      )}
-                    </span>
-                  </div>
-                </>
-              )}
+{
+  /* Lo que le retenemos al proveedor y consignamos a la DIAN. La
+                  factura no cambia: cambia cuánta plata sale del cajón. */
+}
+{
+  Number(compra.retenciones_total ?? 0) > 0 && (
+    <>
+      {Number(compra.retefuente_valor ?? 0) > 0 && (
+        <div className="ln">
+          <span>Retefuente {Number(compra.retefuente_pct ?? 0)}%</span>
+          <span className="v">
+            −{formatCOP(Number(compra.retefuente_valor))}
+          </span>
+        </div>
+      )}
+      {Number(compra.reteica_valor ?? 0) > 0 && (
+        <div className="ln">
+          <span>ReteICA {Number(compra.reteica_pct ?? 0)}%</span>
+          <span className="v">−{formatCOP(Number(compra.reteica_valor))}</span>
+        </div>
+      )}
+      {Number(compra.reteiva_valor ?? 0) > 0 && (
+        <div className="ln">
+          <span>ReteIVA {Number(compra.reteiva_pct ?? 0)}%</span>
+          <span className="v">−{formatCOP(Number(compra.reteiva_valor))}</span>
+        </div>
+      )}
+      <div className="ln tot">
+        <span>Neto a pagar</span>
+        <span className="v">
+          {formatCOP(
+            Math.max(
+              0,
+              Number(compra.total ?? 0) - Number(compra.retenciones_total ?? 0),
+            ),
+          )}
+        </span>
+      </div>
+    </>
+  );
+}
 ```
 
 Se muestra cada retención solo si tiene valor, porque una compra rara vez lleva
@@ -1198,14 +1203,14 @@ nada. El merge a `main` y el push a `cdv-cali` son una decisión suya.
 
 ## Resumen del alcance
 
-| Toca | No toca |
-| --- | --- |
-| `compras`: 4 columnas generadas | `ventas`, `ordenes_servicio` |
-| `fn_registrar_compra` (3 params nuevos, default 0) | `fn_registrar_venta`, `fn_convertir_cotizacion` |
-| `v_cuentas_por_pagar.saldo` | `v_cuentas_por_cobrar` |
-| `_fn_cierre_totales`: 6 sitios de `compras.total` | Los caminos de `pagos_cuenta` en esos mismos 6 |
-| `BloqueRetenciones` (prop `modo`) | `fn_panel_resultado`, `fn_dashboard_admin`, `fn_dashboard_kpis` |
-| `CompraNueva`, `CompraDetalle`, comentario de `Cuentas.jsx` | `fn_registrar_pago_cuenta` (ya estaba lista) |
+| Toca                                                        | No toca                                                         |
+| ----------------------------------------------------------- | --------------------------------------------------------------- |
+| `compras`: 4 columnas generadas                             | `ventas`, `ordenes_servicio`                                    |
+| `fn_registrar_compra` (3 params nuevos, default 0)          | `fn_registrar_venta`, `fn_convertir_cotizacion`                 |
+| `v_cuentas_por_pagar.saldo`                                 | `v_cuentas_por_cobrar`                                          |
+| `_fn_cierre_totales`: 6 sitios de `compras.total`           | Los caminos de `pagos_cuenta` en esos mismos 6                  |
+| `BloqueRetenciones` (prop `modo`)                           | `fn_panel_resultado`, `fn_dashboard_admin`, `fn_dashboard_kpis` |
+| `CompraNueva`, `CompraDetalle`, comentario de `Cuentas.jsx` | `fn_registrar_pago_cuenta` (ya estaba lista)                    |
 
 ---
 
@@ -1266,7 +1271,7 @@ pantalla, y probado en los tres puntos (rechaza el absurdo, deja pasar
 
 **Lo que se verificó sano y no hizo falta tocar.** El picking que ajusta la
 factura: con 6 de 10 llegadas la retención bajó sola de 25.000 a 15.000 y el
-cierre reflejó 585.000 — funciona *porque* las columnas son generadas; calculadas
+cierre reflejó 585.000 — funciona _porque_ las columnas son generadas; calculadas
 en la RPC habrían quedado en 25.000 sobre una factura de 600.000. Cancelar una
 compra retenida la saca de Cuentas por Pagar y devuelve el cierre a su línea
 base. Caja menor sigue registrando con retención en cero y por su propio camino.
