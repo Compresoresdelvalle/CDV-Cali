@@ -1206,3 +1206,46 @@ nada. El merge a `main` y el push a `cdv-cali` son una decisión suya.
 | `_fn_cierre_totales`: 6 sitios de `compras.total` | Los caminos de `pagos_cuenta` en esos mismos 6 |
 | `BloqueRetenciones` (prop `modo`) | `fn_panel_resultado`, `fn_dashboard_admin`, `fn_dashboard_kpis` |
 | `CompraNueva`, `CompraDetalle`, comentario de `Cuentas.jsx` | `fn_registrar_pago_cuenta` (ya estaba lista) |
+
+---
+
+## Cómo quedó (ejecutado el 2026-09-07)
+
+Tres cosas salieron distintas del plan. Las tres las descubrió la verificación,
+no el build.
+
+**El Task 3 se fundió en el Task 1.** `v_cuentas_por_pagar` depende de
+`retenciones_total`, así que bajar la columna exigía bajar la vista. Recrearla
+dos veces en producción no aportaba nada, de modo que la migración
+`20260907T1` hace las dos cosas y `20260907T3` no existe.
+
+**Recrear una vista no conserva ni sus reloptions ni sus grants.** Al reponerla
+pasaron dos cosas a la vez: el default ACL del esquema le regaló permisos a
+`anon`, que no tenía ninguno, y el `create view` sin opciones se comió el
+`security_invoker = true` que la vista traía desde `20260613000001`. Juntas
+habrían dejado la deuda con proveedores visible para cualquier usuario
+autenticado de cualquier sede, y para la anon key. El advisor de seguridad lo
+marcó como ERROR. Corregido en `20260907T5`, con `20260907T1` ya arreglado para
+que una reproducción desde cero no repita el error. Verificado después con
+`set local role authenticated`: Bodega ve su compra, Sofía (L3) no ve nada.
+
+**Agregar parámetros a una función crea una sobrecarga, no la reemplaza.**
+`create or replace` habría dejado viva la firma de diez argumentos, y una
+llamada por nombre desde PostgREST habría podido fallar con "function is not
+unique" en tiempo de ejecución. Se baja primero, y al bajarla se pierden los
+GRANTs, que el default del esquema le regala a PUBLIC y a `anon` — un agujero,
+tratándose de una función `SECURITY DEFINER`. Repuesto el ACL exacto y
+verificado que quede una sola firma.
+
+**Resultado de las verificaciones.** Sin retenciones el cierre da idéntico al
+peso (hoy 1.369.699 de egresos y 4.236.678 de margen; el mes 28.223.485,81 y
+11.760.327,19). Con una compra de un millón al 2,5%, los seis sitios se mueven
+en 975.000 y el arqueo baja 975.000, no un millón. Un crédito retenido nace con
+saldo 975.000, no mueve el cierre al registrarse, acepta el pago de 975.000
+dejando saldo 0, y el cierre registra 975.000 — no 950.625, que sería la
+retención aplicada dos veces. Pagar 1.000.000 se rechaza con el mensaje correcto.
+El panel de resultado no se movió. Advisor de seguridad: de 1 ERROR a ninguno.
+lint sin problemas nuevos, build en verde, 277 pruebas pasando.
+
+**Queda pendiente el paso 5 del Task 8**, el recorrido a mano por rol en el
+navegador. Eso lo hace el dueño: exige iniciar sesión.
