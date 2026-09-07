@@ -186,10 +186,12 @@ export default function Composicion({
             color: "hsl(var(--foreground))",
           }}
         >
-          <TrendingDown className="h-4 w-4" strokeWidth={1.7} />
-          Ver los peores
+          <TrendingDown className="h-4 w-4 shrink-0" strokeWidth={1.7} />
+          <span className="whitespace-nowrap">Ver los peores</span>
+          {/* La coletilla se esconde en móvil: partía "Ver los / peores" en dos
+              líneas y el botón dejaba de leerse como una sola cosa. */}
           <span
-            className="text-[11.5px]"
+            className="hidden text-[11.5px] sm:inline"
             style={{ color: "hsl(var(--muted-foreground))" }}
           >
             {peores ? "· menor margen primero" : "· los que menos margen dejan"}
