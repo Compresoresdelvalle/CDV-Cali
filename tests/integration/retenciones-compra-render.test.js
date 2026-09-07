@@ -68,3 +68,29 @@ describe("BloqueRetenciones en modo compra", () => {
     expect(html).not.toContain("¿Le retenemos al proveedor?");
   });
 });
+
+describe("BloqueRetenciones cuando la retención se pasa del total", () => {
+  it("avisa en pantalla en vez de dejar pulsar un botón que va a fallar", () => {
+    const html = montar({
+      ...BASE,
+      modo: "compra",
+      abierto: true,
+      // 100% + 100% sobre la base son 2.000.000 contra un total de 1.190.000:
+      // sin este aviso el servidor rechazaría el documento y el operador no
+      // sabría por qué.
+      valores: { retefuentePct: 100, reteicaPct: 100, reteivaPct: 0 },
+    });
+    expect(html).toContain("se pasan del total");
+    expect(html).toContain("no 25");
+  });
+
+  it("no avisa nada cuando la retención es normal", () => {
+    const html = montar({
+      ...BASE,
+      modo: "compra",
+      abierto: true,
+      valores: { retefuentePct: 2.5, reteicaPct: 0, reteivaPct: 0 },
+    });
+    expect(html).not.toContain("se pasan del total");
+  });
+});

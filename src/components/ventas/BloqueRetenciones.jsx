@@ -171,6 +171,11 @@ export default function BloqueRetenciones({
   const etiquetaTotal = esCompra ? "Total de la factura" : "Total facturado";
   const etiquetaNeto = esCompra ? "Neto a pagar" : "Neto a recibir";
 
+  // Cada porcentaje está recortado a [0,100], pero la SUMA sí puede pasarse del
+  // total, y entonces el servidor rechaza el documento. Se avisa aquí en vez de
+  // dejar que el operador pulse un botón que va a fallar igual.
+  const seExcede = ret.total > total;
+
   // Recibe el número ya normalizado por la Fila, al salir del campo.
   const cambiar = (clave) => (n) => onChange?.({ ...valores, [clave]: n });
 
@@ -244,6 +249,21 @@ export default function BloqueRetenciones({
               % · {Number(sugeridas.reteicaPct) || 0}% ·{" "}
               {Number(sugeridas.reteivaPct) || 0}%)
             </button>
+          )}
+
+          {seExcede && (
+            <p
+              className="rounded-lg px-3 py-2 text-[12px]"
+              style={{
+                backgroundColor: "hsl(var(--destructive) / 0.08)",
+                color: "hsl(var(--destructive))",
+              }}
+              role="alert"
+            >
+              Las retenciones ({formatCOP(ret.total)}) se pasan del total (
+              {formatCOP(total)}). Así no se puede guardar. Revisa los
+              porcentajes: si querías 2,5% escribe 2,5, no 25.
+            </p>
           )}
 
           <Fila
