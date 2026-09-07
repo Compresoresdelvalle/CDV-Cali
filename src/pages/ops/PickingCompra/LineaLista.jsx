@@ -26,7 +26,10 @@ function detalleTexto(d) {
 function Decision({ d, linea, onFaltanteAccion, onSobranteAccion, compact }) {
   if (d.faltan === 0 && d.sobran === 0) {
     return (
-      <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+      <span
+        className="text-xs"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
         —
       </span>
     );
@@ -63,7 +66,9 @@ function Decision({ d, linea, onFaltanteAccion, onSobranteAccion, compact }) {
           <MiniBtn
             compact={compact}
             active={linea.sobrante_accion === "entra_y_reporta"}
-            onClick={() => onSobranteAccion(linea.detalle_id, "entra_y_reporta")}
+            onClick={() =>
+              onSobranteAccion(linea.detalle_id, "entra_y_reporta")
+            }
           >
             Entran y reporto
           </MiniBtn>
@@ -120,7 +125,10 @@ function Stepper({ value, onChange, size, ariaPrefix }) {
         onChange={(e) => onChange(e.target.value)}
         aria-label={ariaPrefix}
         className="w-14 text-center text-lg font-bold tabular-nums bg-transparent outline-none border-b"
-        style={{ color: "hsl(var(--foreground))", borderColor: "hsl(var(--border))" }}
+        style={{
+          color: "hsl(var(--foreground))",
+          borderColor: "hsl(var(--border))",
+        }}
       />
       <button
         type="button"
@@ -158,7 +166,10 @@ export default function LineaListaCard({
   return (
     <div
       className="rounded-xl border p-4 space-y-3"
-      style={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}
+      style={{
+        backgroundColor: "hsl(var(--card))",
+        borderColor: "hsl(var(--border))",
+      }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -235,7 +246,10 @@ export default function LineaListaCard({
             <Stepper
               value={d.danadas}
               onChange={(v) =>
-                onDanadas(linea.detalle_id, Math.min(d.llegaron, Number(v) || 0))
+                onDanadas(
+                  linea.detalle_id,
+                  Math.min(d.llegaron, Number(v) || 0),
+                )
               }
               size={48}
               ariaPrefix="Unidades dañadas"
@@ -245,7 +259,10 @@ export default function LineaListaCard({
       </div>
 
       {detalle && (
-        <p className="text-xs tabular-nums" style={{ color: "hsl(var(--muted-foreground))" }}>
+        <p
+          className="text-xs tabular-nums"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
           {detalle}
         </p>
       )}
@@ -277,7 +294,10 @@ export function LineaListaFila({
   const detalle = detalleTexto(d);
 
   return (
-    <tr className="border-b last:border-b-0" style={{ borderColor: "hsl(var(--border))" }}>
+    <tr
+      className="border-b last:border-b-0"
+      style={{ borderColor: "hsl(var(--border))" }}
+    >
       <td className="px-3 py-2 align-top max-w-[280px]">
         <p
           className="font-mono text-xs"
@@ -286,7 +306,10 @@ export function LineaListaFila({
           {linea.referencia || "Sin referencia"} ·{" "}
           {linea.destino === "insumo" ? "Insumo" : "Venta"}
         </p>
-        <p className="text-sm font-medium" style={{ color: "hsl(var(--foreground))" }}>
+        <p
+          className="text-sm font-medium"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
           {linea.nombre || "Producto sin nombre"}
         </p>
         {!linea.contada && (
@@ -328,7 +351,10 @@ export function LineaListaFila({
           </div>
         )}
       </td>
-      <td className="px-3 py-2 align-top text-center tabular-nums text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>
+      <td
+        className="px-3 py-2 align-top text-center tabular-nums text-sm"
+        style={{ color: "hsl(var(--muted-foreground))" }}
+      >
         {d.pedido}
       </td>
       <td className="px-3 py-2 align-top">
@@ -359,14 +385,22 @@ export function LineaListaFila({
             ariaPrefix="Unidades dañadas"
           />
         ) : (
-          <span className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>—</span>
+          <span
+            className="text-xs"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            —
+          </span>
         )}
       </td>
       <td className="px-3 py-2 align-top">
         <div className="flex flex-col gap-1">
           <StatusBadge status={badge.status}>{badge.texto}</StatusBadge>
           {detalle && (
-            <span className="text-xs tabular-nums" style={{ color: "hsl(var(--muted-foreground))" }}>
+            <span
+              className="text-xs tabular-nums"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
               {detalle}
             </span>
           )}

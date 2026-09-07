@@ -1,6 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, ScanLine, AlertTriangle, LayoutList, Rows3 } from "lucide-react";
+import {
+  ArrowLeft,
+  ScanLine,
+  AlertTriangle,
+  LayoutList,
+  Rows3,
+} from "lucide-react";
 import { useAuthStore } from "../../../stores/authStore";
 import { supabase } from "../../../lib/supabase";
 import { formatDate, safeError } from "../../../lib/utils";
@@ -207,8 +213,13 @@ export default function PickingCompra() {
     // RoleGuard ya garantiza sesión + rol antes de montar esta pantalla; este
     // chequeo es solo una red de seguridad para no reventar contra `perfil`
     // en el instante improbable de un logout a mitad de carga.
-    if (!perfil) return { txt: "Tu sesión cambió. Vuelve a entrar.", a: "/login" };
-    if (!compra) return { txt: "Esa compra no existe o fue eliminada.", a: "/ops/compras" };
+    if (!perfil)
+      return { txt: "Tu sesión cambió. Vuelve a entrar.", a: "/login" };
+    if (!compra)
+      return {
+        txt: "Esa compra no existe o fue eliminada.",
+        a: "/ops/compras",
+      };
     if (compra.estado === "cancelada")
       return {
         txt: `La compra #${compra.numero} está cancelada: no hay nada que recibir.`,
@@ -850,14 +861,10 @@ export default function PickingCompra() {
                 : `Llevas ${r.contadas} de ${r.total} línea${r.total === 1 ? "" : "s"}`}
               {r.aReclamar > 0 &&
                 ` · ${r.aReclamar} unidad${r.aReclamar === 1 ? "" : "es"} para reclamarle al proveedor`}
-              {r.deMas > 0 &&
-                ` · ${r.deMas} de más que entran al inventario`}
+              {r.deMas > 0 && ` · ${r.deMas} de más que entran al inventario`}
             </p>
             {r.motivoBloqueo && (
-              <p
-                className="text-xs"
-                style={{ color: "hsl(var(--warning))" }}
-              >
+              <p className="text-xs" style={{ color: "hsl(var(--warning))" }}>
                 {r.motivoBloqueo}
               </p>
             )}
@@ -953,7 +960,10 @@ function AvisoBloqueo({ texto, volverA }) {
         borderColor: "hsl(var(--border))",
       }}
     >
-      <AlertTriangle className="h-8 w-8" style={{ color: "hsl(var(--warning))" }} />
+      <AlertTriangle
+        className="h-8 w-8"
+        style={{ color: "hsl(var(--warning))" }}
+      />
       <p className="text-sm" style={{ color: "hsl(var(--foreground))" }}>
         {texto}
       </p>

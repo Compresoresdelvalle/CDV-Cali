@@ -30,10 +30,22 @@ function calcularConsecuencias(compra, lineas) {
   const facturaAntes = Number(compra?.total ?? 0);
   const facturaDespues = Math.max(0, facturaAntes - reduccionFactura);
 
-  return { inventoryUp, facturaAntes, facturaDespues, unidadesAjustadas, reduccionFactura };
+  return {
+    inventoryUp,
+    facturaAntes,
+    facturaDespues,
+    unidadesAjustadas,
+    reduccionFactura,
+  };
 }
 
-export default function ModalConfirmar({ compra, lineas, resumen, onConfirm, onClose }) {
+export default function ModalConfirmar({
+  compra,
+  lineas,
+  resumen,
+  onConfirm,
+  onClose,
+}) {
   const [enviando, setEnviando] = useState(false);
   // Guarda SINCRONA. El `disabled` de React no sirve contra un doble toque
   // rapido: el segundo evento puede entrar antes del re-render. En una tablet
@@ -80,12 +92,19 @@ export default function ModalConfirmar({ compra, lineas, resumen, onConfirm, onC
           Vas a recibir la compra #{compra?.numero}
         </h2>
 
-        <ul className="space-y-2.5 text-sm" style={{ color: "hsl(var(--foreground))" }}>
+        <ul
+          className="space-y-2.5 text-sm"
+          style={{ color: "hsl(var(--foreground))" }}
+        >
           {c.inventoryUp > 0 && (
             <li className="flex gap-2">
               <span aria-hidden>•</span>
               <span>
-                El inventario sube <strong className="tabular-nums">{c.inventoryUp} unidades</strong>.
+                El inventario sube{" "}
+                <strong className="tabular-nums">
+                  {c.inventoryUp} unidades
+                </strong>
+                .
               </span>
             </li>
           )}
@@ -93,10 +112,20 @@ export default function ModalConfirmar({ compra, lineas, resumen, onConfirm, onC
             <li className="flex gap-2">
               <span aria-hidden>•</span>
               <span>
-                La factura baja de <strong className="tabular-nums">{formatCOP(c.facturaAntes)}</strong>{" "}
-                a <strong className="tabular-nums">{formatCOP(c.facturaDespues)}</strong>:{" "}
-                {c.unidadesAjustadas} unidad{c.unidadesAjustadas === 1 ? "" : "es"} no{" "}
-                {c.unidadesAjustadas === 1 ? "la despacharon" : "las despacharon"}.
+                La factura baja de{" "}
+                <strong className="tabular-nums">
+                  {formatCOP(c.facturaAntes)}
+                </strong>{" "}
+                a{" "}
+                <strong className="tabular-nums">
+                  {formatCOP(c.facturaDespues)}
+                </strong>
+                : {c.unidadesAjustadas} unidad
+                {c.unidadesAjustadas === 1 ? "" : "es"} no{" "}
+                {c.unidadesAjustadas === 1
+                  ? "la despacharon"
+                  : "las despacharon"}
+                .
               </span>
             </li>
           )}
@@ -104,9 +133,12 @@ export default function ModalConfirmar({ compra, lineas, resumen, onConfirm, onC
             <li className="flex gap-2">
               <span aria-hidden>•</span>
               <span>
-                Quedan <strong className="tabular-nums">{resumen.aReclamar} unidades</strong> para
-                reclamarle a {proveedor}. Se abre la garantía y Maritza decide si pide nota crédito o
-                reposición.
+                Quedan{" "}
+                <strong className="tabular-nums">
+                  {resumen.aReclamar} unidades
+                </strong>{" "}
+                para reclamarle a {proveedor}. Se abre la garantía y Maritza
+                decide si pide nota crédito o reposición.
               </span>
             </li>
           )}
@@ -114,14 +146,19 @@ export default function ModalConfirmar({ compra, lineas, resumen, onConfirm, onC
             <li className="flex gap-2">
               <span aria-hidden>•</span>
               <span>
-                <strong className="tabular-nums">{resumen.deMas} unidades</strong> llegaron de más y
-                entran al inventario al costo de la compra.
+                <strong className="tabular-nums">
+                  {resumen.deMas} unidades
+                </strong>{" "}
+                llegaron de más y entran al inventario al costo de la compra.
               </span>
             </li>
           )}
         </ul>
 
-        <p className="text-sm font-semibold" style={{ color: "hsl(var(--destructive))" }}>
+        <p
+          className="text-sm font-semibold"
+          style={{ color: "hsl(var(--destructive))" }}
+        >
           Esto no se puede deshacer.
         </p>
 

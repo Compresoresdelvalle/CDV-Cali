@@ -17,29 +17,29 @@
 
 **Bloque 0 — Aviso urgente al Admin**
 
-| Archivo | Responsabilidad |
-| --- | --- |
-| `supabase/migrations/<ts>_fn_escalar_a_admin.sql` | RPC con el tope de 2 del lado del servidor |
-| `src/components/avisos/BotonAvisarAdmin.jsx` | Botón reutilizable: pide motivo, llama la RPC, muestra los avisos restantes |
-| `src/components/avisos/AvisoUrgenteModal.jsx` | Modal bloqueante que solo ve el Admin |
-| `src/components/layout/AppShell.jsx` | Montar el modal (modificar) |
-| `src/components/layout/AdminShell.jsx` | Montar el modal (modificar) |
+| Archivo                                           | Responsabilidad                                                             |
+| ------------------------------------------------- | --------------------------------------------------------------------------- |
+| `supabase/migrations/<ts>_fn_escalar_a_admin.sql` | RPC con el tope de 2 del lado del servidor                                  |
+| `src/components/avisos/BotonAvisarAdmin.jsx`      | Botón reutilizable: pide motivo, llama la RPC, muestra los avisos restantes |
+| `src/components/avisos/AvisoUrgenteModal.jsx`     | Modal bloqueante que solo ve el Admin                                       |
+| `src/components/layout/AppShell.jsx`              | Montar el modal (modificar)                                                 |
+| `src/components/layout/AdminShell.jsx`            | Montar el modal (modificar)                                                 |
 
 **Bloque 1 — Picking**
 
-| Archivo | Responsabilidad |
-| --- | --- |
-| `src/lib/picking-compras.js` | Lógica pura: derivar buenas/faltan/sobran, estado por línea, resumen y payload. Sin React ni Supabase |
-| `supabase/migrations/<ts>_compra_picking_tablas.sql` | `compra_picking` + `compra_picking_detalle` + RLS |
-| `supabase/migrations/<ts>_fn_procesar_picking_compra.sql` | RPC orquestadora |
-| `src/pages/ops/PickingCompra/index.jsx` | Pantalla: carga, guardas, estado, confirmación |
-| `src/pages/ops/PickingCompra/LineaEnfoque.jsx` | Tarjeta de un producto (celular) |
-| `src/pages/ops/PickingCompra/LineaLista.jsx` | Fila de un producto (tablet/escritorio) |
-| `src/pages/ops/PickingCompra/ModalConfirmar.jsx` | El modal de consecuencias |
-| `src/pages/ops/PickingCompra/PanelEtiquetas.jsx` | Impresión de QR sobre lo contado |
-| `src/pages/ops/CompraDetalle.jsx` | Botón "Contar y recibir" (modificar) |
-| `src/App.jsx` | Ruta nueva (modificar) |
-| `tests/integration/picking-compras.test.js` | Tests de la lógica pura |
+| Archivo                                                   | Responsabilidad                                                                                       |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `src/lib/picking-compras.js`                              | Lógica pura: derivar buenas/faltan/sobran, estado por línea, resumen y payload. Sin React ni Supabase |
+| `supabase/migrations/<ts>_compra_picking_tablas.sql`      | `compra_picking` + `compra_picking_detalle` + RLS                                                     |
+| `supabase/migrations/<ts>_fn_procesar_picking_compra.sql` | RPC orquestadora                                                                                      |
+| `src/pages/ops/PickingCompra/index.jsx`                   | Pantalla: carga, guardas, estado, confirmación                                                        |
+| `src/pages/ops/PickingCompra/LineaEnfoque.jsx`            | Tarjeta de un producto (celular)                                                                      |
+| `src/pages/ops/PickingCompra/LineaLista.jsx`              | Fila de un producto (tablet/escritorio)                                                               |
+| `src/pages/ops/PickingCompra/ModalConfirmar.jsx`          | El modal de consecuencias                                                                             |
+| `src/pages/ops/PickingCompra/PanelEtiquetas.jsx`          | Impresión de QR sobre lo contado                                                                      |
+| `src/pages/ops/CompraDetalle.jsx`                         | Botón "Contar y recibir" (modificar)                                                                  |
+| `src/App.jsx`                                             | Ruta nueva (modificar)                                                                                |
+| `tests/integration/picking-compras.test.js`               | Tests de la lógica pura                                                                               |
 
 La pantalla se parte en carpeta porque `CompraDetalle.jsx` ya tiene 785 líneas y `PickingPage.jsx` 727: un archivo único aquí nacería con 900 y sería difícil de editar con fiabilidad.
 
@@ -50,6 +50,7 @@ La pantalla se parte en carpeta porque `CompraDetalle.jsx` ya tiene 785 líneas 
 ### Task 1: RPC `fn_escalar_a_admin`
 
 **Files:**
+
 - Create: `supabase/migrations/<ts>_fn_escalar_a_admin.sql`
 
 Contexto que hay que tener presente: `notificaciones` **no tiene política de INSERT**, solo SELECT y UPDATE. Por eso la escalación obligatoriamente pasa por una función `SECURITY DEFINER`; no es una preferencia de diseño.
@@ -203,6 +204,7 @@ git commit -m "feat(avisos): RPC para escalar una situacion al Admin con tope de
 ### Task 2: `BotonAvisarAdmin`
 
 **Files:**
+
 - Create: `src/components/avisos/BotonAvisarAdmin.jsx`
 
 - [ ] **Step 1: Escribir el componente**
@@ -314,7 +316,10 @@ export default function BotonAvisarAdmin({ origen, origenId, className = "" }) {
             >
               ¿Qué está pasando?
             </h3>
-            <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+            <p
+              className="text-xs"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
               Escríbelo corto y concreto. Le va a salir en pantalla apenas abra
               la aplicación, así que entre más claro, menos llamadas.
             </p>
@@ -350,7 +355,10 @@ export default function BotonAvisarAdmin({ origen, origenId, className = "" }) {
                 onClick={enviar}
                 disabled={enviando || motivo.trim().length < 5}
                 className="flex-1 rounded-lg text-sm font-medium text-white disabled:opacity-40"
-                style={{ minHeight: 48, backgroundColor: "hsl(var(--warning))" }}
+                style={{
+                  minHeight: 48,
+                  backgroundColor: "hsl(var(--warning))",
+                }}
               >
                 {enviando ? "Avisando…" : "Avisar"}
               </button>
@@ -380,6 +388,7 @@ git commit -m "feat(avisos): boton reutilizable para escalar al Admin"
 ### Task 3: `AvisoUrgenteModal` y su montaje
 
 **Files:**
+
 - Create: `src/components/avisos/AvisoUrgenteModal.jsx`
 - Modify: `src/components/layout/AppShell.jsx` (donde ya está `const notifs = useNotificaciones(perfil)`, línea ~741)
 - Modify: `src/components/layout/AdminShell.jsx` (ídem, línea ~479)
@@ -412,8 +421,7 @@ export default function AvisoUrgenteModal({ items, perfil, onMarcar }) {
   const navigate = useNavigate();
 
   const pendientes = useMemo(
-    () =>
-      (items ?? []).filter((n) => n.tipo === "escalamiento" && !n.leida),
+    () => (items ?? []).filter((n) => n.tipo === "escalamiento" && !n.leida),
     [items],
   );
 
@@ -486,7 +494,10 @@ export default function AvisoUrgenteModal({ items, perfil, onMarcar }) {
         </p>
 
         {pendientes.length > 1 && (
-          <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+          <p
+            className="text-xs"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
             Hay {pendientes.length - 1} aviso
             {pendientes.length - 1 === 1 ? "" : "s"} más esperando.
           </p>
@@ -567,6 +578,7 @@ git commit -m "feat(avisos): modal bloqueante de escalamiento para el Admin"
 Esta va primero y sin base de datos: es la que decide qué se reclama y qué se ajusta, y es donde un error se paga caro. Se prueba entera antes de que exista pantalla.
 
 **Files:**
+
 - Create: `src/lib/picking-compras.js`
 - Test: `tests/integration/picking-compras.test.js`
 
@@ -611,21 +623,41 @@ describe("derivar", () => {
 
   it("llegó todo", () => {
     const d = derivar({ ...lineaNueva(det()), llegaron: 10, contada: true });
-    expect(d).toMatchObject({ buenas: 10, faltan: 0, sobran: 0, estado: "completo" });
+    expect(d).toMatchObject({
+      buenas: 10,
+      faltan: 0,
+      sobran: 0,
+      estado: "completo",
+    });
   });
 
   it("faltaron", () => {
     const d = derivar({ ...lineaNueva(det()), llegaron: 8, contada: true });
-    expect(d).toMatchObject({ buenas: 8, faltan: 2, sobran: 0, estado: "faltan" });
+    expect(d).toMatchObject({
+      buenas: 8,
+      faltan: 2,
+      sobran: 0,
+      estado: "faltan",
+    });
   });
 
   it("sobraron", () => {
     const d = derivar({ ...lineaNueva(det()), llegaron: 12, contada: true });
-    expect(d).toMatchObject({ buenas: 12, faltan: 0, sobran: 2, estado: "sobran" });
+    expect(d).toMatchObject({
+      buenas: 12,
+      faltan: 0,
+      sobran: 2,
+      estado: "sobran",
+    });
   });
 
   it("dañadas mandan sobre el resto en el semáforo", () => {
-    const d = derivar({ ...lineaNueva(det()), llegaron: 8, danadas: 2, contada: true });
+    const d = derivar({
+      ...lineaNueva(det()),
+      llegaron: 8,
+      danadas: 2,
+      contada: true,
+    });
     expect(d).toMatchObject({ buenas: 6, faltan: 2, estado: "danadas" });
   });
 
@@ -640,7 +672,10 @@ describe("resumen", () => {
   const base = lineaNueva(det());
 
   it("no deja confirmar mientras falten líneas por contar", () => {
-    const r = resumen([base, { ...base, detalle_id: "d2", llegaron: 5, contada: true }]);
+    const r = resumen([
+      base,
+      { ...base, detalle_id: "d2", llegaron: 5, contada: true },
+    ]);
     expect(r.contadas).toBe(1);
     expect(r.total).toBe(2);
     expect(r.listo).toBe(false);
@@ -648,20 +683,30 @@ describe("resumen", () => {
   });
 
   it("no deja confirmar si hay faltante sin decidir qué hacer", () => {
-    const r = resumen([{ ...base, llegaron: 8, contada: true, faltante_accion: null }]);
+    const r = resumen([
+      { ...base, llegaron: 8, contada: true, faltante_accion: null },
+    ]);
     expect(r.listo).toBe(false);
     expect(r.motivoBloqueo).toMatch(/faltante/i);
   });
 
   it("no deja confirmar si hay sobrante sin decidir", () => {
-    const r = resumen([{ ...base, llegaron: 12, contada: true, sobrante_accion: null }]);
+    const r = resumen([
+      { ...base, llegaron: 12, contada: true, sobrante_accion: null },
+    ]);
     expect(r.listo).toBe(false);
     expect(r.motivoBloqueo).toMatch(/sobrante/i);
   });
 
   it("suma lo que se reclama: faltante reclamado más dañadas", () => {
     const r = resumen([
-      { ...base, llegaron: 8, danadas: 1, contada: true, faltante_accion: "reclamar" },
+      {
+        ...base,
+        llegaron: 8,
+        danadas: 1,
+        contada: true,
+        faltante_accion: "reclamar",
+      },
     ]);
     expect(r.aReclamar).toBe(3);
     expect(r.aAjustar).toBe(0);
@@ -687,7 +732,12 @@ describe("resumen", () => {
 
 describe("todo en cero", () => {
   it("no deja recibir una compra en la que no llego nada: manda a cancelar", () => {
-    const l = { ...lineaNueva(det()), llegaron: 0, contada: true, faltante_accion: "ajustar" };
+    const l = {
+      ...lineaNueva(det()),
+      llegaron: 0,
+      contada: true,
+      faltante_accion: "ajustar",
+    };
     const r = resumen([l, { ...l, detalle_id: "d2" }]);
     expect(r.todoEnCero).toBe(true);
     expect(r.listo).toBe(false);
@@ -695,8 +745,17 @@ describe("todo en cero", () => {
   });
 
   it("si al menos una linea trae algo, no es el caso de todo en cero", () => {
-    const cero = { ...lineaNueva(det()), llegaron: 0, contada: true, faltante_accion: "ajustar" };
-    const algo = { ...lineaNueva(det({ id: "d2" })), llegaron: 10, contada: true };
+    const cero = {
+      ...lineaNueva(det()),
+      llegaron: 0,
+      contada: true,
+      faltante_accion: "ajustar",
+    };
+    const algo = {
+      ...lineaNueva(det({ id: "d2" })),
+      llegaron: 10,
+      contada: true,
+    };
     const r = resumen([cero, algo]);
     expect(r.todoEnCero).toBe(false);
     expect(r.listo).toBe(true);
@@ -705,22 +764,42 @@ describe("todo en cero", () => {
 
 describe("metodoReal", () => {
   it("'completo' que despues se corrige a mano deja de ser 'completo'", () => {
-    const l = { ...lineaNueva(det()), llegaron: 8, contada: true, metodo: METODO.COMPLETO };
+    const l = {
+      ...lineaNueva(det()),
+      llegaron: 8,
+      contada: true,
+      metodo: METODO.COMPLETO,
+    };
     expect(metodoReal(l)).toBe(METODO.MANUAL);
   });
 
   it("'completo' que sigue cuadrando con el pedido se conserva", () => {
-    const l = { ...lineaNueva(det()), llegaron: 10, contada: true, metodo: METODO.COMPLETO };
+    const l = {
+      ...lineaNueva(det()),
+      llegaron: 10,
+      contada: true,
+      metodo: METODO.COMPLETO,
+    };
     expect(metodoReal(l)).toBe(METODO.COMPLETO);
   });
 
   it("'nada' al que despues le suman unidades deja de ser 'nada'", () => {
-    const l = { ...lineaNueva(det()), llegaron: 2, contada: true, metodo: METODO.NADA };
+    const l = {
+      ...lineaNueva(det()),
+      llegaron: 2,
+      contada: true,
+      metodo: METODO.NADA,
+    };
     expect(metodoReal(l)).toBe(METODO.MANUAL);
   });
 
   it("el escaner se respeta tal cual", () => {
-    const l = { ...lineaNueva(det()), llegaron: 7, contada: true, metodo: METODO.ESCANER };
+    const l = {
+      ...lineaNueva(det()),
+      llegaron: 7,
+      contada: true,
+      metodo: METODO.ESCANER,
+    };
     expect(metodoReal(l)).toBe(METODO.ESCANER);
   });
 });
@@ -764,7 +843,9 @@ describe("construirPayload", () => {
   });
 
   it("el servidor deriva: el payload no lleva buenas ni faltan", () => {
-    const p = construirPayload([{ ...lineaNueva(det()), llegaron: 10, contada: true }]);
+    const p = construirPayload([
+      { ...lineaNueva(det()), llegaron: 10, contada: true },
+    ]);
     expect(p[0]).not.toHaveProperty("buenas");
     expect(p[0]).not.toHaveProperty("faltan");
   });
@@ -972,6 +1053,7 @@ git commit -m "feat(picking): logica pura del conteo de recepcion"
 ### Task 5: Tablas de bitácora
 
 **Files:**
+
 - Create: `supabase/migrations/<ts>_compra_picking_tablas.sql`
 
 - [ ] **Step 1: Escribir la migración**
@@ -1077,6 +1159,7 @@ git commit -m "feat(picking): tablas de bitacora del conteo de recepcion"
 ### Task 6: RPC `fn_procesar_picking_compra`
 
 **Files:**
+
 - Create: `supabase/migrations/<ts>_fn_procesar_picking_compra.sql`
 
 - [ ] **Step 1: Escribir la migración**
@@ -1487,6 +1570,7 @@ git commit --allow-empty -m "test(picking): verificacion de la RPC contra produc
 ### Task 8: Pantalla — esqueleto, carga y guardas
 
 **Files:**
+
 - Create: `src/pages/ops/PickingCompra/index.jsx`
 - Modify: `src/App.jsx`
 
@@ -1514,10 +1598,12 @@ La consulta, con todo lo que la lógica pura necesita:
 ```js
 const { data: compra } = await supabase
   .from("compras")
-  .select(`id, numero, proveedor, factura_proveedor, sede_destino_id,
+  .select(
+    `id, numero, proveedor, factura_proveedor, sede_destino_id,
            total, recibida, fecha_recepcion, estado,
            detalle_compra ( id, producto_id, cantidad, costo_unitario, destino,
-                            producto:producto_id ( referencia, nombre ) )`)
+                            producto:producto_id ( referencia, nombre ) )`,
+  )
   .eq("id", id)
   .maybeSingle();
 ```
@@ -1530,17 +1616,25 @@ const lineasCompra = compra?.detalle_compra ?? [];
 const bloqueo = !compra
   ? { txt: "Esa compra no existe o fue eliminada.", a: "/ops/compras" }
   : compra.estado === "cancelada"
-    ? { txt: `La compra #${compra.numero} está cancelada: no hay nada que recibir.`,
-        a: `/ops/compras/${id}` }
+    ? {
+        txt: `La compra #${compra.numero} está cancelada: no hay nada que recibir.`,
+        a: `/ops/compras/${id}`,
+      }
     : compra.recibida
-      ? { txt: `La compra #${compra.numero} ya se recibió el ${formatDate(compra.fecha_recepcion)}.`,
-          a: `/ops/compras/${id}` }
+      ? {
+          txt: `La compra #${compra.numero} ya se recibió el ${formatDate(compra.fecha_recepcion)}.`,
+          a: `/ops/compras/${id}`,
+        }
       : lineasCompra.length === 0
-        ? { txt: `La compra #${compra.numero} no tiene productos que contar. Recíbela directamente desde su detalle.`,
-            a: `/ops/compras/${id}` }
+        ? {
+            txt: `La compra #${compra.numero} no tiene productos que contar. Recíbela directamente desde su detalle.`,
+            a: `/ops/compras/${id}`,
+          }
         : perfil.rol !== "Admin" && compra.sede_destino_id !== perfil.sede_id
-          ? { txt: `Esta compra es de la sede ${compra.sede_destino_id} y tú estás en ${perfil.sede_id}. Pídesela a quien reciba allí o a Maritza.`,
-              a: `/ops/compras/${id}` }
+          ? {
+              txt: `Esta compra es de la sede ${compra.sede_destino_id} y tú estás en ${perfil.sede_id}. Pídesela a quien reciba allí o a Maritza.`,
+              a: `/ops/compras/${id}`,
+            }
           : null;
 ```
 
@@ -1582,7 +1676,7 @@ try {
 }
 ```
 
-El aviso dice de cuándo es: *"Tienes un conteo sin terminar de hace 12 minutos, ¿lo retomo?"*, con "Retomar" y "Empezar de nuevo". Se borra con `localStorage.removeItem(CLAVE)` al confirmar con éxito.
+El aviso dice de cuándo es: _"Tienes un conteo sin terminar de hace 12 minutos, ¿lo retomo?"_, con "Retomar" y "Empezar de nuevo". Se borra con `localStorage.removeItem(CLAVE)` al confirmar con éxito.
 
 - [ ] **Step 3: Lint y build**
 
@@ -1600,6 +1694,7 @@ git commit -m "feat(picking): ruta y esqueleto de la pantalla de conteo"
 ### Task 9: Modo enfoque
 
 **Files:**
+
 - Create: `src/pages/ops/PickingCompra/LineaEnfoque.jsx`
 - Modify: `src/pages/ops/PickingCompra/index.jsx`
 
@@ -1621,10 +1716,10 @@ El badge usa el mapa `BADGE` que ya quedó definido en `picking-compras.js`
 import { derivar, BADGE } from "../../../lib/picking-compras";
 ```
 
-Se usa como `<StatusBadge status={BADGE[d.estado].status}>{BADGE[d.estado].texto}</StatusBadge>`, y al lado el detalle numérico (*"faltan 2 · 1 dañada"*).
+Se usa como `<StatusBadge status={BADGE[d.estado].status}>{BADGE[d.estado].texto}</StatusBadge>`, y al lado el detalle numérico (_"faltan 2 · 1 dañada"_).
 
 **El control de dañadas hay que construirlo, no solo mencionarlo.** En la primera
-versión del plan las dañadas aparecían únicamente como *texto de salida* (ese
+versión del plan las dañadas aparecían únicamente como _texto de salida_ (ese
 "1 dañada" de arriba), sin ningún control para ponerlas en más de cero: toda la
 rama de `danadas` y `aReclamar` de la lógica pura —probada con 23 tests— habría
 quedado inalcanzable desde la pantalla. Va un segundo stepper pequeño, **"De
@@ -1685,6 +1780,7 @@ git commit -m "feat(picking): modo enfoque con atajos y escaner continuo"
 ### Task 10: Modo lista, resumen y confirmación
 
 **Files:**
+
 - Create: `src/pages/ops/PickingCompra/LineaLista.jsx`
 - Create: `src/pages/ops/PickingCompra/ModalConfirmar.jsx`
 - Modify: `src/pages/ops/PickingCompra/index.jsx`
@@ -1732,6 +1828,7 @@ git commit -m "feat(picking): modo lista, resumen bloqueante y modal de consecue
 ### Task 11: Enganche en `CompraDetalle` y etiquetas QR
 
 **Files:**
+
 - Create: `src/pages/ops/PickingCompra/PanelEtiquetas.jsx`
 - Modify: `src/pages/ops/CompraDetalle.jsx`
 
@@ -1740,7 +1837,10 @@ git commit -m "feat(picking): modo lista, resumen bloqueante y modal de consecue
 Lista las líneas contadas con un contador de copias por producto, con el default en las **buenas** (no en lo pedido: se etiqueta lo que de verdad entró). Al generar:
 
 ```js
-import { generarEtiquetasPDF, MAX_COPIAS_POR_PRODUCTO } from "../../../lib/pdf/etiquetasPDF";
+import {
+  generarEtiquetasPDF,
+  MAX_COPIAS_POR_PRODUCTO,
+} from "../../../lib/pdf/etiquetasPDF";
 import { derivar } from "../../../lib/picking-compras";
 
 const r = await generarEtiquetasPDF({
@@ -1790,6 +1890,7 @@ git commit -m "feat(picking): entrada desde la compra, etiquetas QR y aviso al A
 ### Task 12: La puerta desde el registro de la compra
 
 **Files:**
+
 - Modify: `src/pages/ops/CompraNueva.jsx`
 
 Ésta es la tarea que decide si la feature se usa o no se usa nunca. Verificado
@@ -1809,9 +1910,10 @@ Hoy `CompraNueva` descarta la respuesta (`const { error: rpcErr } = await …`).
 recibida}`. Cambiar a:
 
 ```js
-const { data: creada, error: rpcErr } = await supabase.rpc("fn_registrar_compra", {
-  /* … los mismos parámetros que ya se pasan … */
-});
+const { data: creada, error: rpcErr } = await supabase.rpc(
+  "fn_registrar_compra",
+  {/* … los mismos parámetros que ya se pasan … */},
+);
 if (rpcErr) throw new Error(rpcErr.message);
 ```
 
@@ -1829,7 +1931,9 @@ if (!recibirAhora && hayQueContar && puedeContar) {
   avisarOk(`Compra #${creada.numero} registrada. Ahora cuenta lo que llegó.`);
   navigate(`/ops/compras/${creada.compra_id}/picking`);
 } else {
-  avisarOk(recibirAhora ? "Compra registrada y recibida." : "Compra registrada.");
+  avisarOk(
+    recibirAhora ? "Compra registrada y recibida." : "Compra registrada.",
+  );
   navigate("/ops/compras");
 }
 ```
@@ -1869,6 +1973,7 @@ git commit -m "feat(picking): del registro de la compra se pasa a contar"
 - [ ] **Step 1: Responsive de verdad**
 
 Revisar a **360px**, **768px** y **1280px**:
+
 - ningún control por debajo de 48px de alto
 - la barra de resumen no tapa el bottom-nav en celular
 - el modo enfoque es el default en 360px y el de lista en 768px y 1280px

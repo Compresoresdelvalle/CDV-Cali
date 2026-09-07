@@ -338,23 +338,26 @@ export default function CompraNueva() {
     try {
       // RPC server-authoritative: registra compra + detalle en una sola
       // transacción, fija `registrado_por` y recalcula los totales.
-      const { data: creada, error: rpcErr } = await supabase.rpc("fn_registrar_compra", {
-        p_sede_id: perfil?.sede_id,
-        p_proveedor: proveedor.trim(),
-        p_factura_proveedor: facturaProveedor.trim() || null,
-        p_observaciones: observaciones.trim() || null,
-        p_recibir: recibirAhora,
-        p_items: carrito.map((i) => ({
-          producto_id: i.producto_id,
-          cantidad: i.cantidad,
-          costo_unitario: i.costo_unitario,
-          destino: i.destino ?? "venta",
-        })),
-        p_iva_pct: ivaPct,
-        p_metodo_pago: metodoPago,
-        p_cuenta_bancaria: cuentaBancaria || null,
-        p_descuento_valor: descuento,
-      });
+      const { data: creada, error: rpcErr } = await supabase.rpc(
+        "fn_registrar_compra",
+        {
+          p_sede_id: perfil?.sede_id,
+          p_proveedor: proveedor.trim(),
+          p_factura_proveedor: facturaProveedor.trim() || null,
+          p_observaciones: observaciones.trim() || null,
+          p_recibir: recibirAhora,
+          p_items: carrito.map((i) => ({
+            producto_id: i.producto_id,
+            cantidad: i.cantidad,
+            costo_unitario: i.costo_unitario,
+            destino: i.destino ?? "venta",
+          })),
+          p_iva_pct: ivaPct,
+          p_metodo_pago: metodoPago,
+          p_cuenta_bancaria: cuentaBancaria || null,
+          p_descuento_valor: descuento,
+        },
+      );
       if (rpcErr) throw new Error(rpcErr.message);
 
       // La mercancía ya está en el mostrador cuando digitan la factura: de 737

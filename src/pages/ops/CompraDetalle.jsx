@@ -749,7 +749,9 @@ function PanelRecepcion({
             }}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
-            {!puedeContar && <Check className="h-3.5 w-3.5" strokeWidth={2.5} />}
+            {!puedeContar && (
+              <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+            )}
             {recibiendo
               ? "Confirmando…"
               : puedeContar
