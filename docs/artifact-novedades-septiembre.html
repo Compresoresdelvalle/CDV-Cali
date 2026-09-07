@@ -1,145 +1,714 @@
 <title>Novedades de septiembre</title>
 <style>
-
-  :root{
-    --ground:#f3f6f9; --card:#ffffff; --card-2:#f8fbfd;
-    --ink:#15263b; --muted:#556577; --faint:#8291a2;
-    --border:#e2e9f1; --border-2:#ced9e5;
-    --accent:#245a8c; --accent-2:#2f6ea8; --accent-soft:#e9f1f9; --accent-ink:#183f62;
-    --good:#1f7a45; --good-bg:#e7f4ec; --good-bd:#bfe3cd;
-    --warn:#9a5409; --warn-bg:#fbf0dd; --warn-bd:#eed2a2;
-    --bad:#b02a22; --bad-bg:#fbe9e8; --bad-bd:#f0c3c0;
-    --shadow:0 1px 2px rgba(16,32,54,.05),0 10px 26px -16px rgba(16,32,54,.2);
-    --mono:ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Menlo,Consolas,monospace;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;
+  :root {
+    --ground: #f3f6f9;
+    --card: #ffffff;
+    --card-2: #f8fbfd;
+    --ink: #15263b;
+    --muted: #556577;
+    --faint: #8291a2;
+    --border: #e2e9f1;
+    --border-2: #ced9e5;
+    --accent: #245a8c;
+    --accent-2: #2f6ea8;
+    --accent-soft: #e9f1f9;
+    --accent-ink: #183f62;
+    --good: #1f7a45;
+    --good-bg: #e7f4ec;
+    --good-bd: #bfe3cd;
+    --warn: #9a5409;
+    --warn-bg: #fbf0dd;
+    --warn-bd: #eed2a2;
+    --bad: #b02a22;
+    --bad-bg: #fbe9e8;
+    --bad-bd: #f0c3c0;
+    --shadow:
+      0 1px 2px rgba(16, 32, 54, 0.05), 0 10px 26px -16px rgba(16, 32, 54, 0.2);
+    --mono:
+      ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas,
+      monospace;
+    --sans:
+      -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto,
+      "Helvetica Neue", Arial, sans-serif;
   }
-  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-    --ground:#0e1622; --card:#151f2c; --card-2:#111a25;
-    --ink:#e7eef6; --muted:#a0b1c3; --faint:#6e8095;
-    --border:#233141; --border-2:#31445a;
-    --accent:#5f9fd8; --accent-2:#7ab0e2; --accent-soft:#16283a; --accent-ink:#c3dbf1;
-    --good:#5dbe84; --good-bg:#12291d; --good-bd:#1f4230;
-    --warn:#e0a458; --warn-bg:#2a2010; --warn-bd:#493617;
-    --bad:#ec8b83; --bad-bg:#2a1513; --bad-bd:#4a2420;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 30px -18px rgba(0,0,0,.65);
-  }}
-  :root[data-theme="dark"]{
-    --ground:#0e1622; --card:#151f2c; --card-2:#111a25;
-    --ink:#e7eef6; --muted:#a0b1c3; --faint:#6e8095;
-    --border:#233141; --border-2:#31445a;
-    --accent:#5f9fd8; --accent-2:#7ab0e2; --accent-soft:#16283a; --accent-ink:#c3dbf1;
-    --good:#5dbe84; --good-bg:#12291d; --good-bd:#1f4230;
-    --warn:#e0a458; --warn-bg:#2a2010; --warn-bd:#493617;
-    --bad:#ec8b83; --bad-bg:#2a1513; --bad-bd:#4a2420;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 30px -18px rgba(0,0,0,.65);
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e1622;
+      --card: #151f2c;
+      --card-2: #111a25;
+      --ink: #e7eef6;
+      --muted: #a0b1c3;
+      --faint: #6e8095;
+      --border: #233141;
+      --border-2: #31445a;
+      --accent: #5f9fd8;
+      --accent-2: #7ab0e2;
+      --accent-soft: #16283a;
+      --accent-ink: #c3dbf1;
+      --good: #5dbe84;
+      --good-bg: #12291d;
+      --good-bd: #1f4230;
+      --warn: #e0a458;
+      --warn-bg: #2a2010;
+      --warn-bd: #493617;
+      --bad: #ec8b83;
+      --bad-bg: #2a1513;
+      --bad-bd: #4a2420;
+      --shadow:
+        0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 30px -18px rgba(0, 0, 0, 0.65);
+    }
   }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;font-size:16px}
-  .wrap{max-width:860px;margin:0 auto;padding:clamp(18px,3.5vw,40px) clamp(16px,4vw,32px) 90px}
+  :root[data-theme="dark"] {
+    --ground: #0e1622;
+    --card: #151f2c;
+    --card-2: #111a25;
+    --ink: #e7eef6;
+    --muted: #a0b1c3;
+    --faint: #6e8095;
+    --border: #233141;
+    --border-2: #31445a;
+    --accent: #5f9fd8;
+    --accent-2: #7ab0e2;
+    --accent-soft: #16283a;
+    --accent-ink: #c3dbf1;
+    --good: #5dbe84;
+    --good-bg: #12291d;
+    --good-bd: #1f4230;
+    --warn: #e0a458;
+    --warn-bg: #2a2010;
+    --warn-bd: #493617;
+    --bad: #ec8b83;
+    --bad-bg: #2a1513;
+    --bad-bd: #4a2420;
+    --shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 30px -18px rgba(0, 0, 0, 0.65);
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    font-size: 16px;
+  }
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: clamp(18px, 3.5vw, 40px) clamp(16px, 4vw, 32px) 90px;
+  }
 
-  .head{display:flex;align-items:center;gap:16px;padding:18px 20px;border-radius:16px;border:1px solid var(--border);background:var(--card);box-shadow:var(--shadow)}
-  .head img{width:56px;height:56px;border-radius:50%;object-fit:cover;flex:none;border:1px solid var(--border-2)}
-  .head .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
-  .head h1{margin:.12em 0 .1em;font-size:clamp(22px,4.4vw,30px);line-height:1.05;letter-spacing:-.02em;font-weight:750;text-wrap:balance}
-  .head .org{font-size:12.5px;color:var(--faint);font-family:var(--mono)}
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 20px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    box-shadow: var(--shadow);
+  }
+  .head img {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: none;
+    border: 1px solid var(--border-2);
+  }
+  .head .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .head h1 {
+    margin: 0.12em 0 0.1em;
+    font-size: clamp(22px, 4.4vw, 30px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    font-weight: 750;
+    text-wrap: balance;
+  }
+  .head .org {
+    font-size: 12.5px;
+    color: var(--faint);
+    font-family: var(--mono);
+  }
 
-  .lede{font-size:16.5px;color:var(--muted);margin:22px 2px 0;max-width:64ch}
-  .toc{margin:20px 0 0;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:var(--card-2)}
-  .toc p{margin:0 0 6px;font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);font-weight:700}
-  .toc ol{margin:0;padding-left:20px;columns:2;column-gap:26px}
-  .toc li{margin:3px 0;font-size:14px}
-  .toc a{color:var(--accent-ink);text-decoration:none}
+  .lede {
+    font-size: 16.5px;
+    color: var(--muted);
+    margin: 22px 2px 0;
+    max-width: 64ch;
+  }
+  .toc {
+    margin: 20px 0 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card-2);
+  }
+  .toc p {
+    margin: 0 0 6px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--faint);
+    font-weight: 700;
+  }
+  .toc ol {
+    margin: 0;
+    padding-left: 20px;
+    columns: 2;
+    column-gap: 26px;
+  }
+  .toc li {
+    margin: 3px 0;
+    font-size: 14px;
+  }
+  .toc a {
+    color: var(--accent-ink);
+    text-decoration: none;
+  }
 
-  .sec{margin-top:clamp(30px,5vw,52px)}
-  h2{font-size:clamp(19px,3vw,24px);letter-spacing:-.015em;margin:0 0 14px;display:flex;align-items:center;gap:10px;text-wrap:balance;scroll-margin-top:14px}
-  h2 .b{font-family:var(--mono);font-size:13px;font-weight:700;color:#fff;background:var(--accent);width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none}
-  h3{font-size:16.5px;margin:26px 0 8px;letter-spacing:-.01em}
-  p{margin:.5em 0}
-  strong{font-weight:650;color:var(--ink)}
-  .lead-in{color:var(--muted)}
+  .sec {
+    margin-top: clamp(30px, 5vw, 52px);
+  }
+  h2 {
+    font-size: clamp(19px, 3vw, 24px);
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-wrap: balance;
+    scroll-margin-top: 14px;
+  }
+  h2 .b {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--accent);
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+  h3 {
+    font-size: 16.5px;
+    margin: 26px 0 8px;
+    letter-spacing: -0.01em;
+  }
+  p {
+    margin: 0.5em 0;
+  }
+  strong {
+    font-weight: 650;
+    color: var(--ink);
+  }
+  .lead-in {
+    color: var(--muted);
+  }
 
-  .card{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:18px 20px;box-shadow:var(--shadow)}
-  .two{display:grid;gap:14px;margin-top:8px}
-  @media(min-width:680px){.two{grid-template-columns:1fr 1fr}}
-  .two .card h3{margin:0 0 6px}
-  .two .card .kk{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--accent)}
-  .callout{border:1px solid var(--border);border-left-width:3px;border-radius:10px;padding:13px 15px;background:var(--card-2);margin:14px 0}
-  .callout.warn{border-left-color:var(--warn);background:var(--warn-bg);border-color:var(--warn-bd)}
-  .callout.good{border-left-color:var(--good);background:var(--good-bg);border-color:var(--good-bd)}
-  .callout.info{border-left-color:var(--accent);background:var(--accent-soft);border-color:var(--border-2)}
-  .callout .k{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;display:block;margin-bottom:4px}
-  .warn .k{color:var(--warn)} .good .k{color:var(--good)} .info .k{color:var(--accent)}
-  .callout p{margin:.15em 0}
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .two {
+    display: grid;
+    gap: 14px;
+    margin-top: 8px;
+  }
+  @media (min-width: 680px) {
+    .two {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  .two .card h3 {
+    margin: 0 0 6px;
+  }
+  .two .card .kk {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .callout {
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 10px;
+    padding: 13px 15px;
+    background: var(--card-2);
+    margin: 14px 0;
+  }
+  .callout.warn {
+    border-left-color: var(--warn);
+    background: var(--warn-bg);
+    border-color: var(--warn-bd);
+  }
+  .callout.good {
+    border-left-color: var(--good);
+    background: var(--good-bg);
+    border-color: var(--good-bd);
+  }
+  .callout.info {
+    border-left-color: var(--accent);
+    background: var(--accent-soft);
+    border-color: var(--border-2);
+  }
+  .callout .k {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .warn .k {
+    color: var(--warn);
+  }
+  .good .k {
+    color: var(--good);
+  }
+  .info .k {
+    color: var(--accent);
+  }
+  .callout p {
+    margin: 0.15em 0;
+  }
 
-  .twrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin:8px 0}
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--border);vertical-align:top}
-  thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--card-2)}
-  tbody tr:last-child td{border-bottom:none}
-  .pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
-  .pill.g{color:var(--good);background:var(--good-bg)} .pill.w{color:var(--warn);background:var(--warn-bg)} .pill.a{color:var(--accent-ink);background:var(--accent-soft)} .pill.n{color:var(--faint);background:var(--card-2)} .pill.r{color:var(--bad);background:var(--bad-bg)}
+  .twrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin: 8px 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  th,
+  td {
+    text-align: left;
+    padding: 10px 13px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  thead th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    background: var(--card-2);
+  }
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .pill.g {
+    color: var(--good);
+    background: var(--good-bg);
+  }
+  .pill.w {
+    color: var(--warn);
+    background: var(--warn-bg);
+  }
+  .pill.a {
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+  }
+  .pill.n {
+    color: var(--faint);
+    background: var(--card-2);
+  }
+  .pill.r {
+    color: var(--bad);
+    background: var(--bad-bg);
+  }
 
-  .stepr{display:grid;grid-template-columns:1fr;gap:16px;margin-top:24px}
-  @media (min-width:760px){.stepr{grid-template-columns:1fr 1fr;gap:24px;align-items:center} .stepr.rev .txt{order:2}}
-  .stepr .txt h3{margin:0 0 6px;font-size:16px;display:flex;align-items:center;gap:9px}
-  .stepr .txt h3 .n{font-family:var(--mono);font-size:12px;font-weight:750;color:#fff;background:var(--accent);width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none}
-  .stepr .txt p{font-size:14.5px;color:var(--muted);margin:.3em 0}
-  .stepr .txt .tip{font-size:13px;color:var(--faint)}
-  .cap{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:center;margin-top:8px}
+  .stepr {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 24px;
+  }
+  @media (min-width: 760px) {
+    .stepr {
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: center;
+    }
+    .stepr.rev .txt {
+      order: 2;
+    }
+  }
+  .stepr .txt h3 {
+    margin: 0 0 6px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .stepr .txt h3 .n {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 750;
+    color: #fff;
+    background: var(--accent);
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+  .stepr .txt p {
+    font-size: 14.5px;
+    color: var(--muted);
+    margin: 0.3em 0;
+  }
+  .stepr .txt .tip {
+    font-size: 13px;
+    color: var(--faint);
+  }
+  .cap {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--faint);
+    text-align: center;
+    margin-top: 8px;
+  }
 
   /* Mockup: estilo claro, como la app real */
-  .shot{--s-bg:#eef2f7;--s-card:#ffffff;--s-card2:#f1f5fa;--s-line:#e3e9f1;--s-ink:#17263c;--s-mut:#5c6b7e;--s-fnt:#9aa7b6;
-    --s-pri:#345bd6;--s-good:#1a8a4d;--s-goodbg:#e6f5ec;--s-warn:#b0741d;--s-warnbg:#fbf1da;--s-bad:#cf3f3f;--s-badbg:#fbe8e8;--s-blue:#22409e;--s-bluebg:#e9eefb;--s-purple:#6b3fb0;--s-purplebg:#efe8fa;
-    background:var(--s-bg);border:1px solid #dbe3ee;border-radius:14px;padding:14px;color:var(--s-ink);font-size:13px;box-shadow:var(--shadow);overflow:hidden}
-  .shot .eb{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--s-fnt)}
-  .shot .h{font-size:16px;font-weight:700;margin:2px 0;color:var(--s-ink)}
-  .shot .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--s-mut);margin:12px 0 5px}
-  .shot .inp{background:var(--s-card);border:1px solid var(--s-line);border-radius:9px;padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .shot .radio{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--s-line);border-radius:10px;padding:10px 12px;background:var(--s-card);margin-top:7px}
-  .shot .radio.on{border-color:var(--s-pri);background:var(--s-bluebg)}
-  .shot .radio .rd{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--s-fnt);flex:none;margin-top:1px}
-  .shot .radio.on .rd{border-color:var(--s-pri);border-width:4px}
-  .shot .radio b{font-size:12.5px;display:block}
-  .shot .radio small{font-size:10.5px;color:var(--s-mut)}
-  .shot .chk{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:6px 0;color:var(--s-ink)}
-  .shot .chk .bx{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--s-line);flex:none}
-  .shot .chk.on .bx{background:var(--s-good);border-color:var(--s-good)}
-  .shot .tag{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
-  .shot .tag.g{color:var(--s-good);background:var(--s-goodbg)} .shot .tag.w{color:var(--s-warn);background:var(--s-warnbg)} .shot .tag.a{color:var(--s-blue);background:var(--s-bluebg)} .shot .tag.p{color:var(--s-purple);background:var(--s-purplebg)}
-  .shot .dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}
-  .shot .note{margin-top:9px;font-size:11px;color:var(--s-warn);background:var(--s-warnbg);border:1px solid #eed7a6;border-radius:8px;padding:8px 10px;display:flex;gap:7px}
-  .shot .btn{margin-top:12px;background:var(--s-pri);color:#fff;border-radius:10px;padding:10px;text-align:center;font-weight:640;font-size:12.5px}
-  .shot .money{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .shot {
+    --s-bg: #eef2f7;
+    --s-card: #ffffff;
+    --s-card2: #f1f5fa;
+    --s-line: #e3e9f1;
+    --s-ink: #17263c;
+    --s-mut: #5c6b7e;
+    --s-fnt: #9aa7b6;
+    --s-pri: #345bd6;
+    --s-good: #1a8a4d;
+    --s-goodbg: #e6f5ec;
+    --s-warn: #b0741d;
+    --s-warnbg: #fbf1da;
+    --s-bad: #cf3f3f;
+    --s-badbg: #fbe8e8;
+    --s-blue: #22409e;
+    --s-bluebg: #e9eefb;
+    --s-purple: #6b3fb0;
+    --s-purplebg: #efe8fa;
+    background: var(--s-bg);
+    border: 1px solid #dbe3ee;
+    border-radius: 14px;
+    padding: 14px;
+    color: var(--s-ink);
+    font-size: 13px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .shot .eb {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--s-fnt);
+  }
+  .shot .h {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 2px 0;
+    color: var(--s-ink);
+  }
+  .shot .lbl {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--s-mut);
+    margin: 12px 0 5px;
+  }
+  .shot .inp {
+    background: var(--s-card);
+    border: 1px solid var(--s-line);
+    border-radius: 9px;
+    padding: 9px 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .shot .radio {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    border: 1px solid var(--s-line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--s-card);
+    margin-top: 7px;
+  }
+  .shot .radio.on {
+    border-color: var(--s-pri);
+    background: var(--s-bluebg);
+  }
+  .shot .radio .rd {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 1.5px solid var(--s-fnt);
+    flex: none;
+    margin-top: 1px;
+  }
+  .shot .radio.on .rd {
+    border-color: var(--s-pri);
+    border-width: 4px;
+  }
+  .shot .radio b {
+    font-size: 12.5px;
+    display: block;
+  }
+  .shot .radio small {
+    font-size: 10.5px;
+    color: var(--s-mut);
+  }
+  .shot .chk {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    padding: 6px 0;
+    color: var(--s-ink);
+  }
+  .shot .chk .bx {
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+    border: 1.5px solid var(--s-line);
+    flex: none;
+  }
+  .shot .chk.on .bx {
+    background: var(--s-good);
+    border-color: var(--s-good);
+  }
+  .shot .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .shot .tag.g {
+    color: var(--s-good);
+    background: var(--s-goodbg);
+  }
+  .shot .tag.w {
+    color: var(--s-warn);
+    background: var(--s-warnbg);
+  }
+  .shot .tag.a {
+    color: var(--s-blue);
+    background: var(--s-bluebg);
+  }
+  .shot .tag.p {
+    color: var(--s-purple);
+    background: var(--s-purplebg);
+  }
+  .shot .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    display: inline-block;
+  }
+  .shot .note {
+    margin-top: 9px;
+    font-size: 11px;
+    color: var(--s-warn);
+    background: var(--s-warnbg);
+    border: 1px solid #eed7a6;
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex;
+    gap: 7px;
+  }
+  .shot .btn {
+    margin-top: 12px;
+    background: var(--s-pri);
+    color: #fff;
+    border-radius: 10px;
+    padding: 10px;
+    text-align: center;
+    font-weight: 640;
+    font-size: 12.5px;
+  }
+  .shot .money {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
 
   /* Errores */
-  .err{border:1px solid var(--border);border-radius:12px;background:var(--card);margin:12px 0;overflow:hidden}
-  .err .msg{display:flex;gap:9px;align-items:flex-start;padding:11px 14px;background:var(--bad-bg);border-bottom:1px solid var(--bad-bd)}
-  .err .msg.wy{background:var(--warn-bg);border-color:var(--warn-bd)}
-  .err .msg .ic{color:var(--bad);font-weight:800;font-family:var(--mono);flex:none}
-  .err .msg.wy .ic{color:var(--warn)}
-  .err .msg code{font-family:var(--mono);font-size:12.5px;color:var(--ink);background:transparent;font-weight:600;line-height:1.4}
-  .err .body{padding:11px 14px;font-size:14px}
-  .err .body .qy{color:var(--muted)}
-  .err .body .do{margin-top:6px}
-  .err .body .do b{color:var(--good);font-weight:650}
-  .grp{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:700;margin:24px 0 2px}
+  .err {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+    margin: 12px 0;
+    overflow: hidden;
+  }
+  .err .msg {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 11px 14px;
+    background: var(--bad-bg);
+    border-bottom: 1px solid var(--bad-bd);
+  }
+  .err .msg.wy {
+    background: var(--warn-bg);
+    border-color: var(--warn-bd);
+  }
+  .err .msg .ic {
+    color: var(--bad);
+    font-weight: 800;
+    font-family: var(--mono);
+    flex: none;
+  }
+  .err .msg.wy .ic {
+    color: var(--warn);
+  }
+  .err .msg code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink);
+    background: transparent;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .err .body {
+    padding: 11px 14px;
+    font-size: 14px;
+  }
+  .err .body .qy {
+    color: var(--muted);
+  }
+  .err .body .do {
+    margin-top: 6px;
+  }
+  .err .body .do b {
+    color: var(--good);
+    font-weight: 650;
+  }
+  .grp {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--faint);
+    font-weight: 700;
+    margin: 24px 0 2px;
+  }
 
-  ul.plain{padding-left:20px}ul.plain li{margin:6px 0}
-  .foot{margin-top:56px;padding-top:18px;border-top:1px solid var(--border);color:var(--faint);font-size:12.5px;font-family:var(--mono);display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between}
+  ul.plain {
+    padding-left: 20px;
+  }
+  ul.plain li {
+    margin: 6px 0;
+  }
+  .foot {
+    margin-top: 56px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    color: var(--faint);
+    font-size: 12.5px;
+    font-family: var(--mono);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    justify-content: space-between;
+  }
+
+  @media print {
+    @page {
+      size: A4;
+      margin: 12mm;
+    }
+    html,
+    body {
+      background: #fff;
+    }
+    * {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .toc,
+    .two {
+      break-inside: avoid;
+    }
+    .stepr {
+      grid-template-columns: 1fr !important;
+      break-inside: avoid;
+    }
+    .stepr.rev .txt {
+      order: 0 !important;
+    }
+    .card,
+    .callout,
+    .twrap,
+    .shot,
+    .err,
+    .head {
+      break-inside: avoid;
+    }
+    h2,
+    h3 {
+      break-after: avoid;
+    }
+  }
 
   @media print{
-    @page{size:A4;margin:12mm}
-    html,body{background:#fff}
-    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .toc,.two{break-inside:avoid}
-    .stepr{grid-template-columns:1fr !important;break-inside:avoid}
-    .stepr.rev .txt{order:0 !important}
-    .card,.callout,.twrap,.shot,.err,.head{break-inside:avoid}
-    h2,h3{break-after:avoid}
+    /* El pie se iba solo a una hoja al final. */
+    .foot{margin-top:22px;padding-top:12px;break-before:avoid;page-break-before:avoid}
+    .sec{margin-top:26px;break-inside:auto}
+    #s9{break-inside:avoid}
+    .stepr{gap:12px;margin-top:16px}
+    h3{margin-top:18px}
   }
 </style>
 <div class="wrap">
-
   <header class="head">
     <img src="data:image/jpeg;base64,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" alt="Logo Compresores del Valle" />
     <div>
@@ -150,11 +719,13 @@
   </header>
 
   <p class="lede">
-    Esta tanda es la más grande hasta ahora y casi toda gira alrededor de una misma idea: que la app
-    sepa cuánta plata entra y sale de verdad, no cuánta dice el papel. Entran las retenciones en los
-    dos sentidos, aparece un Panel que explica el resultado del mes, la mercancía que llega se cuenta
-    antes de darla por recibida, y hay un botón para llamar al administrador cuando algo no da espera.
-    Cada sección explica qué cambió, dónde se ve y qué hacer.
+    Casi todo lo de esta tanda sirve para lo mismo: que la app sepa cuánta plata
+    entra y sale
+    <strong>de verdad</strong>, y no cuánta dice el papel. Ahora se pueden
+    registrar las retenciones, hay una pantalla que explica por qué el mes dio
+    lo que dio, la mercancía que llega se cuenta antes de darla por recibida, y
+    hay un botón para llamar al administrador cuando algo no da espera. Cada
+    sección dice qué cambió, dónde se ve y qué hacer.
   </p>
 
   <nav class="toc" aria-label="Contenido">
@@ -175,144 +746,504 @@
   <!-- ══════════════════════════ 1 ══════════════════════════ -->
   <section class="sec" id="s1">
     <h2><span class="b">1</span> Qué hay de nuevo</h2>
-    <p>Ocho cambios. Los dos primeros tocan plata directamente, así que valen la pena leerlos completos aunque el resto se hojee:</p>
+    <p>
+      Ocho cambios. Los dos primeros son de plata, así que conviene leerlos
+      completos:
+    </p>
     <div class="twrap">
       <table>
-        <thead><tr><th>Cambio</th><th>Dónde se ve</th><th>A quién le sirve</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Cambio</th>
+            <th>Dónde se ve</th>
+            <th>Quién lo usa</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr><td><strong>Retenciones cuando el cliente nos retiene</strong></td><td>Nueva Venta, la orden de trabajo y al convertir una cotización</td><td>Vendedoras, Admin</td></tr>
-          <tr><td><strong>Retenciones cuando nosotros retenemos</strong></td><td>Nueva Compra y el detalle de la compra</td><td>Bodega, Admin</td></tr>
-          <tr><td><strong>Panel de decisiones</strong></td><td>Panel Admin, Panel</td><td>Admin</td></tr>
-          <tr><td><strong>Conteo de la mercancía que llega</strong></td><td>Al registrar una compra con productos</td><td>Bodega, Admin</td></tr>
-          <tr><td><strong>Aviso urgente al administrador</strong></td><td>Botón dentro del conteo</td><td>Bodega, Admin</td></tr>
-          <tr><td><strong>Garantía desde una orden entregada</strong></td><td>Detalle de la orden de trabajo</td><td>Admin, vendedoras</td></tr>
-          <tr><td><strong>Deshacer un cambio de producto</strong></td><td>Detalle de la venta</td><td>Admin</td></tr>
-          <tr><td><strong>Mínimos y Reorden por clase ABC</strong></td><td>Panel Admin, Mínimos y Reorden</td><td>Admin</td></tr>
+          <tr>
+            <td><strong>El cliente nos retiene</strong></td>
+            <td>Nueva Venta, orden de trabajo, convertir cotización</td>
+            <td>
+              <span class="pill a">Vendedoras</span>
+              <span class="pill a">Admin</span>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Nosotros retenemos al proveedor</strong></td>
+            <td>Nueva Compra y el detalle de la compra</td>
+            <td>
+              <span class="pill a">Bodega</span>
+              <span class="pill a">Admin</span>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Panel de decisiones</strong></td>
+            <td>Panel Admin, Panel</td>
+            <td><span class="pill a">Admin</span></td>
+          </tr>
+          <tr>
+            <td><strong>Contar lo que llegó</strong></td>
+            <td>Al registrar una compra con productos</td>
+            <td>
+              <span class="pill a">Bodega</span>
+              <span class="pill a">Admin</span>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Aviso urgente al administrador</strong></td>
+            <td>Botón dentro del conteo</td>
+            <td>
+              <span class="pill a">Bodega</span>
+              <span class="pill a">Admin</span>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Garantía desde una orden entregada</strong></td>
+            <td>Detalle de la orden de trabajo</td>
+            <td>
+              <span class="pill a">Admin</span>
+              <span class="pill a">Vendedoras</span>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Deshacer un cambio de producto</strong></td>
+            <td>Detalle de la venta</td>
+            <td><span class="pill a">Admin</span></td>
+          </tr>
+          <tr>
+            <td><strong>Filtrar por clase A, B o C</strong></td>
+            <td>Panel Admin, Mínimos y Reorden</td>
+            <td><span class="pill a">Admin</span></td>
+          </tr>
         </tbody>
       </table>
     </div>
     <div class="callout info">
-      <span class="k">Lo que no cambia</span>
-      <p>Mientras nadie abra el bloque de retenciones, todas las pantallas se ven y se comportan exactamente igual que antes. Ninguna venta, orden o compra sale con una retención que alguien no haya puesto a propósito.</p>
+      <span class="k">Tranquilidad</span>
+      <p>
+        Si nadie toca el bloque de retenciones, todas las pantallas funcionan
+        igual que siempre. Nada sale con una retención puesta sola.
+      </p>
     </div>
   </section>
 
   <!-- ══════════════════════════ 2 ══════════════════════════ -->
   <section class="sec" id="s2">
     <h2><span class="b">2</span> Cuando el cliente nos retiene</h2>
+
+    <h3>Qué es una retención, en cristiano</h3>
     <p>
-      Cuando un cliente grande compra, muchas veces no paga el total de la factura: descuenta las
-      retenciones y las consigna a la DIAN o al municipio a nombre de la empresa. La factura sigue
-      diciendo diez millones, pero al banco entran nueve y medio.
-    </p>
-    <p>
-      Antes la app no sabía nada de eso. El cierre contaba como ingreso una plata que nunca llegó, y
-      Cuentas por Cobrar dejaba al cliente debiendo un saldo que jamás iba a pagar porque ya se había
-      ido a la DIAN. Ahora la retención se registra en el documento y todo lo demás se acomoda solo.
+      Algunos clientes grandes no nos pagan toda la factura. Le quitan un pedazo
+      y ese pedazo se lo mandan ellos mismos a la DIAN, a nombre nuestro.
+      <strong>No es que nos estén robando</strong>: esa plata después nos la
+      descuentan de los impuestos. Pero de una: al banco entra menos.
     </p>
 
-    <h3>Dónde está</h3>
-    <p>
-      En <strong>Nueva Venta</strong>, en la <strong>orden de trabajo</strong> y en la ventana de
-      <strong>convertir una cotización</strong>, hay un bloque plegado. Mientras nadie lo toque, no pasa nada.
-    </p>
-
-    <div class="shot">
-      <div class="eb">Ventas · Nueva venta</div>
-      <div class="inp" style="margin-top:8px">
-        <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--s-fnt)">Retenciones</span>
-        <span style="color:var(--s-pri);font-weight:600">¿El cliente retiene? Tocar para aplicar ▾</span>
+    <div class="two">
+      <div class="card">
+        <div class="kk">La factura dice</div>
+        <p
+          style="font-size: 26px; font-weight: 750; margin: 0.2em 0"
+          class="money"
+        >
+          $ 1.190.000
+        </p>
+        <p style="color: var(--muted); font-size: 14px; margin: 0">
+          Eso es lo que le vendimos.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kk">Al banco entra</div>
+        <p
+          style="
+            font-size: 26px;
+            font-weight: 750;
+            margin: 0.2em 0;
+            color: var(--warn);
+          "
+          class="money"
+        >
+          $ 1.132.360
+        </p>
+        <p style="color: var(--muted); font-size: 14px; margin: 0">
+          Los otros <strong>$ 57.640</strong> se van a la DIAN.
+        </p>
       </div>
     </div>
-    <p class="cap">El bloque cerrado: así se ve mientras la venta no lleva retención</p>
 
-    <p>
-      Al abrirlo aparecen los tres campos en cero y un botón con las tarifas que estén guardadas en
-      Configuración. Los porcentajes <strong>no se ponen solos</strong>: hay que pulsar el botón o
-      escribirlos. Retener es una decisión, no un valor por defecto.
-    </p>
-
-    <div class="shot">
-      <div class="eb">Ventas · Nueva venta</div>
-      <div class="inp" style="margin-top:8px">
-        <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--s-fnt)">Retenciones</span>
-        <span class="money" style="color:var(--s-warn);font-weight:600">- $ 57.640 ▴</span>
-      </div>
-      <div style="margin-top:9px;border:1px solid var(--s-pri);color:var(--s-pri);background:var(--s-bluebg);border-radius:9px;padding:9px;text-align:center;font-weight:640;font-size:12px">
-        Aplicar las tarifas de siempre (2,5% · 0,414% · 15%)
-      </div>
-      <div style="margin-top:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--s-line)">
-          <span>Retefuente <span style="color:var(--s-fnt)">(sobre la base)</span></span>
-          <span style="display:flex;align-items:center;gap:10px">
-            <span class="money" style="background:var(--s-card);border:1px solid var(--s-line);border-radius:7px;padding:3px 9px">2,5</span>
-            <span class="money" style="color:var(--s-mut);min-width:70px;text-align:right">- $ 25.000</span>
-          </span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--s-line)">
-          <span>ReteICA <span style="color:var(--s-fnt)">(sobre la base)</span></span>
-          <span style="display:flex;align-items:center;gap:10px">
-            <span class="money" style="background:var(--s-card);border:1px solid var(--s-line);border-radius:7px;padding:3px 9px">0,414</span>
-            <span class="money" style="color:var(--s-mut);min-width:70px;text-align:right">- $ 4.140</span>
-          </span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--s-line)">
-          <span>ReteIVA <span style="color:var(--s-fnt)">(sobre el IVA)</span></span>
-          <span style="display:flex;align-items:center;gap:10px">
-            <span class="money" style="background:var(--s-card);border:1px solid var(--s-line);border-radius:7px;padding:3px 9px">15</span>
-            <span class="money" style="color:var(--s-mut);min-width:70px;text-align:right">- $ 28.500</span>
-          </span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0 3px;color:var(--s-mut)">
-          <span>Total facturado</span><span class="money">$ 1.190.000</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding-top:7px;border-top:1px solid var(--s-line);font-weight:700">
-          <span>Neto a recibir</span><span class="money" style="color:var(--s-warn)">$ 1.132.360</span>
-        </div>
-      </div>
-    </div>
-    <p class="cap">El bloque abierto con las tres retenciones aplicadas, datos de ejemplo</p>
-
-    <h3>Cómo se calcula cada una</h3>
+    <p>Antes la app no sabía nada de esto y por eso pasaban dos cosas feas:</p>
     <div class="twrap">
       <table>
-        <thead><tr><th>Retención</th><th>Sobre qué se calcula</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Antes pasaba esto</th>
+            <th>Ahora</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr><td><strong>Retefuente</strong></td><td>Sobre la base, que es el subtotal menos el descuento. No sobre el IVA ni sobre el domicilio.</td></tr>
-          <tr><td><strong>ReteICA</strong></td><td>Sobre la misma base. Es municipal y cambia según el municipio y la actividad.</td></tr>
-          <tr><td><strong>ReteIVA</strong></td><td>Sobre el IVA facturado, no sobre la base.</td></tr>
+          <tr>
+            <td>
+              El cierre del día decía que habían entrado $1.190.000, pero en la
+              caja había $1.132.360. <strong>No cuadraba.</strong>
+            </td>
+            <td>El cierre cuenta $1.132.360, que es lo que de verdad entró.</td>
+          </tr>
+          <tr>
+            <td>
+              El cliente quedaba debiendo $57.640 que
+              <strong>nunca iba a pagar</strong>, porque ya se los mandó a la
+              DIAN.
+            </td>
+            <td>La deuda del cliente queda en lo que sí debe.</td>
+          </tr>
         </tbody>
       </table>
     </div>
+
+    <h3>Dónde se pone</h3>
     <p>
-      Los porcentajes se escriben con coma, como se escriben en Colombia, y se pueden cambiar documento
-      por documento, porque las tarifas cambian por ley y por municipio y la app no puede quedar
-      amarrada a un número.
+      En <strong>Nueva Venta</strong>, en la <strong>orden de trabajo</strong> y
+      cuando se <strong>convierte una cotización</strong>. Es una franja gris.
+      Si nadie la toca, no pasa nada.
     </p>
+
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Tocar la franja</h3>
+        <p>
+          Aparece abajo del total. Mientras esté así, la venta no lleva ninguna
+          retención.
+        </p>
+        <p class="tip">Si el cliente no retiene, no hay que tocar nada.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Ventas · Nueva venta</div>
+          <div class="inp" style="margin-top: 8px">
+            <span
+              style="
+                font-family: var(--mono);
+                font-size: 9.5px;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--s-fnt);
+              "
+              >Retenciones</span
+            >
+            <span style="color: var(--s-pri); font-weight: 600"
+              >¿El cliente retiene? Tocar para aplicar ▾</span
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stepr rev">
+      <div class="txt">
+        <h3><span class="n">2</span> Poner los porcentajes</h3>
+        <p>
+          Los tres campos empiezan en <strong>cero</strong>. Hay un botón con
+          los porcentajes de siempre: se toca y los pone.
+        </p>
+        <p>
+          Si este cliente usa otros, se escriben a mano. Se escriben con coma:
+          <strong>2,5</strong>
+        </p>
+        <p class="tip">Abrir la franja no pone nada solo. Hay que decidirlo.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Ventas · Nueva venta</div>
+          <div
+            style="
+              margin-top: 9px;
+              border: 1px solid var(--s-pri);
+              color: var(--s-pri);
+              background: var(--s-bluebg);
+              border-radius: 9px;
+              padding: 9px;
+              text-align: center;
+              font-weight: 640;
+              font-size: 12px;
+            "
+          >
+            Aplicar las tarifas de siempre (2,5% · 0,414% · 15%)
+          </div>
+          <div style="margin-top: 10px">
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                padding: 6px 0;
+                border-bottom: 1px solid var(--s-line);
+              "
+            >
+              <span>Retefuente</span>
+              <span style="display: flex; align-items: center; gap: 10px">
+                <span
+                  class="money"
+                  style="
+                    background: var(--s-card);
+                    border: 1px solid var(--s-line);
+                    border-radius: 7px;
+                    padding: 3px 9px;
+                  "
+                  >2,5</span
+                >
+                <span
+                  class="money"
+                  style="
+                    color: var(--s-mut);
+                    min-width: 70px;
+                    text-align: right;
+                  "
+                  >- $ 25.000</span
+                >
+              </span>
+            </div>
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                padding: 6px 0;
+                border-bottom: 1px solid var(--s-line);
+              "
+            >
+              <span>ReteICA</span>
+              <span style="display: flex; align-items: center; gap: 10px">
+                <span
+                  class="money"
+                  style="
+                    background: var(--s-card);
+                    border: 1px solid var(--s-line);
+                    border-radius: 7px;
+                    padding: 3px 9px;
+                  "
+                  >0,414</span
+                >
+                <span
+                  class="money"
+                  style="
+                    color: var(--s-mut);
+                    min-width: 70px;
+                    text-align: right;
+                  "
+                  >- $ 4.140</span
+                >
+              </span>
+            </div>
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                padding: 6px 0;
+              "
+            >
+              <span>ReteIVA</span>
+              <span style="display: flex; align-items: center; gap: 10px">
+                <span
+                  class="money"
+                  style="
+                    background: var(--s-card);
+                    border: 1px solid var(--s-line);
+                    border-radius: 7px;
+                    padding: 3px 9px;
+                  "
+                  >15</span
+                >
+                <span
+                  class="money"
+                  style="
+                    color: var(--s-mut);
+                    min-width: 70px;
+                    text-align: right;
+                  "
+                  >- $ 28.500</span
+                >
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">3</span> Mirar el "Neto a recibir"</h3>
+        <p>
+          Ese es el número importante:
+          <strong>lo que el cliente va a consignar</strong>.
+        </p>
+        <p>
+          Si ese número no se parece a lo que el cliente dijo que iba a pagar,
+          algo se escribió mal. Se corrige ahí mismo.
+        </p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Ventas · Nueva venta</div>
+          <div style="margin-top: 10px">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                padding: 6px 0;
+                color: var(--s-mut);
+              "
+            >
+              <span>Total facturado</span><span class="money">$ 1.190.000</span>
+            </div>
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                padding: 6px 0;
+                color: var(--s-mut);
+                border-bottom: 1px solid var(--s-line);
+              "
+            >
+              <span>Retenciones</span
+              ><span class="money" style="color: var(--s-warn)"
+                >- $ 57.640</span
+              >
+            </div>
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                padding-top: 9px;
+                font-weight: 700;
+                font-size: 15px;
+              "
+            >
+              <span>Neto a recibir</span
+              ><span class="money" style="color: var(--s-warn)"
+                >$ 1.132.360</span
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Cuál va sobre qué</h3>
+    <p>No hay que aprendérselo, pero por si alguien pregunta:</p>
+    <div class="twrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Se llama</th>
+            <th>Se calcula sobre</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Retefuente</strong></td>
+            <td>
+              El subtotal menos el descuento. <strong>No</strong> incluye el IVA
+              ni el domicilio.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>ReteICA</strong></td>
+            <td>
+              Lo mismo que la retefuente. Es del municipio, así que cambia de un
+              pueblo a otro.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>ReteIVA</strong></td>
+            <td>Solo el IVA de la factura.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <div class="callout warn">
-      <span class="k">Si querías 2,5% escribe 2,5, no 25</span>
-      <p>Es el error fácil de cometer y el más caro: en una venta de un millón, escribir 25 en vez de 2,5 convierte $25.000 de retefuente en $250.000. La pantalla siempre muestra el <strong>Neto a recibir</strong> justo debajo; si ese número no se parece a lo que el cliente va a consignar, algo está mal escrito. Y si la suma se pasa del total, la app no deja guardar y dice por qué.</p>
+      <span class="k">El error que más caro sale</span>
+      <p>
+        Escribir <strong>25</strong> cuando era <strong>2,5</strong>. En una
+        venta de un millón, eso convierte $25.000 en $250.000.
+      </p>
+      <p>
+        Por eso siempre hay que mirar el <strong>Neto a recibir</strong> antes
+        de guardar. Y si la suma se pasa del total, la app no deja guardar y
+        dice por qué.
+      </p>
     </div>
 
-    <h3>Qué se acomoda solo</h3>
+    <div class="err">
+      <div class="msg wy">
+        <span class="ic">!</span>
+        <code
+          >Las retenciones ($ 2.000.000) se pasan del total ($ 1.190.000).
+          Revisa los porcentajes: si querías 2,5% escribe 2,5, no 25.</code
+        >
+      </div>
+      <div class="body">
+        <p class="qy">
+          Sale cuando los porcentajes están tan altos que la retención se
+          comería toda la factura.
+        </p>
+        <p class="do">
+          <b>Qué hacer:</b> revisar los tres campos. Casi siempre es una coma
+          que faltó.
+        </p>
+      </div>
+    </div>
+
+    <h3>Qué se arregla solo</h3>
+    <p>
+      Una vez puesta la retención, no hay que hacer nada más. La app se encarga:
+    </p>
     <div class="twrap">
       <table>
-        <thead><tr><th>Dónde</th><th>Qué pasa</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Dónde</th>
+            <th>Qué hace</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr><td><strong>El recibo y la constancia</strong></td><td>La tirilla de venta y el documento de la orden de trabajo desglosan cada retención con su porcentaje, en negativo, y destacan el neto. Antes el papel decía un total y un saldo que no cuadraban con la resta, y no había forma de explicarlo.</td></tr>
-          <tr><td><strong>Cuentas por Cobrar</strong></td><td>El saldo nace neto. Una factura retenida ya no aparece con el cliente debiendo la parte que se fue a la DIAN, y al registrar el cobro la app propone el monto correcto.</td></tr>
-          <tr><td><strong>El cierre</strong></td><td>Cuenta lo que de verdad entró. Una venta de contado entra por el neto, y un cobro de cartera por lo que se recibió, sin contar la retención dos veces.</td></tr>
-          <tr><td><strong>La orden de trabajo</strong></td><td>El saldo se mide contra lo cobrable, no contra lo facturado. Si se midiera contra el total, la orden nunca se podría entregar, porque el cliente jamás va a abonar la parte retenida.</td></tr>
+          <tr>
+            <td><strong>El recibo del cliente</strong></td>
+            <td>
+              Sale cada retención con su porcentaje y el neto destacado. El
+              cliente entiende el papel sin que nadie se lo explique.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Cuentas por Cobrar</strong></td>
+            <td>
+              El cliente ya no aparece debiendo la parte que se fue a la DIAN.
+              Al cobrarle, la app propone el monto correcto.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>El cierre de caja</strong></td>
+            <td>Cuenta lo que de verdad entró.</td>
+          </tr>
+          <tr>
+            <td><strong>La orden de trabajo</strong></td>
+            <td>
+              Se puede entregar cuando el cliente pagó lo que le tocaba, sin que
+              la app pida la plata de la DIAN.
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
 
-    <h3>Las tarifas de siempre</h3>
+    <h3>Los porcentajes de siempre</h3>
     <p>
-      En Panel Admin, Configuración, Parámetros, hay tres campos para las tarifas sugeridas de
-      retefuente, reteICA y reteIVA. Son solo una sugerencia detrás de un botón: cambiarlas no toca
-      ningún documento ya hecho.
+      Están en <strong>Panel Admin → Configuración → Parámetros</strong>. Son
+      solo la sugerencia del botón. Cambiarlos no toca ninguna venta ya hecha.
     </p>
   </section>
 
@@ -320,61 +1251,184 @@
   <section class="sec" id="s3">
     <h2><span class="b">3</span> Cuando nosotros le retenemos al proveedor</h2>
     <p>
-      Es lo mismo al revés. Compresores del Valle también es agente retenedor: cuando le compra a un
-      proveedor pequeño, le descuenta la retención de la factura y la consigna ella misma a la DIAN.
-      La factura dice un millón, del cajón salen novecientos setenta y cinco mil, y el resto se gira a
-      nombre del proveedor.
+      Es lo mismo pero al revés. A algunos proveedores
+      <strong>nosotros</strong> les quitamos un pedazo del pago y se lo mandamos
+      a la DIAN por ellos. Entonces del cajón sale menos de lo que dice la
+      factura del proveedor.
     </p>
 
-    <h3>Dónde está</h3>
+    <div class="two">
+      <div class="card">
+        <div class="kk">El proveedor factura</div>
+        <p
+          style="font-size: 26px; font-weight: 750; margin: 0.2em 0"
+          class="money"
+        >
+          $ 1.000.000
+        </p>
+        <p style="color: var(--muted); font-size: 14px; margin: 0">
+          Eso es lo que nos vendió.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kk">Del cajón sale</div>
+        <p
+          style="
+            font-size: 26px;
+            font-weight: 750;
+            margin: 0.2em 0;
+            color: var(--good);
+          "
+          class="money"
+        >
+          $ 975.000
+        </p>
+        <p style="color: var(--muted); font-size: 14px; margin: 0">
+          Los otros <strong>$ 25.000</strong> los giramos a la DIAN.
+        </p>
+      </div>
+    </div>
+
+    <h3>Dónde se pone</h3>
     <p>
-      En <strong>Nueva Compra</strong>, debajo de la forma de pago, con el mismo bloque pero preguntando
-      al revés. Solo sale en la orden de compra; un recibo de caja menor no lleva retención.
+      En <strong>Nueva Compra</strong>, debajo de la forma de pago. Es la misma
+      franja, pero pregunta al revés. Solo sale en la compra de mercancía: un
+      recibo de caja menor, como un transporte, no lleva retención.
     </p>
 
     <div class="shot">
       <div class="eb">Compras · Nueva compra</div>
-      <div class="inp" style="margin-top:8px">
-        <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--s-fnt)">Retenciones</span>
-        <span style="color:var(--s-pri);font-weight:600">¿Le retenemos al proveedor? Tocar para aplicar ▾</span>
+      <div class="inp" style="margin-top: 8px">
+        <span
+          style="
+            font-family: var(--mono);
+            font-size: 9.5px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--s-fnt);
+          "
+          >Retenciones</span
+        >
+        <span style="color: var(--s-pri); font-weight: 600"
+          >¿Le retenemos al proveedor? Tocar para aplicar ▾</span
+        >
       </div>
-      <div style="margin-top:12px;border-top:1px dashed var(--s-line);padding-top:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--s-line)">
-          <span>Retefuente <span style="color:var(--s-fnt)">(sobre la base)</span></span>
-          <span style="display:flex;align-items:center;gap:10px">
-            <span class="money" style="background:var(--s-card);border:1px solid var(--s-line);border-radius:7px;padding:3px 9px">2,5</span>
-            <span class="money" style="color:var(--s-mut);min-width:70px;text-align:right">- $ 25.000</span>
+      <div
+        style="
+          margin-top: 12px;
+          border-top: 1px dashed var(--s-line);
+          padding-top: 10px;
+        "
+      >
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--s-line);
+          "
+        >
+          <span>Retefuente</span>
+          <span style="display: flex; align-items: center; gap: 10px">
+            <span
+              class="money"
+              style="
+                background: var(--s-card);
+                border: 1px solid var(--s-line);
+                border-radius: 7px;
+                padding: 3px 9px;
+              "
+              >2,5</span
+            >
+            <span
+              class="money"
+              style="color: var(--s-mut); min-width: 70px; text-align: right"
+              >- $ 25.000</span
+            >
           </span>
         </div>
-        <div style="display:flex;justify-content:space-between;padding:8px 0 3px;color:var(--s-mut)">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0 3px;
+            color: var(--s-mut);
+          "
+        >
           <span>Total de la factura</span><span class="money">$ 1.000.000</span>
         </div>
-        <div style="display:flex;justify-content:space-between;padding-top:7px;border-top:1px solid var(--s-line);font-weight:700">
-          <span>Neto a pagar</span><span class="money" style="color:var(--s-warn)">$ 975.000</span>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            padding-top: 7px;
+            border-top: 1px solid var(--s-line);
+            font-weight: 700;
+          "
+        >
+          <span>Neto a pagar</span
+          ><span class="money" style="color: var(--s-warn)">$ 975.000</span>
         </div>
       </div>
     </div>
-    <p class="cap">La compra retenida. El resumen de la derecha también muestra el neto a pagar</p>
+    <p class="cap">
+      La compra con retención. El "Neto a pagar" es lo que se le gira al
+      proveedor
+    </p>
 
-    <h3>Qué se acomoda solo</h3>
+    <h3>Qué se arregla solo</h3>
     <div class="twrap">
       <table>
-        <thead><tr><th>Dónde</th><th>Qué pasa</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Dónde</th>
+            <th>Qué hace</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr><td><strong>El cierre</strong></td><td>Una compra de contado saca del cajón el neto. Con una factura de un millón al 2,5%, el egreso del día son $975.000 y el efectivo esperado del arqueo baja en esa misma cifra, no en el millón.</td></tr>
-          <tr><td><strong>Cuentas por Pagar</strong></td><td>El saldo del proveedor nace neto. Al pagarle se registra lo que de verdad se le entrega y la compra queda saldada.</td></tr>
-          <tr><td><strong>Detalle de la compra</strong></td><td>Muestra el desglose con su porcentaje y el neto a pagar, para que quien le gire al proveedor vea de dónde salió la cifra.</td></tr>
+          <tr>
+            <td><strong>El cierre de caja</strong></td>
+            <td>
+              Si se pagó de contado, el egreso del día son $975.000, no el
+              millón. El efectivo que debería quedar en la caja baja en esa
+              misma cifra.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Cuentas por Pagar</strong></td>
+            <td>
+              Al proveedor le quedamos debiendo $975.000, que es lo que le vamos
+              a girar. Cuando se le paga, queda saldado.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Detalle de la compra</strong></td>
+            <td>
+              Muestra el desglose, para que quien va al banco sepa cuánto girar.
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
 
     <div class="callout info">
-      <span class="k">Una retención no abarata la mercancía</span>
-      <p>El Panel y el Dashboard siguen contando el gasto por el total de la factura, y eso es correcto: el costo de lo que se compró es el mismo. Lo único que cambia es a quién se le paga, una parte al proveedor y otra a la DIAN.</p>
+      <span class="k">Ojo con una idea equivocada</span>
+      <p>
+        Retenerle al proveedor <strong>no hace la mercancía más barata</strong>.
+        El costo sigue siendo el millón. Lo único que cambia es que ese millón
+        se paga en dos partes: una al proveedor y otra a la DIAN. Por eso el
+        Panel y el Dashboard siguen mostrando el gasto completo.
+      </p>
     </div>
     <div class="callout good">
-      <span class="k">Si el conteo ajusta la factura</span>
-      <p>Cuando la mercancía llega incompleta y se ajusta la factura, la retención se recalcula sola sobre el nuevo valor. Si de diez unidades llegaron seis, la retención pasa de $25.000 a $15.000 sin que nadie tenga que tocarla.</p>
+      <span class="k">Si al contar llegó menos</span>
+      <p>
+        La retención se recalcula sola. Si de diez unidades llegaron seis y se
+        ajusta la factura, la retención pasa de $25.000 a $15.000 sin que nadie
+        tenga que tocarla.
+      </p>
     </div>
   </section>
 
@@ -382,61 +1436,180 @@
   <section class="sec" id="s4">
     <h2><span class="b">4</span> Panel: por qué dio lo que dio</h2>
     <p>
-      El Dashboard dice cómo va el negocio hoy. El Panel responde la pregunta de fin de mes: por qué el
-      resultado dio lo que dio y dónde se está yendo la plata. Está en el Panel Admin, en Panel.
+      El Dashboard dice <strong>cómo va el negocio hoy</strong>. El Panel es
+      otra cosa: dice <strong>por qué el mes dio lo que dio</strong> y dónde se
+      está yendo la plata. Está en <strong>Panel Admin → Panel</strong>.
     </p>
     <p>
-      Todo el Panel obedece a una barra de rango arriba. Lo que se elija ahí manda sobre las cinco
-      secciones, y la barra dice en castellano qué rango está aplicado para que nunca se lea un número
-      creyendo que es de otro periodo.
+      Arriba hay una barra para elegir el periodo. Todo lo que se ve abajo
+      obedece a esa barra, y la barra dice en letras qué periodo está mostrando,
+      para no leer un número creyendo que es de otro mes.
     </p>
 
     <div class="shot">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <div><div class="eb">Panel Admin · Panel de decisiones</div><div class="h">Resultado del mes</div></div>
-        <div style="display:inline-flex;gap:2px;background:var(--s-card2);border:1px solid var(--s-line);border-radius:8px;padding:2px;font-size:10px">
-          <span style="color:var(--s-mut);padding:4px 8px">Hoy</span>
-          <span style="color:var(--s-mut);padding:4px 8px">Semana</span>
-          <span style="background:var(--s-pri);color:#fff;border-radius:6px;padding:4px 9px;font-weight:700">Este mes</span>
-          <span style="color:var(--s-mut);padding:4px 8px">Trimestre</span>
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: wrap;
+        "
+      >
+        <div>
+          <div class="eb">Panel Admin · Panel de decisiones</div>
+          <div class="h">Resultado del mes</div>
+        </div>
+        <div
+          style="
+            display: inline-flex;
+            gap: 2px;
+            background: var(--s-card2);
+            border: 1px solid var(--s-line);
+            border-radius: 8px;
+            padding: 2px;
+            font-size: 10px;
+          "
+        >
+          <span style="color: var(--s-mut); padding: 4px 8px">Hoy</span>
+          <span style="color: var(--s-mut); padding: 4px 8px">Semana</span>
+          <span
+            style="
+              background: var(--s-pri);
+              color: #fff;
+              border-radius: 6px;
+              padding: 4px 9px;
+              font-weight: 700;
+            "
+            >Este mes</span
+          >
+          <span style="color: var(--s-mut); padding: 4px 8px">Trimestre</span>
         </div>
       </div>
-      <div style="margin-top:12px">
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--s-line)"><span style="color:var(--s-mut)">Ventas netas</span><span class="money">$ 44.553.612</span></div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--s-line)"><span style="color:var(--s-mut)">Costo de lo vendido</span><span class="money" style="color:var(--s-bad)">- $ 14.191.099</span></div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--s-line)"><span style="color:var(--s-mut)">Margen bruto</span><span class="money">$ 30.362.513</span></div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--s-line)"><span style="color:var(--s-mut)">Gastos</span><span class="money" style="color:var(--s-bad)">- $ 20.189.419</span></div>
-        <div style="display:flex;justify-content:space-between;padding-top:8px;font-weight:700"><span>Resultado</span><span class="money" style="color:var(--s-good)">$ 10.173.094</span></div>
+      <div style="margin-top: 12px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--s-line);
+          "
+        >
+          <span style="color: var(--s-mut)">Lo que vendimos</span
+          ><span class="money">$ 44.553.612</span>
+        </div>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--s-line);
+          "
+        >
+          <span style="color: var(--s-mut)">Menos lo que nos costó</span
+          ><span class="money" style="color: var(--s-bad)">- $ 14.191.099</span>
+        </div>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--s-line);
+          "
+        >
+          <span>Nos queda</span><span class="money">$ 30.362.513</span>
+        </div>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--s-line);
+          "
+        >
+          <span style="color: var(--s-mut)">Menos los gastos</span
+          ><span class="money" style="color: var(--s-bad)">- $ 20.189.419</span>
+        </div>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            padding-top: 8px;
+            font-weight: 700;
+            font-size: 15px;
+          "
+        >
+          <span>Ganancia del mes</span
+          ><span class="money" style="color: var(--s-good)">$ 10.173.094</span>
+        </div>
       </div>
     </div>
-    <p class="cap">La cascada del resultado, con datos reales del mes. Cada renglón se puede abrir</p>
+    <p class="cap">
+      De la venta a la ganancia, renglón por renglón. Cada renglón se puede
+      abrir para ver qué hay adentro
+    </p>
 
     <h3>Las cinco secciones</h3>
     <div class="twrap">
       <table>
-        <thead><tr><th>Sección</th><th>Qué responde</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Sección</th>
+            <th>La pregunta que responde</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr><td><strong>Resultado</strong></td><td>De las ventas al resultado, renglón por renglón, y qué hay dentro de cada pérdida.</td></tr>
-          <tr><td><strong>Composición</strong></td><td>De dónde sale la venta, mirada por siete ejes distintos: sede, vendedora, categoría, producto y otros. Se pueden ver los peores por margen y también por volumen.</td></tr>
-          <tr><td><strong>Cartera</strong></td><td>Cuánto deben los clientes y desde hace cuánto, agrupado por antigüedad.</td></tr>
-          <tr><td><strong>Inventario</strong></td><td>Cuánta plata hay quieta en las bodegas, tratada como capital y no como una lista de productos.</td></tr>
-          <tr><td><strong>Egresos por clasificar</strong></td><td>La bandeja de gastos a los que todavía no se les ha dicho de qué son.</td></tr>
+          <tr>
+            <td><strong>Resultado</strong></td>
+            <td>
+              ¿Por qué ganamos (o perdimos) esto? Se abre cada renglón para ver
+              qué hay adentro.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Composición</strong></td>
+            <td>
+              ¿De dónde salió la venta? Por sede, por vendedora, por categoría,
+              por producto. También muestra los peores, tanto por margen como
+              por cantidad.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Cartera</strong></td>
+            <td>¿Cuánto nos deben los clientes y desde hace cuánto?</td>
+          </tr>
+          <tr>
+            <td><strong>Inventario</strong></td>
+            <td>¿Cuánta plata tenemos quieta en las bodegas?</td>
+          </tr>
+          <tr>
+            <td><strong>Egresos por clasificar</strong></td>
+            <td>¿Qué gastos falta decir de qué son?</td>
+          </tr>
         </tbody>
       </table>
     </div>
 
-    <h3>Clasificar los gastos</h3>
+    <h3>Los gastos hay que clasificarlos</h3>
     <p>
-      Para que el resultado sea confiable, cada egreso necesita una categoría. Los gastos nuevos ya
-      nacen con la suya, y los viejos se resuelven por lotes desde la bandeja: se marcan varios y se
-      les pone la categoría de una sola vez. Mientras un gasto siga sin clasificar, el Panel lo cuenta
-      como gasto y lo dice, para no prometer un resultado mejor del real.
+      Para que la ganancia sea confiable, cada gasto necesita decir de qué es:
+      arriendo, transporte, nómina. Los gastos nuevos ya salen con su categoría.
+      Los viejos se arreglan de a montones desde la bandeja: se marcan varios y
+      se les pone la categoría de una sola vez.
     </p>
+    <div class="callout warn">
+      <span class="k">Mientras un gasto no esté clasificado</span>
+      <p>
+        El Panel lo cuenta como gasto y lo dice. Prefiere mostrar una ganancia
+        más baja que prometer una que no es.
+      </p>
+    </div>
 
-    <h3>Llevarse los números</h3>
+    <h3>Para llevárselo a Excel</h3>
     <p>
-      Cada tabla del Panel tiene un botón para exportar a CSV exactamente lo que se ve en pantalla, con
-      el mismo rango y los mismos filtros. Se abre en Excel sin pelear con nada.
+      Cada tabla tiene un botón que baja un archivo con
+      <strong>exactamente lo que se está viendo</strong>, con el mismo periodo y
+      los mismos filtros. Se abre en Excel de una.
     </p>
   </section>
 
@@ -444,70 +1617,277 @@
   <section class="sec" id="s5">
     <h2><span class="b">5</span> Contar la mercancía que llega</h2>
     <p>
-      Hasta ahora, marcar una compra como recibida daba por bueno que llegó todo lo que decía la
-      factura. Ahora el bodeguero cuenta lo que de verdad llegó, y las diferencias tienen a dónde ir.
+      Antes, dar una compra por recibida era creerle a la factura. Ahora el
+      bodeguero cuenta lo que de verdad llegó, y si algo no cuadra, la app
+      pregunta qué hacer.
     </p>
 
-    <h3>Cómo se entra</h3>
-    <p>
-      Al registrar una compra con productos, el botón dice <strong>Registrar y contar</strong> y lleva
-      directo a la pantalla del conteo. Es el momento correcto, porque la mercancía casi siempre está
-      en el mostrador cuando se digita la factura. El paso se puede omitir; la compra queda registrada
-      igual. Solo lo ven el administrador y bodega.
-    </p>
-
-    <div class="shot">
-      <div class="eb">Compras · Contar lo que llegó</div>
-      <div class="h">Compra #868 · Cabezotes del Pacífico</div>
-      <div style="margin-top:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--s-line)">
-          <div><div style="font-weight:600">CABEZOTE 30 HP 2155T</div><div style="font-size:10px;color:var(--s-fnt)">Pedidas 10</div></div>
-          <span style="display:flex;align-items:center;gap:7px">
-            <span style="border:1px solid var(--s-line);border-radius:7px;padding:2px 9px;color:var(--s-mut)">−</span>
-            <span class="money" style="background:var(--s-card);border:1px solid var(--s-line);border-radius:7px;padding:3px 12px;font-weight:700">10</span>
-            <span style="border:1px solid var(--s-line);border-radius:7px;padding:2px 9px;color:var(--s-mut)">+</span>
-            <span class="tag g"><span class="dot"></span>Completo</span>
-          </span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0">
-          <div><div style="font-weight:600">ACEITE MONOGRADO 50 1/4</div><div style="font-size:10px;color:var(--s-fnt)">Pedidas 24</div></div>
-          <span style="display:flex;align-items:center;gap:7px">
-            <span style="border:1px solid var(--s-line);border-radius:7px;padding:2px 9px;color:var(--s-mut)">−</span>
-            <span class="money" style="background:var(--s-card);border:1px solid var(--s-line);border-radius:7px;padding:3px 12px;font-weight:700">20</span>
-            <span style="border:1px solid var(--s-line);border-radius:7px;padding:2px 9px;color:var(--s-mut)">+</span>
-            <span class="tag w"><span class="dot"></span>Faltan 4</span>
-          </span>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Se entra al registrar la compra</h3>
+        <p>
+          Cuando la compra tiene productos, el botón dice
+          <strong>Registrar y contar</strong> y lleva derecho a contar.
+        </p>
+        <p>
+          Es el momento bueno: la mercancía casi siempre está en el mostrador
+          mientras se digita la factura.
+        </p>
+        <p class="tip">Se puede saltar. La compra queda registrada igual.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Compras · Nueva compra</div>
+          <div class="h">Resumen de la compra</div>
+          <div style="margin-top: 8px">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                padding: 5px 0;
+                color: var(--s-mut);
+              "
+            >
+              <span>Subtotal</span><span class="money">$ 1.000.000</span>
+            </div>
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                padding: 5px 0;
+                font-weight: 700;
+              "
+            >
+              <span>Total estimado</span><span class="money">$ 1.190.000</span>
+            </div>
+          </div>
+          <div class="btn">Registrar y contar →</div>
         </div>
       </div>
-      <div class="btn">Confirmar recepción</div>
     </div>
-    <p class="cap">El conteo en modo lista, para tablet y computador. En celular es una tarjeta por producto</p>
 
-    <h3>Cómo se cuenta</h3>
-    <p>
-      Cada producto arranca en cero y se va sumando, que es como se cuenta de verdad una caja. Hay
-      botones grandes, teclado numérico y el escáner de QR, que suma de a uno sin salir de la pantalla.
-    </p>
+    <div class="stepr rev">
+      <div class="txt">
+        <h3><span class="n">2</span> Se cuenta de a uno</h3>
+        <p>
+          Cada producto <strong>empieza en cero</strong> y se va sumando, como
+          se cuenta una caja de verdad.
+        </p>
+        <p>
+          Hay botones grandes de + y −, teclado de números, y el escáner de QR
+          que suma de a uno sin salir de la pantalla.
+        </p>
+        <p class="tip">
+          Los botones son grandes a propósito: esto se usa con guantes.
+        </p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Compras · Contar lo que llegó</div>
+          <div class="h">Compra #868</div>
+          <div style="margin-top: 8px">
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                padding: 8px 0;
+                border-bottom: 1px solid var(--s-line);
+              "
+            >
+              <div>
+                <div style="font-weight: 600; font-size: 12px">
+                  CABEZOTE 30 HP
+                </div>
+                <div style="font-size: 10px; color: var(--s-fnt)">
+                  Pedidas 10
+                </div>
+              </div>
+              <span style="display: flex; align-items: center; gap: 6px">
+                <span
+                  style="
+                    border: 1px solid var(--s-line);
+                    border-radius: 7px;
+                    padding: 2px 8px;
+                    color: var(--s-mut);
+                  "
+                  >−</span
+                >
+                <span
+                  class="money"
+                  style="
+                    background: var(--s-card);
+                    border: 1px solid var(--s-line);
+                    border-radius: 7px;
+                    padding: 3px 11px;
+                    font-weight: 700;
+                  "
+                  >10</span
+                >
+                <span
+                  style="
+                    border: 1px solid var(--s-line);
+                    border-radius: 7px;
+                    padding: 2px 8px;
+                    color: var(--s-mut);
+                  "
+                  >+</span
+                >
+              </span>
+            </div>
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                padding: 8px 0;
+              "
+            >
+              <div>
+                <div style="font-weight: 600; font-size: 12px">
+                  ACEITE 50 1/4
+                </div>
+                <div style="font-size: 10px; color: var(--s-fnt)">
+                  Pedidas 24
+                </div>
+              </div>
+              <span style="display: flex; align-items: center; gap: 6px">
+                <span
+                  style="
+                    border: 1px solid var(--s-line);
+                    border-radius: 7px;
+                    padding: 2px 8px;
+                    color: var(--s-mut);
+                  "
+                  >−</span
+                >
+                <span
+                  class="money"
+                  style="
+                    background: var(--s-card);
+                    border: 1px solid var(--s-line);
+                    border-radius: 7px;
+                    padding: 3px 11px;
+                    font-weight: 700;
+                  "
+                  >20</span
+                >
+                <span
+                  style="
+                    border: 1px solid var(--s-line);
+                    border-radius: 7px;
+                    padding: 2px 8px;
+                    color: var(--s-mut);
+                  "
+                  >+</span
+                >
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    <h3>Qué se hace con las diferencias</h3>
+    <h3>El semáforo</h3>
+    <p>Cada producto se pinta según cómo va:</p>
     <div class="twrap">
       <table>
-        <thead><tr><th>Diferencia</th><th>Qué se puede hacer</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Señal</th>
+            <th>Quiere decir</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr><td><strong>Llegó menos</strong></td><td>Ajustar la factura, si el proveedor no lo va a mandar, o dejarlo como reclamo al proveedor.</td></tr>
-          <tr><td><strong>Llegó dañado</strong></td><td>Se cuenta aparte y se le reclama al proveedor. Al inventario solo entra lo que sirve.</td></tr>
-          <tr><td><strong>Llegó de más</strong></td><td>Se puede aceptar el sobrante y meterlo al inventario, o dejarlo por fuera.</td></tr>
+          <tr>
+            <td><span class="pill g">Completo</span></td>
+            <td>Llegó todo lo que decía la factura y en buen estado.</td>
+          </tr>
+          <tr>
+            <td><span class="pill w">Faltan 4</span></td>
+            <td>Llegó menos de lo pedido.</td>
+          </tr>
+          <tr>
+            <td><span class="pill a">Sobran 2</span></td>
+            <td>Llegó de más.</td>
+          </tr>
+          <tr>
+            <td><span class="pill r">2 dañadas</span></td>
+            <td>Llegó, pero no sirve.</td>
+          </tr>
         </tbody>
       </table>
     </div>
-    <p>
-      Antes de confirmar, la app muestra en palabras lo que va a pasar: cuántas unidades entran al
-      inventario, qué se le reclama al proveedor y cómo queda la factura. Después de confirmar, la
-      compra queda recibida y el reclamo queda abierto como una garantía de compra.
-    </p>
+
+    <h3>Qué hacer con lo que no cuadra</h3>
+    <div class="twrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Si...</th>
+            <th>Las opciones son</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Llegó menos</strong></td>
+            <td>
+              <strong>Ajustar la factura</strong>, si el proveedor no lo va a
+              mandar y no se le va a pagar. O <strong>reclamarle</strong>, si
+              quedó de mandarlo.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Llegó dañado</strong></td>
+            <td>Se cuenta aparte y se le reclama al proveedor.</td>
+          </tr>
+          <tr>
+            <td><strong>Llegó de más</strong></td>
+            <td>Se acepta y entra al inventario, o se deja por fuera.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
     <div class="callout info">
       <span class="k">Al inventario entra lo que sirve</span>
-      <p>La regla es sencilla: entra lo que llegó menos lo dañado. Una unidad que llegó rota no suma al stock aunque la factura la cobre.</p>
+      <p>
+        La cuenta es: <strong>lo que llegó, menos lo dañado</strong>. Una pieza
+        que llegó rota no suma al stock aunque la factura la cobre.
+      </p>
+    </div>
+
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">3</span> Antes de confirmar, la app avisa</h3>
+        <p>
+          Sale una ventana que dice <strong>en palabras</strong> lo que va a
+          pasar: cuánto entra al inventario, qué se le reclama al proveedor y
+          cómo queda la factura.
+        </p>
+        <p class="tip">
+          Si algo de eso no es lo que se quería, se cierra y se corrige.
+        </p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Confirmar recepción</div>
+          <div class="h">Esto es lo que va a pasar</div>
+          <div style="margin-top: 8px; font-size: 12px; line-height: 1.7">
+            <div>• El inventario sube <strong>30 unidades</strong>.</div>
+            <div>
+              • Se le reclaman <strong>4 unidades</strong> al proveedor.
+            </div>
+            <div>
+              • La factura baja de <span class="money">$ 1.190.000</span> a
+              <span class="money">$ 1.150.000</span>.
+            </div>
+          </div>
+          <div class="btn">Confirmar recepción</div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -515,18 +1895,73 @@
   <section class="sec" id="s6">
     <h2><span class="b">6</span> Avisarle al administrador</h2>
     <p>
-      A veces el bodeguero se topa con algo que no puede resolver solo y que no da espera: llegó la
-      mitad del pedido, o llegó algo que nadie pidió. Dentro del conteo hay un botón para escalarlo al
+      A veces llega media remesa, o llega algo que nadie pidió, y el bodeguero
+      no puede decidir solo. Dentro del conteo hay un botón para llamar al
       administrador.
     </p>
-    <p>
-      Cuando el administrador abre la app, le sale un aviso que tapa la pantalla y que hay que atender
-      antes de seguir. No es una campanita que se pueda pasar por alto. Si no está conectado en ese
-      momento, el aviso lo espera y le sale cuando entre.
-    </p>
+
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Bodega toca el botón</h3>
+        <p>Escribe en dos renglones qué está pasando y lo manda.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Compras · Contar lo que llegó</div>
+          <div
+            style="
+              margin-top: 8px;
+              border: 1px solid var(--s-warn);
+              color: var(--s-warn);
+              background: var(--s-warnbg);
+              border-radius: 9px;
+              padding: 10px;
+              text-align: center;
+              font-weight: 640;
+              font-size: 12px;
+            "
+          >
+            ⚠ Avisarle al administrador
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stepr rev">
+      <div class="txt">
+        <h3><span class="n">2</span> Al administrador le tapa la pantalla</h3>
+        <p>
+          No es una campanita que se pueda pasar por alto: es una ventana que
+          <strong>hay que atender para poder seguir</strong>.
+        </p>
+        <p class="tip">
+          Si el administrador no está conectado, el aviso lo espera y le sale
+          apenas entre.
+        </p>
+      </div>
+      <div>
+        <div
+          class="shot"
+          style="background: var(--s-warnbg); border-color: #eed7a6"
+        >
+          <div class="eb" style="color: var(--s-warn)">Aviso urgente</div>
+          <div class="h">Bodega necesita una decisión</div>
+          <p style="font-size: 12px; color: var(--s-mut); margin: 6px 0">
+            "De la compra #868 solo llegaron 6 de 10 cabezotes. ¿Ajusto la
+            factura o le reclamo?"
+          </p>
+          <div class="btn" style="background: var(--s-warn)">Ver la compra</div>
+        </div>
+      </div>
+    </div>
+
     <div class="callout warn">
       <span class="k">Máximo dos avisos por situación</span>
-      <p>Para que el aviso siga significando algo, cada situación admite hasta dos. Insistir una tercera vez no manda nada nuevo. Si es urgente de verdad y ya se avisó dos veces, toca el teléfono.</p>
+      <p>
+        Para que el aviso siga significando algo, cada situación admite
+        <strong>dos</strong>. Insistir una tercera vez no manda nada nuevo. Si
+        es urgente de verdad y ya se avisó dos veces, toca el teléfono.
+      </p>
     </div>
   </section>
 
@@ -534,55 +1969,105 @@
   <section class="sec" id="s7">
     <h2><span class="b">7</span> Garantía desde una orden entregada</h2>
     <p>
-      Cuando un cliente reclama por un trabajo ya entregado, antes había que buscar la venta que la
-      orden generó y abrir la garantía desde ahí. Casi nadie llegaba por ese camino. Ahora el detalle
-      de la orden de trabajo entregada tiene su propio botón para reclamar la garantía.
-    </p>
-    <h3>Un solo cupo de reembolso</h3>
-    <p>
-      Una orden de trabajo y las ventas que salen de ella son el mismo negocio, así que comparten un
-      solo cupo de devolución. Si por una orden de un millón ya se devolvieron seiscientos mil, por
-      cualquier vía quedan cuatrocientos mil, y la app no deja pasar de ahí. Antes cada camino llevaba
-      su propia cuenta y entre los dos se podía devolver más de lo que el cliente pagó.
+      Cuando un cliente vuelve a reclamar por un trabajo ya entregado, antes
+      había que buscar la venta que la orden había generado y abrir la garantía
+      desde allá. Casi nadie encontraba ese camino.
     </p>
     <p>
-      Cuando un reembolso queda topado, el mensaje dice cuánto se ha devuelto ya y cuánto queda, en vez
-      de solo negarse.
+      Ahora
+      <strong>la orden de trabajo entregada tiene su propio botón</strong> para
+      abrir la garantía. Se entra por donde uno la busca.
     </p>
+
+    <h3>Un solo cupo para devolver plata</h3>
+    <p>
+      Una orden de trabajo y las ventas que salen de ella son el mismo negocio.
+      Por eso comparten
+      <strong>un solo cupo</strong> de devolución.
+    </p>
+
+    <div class="two">
+      <div class="card">
+        <div class="kk">Ejemplo</div>
+        <p style="margin: 0.3em 0">
+          Una orden de <strong class="money">$ 1.000.000</strong>.
+        </p>
+        <p style="margin: 0.3em 0">
+          Ya se le devolvieron <strong class="money">$ 600.000</strong>.
+        </p>
+        <p style="margin: 0.3em 0; color: var(--good); font-weight: 650">
+          Quedan $ 400.000 y ni un peso más.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kk">Antes</div>
+        <p style="margin: 0.3em 0; color: var(--muted)">
+          La orden llevaba su cuenta y la venta llevaba otra.
+        </p>
+        <p style="margin: 0.3em 0; color: var(--bad); font-weight: 650">
+          Entre las dos se podía devolver más de lo que el cliente pagó.
+        </p>
+      </div>
+    </div>
+
+    <div class="err">
+      <div class="msg wy">
+        <span class="ic">!</span>
+        <code
+          >Ya se devolvieron $ 600.000 de esta orden. El cupo que queda es $
+          400.000.</code
+        >
+      </div>
+      <div class="body">
+        <p class="qy">Sale cuando se intenta devolver más de lo que queda.</p>
+        <p class="do">
+          <b>Qué hacer:</b> el mensaje dice cuánto queda. Se ajusta el monto a
+          esa cifra.
+        </p>
+      </div>
+    </div>
   </section>
 
   <!-- ══════════════════════════ 8 ══════════════════════════ -->
   <section class="sec" id="s8">
     <h2><span class="b">8</span> Deshacer un cambio de producto</h2>
     <p>
-      Los cambios de producto con diferencia de precio ya se podían registrar. Lo que faltaba era poder
-      deshacerlos cuando se registraban mal, y eso obligaba a pedir ayuda por fuera de la app.
+      Los cambios de producto ya se podían registrar. Lo que faltaba era poder
+      <strong>deshacerlos</strong>
+      cuando quedaban mal, y eso obligaba a llamar a que alguien lo arreglara
+      por fuera de la app.
     </p>
     <p>
-      Ahora el detalle de la venta tiene la opción de anular el cambio completo. Se deshacen las dos
-      partes a la vez, la devolución y la venta nueva, y el inventario y la caja vuelven a donde
-      estaban. Es una acción del administrador.
+      Ahora el detalle de la venta tiene la opción de anular el cambio. Se
+      deshacen las dos partes a la vez, la devolución y la venta nueva, y el
+      inventario y la caja vuelven a como estaban.
     </p>
+    <div class="callout info">
+      <span class="k">Quién puede</span>
+      <p>Solo el administrador.</p>
+    </div>
   </section>
 
   <!-- ══════════════════════════ 9 ══════════════════════════ -->
   <section class="sec" id="s9">
     <h2><span class="b">9</span> Mínimos y Reorden por clase ABC</h2>
     <p>
-      Las dos pantallas de reposición ahora se pueden filtrar por clase A, B o C. Es útil para trabajar
-      por tandas: revisar primero los A, que son los que mueven la plata, sin que la lista se llene de
-      productos de clase C.
+      Las dos pantallas de reposición ahora se filtran por clase <strong>A</strong>,
+      <strong>B</strong> o <strong>C</strong>. Sirve para revisar primero los A, que son
+      los que mueven la plata, sin que la lista se llene de clase C.
     </p>
-    <p>
-      De paso se corrigió un error en la clase combinada, que contaba dos veces los repuestos usados en
-      órdenes de trabajo. Eso inflaba a algunos productos y podía subirlos de clase sin merecerlo, así
-      que unas cuantas clasificaciones van a verse distintas después de recalcular.
-    </p>
+    <div class="callout good">
+      <span class="k">De paso se arregló un error</span>
+      <p>
+        La clase combinada contaba <strong>dos veces</strong> los repuestos usados
+        en órdenes de trabajo, y eso subía de clase a productos que no lo
+        merecían. Al recalcular, algunas clasificaciones se verán distintas.
+      </p>
+    </div>
   </section>
 
   <div class="foot">
     <span>Compresores del Valle S.A.S. · Guía interna</span>
     <span>Novedades de septiembre</span>
   </div>
-
 </div>
