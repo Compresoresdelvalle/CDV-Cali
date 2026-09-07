@@ -99,3 +99,18 @@ export const safeError = (err, fallback = "Ocurrió un error inesperado") => {
   if (code === "P0001" && err.message) return err.message;
   return fallback;
 };
+
+/**
+ * "hace 2 min". El cambio visible es lo que confirma que el boton de refrescar
+ * sirvio: sin esto, una pantalla que se refresca sola cada minuto hace que
+ * pulsarlo no cambie nada en la vista y parezca roto.
+ */
+export const haceCuanto = (fecha) => {
+  if (!fecha) return "";
+  const seg = Math.max(0, Math.round((Date.now() - fecha.getTime()) / 1000));
+  if (seg < 45) return "hace unos segundos";
+  const min = Math.round(seg / 60);
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  return `hace ${h} h`;
+};

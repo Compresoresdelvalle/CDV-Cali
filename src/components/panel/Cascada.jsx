@@ -6,7 +6,16 @@ import { formatCOP } from "../../lib/utils";
  * Un renglón de la cascada. Vive fuera del componente para que React no lo
  * remonte en cada render.
  */
-function Renglon({ etiqueta, nota, valor, signo, fuerte, color, onClick }) {
+function Renglon({
+  etiqueta,
+  nota,
+  valor,
+  signo,
+  fuerte,
+  heroe,
+  color,
+  onClick,
+}) {
   const Etiqueta = (
     <span className="min-w-0">
       <span
@@ -28,16 +37,24 @@ function Renglon({ etiqueta, nota, valor, signo, fuerte, color, onClick }) {
   );
   const Monto = (
     <span
-      className={`shrink-0 tabular-nums ${fuerte ? "text-[17px] font-semibold" : "text-[14px]"}`}
+      className={`shrink-0 tabular-nums ${
+        heroe
+          ? "text-[22px] font-semibold"
+          : fuerte
+            ? "text-[17px] font-semibold"
+            : "text-[14px]"
+      }`}
       style={{ color: color ?? "hsl(var(--foreground))" }}
     >
       {formatCOP(valor)}
     </span>
   );
-  const clases = `flex w-full items-start justify-between gap-3 py-2 text-left ${
-    fuerte ? "border-t pt-3" : ""
+  const clases = `flex w-full items-start justify-between gap-3 py-2.5 text-left ${
+    fuerte ? "border-t pt-3" : "border-b"
   }`;
-  const estilo = fuerte ? { borderColor: "hsl(var(--border))" } : undefined;
+  const estilo = fuerte
+    ? { borderColor: "hsl(var(--border))" }
+    : { borderColor: "hsl(var(--border) / 0.5)" };
 
   // Solo es botón si de verdad lleva a algún lado: un botón que no hace nada
   // invita a pulsarlo y no responde.
@@ -116,10 +133,12 @@ export default function Cascada({ datos }) {
       />
       <Renglon
         etiqueta="Resultado"
+        nota="Lo que quedó del periodo, después de costo y gastos"
         valor={datos.resultado}
         signo="="
         fuerte
-        color={negativo ? "hsl(var(--destructive))" : "hsl(var(--foreground))"}
+        heroe
+        color={negativo ? "hsl(var(--destructive))" : "hsl(var(--success))"}
       />
 
       {/* Los sin clasificar YA están restados arriba, así que el número de

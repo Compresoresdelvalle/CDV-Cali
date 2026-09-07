@@ -31,7 +31,7 @@ export default function Seccion({
 }) {
   return (
     <section
-      className="overflow-hidden rounded-xl border"
+      className="overflow-hidden rounded-xl border shadow-sm"
       style={{
         backgroundColor: "hsl(var(--card))",
         borderColor: "hsl(var(--border))",
@@ -46,9 +46,14 @@ export default function Seccion({
       >
         <div className="min-w-0">
           <p
-            className="text-xs font-semibold uppercase tracking-wide"
-            style={{ color: "hsl(var(--muted-foreground))" }}
+            className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide"
+            style={{ color: "hsl(var(--foreground))" }}
           >
+            <span
+              aria-hidden="true"
+              className="inline-block h-3.5 w-1 shrink-0 rounded-full"
+              style={{ backgroundColor: "hsl(var(--primary))" }}
+            />
             {titulo}
           </p>
           {subtitulo && (
