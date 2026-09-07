@@ -433,3 +433,88 @@ test.describe("Panel — exportar", () => {
     expect(texto.trim().split("\n").length).toBeGreaterThan(1);
   });
 });
+
+test.describe("Panel — cierre visual", () => {
+  test("a 360 px nada desborda la pagina, ni con el historico completo", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 780 });
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+
+    // Todo el histórico: los nombres largos de producto y los montos de nueve
+    // cifras son los que rompen un diseño, no los datos de ejemplo.
+    await page.getByRole("button", { name: "Este año" }).click();
+
+    const composicion = page
+      .locator("section")
+      .filter({ hasText: "Cómo se compone la venta" });
+    await composicion.getByRole("button", { name: "Producto" }).click();
+    await expect(composicion.locator("li").first()).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // La página no puede rodar en horizontal. Las tablas anchas ruedan DENTRO
+    // de su contenedor, no moviendo la página entera.
+    const desborde = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(desborde).toBeLessThanOrEqual(1);
+
+    await page.screenshot({
+      path: "tests/results/panel-12-movil-360.png",
+      fullPage: true,
+    });
+  });
+
+  test("un rango sin ventas explica en vez de quedar en blanco", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+
+    // "Hoy" en esta base suele no tener ventas todavía; si las tiene, la
+    // aserción sigue valiendo porque lo que se comprueba es que NUNCA quede
+    // una tarjeta muda.
+    await page.getByRole("button", { name: "Hoy", exact: true }).click();
+
+    const composicion = page
+      .locator("section")
+      .filter({ hasText: "Cómo se compone la venta" });
+    await expect(composicion).toBeVisible({ timeout: 30_000 });
+    await expect(
+      composicion.getByText(/No hubo ventas en este rango|Nombre/),
+    ).toBeVisible({ timeout: 30_000 });
+
+    // El resultado se muestra SIEMPRE, aunque esté en cero: fue la corrección
+    // expresa del usuario contra "si siempre falta algo, nunca muestra nada".
+    const resultado = page
+      .locator("section")
+      .filter({ hasText: "Resultado del periodo" });
+    await expect(resultado.getByText("Ventas netas")).toBeVisible();
+    // El renglón lleva el signo en el mismo span: el texto es "= Resultado".
+    await expect(resultado.getByText("= Resultado")).toBeVisible();
+  });
+
+  test("en modo oscuro se sigue leyendo todo", async ({ page }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+    await expect(
+      page.locator("section").filter({ hasText: "Resultado del periodo" }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    await page
+      .getByRole("button", { name: /oscuro|claro|tema/i })
+      .first()
+      .click();
+    await page.waitForTimeout(400);
+
+    // El calendario es donde una librería mete su propia paleta y desaparece.
+    await page.getByRole("button", { name: /Personalizado/ }).click();
+    await page.waitForTimeout(400);
+    await page.screenshot({
+      path: "tests/results/panel-13-oscuro.png",
+      fullPage: false,
+    });
+  });
+});
