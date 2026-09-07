@@ -400,3 +400,36 @@ test.describe("Panel — fase E", () => {
       .not.toBe(todas);
   });
 });
+
+test.describe("Panel — exportar", () => {
+  test("el boton descarga un CSV con el rango en el nombre y datos reales", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+
+    const seccion = page
+      .locator("section")
+      .filter({ hasText: "Cómo se compone la venta" });
+    await seccion.locator("tbody tr").first().waitFor({ timeout: 30_000 });
+
+    const [descarga] = await Promise.all([
+      page.waitForEvent("download"),
+      seccion.getByRole("button", { name: "Exportar" }).click(),
+    ]);
+
+    // El rango va en el nombre: dos descargas del mismo panel con rangos
+    // distintos no se pueden confundir en la carpeta de descargas.
+    expect(descarga.suggestedFilename()).toMatch(
+      /^panel-composicion-sede-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.csv$/,
+    );
+
+    const ruta = await descarga.path();
+    const texto = (await import("node:fs")).readFileSync(ruta, "utf8");
+    // BOM para que Excel no rompa los acentos, titulos, y punto y coma.
+    expect(texto.charCodeAt(0)).toBe(0xfeff);
+    expect(texto).toContain("Nombre;Facturas;Venta;Costo;Margen;Margen %");
+    // Y al menos una fila de datos ademas del encabezado.
+    expect(texto.trim().split("\n").length).toBeGreaterThan(1);
+  });
+});

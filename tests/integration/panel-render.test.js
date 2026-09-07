@@ -692,3 +692,29 @@ describe("Inventario", () => {
     expect(html).toContain("Capital en inventario");
   });
 });
+
+describe("BotonExportar", () => {
+  const montar = async (props) => {
+    const B = (await import("../../src/components/panel/BotonExportar"))
+      .default;
+    return renderToStaticMarkup(
+      createElement(B, {
+        columnas: [{ clave: "a", titulo: "A" }],
+        base: "panel-x",
+        rango: { desde: "2026-09-01", hasta: "2026-09-30" },
+        ...props,
+      }),
+    );
+  };
+
+  it("se apaga cuando no hay nada que bajar", async () => {
+    const html = await montar({ filas: [] });
+    expect(html).toContain("disabled");
+    expect(html).toContain("No hay nada que exportar");
+  });
+
+  it("con filas queda activo", async () => {
+    const html = await montar({ filas: [{ a: 1 }] });
+    expect(html).not.toContain("disabled");
+  });
+});
