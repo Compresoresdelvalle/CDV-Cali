@@ -12,6 +12,7 @@ import Cartera from "../../components/panel/Cartera";
 import Inventario from "../../components/panel/Inventario";
 import BotonExportar from "../../components/panel/BotonExportar";
 import { rangoDeAtajo, etiquetaRango } from "../../lib/panel-rango";
+import { filtrarPorPeso } from "../../lib/panel-composicion";
 
 const CLAVE_RANGO = "cdv.panel.rango";
 
@@ -63,6 +64,10 @@ export default function Panel() {
   // que está cargando.
   const [dimension, setDimension] = useState("sede");
   const [peores, setPeores] = useState(false);
+  // El filtro de peso vive aquí y no dentro de la tabla porque el botón de
+  // exportar también lo necesita: si no, el CSV traería filas que la pantalla
+  // está escondiendo, y el botón dice que exporta lo que se ve.
+  const [minParte, setMinParte] = useState(0);
   const claveComp = `${clave}|${dimension}`;
   const [composicion, setComposicion] = useState({ clave: null });
 
@@ -395,7 +400,7 @@ export default function Panel() {
           acciones={
             esAdmin && (
               <BotonExportar
-                filas={composicion.datos ?? []}
+                filas={filtrarPorPeso(composicion.datos ?? [], minParte)}
                 columnas={[
                   { clave: "etiqueta", titulo: "Nombre" },
                   { clave: "n", titulo: "Facturas" },
@@ -422,6 +427,8 @@ export default function Panel() {
               filas={composicion.datos}
               peores={peores}
               onPeores={setPeores}
+              minParte={minParte}
+              onMinParte={setMinParte}
             />
           )}
         </Seccion>

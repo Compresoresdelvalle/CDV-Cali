@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, TrendingDown } from "lucide-react";
 import { formatCOP } from "../../lib/utils";
+import {
+  UMBRALES,
+  ventaTotal,
+  filtrarPorPeso,
+} from "../../lib/panel-composicion";
 
 /**
  * Los siete ejes, con el nombre que usa quien vende, no el de la columna.
@@ -31,23 +36,6 @@ const COLUMNAS = [
   { id: "margen_pct", rotulo: "%", soloAdmin: true },
   // La participación ordena por venta: es la misma magnitud vista en barra.
   { id: "participacion", rotulo: "Participación", ordenaPor: "venta" },
-];
-
-/**
- * Umbrales de "peso en la venta" para quitar el ruido de la cola.
- *
- * El piso es 1% A PROPOSITO, no por gusto: el servidor devuelve los 100 grupos
- * mas grandes, y como mucho 100 grupos pueden pesar 1% o mas cada uno. Es
- * decir, con 1% la tabla ya trae con seguridad TODOS los que pasan el filtro.
- * Con 0,5% podria haber hasta 200 candidatos y algunos se quedarian afuera sin
- * que nadie se entere, que es exactamente la clase de mentira silenciosa que
- * este panel no puede permitirse.
- */
-const UMBRALES = [
-  { id: 0, rotulo: "Todos" },
-  { id: 0.01, rotulo: "≥ 1%" },
-  { id: 0.03, rotulo: "≥ 3%" },
-  { id: 0.05, rotulo: "≥ 5%" },
 ];
 
 const num = (v) => Number(v ?? 0);
@@ -99,12 +87,11 @@ export default function Composicion({
   filas = [],
   peores,
   onPeores,
+  minParte = 0,
+  onMinParte,
   admin = true,
 }) {
   const [orden, setOrden] = useState({ col: "venta", dir: "desc" });
-  // Cuánto tiene que pesar un grupo para aparecer. Un margen malo sobre una
-  // unidad vendida es ruido; el mismo margen sobre el 8% de la venta es plata.
-  const [minParte, setMinParte] = useState(0);
   // "Peor" tiene dos respuestas legítimas y distintas: el que deja menos
   // porcentaje, y el que deja menos plata. Se elige, no se supone.
   const [criterio, setCriterio] = useState("pct");
@@ -119,32 +106,10 @@ export default function Composicion({
 
   // El total DE TODO, sin filtrar: es contra este que cuadran las ventas netas
   // de la cascada, y es la base de la participación de cada fila.
-  const general = useMemo(
-    () =>
-      filas.reduce(
-        (acc, f) => ({
-          venta: acc.venta + num(f.venta),
-          costo: acc.costo + num(f.costo),
-          margen: acc.margen + num(f.margen),
-          n: acc.n + num(f.n),
-        }),
-        { venta: 0, costo: 0, margen: 0, n: 0 },
-      ),
-    [filas],
-  );
+  const general = useMemo(() => ({ venta: ventaTotal(filas) }), [filas]);
 
   const { ordenadas, total } = useMemo(() => {
-    // La fila "Otros N" sale al filtrar: es una bolsa de grupos que justamente
-    // NO pasan el umbral, así que dejarla dentro contradiría el filtro.
-    const base =
-      minParte > 0
-        ? filas.filter(
-            (f) =>
-              !f.es_resto &&
-              general.venta > 0 &&
-              num(f.venta) / general.venta >= minParte,
-          )
-        : filas;
+    const base = filtrarPorPeso(filas, minParte);
     const campo =
       COLUMNAS.find((c) => c.id === activo.col)?.ordenaPor ?? activo.col;
     const signo = activo.dir === "asc" ? 1 : -1;
@@ -177,7 +142,7 @@ export default function Composicion({
       { venta: 0, costo: 0, margen: 0, n: 0 },
     );
     return { ordenadas: copia, total: t };
-  }, [filas, activo.col, activo.dir, minParte, general.venta]);
+  }, [filas, activo.col, activo.dir, minParte]);
 
   const parteDe = (f) => (general.venta > 0 ? num(f.venta) / general.venta : 0);
   const filtrando = minParte > 0;
@@ -304,7 +269,7 @@ export default function Composicion({
               <button
                 key={u.id}
                 type="button"
-                onClick={() => setMinParte(u.id)}
+                onClick={() => onMinParte(u.id)}
                 aria-pressed={minParte === u.id}
                 className="rounded-lg border px-3 text-[12px] font-medium"
                 style={{
