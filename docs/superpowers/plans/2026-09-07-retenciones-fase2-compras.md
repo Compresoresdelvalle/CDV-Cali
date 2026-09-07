@@ -1249,3 +1249,36 @@ lint sin problemas nuevos, build en verde, 277 pruebas pasando.
 
 **Queda pendiente el paso 5 del Task 8**, el recorrido a mano por rol en el
 navegador. Eso lo hace el dueño: exige iniciar sesión.
+
+---
+
+## Revisión profunda (2026-09-07, después de terminar)
+
+Recorrido adversarial buscando vacíos y daños colaterales. Lo que se comprobó,
+todo contra producción dentro de `BEGIN … ROLLBACK`:
+
+**Un hueco encontrado y cerrado.** Cada porcentaje estaba recortado a [0,100],
+pero la suma no. Retefuente 100% más reteICA 100% sobre una factura de 1.190.000
+daba una retención de 2.000.000, y el cierre registraba un egreso de −810.000:
+la compra aparecía como un ingreso. Cerrado en `20260907T6` con aviso en
+pantalla, y probado en los tres puntos (rechaza el absurdo, deja pasar
+2,5/0,414/15 y también el borde exacto de retención igual al total).
+
+**Lo que se verificó sano y no hizo falta tocar.** El picking que ajusta la
+factura: con 6 de 10 llegadas la retención bajó sola de 25.000 a 15.000 y el
+cierre reflejó 585.000 — funciona *porque* las columnas son generadas; calculadas
+en la RPC habrían quedado en 25.000 sobre una factura de 600.000. Cancelar una
+compra retenida la saca de Cuentas por Pagar y devuelve el cierre a su línea
+base. Caja menor sigue registrando con retención en cero y por su propio camino.
+Ninguna función ni trigger escribe las columnas generadas, y ninguna pantalla
+escribe en `compras` por REST: todas leen. `PagoCuentaModal` ya venía preparado
+de la fase 1 y calcula el neto correcto. `CompraNueva` navega fuera al guardar,
+así que la retención no se filtra a la compra siguiente. `pgrst_ddl_watch`
+recarga la caché de PostgREST sola, y además se mandó el `NOTIFY` a mano.
+
+**Un hallazgo que NO se tocó, a propósito.** `ventas` tiene exactamente el mismo
+hueco de la retención que se pasa del total, desde la fase 1, y esa parte ya
+está desplegada y en uso. Cerrarlo exige tocar `fn_registrar_venta`,
+`fn_convertir_cotizacion` y el camino de la OT: es su propio cambio, con su
+propia verificación. El aviso en pantalla sí lo hereda, porque el bloque es
+compartido.
