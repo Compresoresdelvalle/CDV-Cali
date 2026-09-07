@@ -437,3 +437,49 @@ export function puedeManipular(perfil, orden) {
 export function puedeAnular(perfil, orden) {
   return perfil?.rol === "Admin" && !otCerrada(orden);
 }
+
+/** Milisegundos de un día, para la ventana de garantía. */
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * ¿Se puede abrir un reclamo de garantía sobre esta OT, y hasta cuándo?
+ *
+ * Copia exacta de la regla de `fn_abrir_garantia_venta`, y a propósito NO se
+ * apoya en `puedeManipular`: esa le dice que no al Técnico (que no ejecuta el
+ * flujo de la OT) mientras que la RPC sí lo deja abrir garantías. Gatear con
+ * `puedeManipular` le habría escondido el botón al técnico sin razón.
+ *
+ * `dias` es el plazo vigente, que sale de `parametros_sistema.dias_garantia_venta`
+ * con respaldo en 90 — el mismo valor y el mismo respaldo que usa el servidor.
+ * Si aquí se quemara un 90 fijo, el día que se configure otro plazo la pantalla
+ * ofrecería un botón que la RPC va a rechazar.
+ *
+ * Devuelve también `vence` para poder decir la fecha en pantalla en vez de
+ * mostrar un botón condenado a fallar.
+ */
+export function puedeReclamarGarantia(
+  perfil,
+  orden,
+  dias = 90,
+  ahora = Date.now(),
+) {
+  const rolOk = ["Admin", "Vendedor", "Tecnico"].includes(perfil?.rol);
+  const sedeOk = perfil?.rol === "Admin" || orden?.sede_id === perfil?.sede_id;
+  const entregada = orden?.estado === "entregada";
+
+  // Mismo anclaje que el servidor: la entrega y, si faltara, la apertura.
+  const ancla = orden?.fecha_entrega ?? orden?.fecha ?? null;
+  const t = ancla ? new Date(ancla).getTime() : NaN;
+  const vence = Number.isFinite(t) ? new Date(t + dias * DIA_MS) : null;
+  const vigente = vence ? ahora <= vence.getTime() : false;
+
+  return {
+    // `habilitado` = tiene el rol y la sede sobre una OT entregada. Se separa de
+    // `puede` para poder distinguir "no te toca" de "se te vencio" y explicar
+    // cada caso con su motivo.
+    habilitado: rolOk && sedeOk && entregada,
+    vigente,
+    vence,
+    puede: rolOk && sedeOk && entregada && vigente,
+  };
+}
