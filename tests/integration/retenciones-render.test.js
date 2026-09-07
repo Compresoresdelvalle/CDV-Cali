@@ -103,14 +103,18 @@ describe("BloqueRetenciones", () => {
   });
 
   it("monta con tarifas sugeridas sin aplicarlas todavia", () => {
-    // La precarga ocurre al pulsar el encabezado, no al montar: apagado sigue
-    // significando cero retencion.
+    // Las sugeridas NO se aplican solas en ningun momento, ni al montar ni al
+    // abrir el bloque: hay que pulsar "Aplicar las tarifas de siempre". Si se
+    // pusieran solas, abrir el bloque por curiosidad y cerrarlo dejaria la
+    // venta con una retencion que nadie quiso y la caja descuadrada.
     const html = montar({
       ...BASE,
       sugeridas: { retefuentePct: 2.5, reteicaPct: 0.69, reteivaPct: 15 },
     });
-    expect(html).toContain("Sin retenciones");
+    expect(html).toContain("Retenciones");
     expect(html).not.toContain("Neto a recibir");
+    // Ningun porcentaje sugerido pintado como valor aplicado.
+    expect(html).not.toContain("2,5");
   });
 });
 
@@ -132,7 +136,7 @@ describe("Nueva Venta con el bloque de retenciones", () => {
     // Con las retenciones apagadas la pantalla no puede cambiar en nada: ese es
     // el criterio de aceptacion mas importante de toda la funcionalidad.
     const html = await montarVenta();
-    expect(html).toContain("Sin retenciones");
+    expect(html).toContain("Retenciones");
     expect(html).not.toContain("A recibir");
   });
 

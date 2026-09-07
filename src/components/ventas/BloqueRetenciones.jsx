@@ -134,18 +134,23 @@ export default function BloqueRetenciones({
     !Number(valores.reteicaPct) &&
     !Number(valores.reteivaPct);
 
-  const alternar = () => {
-    const abriendo = !abierto;
-    setAbierto(abriendo);
-    // Solo al ABRIR y solo si no hay nada puesto: así, si alguien deja las tres
-    // en cero a propósito y vuelve a abrir, no se le repone la sugerencia.
-    if (abriendo && vacio && sugeridas && !soloLectura) {
-      onChange?.({
-        retefuentePct: Number(sugeridas.retefuentePct) || 0,
-        reteicaPct: Number(sugeridas.reteicaPct) || 0,
-        reteivaPct: Number(sugeridas.reteivaPct) || 0,
-      });
-    }
+  // Abrir el bloque NO pone tarifas. Antes se rellenaban solas con las
+  // sugeridas, y eso descuadra una caja: basta que alguien lo abra por
+  // curiosidad y lo cierre para que la venta salga con una retención que nadie
+  // quiso. El sistema diría que entran $950.000 y en el cajón habría
+  // $1.000.000, y el descuadre aparece al cerrar, cuando ya nadie se acuerda.
+  //
+  // Las sugeridas siguen a la mano, pero hay que pulsarlas (ver "Aplicar
+  // sugeridas" abajo): retener es una decisión, no un valor por defecto.
+  const alternar = () => setAbierto((a) => !a);
+
+  const aplicarSugeridas = () => {
+    if (!sugeridas || soloLectura) return;
+    onChange?.({
+      retefuentePct: Number(sugeridas.retefuentePct) || 0,
+      reteicaPct: Number(sugeridas.reteicaPct) || 0,
+      reteivaPct: Number(sugeridas.reteivaPct) || 0,
+    });
   };
 
   // Recibe el número ya normalizado por la Fila, al salir del campo.
@@ -166,17 +171,31 @@ export default function BloqueRetenciones({
         style={{ minHeight: 48, backgroundColor: "hsl(var(--muted) / 0.3)" }}
         aria-expanded={abierto}
       >
+        {/* Plegado decía "RETENCIONES / Sin retenciones", una franja gris que
+            parecía un dato y no un control: nadie la abría. Ahora, mientras no
+            haya ninguna, invita a usarla; cuando ya hay, manda el monto. */}
         <span
           className="text-xs font-semibold uppercase tracking-wide"
-          style={{ color: "hsl(var(--muted-foreground))" }}
+          style={{
+            color: ret.hay
+              ? "hsl(var(--foreground))"
+              : "hsl(var(--muted-foreground))",
+          }}
         >
           Retenciones
         </span>
         <span
-          className="text-[13px]"
-          style={{ color: "hsl(var(--muted-foreground))" }}
+          className="flex items-center gap-1.5 text-[13px]"
+          style={{
+            color: ret.hay ? "hsl(var(--warning))" : "hsl(var(--primary))",
+          }}
         >
-          {ret.hay ? `- ${formatCOP(ret.total)}` : "Sin retenciones"}
+          {ret.hay
+            ? `- ${formatCOP(ret.total)}`
+            : soloLectura
+              ? "Sin retenciones"
+              : "¿El cliente retiene? Tocar para aplicar"}
+          <span aria-hidden="true">{abierto ? "▴" : "▾"}</span>
         </span>
       </button>
 
@@ -189,6 +208,26 @@ export default function BloqueRetenciones({
             Lo que el cliente descuenta y consigna a la DIAN o al municipio. La
             factura no cambia: solo cambia cuánta plata entra.
           </p>
+
+          {/* Las tarifas de Configuración quedan a un toque, pero no se ponen
+              solas: aplicarlas es una decisión de quien está atendiendo. */}
+          {!soloLectura && sugeridas && vacio && (
+            <button
+              type="button"
+              onClick={aplicarSugeridas}
+              className="w-full rounded-lg border text-[13px] font-medium"
+              style={{
+                minHeight: 48,
+                borderColor: "hsl(var(--primary) / 0.4)",
+                backgroundColor: "hsl(var(--primary) / 0.06)",
+                color: "hsl(var(--primary))",
+              }}
+            >
+              Aplicar las tarifas de siempre ({Number(sugeridas.retefuentePct) || 0}
+              % · {Number(sugeridas.reteicaPct) || 0}% ·{" "}
+              {Number(sugeridas.reteivaPct) || 0}%)
+            </button>
+          )}
 
           <Fila
             etiqueta="Retefuente (sobre la base)"
