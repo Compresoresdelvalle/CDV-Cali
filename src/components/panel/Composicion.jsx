@@ -97,6 +97,10 @@ export default function Composicion({
       COLUMNAS.find((c) => c.id === activo.col)?.ordenaPor ?? activo.col;
     const signo = activo.dir === "asc" ? 1 : -1;
     const copia = [...filas].sort((a, b) => {
+      // "Otros N productos" es un agregado de todo lo que no cupo, no un grupo
+      // que compita con los demás: se queda al final se ordene por lo que se
+      // ordene. Arriba del todo diría que lo peor del negocio es una bolsa.
+      if (a.es_resto !== b.es_resto) return a.es_resto ? 1 : -1;
       if (campo === "etiqueta") {
         return (
           signo *
@@ -256,11 +260,22 @@ export default function Composicion({
                   <tr
                     key={f.clave}
                     className="border-t"
-                    style={{ borderColor: "hsl(var(--border))" }}
+                    style={{
+                      borderColor: "hsl(var(--border))",
+                      // El resto va en gris: es lo que hace que el pie sume,
+                      // pero no es un renglón sobre el que se pueda actuar.
+                      backgroundColor: f.es_resto
+                        ? "hsl(var(--muted) / 0.25)"
+                        : undefined,
+                    }}
                   >
                     <td
                       className="max-w-[260px] truncate px-3 py-2 text-[13px]"
-                      style={{ color: "hsl(var(--foreground))" }}
+                      style={{
+                        color: f.es_resto
+                          ? "hsl(var(--muted-foreground))"
+                          : "hsl(var(--foreground))",
+                      }}
                       title={f.etiqueta}
                     >
                       {f.etiqueta}

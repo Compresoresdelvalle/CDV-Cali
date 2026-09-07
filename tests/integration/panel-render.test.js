@@ -672,7 +672,7 @@ describe("Inventario", () => {
       n_dormido: 1500,
       agotados_a: 150,
     });
-    expect(html).toContain("1500 productos sin salir en 90 días");
+    expect(html).toContain("1500 productos sin un solo movimiento en 90 días");
     expect(html).toContain("75% del capital");
   });
 
@@ -716,5 +716,120 @@ describe("BotonExportar", () => {
   it("con filas queda activo", async () => {
     const html = await montar({ filas: [{ a: 1 }] });
     expect(html).not.toContain("disabled");
+  });
+});
+
+describe("Composicion — la fila del resto (bug de la revision)", () => {
+  const FILAS = [
+    {
+      clave: "p1",
+      etiqueta: "Filtro caro",
+      venta: 100000,
+      costo: 10000,
+      margen: 90000,
+      margen_pct: 90,
+      n: 3,
+      es_resto: false,
+    },
+    {
+      clave: "p2",
+      etiqueta: "Manguera",
+      venta: 60000,
+      costo: 50000,
+      margen: 10000,
+      margen_pct: 16.7,
+      n: 2,
+      es_resto: false,
+    },
+    {
+      clave: "__resto__",
+      etiqueta: "Otros 529 productos",
+      venta: 41000,
+      costo: 35000,
+      margen: 6000,
+      margen_pct: 12.5,
+      n: 9,
+      es_resto: true,
+    },
+  ];
+  const montar = async (props) => {
+    const C = (await import("../../src/components/panel/Composicion")).default;
+    return renderToStaticMarkup(
+      createElement(C, {
+        dimension: "producto",
+        onDimension() {},
+        filas: FILAS,
+        peores: false,
+        onPeores() {},
+        ...props,
+      }),
+    );
+  };
+
+  it("el total del pie incluye el resto, que es lo que lo hace cuadrar", async () => {
+    // 100.000 + 60.000 + 41.000 = 201.000. Sin la fila del resto el pie diria
+    // 160.000 debajo de un titular de 201.000: el bug de la revision.
+    const html = await montar();
+    expect(html).toContain("201.000");
+    expect(html).not.toContain("160.000");
+  });
+
+  it("el resto va de ultimo aunque se ordene por el peor margen", async () => {
+    const html = await montar({ peores: true });
+    // Con "ver los peores" el resto tiene el margen mas bajo (12.5%), pero es
+    // una bolsa de 529 productos: arriba diria que lo peor del negocio es un
+    // agregado.
+    expect(html.indexOf("Otros 529 productos")).toBeGreaterThan(
+      html.indexOf("Manguera"),
+    );
+  });
+
+  it("en producto el pie no suma facturas: una factura sale en varias filas", async () => {
+    const html = await montar();
+    expect(html).not.toContain(">14<");
+    expect(html).toContain("contaría de más");
+  });
+});
+
+describe("PanelDetalle — el pie no puede contradecir a la seccion", () => {
+  const FILAS = Array.from({ length: 3 }, (_, i) => ({
+    doc_tipo: "venta",
+    doc_id: `id-${i}`,
+    referencia: `Venta #${i}`,
+    descripcion: "Cliente",
+    fecha: "2026-08-01",
+    monto: 12345,
+  }));
+  const montar = async (props) => {
+    const P = (await import("../../src/components/panel/PanelDetalle")).default;
+    return renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(P, {
+          abierto: true,
+          titulo: "Vendido bajo costo",
+          filas: FILAS,
+          onCerrar() {},
+          ...props,
+        }),
+      ),
+    );
+  };
+
+  it("sin recorte muestra el conteo y la suma de lo que hay", async () => {
+    const html = await montar();
+    expect(html).toContain("3 registros");
+    expect(html).toContain("37.035");
+  });
+
+  it("recortado dice cuantas de cuantas y usa el total real", async () => {
+    // El servidor corta en 200; si el concepto tenia 640 por 6.5 millones, el
+    // pie tiene que decir el numero de la seccion, no la suma de lo que trajo.
+    const html = await montar({ totalReal: 6535825, nReal: 640 });
+    expect(html).toContain("3 de 640 registros");
+    expect(html).toContain("6.535.825");
+    // Y NO la suma de lo que alcanzo a traer.
+    expect(html).not.toContain("37.035");
   });
 });

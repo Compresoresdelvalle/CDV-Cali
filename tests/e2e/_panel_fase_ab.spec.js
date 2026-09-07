@@ -518,3 +518,69 @@ test.describe("Panel — cierre visual", () => {
     });
   });
 });
+
+test.describe("Panel — lo que arreglo la revision", () => {
+  test("con producto (mas de 100 grupos) el pie SIGUE dando las ventas netas", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+    await page.getByRole("button", { name: "Este año" }).click();
+
+    const netas = await page
+      .locator("section")
+      .filter({ hasText: "Resultado del periodo" })
+      .getByText(/^\$\s?[\d.]+$/)
+      .first()
+      .innerText();
+
+    const seccion = page
+      .locator("section")
+      .filter({ hasText: "Cómo se compone la venta" });
+
+    // Producto y cliente son las dimensiones que pasan de 100 grupos: es donde
+    // faltaban 92 y 52 millones antes de la fila del resto.
+    for (const dim of ["Producto", "Cliente", "Categoría"]) {
+      await seccion.getByRole("button", { name: dim, exact: true }).click();
+      await expect(seccion.locator("tfoot")).toContainText(netas.trim(), {
+        timeout: 30_000,
+      });
+      // .first() porque la tabla de escritorio y las tarjetas de movil se
+      // renderizan las dos: solo se ocultan por CSS.
+      await expect(seccion.getByText(/^Otros \d+ /).first()).toBeVisible();
+    }
+
+    await seccion
+      .getByRole("button", { name: "Producto", exact: true })
+      .click();
+    await expect(seccion.locator("tbody tr").last()).toContainText("Otros");
+    await page.screenshot({
+      path: "tests/results/panel-14-resto.png",
+      fullPage: false,
+    });
+  });
+
+  test("los tres porcentajes de la cascada ya salen de la misma base", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+    await page.getByRole("button", { name: "Este año" }).click();
+
+    const nota = page
+      .locator("section")
+      .filter({ hasText: "Resultado del periodo" })
+      .getByText(/en total · productos .* · servicios/);
+    await expect(nota).toBeVisible({ timeout: 30_000 });
+
+    const t = await nota.innerText();
+    const [total, prod, serv] = [...t.matchAll(/([\d.,]+)%/g)].map((m) =>
+      parseFloat(m[1].replace(",", ".")),
+    );
+    // El margen total tiene que quedar ENTRE el de productos y el de servicios:
+    // es una mezcla ponderada de los dos. Antes salian de bases distintas y el
+    // 73.2% quedaba por encima del 65% de productos sin explicacion posible.
+    expect(total).toBeGreaterThanOrEqual(Math.min(prod, serv) - 0.1);
+    expect(total).toBeLessThanOrEqual(Math.max(prod, serv) + 0.1);
+  });
+});

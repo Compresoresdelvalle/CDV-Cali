@@ -224,7 +224,18 @@ export default function Panel() {
 
   const abrirDetalle = useCallback(
     (concepto, titulo) => {
-      setDetalle({ concepto, titulo, cargando: true, filas: [] });
+      // El titular del concepto viaja con la hoja: el servidor corta el detalle
+      // en 200 filas y sin esto el pie mostraría una suma menor que la cifra
+      // que el usuario acaba de pulsar.
+      const titular = perdidas.datos?.[concepto];
+      setDetalle({
+        concepto,
+        titulo,
+        cargando: true,
+        filas: [],
+        totalReal: titular?.monto,
+        nReal: titular?.n,
+      });
       supabase
         .rpc("fn_panel_perdidas_detalle", {
           p_concepto: concepto,
@@ -248,15 +259,22 @@ export default function Panel() {
           ),
         );
     },
-    [rango.desde, rango.hasta, sede],
+    [rango.desde, rango.hasta, sede, perdidas.datos],
   );
 
   // La cartera ya trae su detalle en la misma respuesta, así que la hoja se
   // abre con lo que ya está en memoria: pedirlo otra vez sería un viaje al
   // servidor para traer lo mismo.
   const abrirLista = useCallback(
-    (titulo, subtitulo, filas) =>
-      setDetalle({ titulo, subtitulo, cargando: false, filas }),
+    (titulo, subtitulo, filas, totalReal, nReal) =>
+      setDetalle({
+        titulo,
+        subtitulo,
+        cargando: false,
+        filas,
+        totalReal,
+        nReal,
+      }),
     [],
   );
 
@@ -433,7 +451,16 @@ export default function Panel() {
             <Cartera
               datos={cartera.datos}
               onVerTodas={(filas) =>
-                abrirLista("Facturas sin cobrar", "Al día de hoy", filas)
+                abrirLista(
+                  "Facturas sin cobrar",
+                  "Al día de hoy",
+                  filas,
+                  cartera.datos.total,
+                  (cartera.datos.tramos ?? []).reduce(
+                    (s, t) => s + Number(t.n ?? 0),
+                    0,
+                  ),
+                )
               }
             />
           )}
@@ -456,6 +483,8 @@ export default function Panel() {
         titulo={detalle?.titulo ?? ""}
         subtitulo={detalle?.subtitulo ?? etiquetaRango(rango)}
         filas={detalle?.filas ?? []}
+        totalReal={detalle?.totalReal}
+        nReal={detalle?.nReal}
         cargando={detalle?.cargando}
         error={detalle?.error}
         onCerrar={() => setDetalle(null)}
