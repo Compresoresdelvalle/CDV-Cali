@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Printer,
@@ -13,6 +13,7 @@ import {
   Hash,
   Wrench,
   Package,
+  Shield,
   ShieldCheck,
   Wallet,
   Activity,
@@ -32,12 +33,15 @@ import {
 } from "../../lib/utils";
 import { avisarOk, avisarError } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
+import { getParametroInt } from "../../hooks/useParametro";
 import { construirHistorialOT } from "../../lib/ordenes-ui";
 import { cuentaBancariaLabel } from "../../lib/cuentas-ui";
 import ClientePicker from "../../components/forms/ClientePicker";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
 import OrdenStepper from "../../components/ot/OrdenStepper";
+import ModalAbrirGarantiaVenta from "../../components/garantias/ModalAbrirGarantiaVenta";
+import { garantiaVentaEstadoLabel } from "../../lib/ventas-ui";
 import { generarOrdenPDF } from "../../lib/pdf/ordenPDF";
 import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
 import BloqueRetenciones from "../../components/ventas/BloqueRetenciones";
@@ -58,6 +62,7 @@ import {
   METODO_PAGO,
   puedeManipular,
   puedeAnular,
+  puedeReclamarGarantia,
   TX,
 } from "../../lib/ot-flujo";
 
@@ -203,6 +208,42 @@ export default function OrdenDetalle() {
   // de un flag de sesión y la orden quedaba trabada para otro usuario/pestaña).
   const [checklistYaMarcado, setChecklistYaMarcado] = useState(false);
   const busyRef = useRef(false);
+
+  // Garantías abiertas sobre ESTA OT + el plazo vigente. Van en su propio efecto
+  // y fallan en silencio a propósito: son datos secundarios y un problema de
+  // permisos en ellos no puede tumbar el render de la orden.
+  const [garantias, setGarantias] = useState([]);
+  const [diasGarantia, setDiasGarantia] = useState(90);
+  const [modalGarantia, setModalGarantia] = useState(false);
+
+  const cargarGarantias = useCallback(async () => {
+    if (!id) return;
+    const { data } = await supabase
+      .from("garantias_venta")
+      .select("id, numero, fecha, estado, resolucion")
+      .eq("orden_servicio_id", id)
+      .order("fecha", { ascending: true });
+    setGarantias(data ?? []);
+  }, [id]);
+
+  useEffect(() => {
+    cargarGarantias();
+  }, [cargarGarantias]);
+
+  // El plazo se lee del mismo parámetro que usa fn_abrir_garantia_venta, con el
+  // mismo respaldo de 90 días. Si se hardcodeara, el día que Maritza cambie el
+  // parámetro la pantalla ofrecería un botón que el servidor va a rechazar.
+  // Se usa el mismo helper que GarantiaVentaDetalle (viene con caché), no una
+  // consulta suelta: dos formas de leer el mismo parámetro terminan divergiendo.
+  useEffect(() => {
+    let alive = true;
+    getParametroInt("dias_garantia_venta", 90).then((n) => {
+      if (alive && n > 0) setDiasGarantia(n);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -566,6 +607,9 @@ export default function OrdenDetalle() {
                 setChecklistTocado={setChecklistTocado}
                 imprimirConstancia={imprimirConstancia}
                 imprimirReciboVenta={imprimirReciboVenta}
+                garantias={garantias}
+                diasGarantia={diasGarantia}
+                onAbrirGarantia={() => setModalGarantia(true)}
               />
             </PasoAcordeon>
           ))}
@@ -581,6 +625,25 @@ export default function OrdenDetalle() {
           ro={ro}
         />
       </div>
+
+      {/* Reclamo de garantía sobre la OT entregada. El modal ya era agnóstico
+          del origen (tenía la rama `tipo: "ot"` sin usar), así que aquí solo se
+          le pasa el origen correcto. */}
+      {modalGarantia && (
+        <ModalAbrirGarantiaVenta
+          origen={{
+            tipo: "ot",
+            id: orden.id,
+            cliente_nombre: orden.cliente_nombre,
+            sede_id: orden.sede_id,
+          }}
+          onClose={() => setModalGarantia(false)}
+          onCreated={(gid) => {
+            setModalGarantia(false);
+            navigate(`/ops/garantias/venta/${gid}`);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2679,6 +2742,9 @@ function PasoEntrega({
   cargar,
   setErrorMsg,
   imprimirReciboVenta,
+  garantias = [],
+  diasGarantia = 90,
+  onAbrirGarantia,
 }) {
   const [monto, setMonto] = useState("");
   const [metodo, setMetodo] = useState("efectivo");
@@ -2688,6 +2754,10 @@ function PasoEntrega({
 
   const saldoCubierto = (montos.saldo ?? 0) <= 0;
   const entregada = orden.estado === "entregada";
+
+  // La regla vive en ot-flujo.js junto a puedeManipular/puedeAnular, para que
+  // sea la misma en un solo sitio y se pueda probar sin montar la pantalla.
+  const gar = puedeReclamarGarantia(perfil, orden, diasGarantia);
 
   const registrarSaldo = async () => {
     if (ro) return;
@@ -2949,6 +3019,84 @@ function PasoEntrega({
           >
             <Printer className="h-4 w-4" /> Reimprimir recibo de venta
           </OutlineButton>
+
+          {/* ── Garantía sobre esta OT ──────────────────────────────────
+              El reclamo del cliente por el TRABAJO se registra aquí, no en la
+              factura: es la orden la que responde. El tope de reembolso lo
+              comparten las dos (ver fn_reembolsado_del_grupo), así que no se
+              puede devolver la misma plata por los dos lados. */}
+          <div className="rounded-lg border px-4 py-3 space-y-2.5" style={card}>
+            <p
+              className="text-xs font-semibold uppercase tracking-wide"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              Garantía
+            </p>
+
+            {garantias.length > 0 && (
+              <ul className="space-y-1.5" role="list">
+                {garantias.map((g) => (
+                  <li key={g.id}>
+                    <Link
+                      to={`/ops/garantias/venta/${g.id}`}
+                      className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
+                      style={{
+                        borderColor: "hsl(var(--border))",
+                        color: "hsl(var(--foreground))",
+                      }}
+                    >
+                      <span>Garantía #{g.numero}</span>
+                      <span
+                        className="text-xs"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        {garantiaVentaEstadoLabel(g.estado)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {gar.puede && (
+              <OutlineButton
+                tone="warning"
+                onClick={onAbrirGarantia}
+                style={{ width: "100%" }}
+              >
+                <Shield className="h-4 w-4" /> Cliente reclama garantía
+              </OutlineButton>
+            )}
+
+            {/* Vencida: no se ofrece un botón que el servidor va a rechazar de
+                todos modos; se dice la fecha y qué hacer. */}
+            {gar.habilitado && !gar.vigente && (
+              <p
+                className="text-xs"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                La garantía venció el{" "}
+                {gar.vence?.toLocaleDateString("es-CO", {
+                  timeZone: "America/Bogota",
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })}{" "}
+                ({diasGarantia} días desde la entrega), así que ya no se puede
+                abrir un reclamo. Si de todos modos hay que responderle al
+                cliente, tiene que autorizarlo Maritza.
+              </p>
+            )}
+
+            {garantias.length === 0 && !gar.habilitado && (
+              <p
+                className="text-xs"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+              >
+                Sin reclamos de garantía.
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>

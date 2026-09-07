@@ -77,9 +77,9 @@ test.describe("Panel — fases A y B", () => {
       .waitFor({ timeout: 20_000 });
 
     const frase = page
-      .locator("p")
-      .filter({ hasText: /Actualizado/i })
-      .first();
+      .locator("div")
+      .filter({ hasText: /^Del .*Actualizado|^\d.*Actualizado/i })
+      .last();
     const antes = await frase.innerText();
 
     await page.getByRole("button", { name: "Mes pasado", exact: true }).click();
@@ -510,7 +510,7 @@ test.describe("Panel — cierre visual", () => {
     await page.waitForTimeout(400);
 
     // El calendario es donde una librería mete su propia paleta y desaparece.
-    await page.getByRole("button", { name: /Personalizado/ }).click();
+    await page.getByRole("button", { name: /personalizado/i }).click();
     await page.waitForTimeout(400);
     await page.screenshot({
       path: "tests/results/panel-13-oscuro.png",
