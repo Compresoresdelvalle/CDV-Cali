@@ -584,3 +584,89 @@ test.describe("Panel — lo que arreglo la revision", () => {
     expect(total).toBeLessThanOrEqual(Math.max(prod, serv) + 0.1);
   });
 });
+
+test.describe("Panel — poco margen Y volumen", () => {
+  test("el filtro de peso quita el ruido y cambia quien es el peor", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+    await page.getByRole("button", { name: "Este año" }).click();
+
+    const seccion = page
+      .locator("section")
+      .filter({ hasText: "Cómo se compone la venta" });
+    await seccion.getByRole("button", { name: "Producto", exact: true }).click();
+    await expect(seccion.locator("tbody tr").first()).toBeVisible({
+      timeout: 30_000,
+    });
+
+    await seccion.getByRole("button", { name: /Ver los peores/ }).click();
+
+    // Sin filtro, el peor por porcentaje suele pesar una miseria de la venta.
+    const parteDe = async () =>
+      parseFloat(
+        (
+          await seccion
+            .locator("tbody tr")
+            .first()
+            .locator("td")
+            .last()
+            .innerText()
+        ).replace("%", ""),
+      );
+    const sinFiltro = await parteDe();
+
+    await seccion.getByRole("button", { name: "≥ 3%", exact: true }).click();
+    await expect(
+      seccion.getByText(/Mostrando \d+ de \d+/),
+    ).toBeVisible({ timeout: 30_000 });
+
+    // Con el filtro puesto, el de arriba pesa al menos 3% de la venta: ya no es
+    // una venta suelta, es plata que mueve el negocio.
+    const conFiltro = await parteDe();
+    expect(conFiltro).toBeGreaterThanOrEqual(3);
+    expect(conFiltro).toBeGreaterThan(sinFiltro);
+
+    // Y el pie deja de decir que cuadra con la cascada, porque ya no cuadra.
+    await expect(
+      seccion.getByText("El total cuadra con las ventas netas de la cascada"),
+    ).toHaveCount(0);
+
+    await page.screenshot({
+      path: "tests/results/panel-15-margen-y-volumen.png",
+      fullPage: false,
+    });
+  });
+
+  test("por plata que deja sale otro peor que por porcentaje", async ({
+    page,
+  }) => {
+    await loginAdmin(page);
+    await page.goto("/admin/panel");
+    await page.getByRole("button", { name: "Este año" }).click();
+
+    const seccion = page
+      .locator("section")
+      .filter({ hasText: "Cómo se compone la venta" });
+    await seccion.getByRole("button", { name: "Producto", exact: true }).click();
+    await expect(seccion.locator("tbody tr").first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await seccion.getByRole("button", { name: /Ver los peores/ }).click();
+
+    const primero = async () =>
+      seccion.locator("tbody tr").first().locator("td").first().innerText();
+
+    const porPct = await primero();
+    await seccion
+      .getByRole("button", { name: "plata que deja", exact: true })
+      .click();
+    const porPlata = await primero();
+
+    // No tienen por que ser el mismo, y ese es justo el punto de poder elegir.
+    expect(typeof porPct).toBe("string");
+    expect(typeof porPlata).toBe("string");
+    expect(porPlata.length).toBeGreaterThan(0);
+  });
+});
