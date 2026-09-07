@@ -378,6 +378,14 @@ export default function CompraNueva() {
       setError("Selecciona la cuenta bancaria desde donde se pagó.");
       return;
     }
+    // Espeja el bloqueo del servidor, para no mandar al operador contra un
+    // error del backend cuando la pantalla ya sabe que no va a pasar.
+    if (retencionesCalculadas.total > total) {
+      setError(
+        `Las retenciones (${formatCOP(retencionesCalculadas.total)}) se pasan del total (${formatCOP(total)}). Revisa los porcentajes: si querías 2,5% escribe 2,5, no 25.`,
+      );
+      return;
+    }
     // Guard síncrono: el `disabled` de React no evita el doble-clic veloz.
     if (guardandoRef.current) return;
     guardandoRef.current = true;
