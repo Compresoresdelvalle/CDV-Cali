@@ -20,6 +20,31 @@ recharts, react-day-picker, date-fns, vitest.
 
 ---
 
+## Estado al 2026-09-06
+
+**Las cinco fases están implementadas, en producción y verificadas.** Faltan
+solo los dos últimos pasos de E4, que no los puede hacer quien implementa:
+
+- **E4 paso 8** — el recorrido manual de quien decide (los 8 puntos de la lista).
+- **E4 paso 9** — merge a `main` y push a los dos repos.
+
+Dos cosas salieron distintas de lo planeado, las dos a propósito:
+
+**`fn_panel_composicion` reparte la venta neta completa, no solo la retención.**
+El plan asumía que las líneas sumaban el total; no lo hacen, porque
+`ventas.total` lleva además IVA y domicilio, y menos el descuento. Con el
+reparto del plan el desglose habría mostrado 405.499.719 contra los 436.524.418
+de la cascada, 31 millones de diferencia sin explicación. Repartiendo la venta
+neta completa en proporción al subtotal de cada línea, las partes suman el total
+exactamente.
+
+**No se usó recharts.** Las dos únicas visualizaciones que pedía el diseño (la
+barra de participación y la barra apilada de cartera) son barras proporcionales,
+que en CSS son cuatro líneas y respetan los tokens sin pelear con la paleta de
+la librería. `recharts` sigue instalado pero no entra en el bundle.
+
+---
+
 ## Las fases
 
 |       | Entrega                                      | Por qué en este orden                                                            |
