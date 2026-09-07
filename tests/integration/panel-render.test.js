@@ -839,9 +839,36 @@ describe("Composicion — poco margen Y volumen", () => {
   // contra un producto que mueve el 40% de la venta a margen flaco. El primero
   // es ruido; el segundo es plata de verdad.
   const FILAS = [
-    { clave: "ruido", etiqueta: "Tornillo suelto", venta: 1000, costo: 950, margen: 50, margen_pct: 5, n: 1, es_resto: false },
-    { clave: "gordo", etiqueta: "Compresor 2HP", venta: 400000, costo: 340000, margen: 60000, margen_pct: 15, n: 90, es_resto: false },
-    { clave: "bueno", etiqueta: "Filtro premium", venta: 599000, costo: 100000, margen: 499000, margen_pct: 83.3, n: 40, es_resto: false },
+    {
+      clave: "ruido",
+      etiqueta: "Tornillo suelto",
+      venta: 1000,
+      costo: 950,
+      margen: 50,
+      margen_pct: 5,
+      n: 1,
+      es_resto: false,
+    },
+    {
+      clave: "gordo",
+      etiqueta: "Compresor 2HP",
+      venta: 400000,
+      costo: 340000,
+      margen: 60000,
+      margen_pct: 15,
+      n: 90,
+      es_resto: false,
+    },
+    {
+      clave: "bueno",
+      etiqueta: "Filtro premium",
+      venta: 599000,
+      costo: 100000,
+      margen: 499000,
+      margen_pct: 83.3,
+      n: 40,
+      es_resto: false,
+    },
   ];
   const montar = async (props) => {
     const C = (await import("../../src/components/panel/Composicion")).default;
@@ -879,9 +906,8 @@ describe("Composicion — poco margen Y volumen", () => {
   });
 
   it("el umbral mas bajo es 1%: con 100 grupos es el unico piso sin huecos", async () => {
-    const { default: C } = await import(
-      "../../src/components/panel/Composicion"
-    );
+    const { default: C } =
+      await import("../../src/components/panel/Composicion");
     // Documenta la razon: como mucho 100 grupos pueden pesar 1% o mas cada uno,
     // y el servidor trae justo los 100 mas grandes.
     expect(typeof C).toBe("function");
