@@ -509,6 +509,15 @@ export default function VentaNueva() {
       );
       return;
     }
+    // Espeja el CHECK del servidor (ventas_retencion_no_supera_total), para no
+    // mandar a la vendedora contra un error crudo de constraint cuando la
+    // pantalla ya sabe que no va a pasar.
+    if (retencionesCalculadas.total > total) {
+      setError(
+        `Las retenciones (${formatCOP(retencionesCalculadas.total)}) se pasan del total (${formatCOP(total)}). Revisa los porcentajes: si querías 2,5% escribe 2,5, no 25.`,
+      );
+      return;
+    }
     setError(null);
     setConfirmando(true);
     try {

@@ -155,6 +155,13 @@ export default function ConvertirCotizacionModal({
       setErr("Selecciona la cuenta bancaria para pagos electrónicos.");
       return;
     }
+    // Espeja el CHECK del servidor (ventas_retencion_no_supera_total).
+    if (ret.total > total) {
+      setErr(
+        `Las retenciones (${formatCOP(ret.total)}) se pasan del total (${formatCOP(total)}). Revisa los porcentajes: si querías 2,5% escribe 2,5, no 25.`,
+      );
+      return;
+    }
     convirtiendoRef.current = true;
     setConvirtiendo(true);
     setErr("");
