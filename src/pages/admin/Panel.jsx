@@ -10,6 +10,7 @@ import PanelDetalle from "../../components/panel/PanelDetalle";
 import Composicion from "../../components/panel/Composicion";
 import Cartera from "../../components/panel/Cartera";
 import Inventario from "../../components/panel/Inventario";
+import BotonExportar from "../../components/panel/BotonExportar";
 import { rangoDeAtajo, etiquetaRango } from "../../lib/panel-rango";
 
 const CLAVE_RANGO = "cdv.panel.rango";
@@ -259,6 +260,29 @@ export default function Panel() {
     [],
   );
 
+  // Las filas que exporta cada sección son las MISMAS que pinta, aplanadas.
+  const filasPerdidas = perdidas.datos
+    ? Object.entries(perdidas.datos)
+        .filter(([, v]) => v && typeof v === "object" && v.etiqueta)
+        .map(([, v]) => ({
+          concepto: v.etiqueta,
+          n: v.n,
+          unidad: v.unidad,
+          monto: v.monto,
+          suma_al_total: v.suma_al_total ? "sí" : "no",
+        }))
+    : [];
+
+  const filasResultado = resultado.datos
+    ? [
+        ["Ventas netas", resultado.datos.ventas_netas],
+        ["Costo de lo vendido", resultado.datos.costo_vendido],
+        ["Margen bruto", resultado.datos.margen_bruto],
+        ["Gastos operativos", resultado.datos.gastos],
+        ["Resultado", resultado.datos.resultado],
+      ].map(([concepto, monto]) => ({ concepto, monto }))
+    : [];
+
   // Está cargando mientras lo que hay en pantalla no corresponda a los
   // filtros de ahora.
   const cargaResultado = resultado.clave !== clave;
@@ -293,6 +317,19 @@ export default function Panel() {
       <div className="space-y-4 p-4 sm:p-6">
         <Seccion
           titulo="Resultado del periodo"
+          acciones={
+            esAdmin && (
+              <BotonExportar
+                filas={filasResultado}
+                columnas={[
+                  { clave: "concepto", titulo: "Concepto" },
+                  { clave: "monto", titulo: "Monto" },
+                ]}
+                base="panel-resultado"
+                rango={rango}
+              />
+            )
+          }
           sinPermiso={!esAdmin}
           cargando={cargaResultado}
           error={resultado.error}
@@ -304,6 +341,22 @@ export default function Panel() {
 
         <Seccion
           titulo="En qué se pierde"
+          acciones={
+            esAdmin && (
+              <BotonExportar
+                filas={filasPerdidas}
+                columnas={[
+                  { clave: "concepto", titulo: "Concepto" },
+                  { clave: "n", titulo: "Cantidad" },
+                  { clave: "unidad", titulo: "Unidad" },
+                  { clave: "monto", titulo: "Monto" },
+                  { clave: "suma_al_total", titulo: "Suma al total" },
+                ]}
+                base="panel-perdidas"
+                rango={rango}
+              />
+            )
+          }
           sinPermiso={!esAdmin}
           cargando={cargaPerdidas}
           error={perdidas.error}
@@ -318,6 +371,23 @@ export default function Panel() {
         <Seccion
           titulo="Cómo se compone la venta"
           subtitulo="El total de aquí abajo tiene que dar lo mismo que las ventas netas de arriba"
+          acciones={
+            esAdmin && (
+              <BotonExportar
+                filas={composicion.datos ?? []}
+                columnas={[
+                  { clave: "etiqueta", titulo: "Nombre" },
+                  { clave: "n", titulo: "Facturas" },
+                  { clave: "venta", titulo: "Venta" },
+                  { clave: "costo", titulo: "Costo" },
+                  { clave: "margen", titulo: "Margen" },
+                  { clave: "margen_pct", titulo: "Margen %" },
+                ]}
+                base={`panel-composicion-${dimension}`}
+                rango={rango}
+              />
+            )
+          }
           sinPermiso={!esAdmin}
           cargando={cargaComposicion}
           error={composicion.error}
@@ -337,6 +407,22 @@ export default function Panel() {
 
         <Seccion
           titulo="Quién debe"
+          acciones={
+            esAdmin && (
+              <BotonExportar
+                filas={cartera.datos?.detalle ?? []}
+                columnas={[
+                  { clave: "referencia", titulo: "Factura" },
+                  { clave: "descripcion", titulo: "Cliente" },
+                  { clave: "fecha", titulo: "Fecha" },
+                  { clave: "dias", titulo: "Días" },
+                  { clave: "monto", titulo: "Saldo" },
+                ]}
+                base="panel-cartera"
+                rango={null}
+              />
+            )
+          }
           sinPermiso={!esAdmin}
           cargando={cargaCartera}
           error={cartera.error}

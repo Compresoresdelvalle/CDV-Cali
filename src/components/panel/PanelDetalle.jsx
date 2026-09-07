@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { X, ChevronRight } from "lucide-react";
 import { formatCOP, formatDate } from "../../lib/utils";
+import BotonExportar from "./BotonExportar";
 
 /** A dónde lleva cada fila según su tipo de documento. */
 const RUTA = {
@@ -96,21 +97,41 @@ export default function PanelDetalle({
               </p>
             )}
           </div>
-          <button
-            ref={cerrarRef}
-            type="button"
-            onClick={onCerrar}
-            className="grid shrink-0 place-items-center rounded-lg border"
-            style={{
-              height: 48,
-              width: 48,
-              borderColor: "hsl(var(--border))",
-              color: "hsl(var(--muted-foreground))",
-            }}
-            aria-label="Cerrar"
-          >
-            <X className="h-4 w-4" strokeWidth={1.7} />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Exporta lo que está en la hoja, que puede ser mucho más de lo
+                que cabe en pantalla: el detalle llega hasta 200 filas. */}
+            <BotonExportar
+              filas={filas}
+              columnas={[
+                { clave: "fecha", titulo: "Fecha" },
+                { clave: "referencia", titulo: "Documento" },
+                { clave: "descripcion", titulo: "Detalle" },
+                { clave: "monto", titulo: "Monto" },
+              ]}
+              base={`panel-${(titulo || "detalle")
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[̀-ͯ]/g, "")
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-|-$/g, "")}`}
+              rango={null}
+            />
+            <button
+              ref={cerrarRef}
+              type="button"
+              onClick={onCerrar}
+              className="grid shrink-0 place-items-center rounded-lg border"
+              style={{
+                height: 48,
+                width: 48,
+                borderColor: "hsl(var(--border))",
+                color: "hsl(var(--muted-foreground))",
+              }}
+              aria-label="Cerrar"
+            >
+              <X className="h-4 w-4" strokeWidth={1.7} />
+            </button>
+          </div>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
