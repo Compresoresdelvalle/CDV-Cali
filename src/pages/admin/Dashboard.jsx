@@ -16,7 +16,7 @@ import {
   Snowflake,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { formatCOP, safeError } from "../../lib/utils";
+import { formatCOP, safeError, haceCuanto } from "../../lib/utils";
 import {
   periodoVentas,
   PERIODOS,
@@ -178,10 +178,27 @@ export default function Dashboard() {
   const cargarAdminRef = useRef(cargarAdmin);
   cargarAdminRef.current = cargarAdmin;
 
-  const refrescar = () => {
-    cargarRef.current();
-    cargarBloquesRef.current();
-    cargarAdminRef.current();
+  // Cuando se refrescaron por ultima vez los datos que se estan viendo.
+  //
+  // El boton "Refrescar" SI llamaba a las tres cargas, pero la pantalla se
+  // refresca sola cada 60 s, asi que al pulsarlo los numeros ya venian al dia y
+  // no cambiaba nada: parecia roto. Mostrando "Actualizado hace X" el boton
+  // tiene un efecto visible aunque las cifras sean las mismas.
+  const [actualizado, setActualizado] = useState(() => new Date());
+  const [refrescando, setRefrescando] = useState(false);
+
+  const refrescar = async () => {
+    setRefrescando(true);
+    try {
+      await Promise.all([
+        cargarRef.current(),
+        cargarBloquesRef.current(),
+        cargarAdminRef.current(),
+      ]);
+    } finally {
+      setActualizado(new Date());
+      setRefrescando(false);
+    }
   };
 
   useEffect(() => {
@@ -192,9 +209,11 @@ export default function Dashboard() {
     const start = () => {
       if (interval) return;
       interval = setInterval(() => {
-        cargarRef.current();
-        cargarBloquesRef.current();
-        cargarAdminRef.current();
+        Promise.all([
+          cargarRef.current(),
+          cargarBloquesRef.current(),
+          cargarAdminRef.current(),
+        ]).finally(() => setActualizado(new Date()));
       }, 60_000);
     };
     const stop = () => {
@@ -225,6 +244,8 @@ export default function Dashboard() {
       <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7">
         <PageHead
           onRefresh={refrescar}
+          actualizado={actualizado}
+          refrescando={refrescando}
           periodo={periodo}
           setPeriodo={setPeriodo}
         />
@@ -238,6 +259,8 @@ export default function Dashboard() {
       <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7">
         <PageHead
           onRefresh={refrescar}
+          actualizado={actualizado}
+          refrescando={refrescando}
           periodo={periodo}
           setPeriodo={setPeriodo}
         />
@@ -301,6 +324,8 @@ export default function Dashboard() {
     <div className="flex flex-col gap-6 px-5 pb-8 pt-6 sm:px-7 animate-fade-in">
       <PageHead
         onRefresh={refrescar}
+        actualizado={actualizado}
+        refrescando={refrescando}
         periodo={periodo}
         setPeriodo={setPeriodo}
       />
@@ -1185,7 +1210,13 @@ function CarteraCol({
 }
 
 /* ── Page head con controles ──────────────────────────────────────────── */
-function PageHead({ onRefresh, periodo, setPeriodo }) {
+function PageHead({
+  onRefresh,
+  periodo,
+  setPeriodo,
+  actualizado,
+  refrescando,
+}) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
@@ -1204,24 +1235,38 @@ function PageHead({ onRefresh, periodo, setPeriodo }) {
       </div>
       <div className="flex items-center gap-2">
         <Seg options={PERIODOS} value={periodo} onChange={setPeriodo} />
-        <button
-          onClick={onRefresh}
-          className="inline-flex h-12 items-center gap-1.5 rounded-md border px-3 text-[12.5px] font-medium transition-colors cursor-pointer"
-          style={{
-            borderColor: "hsl(var(--border))",
-            backgroundColor: "hsl(var(--card))",
-            color: "hsl(var(--muted-foreground))",
-          }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.color = "hsl(var(--foreground))")
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.color = "hsl(var(--muted-foreground))")
-          }
-        >
-          <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.5} />
-          Refrescar
-        </button>
+        <div className="flex items-center gap-2">
+          {actualizado && (
+            <span
+              className="text-[11.5px] max-sm:hidden"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+            >
+              Actualizado {haceCuanto(actualizado)}
+            </span>
+          )}
+          <button
+            onClick={onRefresh}
+            disabled={refrescando}
+            className="inline-flex h-12 cursor-pointer items-center gap-1.5 rounded-md border px-3 text-[12.5px] font-medium transition-colors disabled:opacity-60"
+            style={{
+              borderColor: "hsl(var(--border))",
+              backgroundColor: "hsl(var(--card))",
+              color: "hsl(var(--muted-foreground))",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.color = "hsl(var(--foreground))")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.color = "hsl(var(--muted-foreground))")
+            }
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${refrescando ? "animate-spin" : ""}`}
+              strokeWidth={1.5}
+            />
+            {refrescando ? "Refrescando…" : "Refrescar"}
+          </button>
+        </div>
       </div>
     </div>
   );
