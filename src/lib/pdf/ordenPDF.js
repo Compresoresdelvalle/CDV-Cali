@@ -473,6 +473,42 @@ export function generarOrdenPDF({
     doc.text(formatCOP(total), valuesX, y, { align: "right" });
     y += 7;
 
+    // Retenciones: el saldo de abajo ya las restaba, pero el documento nunca
+    // las IMPRIMIA. El cliente veia un total, un abonado y un saldo que no
+    // cuadraba con la resta, sin nada que explicara la diferencia. Se desglosan
+    // igual que en el recibo POS, y el neto queda destacado porque es la cifra
+    // que de verdad tiene que entregar.
+    if (retenciones > 0) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      const retF = Number(orden.retefuente_valor ?? 0);
+      const retI = Number(orden.reteica_valor ?? 0);
+      const retV = Number(orden.reteiva_valor ?? 0);
+      if (retF > 0)
+        filaT(
+          `Retefuente ${Number(orden.retefuente_pct ?? 0)}%:`,
+          `-${formatCOP(retF)}`,
+        );
+      if (retI > 0)
+        filaT(
+          `ReteICA ${Number(orden.reteica_pct ?? 0)}%:`,
+          `-${formatCOP(retI)}`,
+        );
+      if (retV > 0)
+        filaT(
+          `ReteIVA ${Number(orden.reteiva_pct ?? 0)}%:`,
+          `-${formatCOP(retV)}`,
+        );
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(...COLORES.primario);
+      doc.text("NETO A PAGAR:", totalsX, y);
+      doc.text(formatCOP(Math.max(0, total - retenciones)), valuesX, y, {
+        align: "right",
+      });
+      y += 7;
+    }
+
     // Abonos del cliente: TODOS los roles, si hay alguno registrado.
     if (abonos.length > 0) {
       doc.setFont("helvetica", "bold");
