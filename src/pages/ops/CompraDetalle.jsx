@@ -25,6 +25,7 @@ import {
 } from "../../lib/compras-ui";
 import ModalAbrirGarantiaCompra from "../../components/garantias/ModalAbrirGarantiaCompra";
 import RecibirCompraModal from "../../components/compras/RecibirCompraModal";
+import { useConfirm } from "../../components/ui/ConfirmDialog";
 
 /**
  * Detalle de una compra.
@@ -62,6 +63,10 @@ export default function CompraDetalle() {
   const [modalAbrir, setModalAbrir] = useState(false);
   const [modalRecibir, setModalRecibir] = useState(false); // S6: recepción parcial
   const [cancelando, setCancelando] = useState(false); // B1: cancelar compra (Admin)
+  // El dialogo propio del proyecto, no el window.confirm del navegador: ese
+  // sale con la estetica del sistema operativo, rompe la de la app y ni
+  // siquiera respeta el modo oscuro.
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -114,13 +119,15 @@ export default function CompraDetalle() {
   // del inventario el stock que había ingresado (bloquea si ya no alcanza).
   const cancelarCompra = async () => {
     if (cancelando) return;
-    const ok = window.confirm(
-      compra.recibida
-        ? "Se cancelará la compra y se REVERTIRÁ del inventario el stock que ingresó.\n\n" +
-            "OJO: el costo promedio del producto NO siempre se recalcula solo al cancelar (depende de las compras que haya tenido). Después de cancelar, revisa el costo del producto y ajústalo a mano si quedó mal.\n\n" +
-            "Esta acción no se puede deshacer. ¿Continuar?"
-        : "Se cancelará la compra. Esta acción no se puede deshacer. ¿Continuar?",
-    );
+    const ok = await confirm({
+      titulo: `¿Cancelar la compra #${compra.numero}?`,
+      mensaje: compra.recibida
+        ? `El stock que entró con esta compra sale del inventario.\n\nDespués revisa el costo del producto: el promedio no siempre se recalcula solo al cancelar, y puede quedar mal.\n\nEsto no se puede deshacer.`
+        : "Esta compra todavía no ha entrado al inventario, así que cancelarla no mueve stock.\n\nEsto no se puede deshacer.",
+      confirmLabel: "Sí, cancelar la compra",
+      cancelLabel: "No, dejarla como está",
+      danger: true,
+    });
     if (!ok) return;
     setCancelando(true);
     setError(null);
@@ -558,6 +565,8 @@ export default function CompraDetalle() {
           }}
         />
       )}
+
+      <ConfirmDialog />
 
       {modalRecibir && (
         <RecibirCompraModal
