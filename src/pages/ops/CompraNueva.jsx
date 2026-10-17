@@ -19,6 +19,7 @@ import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import QRScanner from "../../components/forms/QRScanner";
 import NumeroInput from "../../components/forms/NumeroInput";
+import MonedaInput from "../../components/forms/MonedaInput";
 import BloqueRetenciones from "../../components/ventas/BloqueRetenciones";
 import {
   calcularRetenciones,
@@ -1226,15 +1227,15 @@ export default function CompraNueva() {
                   />
                 </Field>
                 <Field label="Monto" req>
-                  <input
-                    type="number"
-                    min="0"
-                    step="100"
+                  {/* Separador de miles mientras se escribe ("$ 647.185");
+                      `monto` sigue guardando solo los dígitos. */}
+                  <MonedaInput
                     value={monto}
-                    onChange={(e) => setMonto(e.target.value)}
-                    placeholder="0"
+                    onChange={setMonto}
+                    placeholder="$ 0"
                     className="finput"
                     style={{ height: 48 }}
+                    aria-label="Monto del gasto en pesos"
                   />
                 </Field>
                 <Field label="Categoría" req>
