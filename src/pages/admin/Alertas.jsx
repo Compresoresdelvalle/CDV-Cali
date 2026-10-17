@@ -13,6 +13,8 @@ import {
   ChevronRight,
   Filter,
   Building2,
+  PackageX,
+  Phone,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatDate, formatCOP, safeError } from "../../lib/utils";
@@ -21,12 +23,25 @@ import { severidadStock, diasDesde } from "../../lib/admin-analytics-ui";
 import { useFiltros } from "../../hooks/useFiltros";
 import { useSedes } from "../../hooks/useSedes";
 import BarraFiltros from "../../components/filtros/BarraFiltros";
+import MarcarAbandonadaModal from "../../components/ot/MarcarAbandonadaModal";
+import { useAuthStore } from "../../stores/authStore";
+import { getParametroInt } from "../../hooks/useParametro";
+import { puedeMarcarAbandonada, SEDE_LABEL, TX } from "../../lib/ot-flujo";
+import {
+  DIAS_ALERTA_OT_DEFAULT,
+  severidadSinRecoger,
+  telHref,
+  ordenarSinRecoger,
+  diasLabel,
+} from "../../lib/equipos-sin-recoger";
 
 const TABS = [
   { key: "stock", label: "Stock bajo / agotado", icon: Package },
   { key: "herramientas", label: "Herramientas vencidas", icon: Wrench },
   { key: "ordenes", label: "OT esperando repuesto", icon: ClipboardList },
-  { key: "ot30dias", label: "OT > 30 días sin recoger", icon: ClipboardList },
+  // La clave `ot30dias` se conserva (es interna); el umbral real sale del
+  // parámetro dias_alerta_ot_abandonada, por eso el nombre ya no dice "30".
+  { key: "ot30dias", label: "Equipos sin recoger", icon: PackageX },
   { key: "sobre_stock", label: "Sobre-stock", icon: ShoppingCart },
   { key: "mayor_rotacion", label: "Mayor rotación", icon: TrendingUp },
   { key: "menor_rotacion", label: "Menor rotación", icon: TrendingDown },
@@ -69,6 +84,11 @@ const TODAS_SEDES = "Todas";
 /* ── Centro de alertas (datos reales: inventario + RPC rotación) ───────── */
 export default function Alertas() {
   const navigate = useNavigate();
+  const perfil = useAuthStore((s) => s.perfil);
+  // OT que se va a cerrar como abandonada desde "Equipos sin recoger".
+  const [abandonar, setAbandonar] = useState(null);
+  // Umbral de la vista v_ot_alertas_30_dias, para explicarlo en pantalla.
+  const [diasAlertaOt, setDiasAlertaOt] = useState(DIAS_ALERTA_OT_DEFAULT);
   const [tab, setTab] = useState("stock");
   const [sede, setSede] = useState(TODAS_SEDES);
   const [prioridad, setPrioridad] = useState("Todas");
@@ -162,13 +182,15 @@ export default function Alertas() {
           )
           .eq("estado", "esperando_repuesto")
           .order("fecha", { ascending: true }),
-        // Fase 10 §10.4: OTs completadas hace > 30 días sin recoger
+        // Equipos esperando que el cliente los recoja: OT terminadas o no
+        // autorizadas, sin movimiento hace más de `dias_alerta_ot_abandonada`
+        // días. La vista ya trae los días, el motivo y dónde está el equipo.
         supabase
           .from("v_ot_alertas_30_dias")
           .select(
-            `id, numero, cliente_nombre, cliente_telefono, equipo_descripcion, fecha, sede_id, total_abonado`,
+            `id, numero, estado, cliente_nombre, cliente_telefono, equipo_descripcion, fecha, sede_id, sede_equipo, total_abonado, dias_sin_movimiento, motivo_alerta`,
           )
-          .order("fecha", { ascending: true }),
+          .order("dias_sin_movimiento", { ascending: false }),
         // F12: alertas de rotación (RPC retorna las 3 categorías)
         supabase.rpc("fn_alertas_rotacion", { p_dias: 30, p_sede: null }),
       ]);
@@ -182,7 +204,7 @@ export default function Alertas() {
         ...prev,
         herramientas: h.data ?? [],
         ordenes: o.data ?? [],
-        ot30dias: ot30.data ?? [],
+        ot30dias: ordenarSinRecoger(ot30.data ?? []),
         sobre_stock: rotData.filter((r) => r.categoria === "sobre_stock"),
         mayor_rotacion: rotData.filter((r) => r.categoria === "mayor_rotacion"),
         menor_rotacion: rotData.filter((r) => r.categoria === "menor_rotacion"),
@@ -197,6 +219,19 @@ export default function Alertas() {
 
   useEffect(() => {
     cargar();
+  }, []);
+
+  // Mismo parámetro y mismo respaldo (30) que usa la vista en el servidor.
+  useEffect(() => {
+    let alive = true;
+    getParametroInt("dias_alerta_ot_abandonada", DIAS_ALERTA_OT_DEFAULT).then(
+      (n) => {
+        if (alive && n > 0) setDiasAlertaOt(n);
+      },
+    );
+    return () => {
+      alive = false;
+    };
   }, []);
 
   /* Stock bajo/agotado: filtrado, contado y paginado en el servidor.
@@ -543,7 +578,11 @@ export default function Alertas() {
         {(esStock ? stockLoading : loading) ? (
           <Skeleton />
         ) : (
-          renderTab(tab, filasVisibles, navigate)
+          renderTab(tab, filasVisibles, navigate, {
+            diasAlertaOt,
+            onAbandonar: (o) =>
+              puedeMarcarAbandonada(perfil, o) ? () => setAbandonar(o) : null,
+          })
         )}
 
         {/* Paginación del stock (contra el servidor). Solo en esa pestaña, que
@@ -624,6 +663,20 @@ export default function Alertas() {
           </footer>
         )}
       </section>
+
+      {abandonar && (
+        <MarcarAbandonadaModal
+          // La vista trae la sede del equipo ya resuelta (custodia o la de la
+          // OT); el modal la toma como la sede actual.
+          orden={{ ...abandonar, sede_equipo_id: abandonar.sede_equipo }}
+          abonado={abandonar.total_abonado}
+          onClose={() => setAbandonar(null)}
+          onDone={async () => {
+            setAbandonar(null);
+            await cargar();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -657,7 +710,7 @@ function severidadDeFila(tab, r) {
     case "ordenes":
       return "--warning";
     case "ot30dias":
-      return diasDesde(r.fecha) > 45 ? "--destructive" : "--warning";
+      return severidadSinRecoger(r.dias_sin_movimiento);
     case "sobre_stock":
       return "--info";
     case "mayor_rotacion":
@@ -681,9 +734,13 @@ function severidadLabel(token) {
 }
 
 /* ── Render por pestaña ───────────────────────────────────────────────── */
-function renderTab(tab, filas, navigate) {
+function renderTab(tab, filas, navigate, extra = {}) {
   if (filas.length === 0) {
-    return <Empty icon={EMPTY_ICON[tab] ?? "✅"}>{EMPTY_MSG[tab]}</Empty>;
+    const msg =
+      typeof EMPTY_MSG[tab] === "function"
+        ? EMPTY_MSG[tab](extra)
+        : EMPTY_MSG[tab];
+    return <Empty icon={EMPTY_ICON[tab] ?? "✅"}>{msg}</Empty>;
   }
 
   switch (tab) {
@@ -743,27 +800,14 @@ function renderTab(tab, filas, navigate) {
       ));
 
     case "ot30dias":
-      return filas.map((o) => {
-        const dias = diasDesde(o.fecha);
-        const abonado =
-          Number(o.total_abonado) > 0
-            ? ` · Abonado: ${formatCOP(o.total_abonado)}`
-            : "";
-        return (
-          <AlertRow
-            key={o.id}
-            sevToken={o._sev}
-            sevLabel={`${dias} días`}
-            keyText={`#${o.numero}`}
-            title={`${o.cliente_nombre}${o.cliente_telefono ? ` · ${o.cliente_telefono}` : ""}`}
-            meta={`${o.equipo_descripcion} · completada ${formatDate(o.fecha)}${abonado}`}
-            action={{
-              label: "Abrir OT",
-              onClick: () => navigate(`/ops/ordenes/${o.id}`),
-            }}
-          />
-        );
-      });
+      return filas.map((o) => (
+        <EquipoSinRecogerRow
+          key={o.id}
+          o={o}
+          onAbrir={() => navigate(`/ops/ordenes/${o.id}`)}
+          onAbandonar={extra.onAbandonar?.(o)}
+        />
+      ));
 
     case "sobre_stock":
       return (
@@ -816,8 +860,12 @@ const EMPTY_ICON = {
 const EMPTY_MSG = {
   stock: "No hay stock bajo ni agotado",
   herramientas: "Sin herramientas vencidas",
-  ordenes: "Sin órdenes esperando repuesto",
-  ot30dias: "Sin OT pendientes de recogida",
+  // Explica cómo se llega a este estado: si nadie usa el botón, la pestaña
+  // vive vacía y no se sabe si es que no hay o que no se está marcando.
+  ordenes:
+    "Ninguna OT está esperando repuesto. Una OT llega aquí cuando, en su paso «Descarga de repuestos y trabajo», se toca «Pausar: esperando repuesto» (solo con reparación autorizada); sale con «Reanudar trabajo».",
+  ot30dias: ({ diasAlertaOt = 30 } = {}) =>
+    `Ningún equipo lleva más de ${diasAlertaOt} días esperando a que el cliente lo recoja (OT terminadas, o no autorizadas y sin entregar).`,
   sobre_stock: "Sin productos con sobre-stock en los últimos 30 días.",
   mayor_rotacion: "Sin movimientos en los últimos 30 días.",
   menor_rotacion: "Sin productos de menor rotación.",
@@ -838,6 +886,147 @@ function RotacionRows({ items, navigate, sevToken, sevLabel, modo }) {
       }}
     />
   ));
+}
+
+/* ── Fila de "Equipos sin recoger" ──────────────────────────────────────
+ * Más datos que una AlertRow: teléfono para llamar con un toque, motivo, días
+ * sin movimiento, sede donde está el equipo y lo abonado. En celular los
+ * botones bajan a su propia línea, con 48px de alto. */
+function EquipoSinRecogerRow({ o, onAbrir, onAbandonar }) {
+  const sev = o._sev ?? severidadSinRecoger(o.dias_sin_movimiento);
+  const tel = telHref(o.cliente_telefono);
+  const abonado = Number(o.total_abonado) || 0;
+  const sedeEquipo = o.sede_equipo ?? o.sede_id;
+  return (
+    <div
+      className="flex flex-col gap-2.5 border-b px-[18px] py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-3"
+      style={{ borderColor: "hsl(var(--border))" }}
+    >
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <span
+          className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: `hsl(var(${sev}))` }}
+        />
+        <span
+          className="shrink-0 rounded-[3px] border px-1.5 py-0.5 font-mono text-[11px] font-medium leading-[1.4]"
+          style={{
+            backgroundColor: `hsl(var(${sev}) / 0.1)`,
+            borderColor: `hsl(var(${sev}) / 0.4)`,
+            color: `hsl(var(${sev}))`,
+          }}
+        >
+          #{o.numero}
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div
+            className="text-[12.5px] font-medium leading-[1.3]"
+            style={{ color: "hsl(var(--foreground))" }}
+          >
+            {o.cliente_nombre || "Sin cliente"}
+          </div>
+          <div
+            className="truncate text-[12px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            {o.equipo_descripcion || "Sin equipo"}
+          </div>
+          <div
+            className="flex flex-wrap gap-x-2 font-mono text-[10.5px] tracking-[0.04em]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            <span>{o.motivo_alerta}</span>
+            <span>· equipo en {SEDE_LABEL[sedeEquipo] ?? sedeEquipo}</span>
+            <span>
+              · {abonado > 0 ? `abonado ${formatCOP(abonado)}` : "sin abonos"}
+            </span>
+          </div>
+        </div>
+        <span
+          className="shrink-0 rounded-[3px] border px-1.5 py-px font-mono text-[10.5px] font-semibold leading-[1.4]"
+          style={{
+            backgroundColor: `hsl(var(${sev}) / 0.12)`,
+            borderColor: `hsl(var(${sev}) / 0.4)`,
+            color: `hsl(var(${sev}))`,
+          }}
+          title="Días sin movimiento"
+        >
+          {diasLabel(o.dias_sin_movimiento)}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2 pl-5 sm:pl-0">
+        {tel ? (
+          <a
+            href={tel}
+            className="inline-flex h-12 items-center gap-1.5 rounded-[5px] border px-3 text-[12px] font-medium"
+            style={{
+              borderColor: "hsl(var(--border))",
+              backgroundColor: "hsl(var(--card))",
+              color: "hsl(var(--foreground))",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.backgroundColor =
+                "hsl(var(--muted) / 0.5)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.backgroundColor = "hsl(var(--card))")
+            }
+            title="Llamar al cliente"
+          >
+            <Phone className="h-3.5 w-3.5" strokeWidth={1.75} />
+            {o.cliente_telefono}
+          </a>
+        ) : (
+          <span
+            className="inline-flex h-12 items-center text-[11.5px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Sin teléfono registrado
+          </span>
+        )}
+        <button
+          onClick={onAbrir}
+          className="inline-flex h-12 items-center gap-1 rounded-[5px] border px-3 text-[12px] font-medium cursor-pointer"
+          style={{
+            borderColor: "hsl(var(--border))",
+            backgroundColor: "hsl(var(--card))",
+            color: "hsl(var(--primary))",
+          }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.backgroundColor =
+              "hsl(var(--primary) / 0.1)")
+          }
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.backgroundColor = "hsl(var(--card))")
+          }
+        >
+          Abrir OT
+          <ArrowRight className="h-3 w-3" strokeWidth={1.5} />
+        </button>
+        {onAbandonar && (
+          <button
+            onClick={onAbandonar}
+            className="inline-flex h-12 items-center gap-1.5 rounded-[5px] border px-3 text-[12px] font-medium cursor-pointer"
+            style={{
+              borderColor: "hsl(var(--warning) / 0.5)",
+              backgroundColor: "hsl(var(--warning) / 0.08)",
+              color: "hsl(var(--foreground))",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.backgroundColor =
+                "hsl(var(--warning) / 0.18)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.backgroundColor =
+                "hsl(var(--warning) / 0.08)")
+            }
+          >
+            <PackageX className="h-3.5 w-3.5" strokeWidth={1.75} />
+            {TX.marcarAbandonada}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /* ── Fila de alerta (layout Lovable, tokens semánticos) ────────────────── */
