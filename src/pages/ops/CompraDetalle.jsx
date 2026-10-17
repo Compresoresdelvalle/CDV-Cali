@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   Check,
   Printer,
+  Wallet,
   X,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
@@ -58,6 +59,10 @@ export default function CompraDetalle() {
   const [compra, setCompra] = useState(null);
   const [items, setItems] = useState([]);
   const [garantias, setGarantias] = useState([]);
+  // Pagos a la compra (pagos_cuenta) y saldo de Cuentas por pagar: solo
+  // existen si la compra es a Crédito.
+  const [pagos, setPagos] = useState([]);
+  const [saldoCxP, setSaldoCxP] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalAbrir, setModalAbrir] = useState(false);
@@ -71,7 +76,7 @@ export default function CompraDetalle() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const [compraRes, detRes, garRes] = await Promise.all([
+      const [compraRes, detRes, garRes, pagosRes, cxpRes] = await Promise.all([
         supabase
           .from("compras")
           .select(
@@ -96,6 +101,22 @@ export default function CompraDetalle() {
           .select("id, numero, fecha, resolucion, estado, motivo")
           .eq("compra_id", id)
           .order("fecha", { ascending: false }),
+        supabase
+          .from("pagos_cuenta")
+          .select(
+            `id, fecha, monto, metodo_pago, cuenta_bancaria, observaciones,
+             registrador:registrado_por(nombre)`,
+          )
+          .eq("compra_id", id)
+          .eq("tipo", "pago")
+          .eq("anulado", false)
+          .order("fecha", { ascending: true }),
+        // La vista solo trae compras a Crédito: para las demás llega vacía.
+        supabase
+          .from("v_cuentas_por_pagar")
+          .select("saldo")
+          .eq("compra_id", id)
+          .maybeSingle(),
       ]);
       // El error de la compra principal es bloqueante; los secundarios
       // (detalle/garantías) solo degradan la vista, no la tumban.
@@ -103,7 +124,11 @@ export default function CompraDetalle() {
       setCompra(compraRes.data);
       setItems(detRes.data ?? []);
       setGarantias(garRes.data ?? []);
-      if (detRes.error || garRes.error) {
+      setPagos(pagosRes.data ?? []);
+      setSaldoCxP(
+        !cxpRes.error && cxpRes.data ? Number(cxpRes.data.saldo ?? 0) : null,
+      );
+      if (detRes.error || garRes.error || pagosRes.error || cxpRes.error) {
         setError("Algunos datos no se pudieron cargar completamente.");
       }
     } catch (e) {
@@ -162,8 +187,16 @@ export default function CompraDetalle() {
   const puedeAbrirGarantia =
     compra.recibida === true && !cancelada && !esCajaMenor;
   const pendienteRecepcion = !compra.recibida && !cancelada;
-  const pill = compraEstadoPill(compra);
-  const timeline = construirTimelineCompra(compra, garantias, formatDate);
+  const esCredito = compra.metodo_pago === "Crédito";
+  // Saldo real de Cuentas por pagar (null = no se pudo saber).
+  const debe = esCredito && (saldoCxP == null || saldoCxP > 0.01);
+  const compraConSaldo = { ...compra, saldo: esCredito ? saldoCxP : null };
+  const pill = compraEstadoPill(compraConSaldo);
+  const timeline = construirTimelineCompra(
+    compraConSaldo,
+    garantias,
+    formatDate,
+  );
 
   return (
     <div className="flex h-full flex-col gap-4 px-4 pb-14 pt-5 sm:px-7 animate-fade-in">
@@ -204,7 +237,14 @@ export default function CompraDetalle() {
                 >
                   {formatDate(compra.fecha)}
                 </b>{" "}
-                · pagado en {compra.metodo_pago ?? "Efectivo"}
+                ·{" "}
+                {esCredito
+                  ? debe
+                    ? saldoCxP == null
+                      ? "a crédito, por pagar"
+                      : `a crédito, debe ${formatCOP(saldoCxP)}`
+                    : "a crédito, ya pagado"
+                  : `pagado en ${compra.metodo_pago ?? "Efectivo"}`}
               </>
             ) : compra.recibida && compra.fecha_recepcion ? (
               <>
@@ -474,7 +514,13 @@ export default function CompraDetalle() {
                 <span>Pago</span>
                 <span className="v">
                   {compra.metodo_pago ?? "Efectivo"}
-                  {compra.metodo_pago === "Crédito" ? " · pendiente" : ""}
+                  {esCredito
+                    ? debe
+                      ? saldoCxP == null
+                        ? " · pendiente"
+                        : ` · debe ${formatCOP(saldoCxP)}`
+                      : " · pagada"
+                    : ""}
                 </span>
               </div>
               {compra.cuenta_bancaria && (
@@ -485,6 +531,12 @@ export default function CompraDetalle() {
               )}
             </div>
           </div>
+
+          {/* Pagos a la compra a crédito: los del día del registro (pago en
+              partes o anticipo) y los que se hicieron después desde Cuentas
+              por pagar. Sin esto, una compra pagada en dos formas solo decía
+              "Crédito" y no había dónde ver cómo se pagó. */}
+          {esCredito && <PagosCompra pagos={pagos} saldo={saldoCxP} />}
 
           {/* Notas */}
           {compra.observaciones && (
@@ -521,10 +573,20 @@ export default function CompraDetalle() {
                 lk={esCajaMenor ? "Gasto registrado" : "Orden registrada"}
                 v={formatDate(compra.fecha)}
               />
-              {esCajaMenor ? (
+              {esCajaMenor && debe ? (
+                <FactBox
+                  lk="Por pagar"
+                  v={saldoCxP == null ? "A crédito" : formatCOP(saldoCxP)}
+                  tone="warn"
+                />
+              ) : esCajaMenor ? (
                 <FactBox
                   lk="Pagado"
-                  v={compra.metodo_pago ?? "Efectivo"}
+                  v={
+                    esCredito
+                      ? "A crédito, saldado"
+                      : (compra.metodo_pago ?? "Efectivo")
+                  }
                   tone="succ"
                 />
               ) : (
@@ -866,6 +928,124 @@ function PanelRecepcion({
   );
 }
 
+/**
+ * Pagos hechos a una compra a crédito, con fecha, forma, cuenta, monto y
+ * quién lo registró. Tabla en escritorio, tarjetas en el celular.
+ */
+function PagosCompra({ pagos, saldo }) {
+  const pagado = pagos.reduce((s, p) => s + Number(p.monto ?? 0), 0);
+  return (
+    <div className="iblock">
+      <div className="ib-head">
+        <div className="ib-ico">
+          <Wallet className="h-3.5 w-3.5" strokeWidth={2} />
+        </div>
+        <div className="ib-title">Pagos</div>
+        <div className="ib-aux">
+          {formatCOP(pagado)} pagado
+          {saldo != null &&
+            (saldo > 0.01 ? ` · debe ${formatCOP(saldo)}` : " · saldada")}
+        </div>
+      </div>
+      {pagos.length === 0 ? (
+        <p
+          className="m-0 text-[12.5px] leading-[1.5]"
+          style={{ color: "var(--n-600)" }}
+        >
+          Todavía no tiene pagos. Se paga desde Cuentas por pagar (bodega o el
+          administrador).
+        </p>
+      ) : (
+        <>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="prod-tbl w-full">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Forma</th>
+                  <th>Cuenta</th>
+                  <th>Quién</th>
+                  <th className="r">Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagos.map((p) => (
+                  <tr key={p.id}>
+                    <td className="font-mono text-[12px]">
+                      {formatDate(p.fecha)}
+                    </td>
+                    <td className="text-[12.5px]">{p.metodo_pago}</td>
+                    <td
+                      className="text-[12px]"
+                      style={{ color: "var(--n-600)" }}
+                    >
+                      {p.cuenta_bancaria || "—"}
+                    </td>
+                    <td
+                      className="text-[12px]"
+                      style={{ color: "var(--n-600)" }}
+                    >
+                      {p.registrador?.nombre ?? "—"}
+                    </td>
+                    <td
+                      className="r font-mono text-[13px] font-medium"
+                      style={{ color: "var(--n-950)" }}
+                    >
+                      {formatCOP(p.monto)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul className="space-y-2 md:hidden" role="list">
+            {pagos.map((p) => (
+              <li
+                key={p.id}
+                className="rounded-lg border px-3 py-2.5"
+                style={{
+                  borderColor: "var(--n-150)",
+                  backgroundColor: "var(--n-0)",
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className="text-[13px] font-medium"
+                    style={{ color: "var(--n-950)" }}
+                  >
+                    {p.metodo_pago}
+                  </span>
+                  <span
+                    className="font-mono text-[13.5px] font-semibold tabular-nums"
+                    style={{ color: "var(--n-950)" }}
+                  >
+                    {formatCOP(p.monto)}
+                  </span>
+                </div>
+                <div
+                  className="mt-0.5 text-[11.5px]"
+                  style={{ color: "var(--n-500)" }}
+                >
+                  {formatDate(p.fecha)}
+                  {p.registrador?.nombre ? ` · ${p.registrador.nombre}` : ""}
+                </div>
+                {p.cuenta_bancaria && (
+                  <div
+                    className="mt-0.5 text-[11.5px] [overflow-wrap:anywhere]"
+                    style={{ color: "var(--n-600)" }}
+                  >
+                    {p.cuenta_bancaria}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Fact({ lk, v, mono, full }) {
   return (
     <div className={full ? "sm:col-span-2" : undefined}>
@@ -899,7 +1079,14 @@ function FactBox({ lk, v, tone }) {
       </span>
       <span
         className="font-mono text-[13.5px] font-medium"
-        style={{ color: tone === "succ" ? "var(--succ-700)" : "var(--n-950)" }}
+        style={{
+          color:
+            tone === "succ"
+              ? "var(--succ-700)"
+              : tone === "warn"
+                ? "var(--warn-700)"
+                : "var(--n-950)",
+        }}
       >
         {v}
       </span>

@@ -13,6 +13,8 @@
  *   lenguaje visual Lovable SIN inventar estados que el backend no soporta.
  */
 
+import { formatCOP as formatoCOP } from "./utils";
+
 /**
  * Pestañas de filtro por estado (mapeadas a la query de CompraHistorial).
  *
@@ -48,10 +50,19 @@ export function compraTipoBadge(esCajaMenor) {
  * El estado real se deriva de dos campos:
  *   - `recibida` (bool): false → registrada, true → recibida
  *   - `estado` ('completada' | 'devolucion_garantia')
- * @param {{ recibida: boolean, estado?: string|null, es_caja_menor?: boolean }} compra
+ * @param {{ recibida: boolean, estado?: string|null, es_caja_menor?: boolean,
+ *   metodo_pago?: string|null, saldo?: number|null }} compra
+ *   `saldo` = saldo de v_cuentas_por_pagar (solo aplica a Crédito; null si no
+ *   se conoce).
  * @returns {{ cls: string, label: string }}
  */
-export function compraEstadoPill({ recibida, estado, es_caja_menor }) {
+export function compraEstadoPill({
+  recibida,
+  estado,
+  es_caja_menor,
+  metodo_pago,
+  saldo,
+}) {
   if (estado === "cancelada") {
     // C-04: rojo de alto contraste (antes usaba el pill neutro s-entregada,
     // indistinguible de una compra normal).
@@ -60,9 +71,16 @@ export function compraEstadoPill({ recibida, estado, es_caja_menor }) {
   if (estado === "devolucion_garantia") {
     return { cls: "s-pill s-conv", label: "Dev. garantía" };
   }
-  // Caja menor es un gasto pagado en el acto (la RPC la crea ya "recibida" y
-  // solo admite Efectivo/Transferencia/Tarjeta): no hay mercancía que recibir.
+  // Caja menor no trae mercancía (la RPC la crea ya "recibida"). Casi siempre
+  // se paga en el acto; desde el Bloque 3.2 también puede quedar a Crédito, y
+  // entonces es "Por pagar" hasta que Cuentas por pagar la salde.
   if (es_caja_menor) {
+    if (metodo_pago === "Crédito") {
+      if (saldo == null) return { cls: "s-pill s-ven", label: "A crédito" };
+      return Number(saldo) > 0.01
+        ? { cls: "s-pill s-ven", label: "Por pagar" }
+        : { cls: "s-pill s-apr", label: "Pagado" };
+    }
     return { cls: "s-pill s-apr", label: "Pagado" };
   }
   return recibida
@@ -128,12 +146,32 @@ export function construirTimelineCompra(compra, garantias, fmtDate) {
     time: compra.fecha ? fmtDate(compra.fecha) : null,
   });
 
-  if (compra.es_caja_menor) {
-    // Un gasto de caja menor no trae mercancía: se paga en el acto.
+  const debe =
+    compra.metodo_pago === "Crédito" &&
+    (compra.saldo == null || Number(compra.saldo) > 0.01);
+  if (compra.es_caja_menor && debe) {
+    // Gasto a crédito (Bloque 3.2): se debe hasta que se pague desde Cuentas
+    // por pagar. Hoy no salió plata.
+    eventos.push({
+      tone: "prog",
+      act: "Gasto por pagar",
+      meta:
+        compra.saldo == null
+          ? "A crédito · se paga desde Cuentas por pagar"
+          : `A crédito · debe ${formatoCOP(compra.saldo)} · se paga desde Cuentas por pagar`,
+      time: null,
+    });
+  } else if (compra.es_caja_menor) {
+    // Un gasto de caja menor no trae mercancía: se paga en el acto (o ya se
+    // saldó, si fue a crédito).
     eventos.push({
       tone: "succ",
       act: "Gasto pagado",
-      meta: `${compra.metodo_pago ?? "Efectivo"}${
+      meta: `${
+        compra.metodo_pago === "Crédito"
+          ? "A crédito, ya saldado"
+          : (compra.metodo_pago ?? "Efectivo")
+      }${
         compra.cuenta_bancaria ? ` · ${compra.cuenta_bancaria}` : ""
       }${compra.sede_destino_id ? ` · ${compra.sede_destino_id}` : ""}`,
       time: compra.fecha ? fmtDate(compra.fecha) : null,

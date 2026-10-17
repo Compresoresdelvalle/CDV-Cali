@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { X, Trash2, Wallet, CheckCircle2, Printer } from "lucide-react";
+import {
+  X,
+  Trash2,
+  Wallet,
+  CheckCircle2,
+  Printer,
+  AlertTriangle,
+} from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../stores/authStore";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
@@ -7,6 +14,12 @@ import {
   METODOS_PAGO_CUENTA,
   METODOS_ELECTRONICOS,
   cuentaBancariaLabel,
+  hoyBogota,
+  rangoFechaPago,
+  validarFechaPago,
+  fechaParaPayload,
+  cierreQueCubre,
+  diaLegible,
 } from "../../lib/cuentas-ui";
 import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
 
@@ -18,7 +31,8 @@ import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
  *
  * Props:
  *   - cuenta: { tipo:'cobro'|'pago', refId:uuid, numero, contraparte:string,
- *               total:number, abonosCotizacion?:number, retenciones?:number }
+ *               total:number, abonosCotizacion?:number, retenciones?:number,
+ *               sede?:string, fecha?:string }   // sede y fecha del documento
  *   - onClose: () => void
  *   - onChanged: () => void   // se llama tras registrar/eliminar para refrescar la lista
  */
@@ -39,6 +53,11 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
   const [metodo, setMetodo] = useState("Efectivo");
   const [cuentaBancaria, setCuentaBancaria] = useState("");
   const [obs, setObs] = useState("");
+  // Bloque 3.3: el día en que de verdad salió o entró la plata. Por defecto
+  // hoy (Colombia); el servidor acepta hasta 30 días atrás y nunca a futuro.
+  const [hoy] = useState(() => hoyBogota());
+  const [fecha, setFecha] = useState(hoy);
+  const [cierreDia, setCierreDia] = useState(null); // cierre que ya cubre `fecha`
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState("");
   const [anularId, setAnularId] = useState(null); // id del cobro/pago a anular
@@ -78,6 +97,36 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
       .then(({ data }) => setCuentasBanco(data ?? []));
   }, [cargar]);
 
+  // Rango del calendario. Un cobro tampoco puede ser de antes de la venta.
+  const rango = rangoFechaPago(hoy);
+  const diaDocumento = cuenta.fecha ? hoyBogota(new Date(cuenta.fecha)) : null;
+  const minFecha =
+    esCobro && diaDocumento && diaDocumento > rango.min
+      ? diaDocumento
+      : rango.min;
+
+  // ¿Ese día ya tiene un cierre guardado? El pago se registra igual, pero el
+  // cierre es inmutable y no lo va a contar: hay que avisar cómo corregirlo.
+  // La RLS solo deja leer cierres a Admin y Bodega; para los demás llega vacío
+  // y el aviso simplemente no sale.
+  useEffect(() => {
+    let vivo = true;
+    setCierreDia(null);
+    if (validarFechaPago(fecha, hoy, esCobro)) return;
+    supabase
+      .from("cierres")
+      .select("id, numero, tipo, fecha_desde, fecha_hasta, sede_id")
+      .lte("fecha_desde", fecha)
+      .gte("fecha_hasta", fecha)
+      .order("numero", { ascending: false })
+      .then(({ data }) => {
+        if (vivo) setCierreDia(cierreQueCubre(data ?? [], fecha, cuenta.sede));
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [fecha, hoy, esCobro, cuenta.sede]);
+
   const abonosCotiz = Number(cuenta.abonosCotizacion ?? 0);
   const pagado = pagos.reduce((s, p) => s + Number(p.monto ?? 0), 0);
   const total = Number(cuenta.total ?? 0);
@@ -109,6 +158,18 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
       setErr("Selecciona la cuenta bancaria para pagos electrónicos.");
       return;
     }
+    const errFecha = validarFechaPago(fecha, hoy, esCobro);
+    if (errFecha) {
+      setErr(errFecha);
+      return;
+    }
+    if (fecha < minFecha) {
+      setErr(
+        `El cobro no puede ser de antes de la venta (${diaLegible(minFecha)}). Elige ese día o uno posterior.`,
+      );
+      return;
+    }
+    const fechaPayload = fechaParaPayload(fecha, hoy);
     setErr("");
     setGuardando(true);
     try {
@@ -120,11 +181,15 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
           metodo_pago: metodo,
           cuenta_bancaria: cuentaBancaria || null,
           observaciones: obs || null,
+          // Solo si no es hoy: sin fecha el servidor usa "ahora".
+          ...(fechaPayload ? { fecha: fechaPayload } : {}),
         },
       });
       if (error) throw new Error(error.message);
       setMonto("");
       setObs("");
+      // Vuelve a hoy: que el siguiente pago no herede sin querer un día viejo.
+      setFecha(hoy);
       await cargar();
       onChanged?.();
     } catch (e) {
@@ -634,6 +699,68 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                         })}
                       </select>
                     </label>
+                  )}
+
+                  <label className="mt-2 flex flex-col gap-1">
+                    <span
+                      className="text-[11px]"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      {esCobro ? "Fecha del cobro" : "Fecha del pago"}
+                    </span>
+                    <input
+                      type="date"
+                      value={fecha}
+                      min={minFecha}
+                      max={rango.max}
+                      onChange={(e) => {
+                        setFecha(e.target.value);
+                        setErr("");
+                      }}
+                      className="h-12 w-full cursor-pointer rounded-[10px] border bg-transparent px-3 text-[14px] outline-none"
+                      style={{
+                        borderColor: "hsl(var(--border))",
+                        color: "hsl(var(--foreground))",
+                      }}
+                    />
+                    <span
+                      className="text-[11px]"
+                      style={{ color: "hsl(var(--muted-foreground))" }}
+                    >
+                      {fecha === hoy
+                        ? `Hoy. Si ${esCobro ? "el cliente pagó" : "le pagaste"} otro día, cámbiala (hasta 30 días atrás).`
+                        : `Queda registrado con fecha ${diaLegible(fecha)}.`}
+                    </span>
+                  </label>
+
+                  {cierreDia && (
+                    <div
+                      role="alert"
+                      className="mt-2 flex items-start gap-2 rounded-lg border px-3 py-2.5 text-[12px] leading-[1.45]"
+                      style={{
+                        backgroundColor: "hsl(var(--warning) / 0.1)",
+                        borderColor: "hsl(var(--warning) / 0.45)",
+                        color: "hsl(var(--foreground))",
+                      }}
+                    >
+                      <AlertTriangle
+                        className="mt-0.5 h-4 w-4 shrink-0"
+                        strokeWidth={2}
+                        style={{ color: "hsl(var(--warning))" }}
+                        aria-hidden="true"
+                      />
+                      <p className="m-0">
+                        El {esCobro ? "cobro" : "pago"} se registra igual, pero
+                        el {diaLegible(fecha)} ya tenía guardado el cierre #
+                        {cierreDia.numero}, y ese cierre no cambia. Para que
+                        esta plata quede contada,{" "}
+                        {esAdmin
+                          ? "ve a Panel Admin, Cierres"
+                          : "avísale al administrador: en Panel Admin, Cierres"}
+                        , pon ese día en Desde y Hasta, toca Previsualizar y
+                        luego Generar cierre complementario.
+                      </p>
+                    </div>
                   )}
 
                   <input

@@ -126,7 +126,7 @@ export default function CompraHistorial() {
       try {
         let query = supabase.from("compras").select(
           `id, numero, fecha, fecha_recepcion, proveedor, factura_proveedor,
-             total, recibida, estado, es_caja_menor, concepto,
+             total, recibida, estado, es_caja_menor, concepto, metodo_pago,
              registrador:registrado_por(nombre)`,
         );
         query = aplicarTodo(query)
@@ -136,9 +136,30 @@ export default function CompraHistorial() {
           .order("numero", { ascending: false })
           .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
 
-        const { data, error } = await query;
+        const { data: filas, error } = await query;
         if (!esReqVigente(myReq)) return; // respuesta obsoleta
         if (error) throw error;
+
+        // Un gasto de caja menor a Crédito no está "Pagado" hasta que se salde:
+        // su saldo vive en v_cuentas_por_pagar. Se pide en lote solo para esas
+        // filas; si falla, el badge dice "A crédito" en vez de inventar.
+        let data = filas ?? [];
+        const idsCredito = data
+          .filter((c) => c.es_caja_menor && c.metodo_pago === "Crédito")
+          .map((c) => c.id);
+        if (idsCredito.length > 0) {
+          const { data: saldos } = await supabase
+            .from("v_cuentas_por_pagar")
+            .select("compra_id, saldo")
+            .in("compra_id", idsCredito);
+          if (!esReqVigente(myReq)) return;
+          const porId = new Map(
+            (saldos ?? []).map((s) => [s.compra_id, Number(s.saldo ?? 0)]),
+          );
+          data = data.map((c) =>
+            porId.has(c.id) ? { ...c, saldo: porId.get(c.id) } : c,
+          );
+        }
 
         if (reset) {
           setCompras(data ?? []);
