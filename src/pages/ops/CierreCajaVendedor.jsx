@@ -6,12 +6,19 @@ import {
   Package,
   ArrowDownCircle,
   Info,
+  Wrench,
+  Percent,
+  CalendarDays,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
 import { useAuthStore } from "../../stores/authStore";
-import { PRESETS_FECHA } from "../../lib/filtros";
+import { PRESETS_FECHA, hoyBogota } from "../../lib/filtros";
 import { SEDE_LABEL } from "../../lib/ot-flujo";
+import { etiquetaRango } from "../../lib/panel-rango";
+import { useAbonosOT } from "../../hooks/useAbonosOT";
+import AbonosOTLista from "../../components/ot/AbonosOTLista";
+import RetencionesCierre from "../../components/cierres/RetencionesCierre";
 
 /**
  * Cierre de caja para VENDEDORAS — solo lectura, solo SU sede.
@@ -25,6 +32,7 @@ const PRESETS = [
   { id: "hoy", label: "Hoy" },
   { id: "semana", label: "Esta semana" },
   { id: "mes", label: "Este mes" },
+  { id: "mesPasado", label: "Mes pasado" },
 ];
 
 const METODO_LABEL = {
@@ -49,14 +57,30 @@ export default function CierreCajaVendedor() {
     SEDE_LABEL[perfil?.sede_id] ?? perfil?.sede_id ?? "tu sede";
 
   const [preset, setPreset] = useState("hoy");
+  // Día concreto elegido en el calendario. Cuando hay uno, manda sobre el
+  // preset (que queda sin marcar); al tocar un preset se borra.
+  const [dia, setDia] = useState("");
+  const hoy = hoyBogota();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
   const rango = useMemo(() => {
+    if (dia) return { desde: dia, hasta: dia };
     const { desdeDia, hastaDia } = PRESETS_FECHA[preset].calcular();
     return { desde: desdeDia, hasta: hastaDia };
-  }, [preset]);
+  }, [preset, dia]);
+
+  // Abonos de OT del MISMO periodo y la misma sede que el cierre. La sede la
+  // fuerza el backend en el cierre; aquí se manda la del perfil para que la
+  // lista coincida con lo que el cierre cuenta en "Servicios (OT)".
+  const refresco = data?.detalle?.generado_en ?? "";
+  const abonos = useAbonosOT({
+    desdeDia: rango.desde,
+    hastaDia: rango.hasta,
+    sedeId: perfil?.sede_id ?? null,
+    refresco,
+  });
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -142,26 +166,65 @@ export default function CierreCajaVendedor() {
         </span>
       </div>
 
-      {/* Presets de fecha */}
-      <div className="mt-4 flex gap-1.5">
+      {/* Periodo: presets + día concreto */}
+      <div className="mt-4 flex flex-wrap items-center gap-1.5">
         {PRESETS.map((p) => {
-          const on = preset === p.id;
+          const on = !dia && preset === p.id;
           return (
             <button
               key={p.id}
-              onClick={() => setPreset(p.id)}
-              className="h-10 rounded-lg border px-3.5 text-[13px] font-medium cursor-pointer transition-colors"
+              onClick={() => {
+                setDia("");
+                setPreset(p.id);
+              }}
+              aria-pressed={on}
+              className="rounded-lg border px-3.5 text-[13px] font-medium cursor-pointer transition-colors"
               style={{
+                height: 48,
                 borderColor: on ? "var(--p-600)" : "var(--n-150)",
                 backgroundColor: on ? "var(--p-600)" : "transparent",
-                color: on ? "#fff" : "var(--n-700)",
+                color: on ? "var(--n-0)" : "var(--n-700)",
               }}
             >
               {p.label}
             </button>
           );
         })}
+        <label
+          className="flex items-center gap-2 rounded-lg border px-3 text-[13px] font-medium"
+          style={{
+            height: 48,
+            borderColor: dia ? "var(--p-600)" : "var(--n-150)",
+            color: "var(--n-700)",
+          }}
+        >
+          <CalendarDays
+            className="h-4 w-4"
+            style={{ color: dia ? "var(--p-600)" : "var(--n-500)" }}
+          />
+          <span>Día</span>
+          <input
+            type="date"
+            value={dia}
+            max={hoy}
+            onChange={(e) => setDia(e.target.value)}
+            aria-label="Ver el cierre de un día concreto"
+            className="bg-transparent text-[13px] outline-none"
+            style={{ height: 44, color: "var(--n-900)" }}
+          />
+        </label>
       </div>
+      <p
+        className="mt-2 text-[13px]"
+        style={{ color: "var(--n-700)" }}
+        aria-live="polite"
+      >
+        Mostrando:{" "}
+        <b style={{ color: "var(--n-950)" }}>
+          {etiquetaRango({ desde: rango.desde, hasta: rango.hasta })}
+        </b>
+        {rango.hasta === hoy ? " (en vivo, puede seguir cambiando)" : ""}
+      </p>
 
       {errorMsg && (
         <div
@@ -260,6 +323,34 @@ export default function CierreCajaVendedor() {
                   ])}
                 />
               )}
+            </Section>
+
+            {/* ── Abonos de OT del periodo (solo lectura) ─────────────── */}
+            <Section
+              icon={Wrench}
+              titulo={
+                rango.desde === rango.hasta
+                  ? "Abonos de OT del día"
+                  : "Abonos de OT del periodo"
+              }
+            >
+              <AbonosOTLista
+                resumen={abonos.resumen}
+                cargando={abonos.cargando}
+                error={abonos.error}
+                mostrarRegistrador
+                vacio="No entraron abonos de OT en este periodo."
+              />
+            </Section>
+
+            {/* ── Retenciones (informativo) ───────────────────────────── */}
+            <Section icon={Percent} titulo="Retenciones del periodo">
+              <RetencionesCierre
+                desdeDia={rango.desde}
+                hastaDia={rango.hasta}
+                sedeId={perfil?.sede_id ?? null}
+                refresco={refresco}
+              />
             </Section>
 
             {/* ── Egresos ─────────────────────────────────────────────── */}

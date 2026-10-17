@@ -10,11 +10,21 @@
  */
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, List, LayoutGrid, Wrench, Lock } from "lucide-react";
+import {
+  Plus,
+  List,
+  LayoutGrid,
+  Wrench,
+  Lock,
+  Banknote,
+  X,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, safeError } from "../../lib/utils";
-import { rangoBogota, esNumeroPuro } from "../../lib/filtros";
+import { rangoBogota, esNumeroPuro, hoyBogota } from "../../lib/filtros";
+import { useAbonosOT } from "../../hooks/useAbonosOT";
+import AbonosOTLista from "../../components/ot/AbonosOTLista";
 import { useFiltros } from "../../hooks/useFiltros";
 import BarraFiltros from "../../components/filtros/BarraFiltros";
 import PageHeader from "../../components/layout/PageHeader";
@@ -85,6 +95,8 @@ export default function OrdenHistorial() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [view, setView] = useState("lista"); // 'lista' | 'kanban'
+  // "Pagadas el día…": día de calendario de Bogotá ('YYYY-MM-DD') o "".
+  const [diaPago, setDiaPago] = useState("");
 
   const esAdmin = perfil?.rol === "Admin";
 
@@ -229,6 +241,15 @@ export default function OrdenHistorial() {
     });
   }, [enriquecidas, fv.q, fv.estado, fv.sede, rangoFecha]);
 
+  // OT pagadas el día elegido: sale de `abonos.fecha`, no de la fecha de la
+  // orden. La sede sigue el mismo permiso de la pantalla: todos ven todas las
+  // sedes y solo el Admin puede filtrarlas.
+  const abonosDia = useAbonosOT({
+    desdeDia: diaPago,
+    hastaDia: diaPago,
+    sedeId: esAdmin ? fv.sede || null : null,
+  });
+
   const open = (id) => navigate(`/ops/ordenes/${id}`);
   const sedeLabel = SEDE_LABEL[perfil?.sede_id] ?? perfil?.sede_id ?? "tu sede";
 
@@ -283,6 +304,13 @@ export default function OrdenHistorial() {
         placeholder="Buscar por N° de OT, cliente, equipo o serie…"
       />
 
+      <PagadasElDia
+        dia={diaPago}
+        setDia={setDiaPago}
+        abonos={abonosDia}
+        sedeFiltrada={esAdmin && fv.sede ? fv.sede : null}
+      />
+
       {/* Contador honesto: como aquí se cargan TODAS las OT, `filtradas.length`
           ya es el total real del filtro, no "lo que alcanzó a cargar". */}
       {!loading && (
@@ -305,6 +333,121 @@ export default function OrdenHistorial() {
         <ListView rows={filtradas} onOpen={open} />
       ) : (
         <KanbanView rows={filtradas} onOpen={open} />
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────── Pagadas el día ──────────────────────────── */
+
+function PagadasElDia({ dia, setDia, abonos, sedeFiltrada }) {
+  const hoy = hoyBogota();
+  return (
+    <div
+      className="rounded-xl border overflow-hidden"
+      style={{
+        backgroundColor: "hsl(var(--card))",
+        borderColor: "hsl(var(--border))",
+      }}
+    >
+      <div
+        className="flex flex-wrap items-center gap-3 px-4 py-3 border-b"
+        style={{
+          borderColor: "hsl(var(--border))",
+          backgroundColor: "hsl(var(--muted) / 0.3)",
+        }}
+      >
+        <Banknote
+          className="h-4 w-4"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        />
+        <label
+          htmlFor="ot-pagadas-dia"
+          className="text-xs font-semibold uppercase tracking-wide"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Pagadas el día…
+        </label>
+        <input
+          id="ot-pagadas-dia"
+          type="date"
+          value={dia}
+          max={hoy}
+          onChange={(e) => setDia(e.target.value)}
+          className="rounded-lg border px-3 text-sm"
+          style={{
+            height: 48,
+            backgroundColor: "hsl(var(--background))",
+            borderColor: "hsl(var(--border))",
+            color: "hsl(var(--foreground))",
+          }}
+        />
+        {dia !== hoy && (
+          <button
+            type="button"
+            onClick={() => setDia(hoy)}
+            className="rounded-lg border px-3 text-sm font-medium"
+            style={{
+              height: 48,
+              borderColor: "hsl(var(--border))",
+              color: "hsl(var(--foreground))",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.backgroundColor =
+                "hsl(var(--muted) / 0.5)")
+            }
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
+          >
+            Hoy
+          </button>
+        )}
+        {dia && (
+          <button
+            type="button"
+            onClick={() => setDia("")}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 text-sm font-medium"
+            style={{ height: 48, color: "hsl(var(--muted-foreground))" }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.backgroundColor =
+                "hsl(var(--muted) / 0.5)")
+            }
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
+          >
+            <X className="h-4 w-4" />
+            Quitar
+          </button>
+        )}
+      </div>
+      {dia ? (
+        <div className="p-4 space-y-2">
+          <p
+            className="text-xs"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Abonos registrados el {dia.split("-").reverse().join("/")} (hora
+            Colombia)
+            {sedeFiltrada
+              ? ` en OT de ${SEDE_LABEL[sedeFiltrada] ?? sedeFiltrada}`
+              : ", todas las sedes"}
+            . Cuenta la fecha del pago, no la de la orden.
+          </p>
+          <AbonosOTLista
+            resumen={abonos.resumen}
+            cargando={abonos.cargando}
+            error={abonos.error}
+            mostrarRegistrador
+            mostrarSede={!sedeFiltrada}
+            vacio="Ninguna OT recibió pagos ese día."
+          />
+        </div>
+      ) : (
+        <p
+          className="px-4 py-3 text-sm"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Elige un día para ver qué OT recibieron pagos, cuánto, con qué método
+          y quién lo registró.
+        </p>
       )}
     </div>
   );

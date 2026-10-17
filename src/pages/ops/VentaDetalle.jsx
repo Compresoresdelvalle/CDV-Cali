@@ -363,6 +363,21 @@ export default function VentaDetalle() {
   const domicilioVenta = Math.max(0, Number(venta.domicilio ?? 0));
   const totalCalc =
     venta.total > 0 ? venta.total : baseIva + iva + domicilioVenta;
+  // Retenciones: valores guardados por el servidor (columnas generadas), igual
+  // que el recibo POS. La factura no cambia; cambia cuánto entra de verdad.
+  const retenciones = [
+    ["Retefuente", venta.retefuente_pct, venta.retefuente_valor],
+    ["ReteICA", venta.reteica_pct, venta.reteica_valor],
+    ["ReteIVA", venta.reteiva_pct, venta.reteiva_valor],
+  ]
+    .map(([label, pct, valor]) => ({
+      label,
+      pct: Number(pct ?? 0),
+      valor: Number(valor ?? 0),
+    }))
+    .filter((r) => r.valor > 0);
+  const retTotal = retenciones.reduce((a, r) => a + r.valor, 0);
+  const netoRecibir = Math.max(0, Math.round(totalCalc - retTotal));
 
   const historial = construirHistorialVenta(
     venta,
@@ -791,6 +806,30 @@ export default function VentaDetalle() {
                 <span>Total</span>
                 <span className="v">{formatCOP(totalCalc)}</span>
               </div>
+              {retTotal > 0 && (
+                <>
+                  {retenciones.map((r) => (
+                    <div key={r.label} className="ln">
+                      <span>
+                        {r.label} {String(r.pct).replace(".", ",")}%
+                      </span>
+                      <span className="v">−{formatCOP(r.valor)}</span>
+                    </div>
+                  ))}
+                  <div className="ln tot">
+                    <span>Neto a recibir</span>
+                    <span className="v">{formatCOP(netoRecibir)}</span>
+                  </div>
+                  <div
+                    className="mt-1 text-[11.5px]"
+                    style={{ color: "var(--n-500)" }}
+                  >
+                    El cliente nos retuvo {formatCOP(retTotal)} y los consigna a
+                    la DIAN a nombre de la empresa: no es plata perdida, se
+                    descuenta en la declaración. A caja entra el neto.
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -836,7 +875,9 @@ export default function VentaDetalle() {
                   {venta.metodo_pago}
                   {venta.cuenta_bancaria ? ` · ${venta.cuenta_bancaria}` : ""}
                 </span>
-                <span className="pamt">{formatCOP(totalCalc)}</span>
+                {/* Con retención entra el neto, no el total: es lo mismo que
+                    cuenta el cierre (total − retenciones). */}
+                <span className="pamt">{formatCOP(netoRecibir)}</span>
               </div>
             )}
             <div
@@ -867,7 +908,9 @@ export default function VentaDetalle() {
                   0,
                 );
                 const abonado = credito.abonosCotiz + cobrosTotal;
-                const saldoCred = Math.max(0, totalCalc - abonado);
+                // Igual que Cuentas por cobrar y el recibo POS: la retención no
+                // se le cobra al cliente, ya la consignó él a la DIAN.
+                const saldoCred = Math.max(0, totalCalc - retTotal - abonado);
                 return (
                   <>
                     {credito.cobros.length > 0 &&
@@ -884,6 +927,12 @@ export default function VentaDetalle() {
                         </div>
                       ))}
                     <div className="totals">
+                      {retTotal > 0 && (
+                        <div className="ln">
+                          <span>Retenciones</span>
+                          <span className="v">−{formatCOP(retTotal)}</span>
+                        </div>
+                      )}
                       {credito.abonosCotiz > 0 && (
                         <div className="ln">
                           <span>Abonos de cotización</span>
