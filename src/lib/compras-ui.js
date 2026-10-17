@@ -133,8 +133,14 @@ export function comprasHeaderStats(compras) {
  * @param {(d: string) => string} fmtDate
  * @returns {Array<{ tone: string, act: string, meta: string, time: string|null }>}
  */
-export function construirTimelineCompra(compra, garantias, fmtDate) {
+export function construirTimelineCompra(
+  compra,
+  garantias,
+  fmtDate,
+  { pagosAnulados = [] } = {},
+) {
   const eventos = [];
+  const cancelada = compra.estado === "cancelada";
   eventos.push({
     tone: "info",
     act: compra.es_caja_menor
@@ -146,10 +152,24 @@ export function construirTimelineCompra(compra, garantias, fmtDate) {
     time: compra.fecha ? fmtDate(compra.fecha) : null,
   });
 
+  // Una compra cancelada ya no debe nada: no se pinta "por pagar" ni
+  // "pagado" (una caja menor de contado cancelada NO es un gasto pagado).
   const debe =
+    !cancelada &&
     compra.metodo_pago === "Crédito" &&
     (compra.saldo == null || Number(compra.saldo) > 0.01);
-  if (compra.es_caja_menor && debe) {
+  if (cancelada) {
+    // Lo que sí pasó antes de cancelar: la mercancía entró (y salió al
+    // cancelar). Los pagos y la cancelación van abajo.
+    if (!compra.es_caja_menor && compra.recibida && compra.fecha_recepcion) {
+      eventos.push({
+        tone: "succ",
+        act: "Mercancía recibida en bodega",
+        meta: `Ingreso a inventario · ${compra.sede_destino_id ?? ""}`.trim(),
+        time: fmtDate(compra.fecha_recepcion),
+      });
+    }
+  } else if (compra.es_caja_menor && debe) {
     // Gasto a crédito (Bloque 3.2): se debe hasta que se pague desde Cuentas
     // por pagar. Hoy no salió plata.
     eventos.push({
@@ -201,7 +221,74 @@ export function construirTimelineCompra(compra, garantias, fmtDate) {
     });
   });
 
+  if (cancelada) {
+    // fn_cancelar_compra anula los pagos con motivo "Compra cancelada" en el
+    // mismo momento: esa hora es la de la cancelación (la compra no guarda
+    // cuándo se canceló).
+    const anulados = (pagosAnulados ?? []).filter((p) => p?.anulado);
+    anulados.forEach((p) => {
+      eventos.push({
+        tone: "dang",
+        act: `Pago de ${formatoCOP(p.monto)} anulado`,
+        meta: `${p.metodo_pago ?? ""}${p.fecha ? ` · era del ${fmtDate(p.fecha)}` : ""}${
+          p.motivo_anulacion ? ` · ${p.motivo_anulacion}` : ""
+        }`.replace(/^ · /, ""),
+        time: p.anulado_en ? fmtDate(p.anulado_en) : null,
+      });
+    });
+    const enCancelacion = anulados.find(
+      (p) => p.motivo_anulacion === "Compra cancelada" && p.anulado_en,
+    );
+    eventos.push({
+      tone: "dang",
+      act: compra.es_caja_menor ? "Gasto anulado" : "Compra cancelada",
+      meta: compra.es_caja_menor
+        ? "Ya no cuenta como gasto ni se debe nada"
+        : compra.recibida
+          ? "El stock que entró salió del inventario · no se debe nada"
+          : "No movió inventario · no se debe nada",
+      time: enCancelacion ? fmtDate(enCancelacion.anulado_en) : null,
+    });
+  }
+
   return eventos;
+}
+
+/**
+ * Quién paga el saldo de una compra a crédito desde Cuentas por pagar.
+ * fn_registrar_pago_cuenta deja pagar al Admin cualquier compra y a Bodega
+ * solo las de BODEGA: decir "bodega o el administrador" en una compra de CV
+ * mandaba a la vendedora a pedírselo a quien no puede.
+ * @param {string|null|undefined} sedeCompra
+ */
+export function quienPagaSaldoCompra(sedeCompra) {
+  return sedeCompra === "BODEGA"
+    ? "lo paga bodega o el administrador"
+    : "lo paga el administrador";
+}
+
+/**
+ * Mensaje de confirmación de "Cancelar compra". Si la compra tiene pagos no
+ * anulados, fn_cancelar_compra los anula: hay que decirlo antes, con cuántos
+ * y por cuánto, y aclarar que la plata que devuelva el proveedor va aparte.
+ * @param {{ es_caja_menor?: boolean, recibida?: boolean }} compra
+ * @param {Array<{ monto: number, anulado?: boolean }>} pagos
+ */
+export function mensajeCancelarCompra(compra, pagos = []) {
+  const base = compra?.es_caja_menor
+    ? "Un gasto de caja menor no mueve inventario: cancelarlo solo anula el gasto."
+    : compra?.recibida
+      ? "El stock que entró con esta compra sale del inventario.\n\nDespués revisa el costo del producto: el promedio no siempre se recalcula solo al cancelar, y puede quedar mal."
+      : "Esta compra todavía no ha entrado al inventario, así que cancelarla no mueve stock.";
+  const vigentes = (pagos ?? []).filter((p) => !p?.anulado);
+  const suma = vigentes.reduce((s, p) => s + Number(p.monto ?? 0), 0);
+  const pagosTxt =
+    vigentes.length > 0
+      ? `\n\nTambién se anula${vigentes.length === 1 ? "" : "n"} ${
+          vigentes.length === 1 ? "el pago" : `los ${vigentes.length} pagos`
+        } que tiene por ${formatoCOP(suma)}. Si el proveedor te devolvió esa plata, eso se registra aparte.`
+      : "";
+  return `${base}${pagosTxt}\n\nEsto no se puede deshacer.`;
 }
 
 /**

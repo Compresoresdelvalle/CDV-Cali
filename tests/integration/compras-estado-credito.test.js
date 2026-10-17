@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   compraEstadoPill,
   construirTimelineCompra,
+  mensajeCancelarCompra,
+  quienPagaSaldoCompra,
 } from "../../src/lib/compras-ui";
 
 /**
@@ -81,5 +83,79 @@ describe("construirTimelineCompra · caja menor a crédito", () => {
     );
     expect(t[1].act).toBe("Gasto pagado");
     expect(t[1].meta).toMatch(/^Efectivo/);
+  });
+});
+
+describe("compra o caja menor CANCELADA", () => {
+  const fmt = (d) => d;
+  const base = {
+    proveedor: "Ferretería",
+    fecha: "2026-10-10T15:00:00Z",
+    sede_destino_id: "CV",
+    estado: "cancelada",
+  };
+
+  it("caja menor de contado cancelada: no dice 'Gasto pagado', dice anulado", () => {
+    const t = construirTimelineCompra(
+      { ...base, es_caja_menor: true, metodo_pago: "Efectivo" },
+      [],
+      fmt,
+    );
+    const acts = t.map((e) => e.act);
+    expect(acts).not.toContain("Gasto pagado");
+    expect(acts).toContain("Gasto anulado");
+    expect(t.at(-1).tone).toBe("dang");
+  });
+
+  it("a crédito cancelada: no 'por pagar', muestra los pagos anulados y la hora", () => {
+    const t = construirTimelineCompra(
+      { ...base, es_caja_menor: false, metodo_pago: "Crédito", saldo: null },
+      [],
+      fmt,
+      {
+        pagosAnulados: [
+          {
+            monto: 50000,
+            metodo_pago: "Efectivo",
+            fecha: "2026-10-11T12:00:00Z",
+            anulado: true,
+            anulado_en: "2026-10-12T12:00:00Z",
+            motivo_anulacion: "Compra cancelada",
+          },
+        ],
+      },
+    );
+    const acts = t.map((e) => e.act);
+    expect(acts.some((a) => /por pagar|Pendiente/i.test(a))).toBe(false);
+    expect(acts.some((a) => /Pago de .*anulado/.test(a))).toBe(true);
+    const cancel = t.find((e) => e.act === "Compra cancelada");
+    expect(cancel.time).toBe("2026-10-12T12:00:00Z");
+  });
+});
+
+describe("mensajeCancelarCompra", () => {
+  it("con pagos vigentes dice cuántos y por cuánto se anulan", () => {
+    const msg = mensajeCancelarCompra({ recibida: false }, [
+      { monto: 100000 },
+      { monto: 50000 },
+      { monto: 999, anulado: true },
+    ]);
+    expect(msg).toMatch(/los 2 pagos/);
+    expect(msg).toMatch(/150\.000/);
+    expect(msg).toMatch(/se registra aparte/);
+  });
+  it("sin pagos no menciona pagos", () => {
+    expect(mensajeCancelarCompra({ es_caja_menor: true }, [])).not.toMatch(
+      /pago/,
+    );
+  });
+});
+
+describe("quienPagaSaldoCompra", () => {
+  it("Bodega solo paga compras de BODEGA", () => {
+    expect(quienPagaSaldoCompra("BODEGA")).toBe(
+      "lo paga bodega o el administrador",
+    );
+    expect(quienPagaSaldoCompra("CV")).toBe("lo paga el administrador");
   });
 });

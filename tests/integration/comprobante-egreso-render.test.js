@@ -77,6 +77,25 @@ describe("ComprobanteEgreso", () => {
     expect(html).toMatch(/Saldo por pagar/);
   });
 
+  it("a Crédito ya pagada: es comprobante de egreso, no cuenta por pagar", () => {
+    const html = montar({
+      compra: { ...BASE, metodo_pago: "Crédito" },
+      pagos: [
+        {
+          id: "p1",
+          fecha: "2026-10-18T14:00:00Z",
+          monto: 647185,
+          metodo_pago: "Efectivo",
+        },
+      ],
+      saldo: 0,
+    });
+    expect(html).toContain("Comprobante de egreso");
+    expect(html).not.toContain("Cuenta por pagar");
+    expect(html).toContain("Valor pagado");
+    expect(html).toContain("Saldada");
+  });
+
   it("a Crédito sin pagos lo dice, sin tabla vacía", () => {
     const html = montar({
       compra: { ...BASE, metodo_pago: "Crédito" },

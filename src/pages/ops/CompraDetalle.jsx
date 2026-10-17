@@ -23,6 +23,8 @@ import {
   compraEstadoPill,
   garantiaEstadoPill,
   construirTimelineCompra,
+  mensajeCancelarCompra,
+  quienPagaSaldoCompra,
 } from "../../lib/compras-ui";
 import ModalAbrirGarantiaCompra from "../../components/garantias/ModalAbrirGarantiaCompra";
 import RecibirCompraModal from "../../components/compras/RecibirCompraModal";
@@ -107,11 +109,11 @@ export default function CompraDetalle() {
           .from("pagos_cuenta")
           .select(
             `id, fecha, monto, metodo_pago, cuenta_bancaria, observaciones,
+             anulado, anulado_en, motivo_anulacion,
              registrador:registrado_por(nombre)`,
           )
           .eq("compra_id", id)
           .eq("tipo", "pago")
-          .eq("anulado", false)
           .order("fecha", { ascending: true }),
         // La vista solo trae compras a Crédito: para las demás llega vacía.
         supabase
@@ -150,11 +152,7 @@ export default function CompraDetalle() {
     if (cancelando) return;
     const ok = await confirm({
       titulo: `¿Cancelar la compra #${compra.numero}?`,
-      mensaje: compra.es_caja_menor
-        ? "Un gasto de caja menor no mueve inventario: cancelarlo solo anula el gasto.\n\nEsto no se puede deshacer."
-        : compra.recibida
-          ? `El stock que entró con esta compra sale del inventario.\n\nDespués revisa el costo del producto: el promedio no siempre se recalcula solo al cancelar, y puede quedar mal.\n\nEsto no se puede deshacer.`
-          : "Esta compra todavía no ha entrado al inventario, así que cancelarla no mueve stock.\n\nEsto no se puede deshacer.",
+      mensaje: mensajeCancelarCompra(compra, pagos),
       confirmLabel: "Sí, cancelar la compra",
       cancelLabel: "No, dejarla como está",
       danger: true,
@@ -183,6 +181,9 @@ export default function CompraDetalle() {
     );
 
   const cancelada = compra.estado === "cancelada";
+  // Los pagos se traen todos: los vigentes son los que cuentan; los anulados
+  // solo se muestran en la línea de tiempo de una compra cancelada.
+  const pagosVigentes = pagos.filter((p) => !p.anulado);
   // Caja menor es un gasto (sin productos): no hay nada que devolver al
   // proveedor por garantía ni mercancía que recibir.
   const esCajaMenor = compra.es_caja_menor === true;
@@ -190,14 +191,16 @@ export default function CompraDetalle() {
     compra.recibida === true && !cancelada && !esCajaMenor;
   const pendienteRecepcion = !compra.recibida && !cancelada;
   const esCredito = compra.metodo_pago === "Crédito";
-  // Saldo real de Cuentas por pagar (null = no se pudo saber).
-  const debe = esCredito && (saldoCxP == null || saldoCxP > 0.01);
+  // Saldo real de Cuentas por pagar (null = no se pudo saber). Una compra
+  // cancelada no debe nada aunque la vista no la traiga.
+  const debe = !cancelada && esCredito && (saldoCxP == null || saldoCxP > 0.01);
   const compraConSaldo = { ...compra, saldo: esCredito ? saldoCxP : null };
   const pill = compraEstadoPill(compraConSaldo);
   const timeline = construirTimelineCompra(
     compraConSaldo,
     garantias,
     formatDate,
+    { pagosAnulados: cancelada ? pagos : [] },
   );
 
   return (
@@ -240,13 +243,15 @@ export default function CompraDetalle() {
                   {formatDate(compra.fecha)}
                 </b>{" "}
                 ·{" "}
-                {esCredito
-                  ? debe
-                    ? saldoCxP == null
-                      ? "a crédito, por pagar"
-                      : `a crédito, debe ${formatCOP(saldoCxP)}`
-                    : "a crédito, ya pagado"
-                  : `pagado en ${compra.metodo_pago ?? "Efectivo"}`}
+                {cancelada
+                  ? "anulado"
+                  : esCredito
+                    ? debe
+                      ? saldoCxP == null
+                        ? "a crédito, por pagar"
+                        : `a crédito, debe ${formatCOP(saldoCxP)}`
+                      : "a crédito, ya pagado"
+                    : `pagado en ${compra.metodo_pago ?? "Efectivo"}`}
               </>
             ) : compra.recibida && compra.fecha_recepcion ? (
               <>
@@ -291,7 +296,11 @@ export default function CompraDetalle() {
           imprimir una caja menor. Las órdenes de compra imprimen la pantalla
           como siempre, por eso solo se monta para caja menor. */}
       {esCajaMenor && (
-        <ComprobanteEgreso compra={compra} pagos={pagos} saldo={saldoCxP} />
+        <ComprobanteEgreso
+          compra={compra}
+          pagos={pagosVigentes}
+          saldo={saldoCxP}
+        />
       )}
 
       {/* ── Barra de acciones ────────────────────────────────────────── */}
@@ -523,13 +532,15 @@ export default function CompraDetalle() {
                 <span>Pago</span>
                 <span className="v">
                   {compra.metodo_pago ?? "Efectivo"}
-                  {esCredito
-                    ? debe
-                      ? saldoCxP == null
-                        ? " · pendiente"
-                        : ` · debe ${formatCOP(saldoCxP)}`
-                      : " · pagada"
-                    : ""}
+                  {cancelada
+                    ? " · anulada"
+                    : esCredito
+                      ? debe
+                        ? saldoCxP == null
+                          ? " · pendiente"
+                          : ` · debe ${formatCOP(saldoCxP)}`
+                        : " · pagada"
+                      : ""}
                 </span>
               </div>
               {compra.cuenta_bancaria && (
@@ -545,7 +556,14 @@ export default function CompraDetalle() {
               partes o anticipo) y los que se hicieron después desde Cuentas
               por pagar. Sin esto, una compra pagada en dos formas solo decía
               "Crédito" y no había dónde ver cómo se pagó. */}
-          {esCredito && <PagosCompra pagos={pagos} saldo={saldoCxP} />}
+          {esCredito && (
+            <PagosCompra
+              pagos={cancelada ? pagos : pagosVigentes}
+              saldo={saldoCxP}
+              cancelada={cancelada}
+              sedeCompra={compra.sede_destino_id}
+            />
+          )}
 
           {/* Notas */}
           {compra.observaciones && (
@@ -582,7 +600,9 @@ export default function CompraDetalle() {
                 lk={esCajaMenor ? "Gasto registrado" : "Orden registrada"}
                 v={formatDate(compra.fecha)}
               />
-              {esCajaMenor && debe ? (
+              {cancelada ? (
+                <FactBox lk="Estado" v="Anulada" tone="dang" />
+              ) : esCajaMenor && debe ? (
                 <FactBox
                   lk="Por pagar"
                   v={saldoCxP == null ? "A crédito" : formatCOP(saldoCxP)}
@@ -941,7 +961,7 @@ function PanelRecepcion({
  * Pagos hechos a una compra a crédito, con fecha, forma, cuenta, monto y
  * quién lo registró. Tabla en escritorio, tarjetas en el celular.
  */
-function PagosCompra({ pagos, saldo }) {
+function PagosCompra({ pagos, saldo, cancelada = false, sedeCompra }) {
   const pagado = pagos.reduce((s, p) => s + Number(p.monto ?? 0), 0);
   return (
     <div className="iblock">
@@ -951,9 +971,15 @@ function PagosCompra({ pagos, saldo }) {
         </div>
         <div className="ib-title">Pagos</div>
         <div className="ib-aux">
-          {formatCOP(pagado)} pagado
-          {saldo != null &&
-            (saldo > 0.01 ? ` · debe ${formatCOP(saldo)}` : " · saldada")}
+          {cancelada ? (
+            "Anulada"
+          ) : (
+            <>
+              {formatCOP(pagado)} pagado
+              {saldo != null &&
+                (saldo > 0.01 ? ` · debe ${formatCOP(saldo)}` : " · saldada")}
+            </>
+          )}
         </div>
       </div>
       {pagos.length === 0 ? (
@@ -961,11 +987,21 @@ function PagosCompra({ pagos, saldo }) {
           className="m-0 text-[12.5px] leading-[1.5]"
           style={{ color: "var(--n-600)" }}
         >
-          Todavía no tiene pagos. Se paga desde Cuentas por pagar (bodega o el
-          administrador).
+          {cancelada
+            ? "No tuvo pagos. Al cancelarla no se debe nada."
+            : `Todavía no tiene pagos. Se paga desde Cuentas por pagar (${quienPagaSaldoCompra(sedeCompra)}).`}
         </p>
       ) : (
         <>
+          {cancelada && (
+            <p
+              className="m-0 mb-2 text-[12.5px] leading-[1.5]"
+              style={{ color: "var(--dang-700)" }}
+            >
+              Estos pagos quedaron anulados al cancelar la compra. Si el
+              proveedor devolvió la plata, eso se registra aparte.
+            </p>
+          )}
           <div className="hidden overflow-x-auto md:block">
             <table className="prod-tbl w-full">
               <thead>
@@ -1094,7 +1130,9 @@ function FactBox({ lk, v, tone }) {
               ? "var(--succ-700)"
               : tone === "warn"
                 ? "var(--warn-700)"
-                : "var(--n-950)",
+                : tone === "dang"
+                  ? "var(--dang-700)"
+                  : "var(--n-950)",
         }}
       >
         {v}

@@ -60,8 +60,12 @@ export function HojaEgreso({ compra, pagos = [], saldo }) {
   // al beneficiario y se consigna a la DIAN, no se le entrega.
   const neto = Math.max(0, total - retenciones);
   const pagado = pagos.reduce((s, p) => s + Number(p.monto ?? 0), 0);
-  const titulo = esCredito ? "Cuenta por pagar" : "Comprobante de egreso";
-  const lblMonto = esCredito ? "Valor adeudado" : "Valor pagado";
+  // A crédito ya pagada (saldo ≤ 0) es un egreso hecho, no una cuenta por
+  // pagar. Con saldo desconocido (null) se queda como cuenta por pagar.
+  const saldada = esCredito && saldo != null && Number(saldo) <= 0.01;
+  const porPagar = esCredito && !saldada;
+  const titulo = porPagar ? "Cuenta por pagar" : "Comprobante de egreso";
+  const lblMonto = porPagar ? "Valor adeudado" : "Valor pagado";
   const tel = SEDE_TELEFONO[compra.sede_destino_id];
   const obs = (compra.observaciones || "").trim();
   const registro = compra.registrador?.nombre || "—";
@@ -157,11 +161,13 @@ export function HojaEgreso({ compra, pagos = [], saldo }) {
               <div className="egr-saldo">
                 <span>Pagado {formatCOP(pagado)}</span>
                 <b>
-                  {saldo == null
-                    ? "Saldo: sin dato"
-                    : saldo > 0.01
-                      ? `Saldo por pagar ${formatCOP(saldo)}`
-                      : "Saldada"}
+                  {cancelada
+                    ? "Anulada"
+                    : saldo == null
+                      ? "Saldo: sin dato"
+                      : saldo > 0.01
+                        ? `Saldo por pagar ${formatCOP(saldo)}`
+                        : "Saldada"}
                 </b>
               </div>
             </div>

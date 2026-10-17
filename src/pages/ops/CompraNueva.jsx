@@ -16,7 +16,11 @@ import {
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch } from "../../lib/utils";
-import { carritoDesdeReorden, sedesDeSugerencias } from "../../lib/compras-ui";
+import {
+  carritoDesdeReorden,
+  sedesDeSugerencias,
+  quienPagaSaldoCompra,
+} from "../../lib/compras-ui";
 import { SEDES } from "../../lib/constants";
 import { SEDE_LABELS, sedeLabel } from "../../lib/traspasos-ui";
 import { avisarOk, avisarError } from "../../lib/notify";
@@ -234,6 +238,15 @@ export default function CompraNueva() {
 
   const buscarDebounced = useDebouncedCallback(buscarProductos, 400);
 
+  // Al cambiar la sede (Admin), `buscarProductos` cambia y se repite la
+  // búsqueda en curso para que la ubicación mostrada sea la de la sede nueva.
+  const busquedaRef = useRef("");
+  busquedaRef.current = busqueda;
+  useEffect(() => {
+    const q = busquedaRef.current;
+    if (q && q.trim().length >= 2) buscarProductos(q);
+  }, [buscarProductos]);
+
   const handleBusquedaChange = (e) => {
     const val = e.target.value;
     setBusqueda(val);
@@ -354,19 +367,13 @@ export default function CompraNueva() {
     setCarrito((prev) => prev.filter((i) => i.producto_id !== productoId));
   };
 
-  // Admin: cambiar la sede de la compra. Igual que en Nueva Venta, si ya hay
-  // productos se confirma antes de vaciarlos (la compra es de una sola sede).
+  // Admin: cambiar la sede de la compra. A diferencia de Nueva Venta, el
+  // carrito se conserva: una compra no descuenta stock, así que no hay nada
+  // por sede que validar en lo ya agregado. Lo único que depende de la sede
+  // es la ubicación que muestran los resultados de búsqueda, y esos se
+  // vuelven a buscar (efecto junto a buscarDebounced).
   const onChangeSede = (nuevaSede) => {
-    if (carrito.length > 0) {
-      const ok = window.confirm(
-        `Cambiar de sede vaciará los ${carrito.length} producto(s) que ya agregaste a esta compra. ¿Continuar?`,
-      );
-      if (!ok) return; // el <select> vuelve solo a la sede anterior (controlado)
-    }
     setSedeElegida(nuevaSede);
-    setBusqueda("");
-    setResultados([]);
-    setCarrito([]);
   };
 
   const subtotal = carrito.reduce(
@@ -712,7 +719,7 @@ export default function CompraNueva() {
             <b className="font-semibold">{sedesOrigen.join(", ")}</b>: cuando
             llegue la mercancía habrá que traspasarla.
             {esAdmin &&
-              " Si debe quedar allá, cambia la sede arriba (cambiarla vacía la lista de productos)."}
+              " Si debe quedar allá, cambia la sede arriba (los productos que ya agregaste se conservan)."}
           </p>
         </div>
       )}
@@ -1271,6 +1278,7 @@ export default function CompraNueva() {
                   resumen={resumenPagos}
                   cuentasBanco={cuentasBanco}
                   esVendedor={esVendedor}
+                  quienPagaSaldo={quienPagaSaldoCompra(sedeCompra)}
                   onAgregar={agregarPagoHoy}
                   onCambiar={cambiarPagoHoy}
                   onQuitar={quitarPagoHoy}
@@ -1498,9 +1506,7 @@ export default function CompraNueva() {
                   >
                     Queda en Cuentas por pagar; hoy no sale plata. Se paga
                     después desde Cuentas por pagar
-                    {esVendedor
-                      ? " (lo registra bodega o el administrador)"
-                      : ""}
+                    {esVendedor ? ` (${quienPagaSaldoCompra(sedeCompra)})` : ""}
                     .
                   </p>
                 )}
@@ -1634,9 +1640,10 @@ export default function CompraNueva() {
                   </div>
                   <div className="cart-line tot">
                     <span>Neto a pagar</span>
-                    <span className="v">
-                      {formatCOP(retencionesCalculadas.neto)}
-                    </span>
+                    {/* El mismo redondeo del servidor que usan los pagos de
+                        hoy: así este neto y el de "¿Le pagaste algo hoy?"
+                        nunca difieren en $1. */}
+                    <span className="v">{formatCOP(netoServidor)}</span>
                   </div>
                 </>
               )}
@@ -1834,6 +1841,7 @@ function PagosHoyCredito({
   resumen,
   cuentasBanco,
   esVendedor,
+  quienPagaSaldo,
   onAgregar,
   onCambiar,
   onQuitar,
@@ -1864,7 +1872,7 @@ function PagosHoyCredito({
           Si pagaste la compra en dos formas (por ejemplo, una parte en efectivo
           y otra por transferencia) o dejaste un anticipo, anota aquí cada pago.
           Lo que quede debiendo se paga después desde Cuentas por pagar
-          {esVendedor ? " (lo registra bodega o el administrador)" : ""}.
+          {esVendedor ? ` (${quienPagaSaldo})` : ""}.
         </p>
       </div>
 
