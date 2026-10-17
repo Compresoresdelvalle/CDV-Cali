@@ -274,7 +274,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
           </div>
           <button
             onClick={onClose}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-md cursor-pointer"
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-md cursor-pointer"
             style={{ color: "hsl(var(--muted-foreground))" }}
             aria-label="Cerrar"
           >
@@ -307,7 +307,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                   setLoading(true);
                   cargar();
                 }}
-                className="mt-3 h-10 rounded-md border px-4 text-[13px] font-medium cursor-pointer"
+                className="mt-3 h-12 rounded-md border px-4 text-[13px] font-medium cursor-pointer"
                 style={{
                   borderColor: "hsl(var(--destructive) / 0.5)",
                   color: "hsl(var(--destructive))",
@@ -444,7 +444,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                               setMotivoAnular("");
                               setErr("");
                             }}
-                            className="grid h-8 w-8 shrink-0 place-items-center rounded-md cursor-pointer"
+                            className="grid h-12 w-12 shrink-0 place-items-center rounded-md cursor-pointer"
                             style={{ color: "hsl(var(--destructive))" }}
                             aria-label="Anular movimiento"
                             title="Anular"
@@ -478,7 +478,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                             value={motivoAnular}
                             onChange={(e) => setMotivoAnular(e.target.value)}
                             placeholder="Motivo (opcional)"
-                            className="h-10 w-full rounded-md border bg-transparent px-2 text-[13px] outline-none"
+                            className="h-12 w-full rounded-md border bg-transparent px-2 text-[13px] outline-none"
                             style={{
                               borderColor: "hsl(var(--border))",
                               color: "hsl(var(--foreground))",
@@ -490,7 +490,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                                 setAnularId(null);
                                 setMotivoAnular("");
                               }}
-                              className="h-10 flex-1 rounded-md border text-[13px] font-medium cursor-pointer"
+                              className="h-12 flex-1 rounded-md border text-[13px] font-medium cursor-pointer"
                               style={{
                                 borderColor: "hsl(var(--border))",
                                 color: "hsl(var(--muted-foreground))",
@@ -501,7 +501,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                             <button
                               onClick={() => eliminar(p.id, motivoAnular)}
                               disabled={anulando}
-                              className="h-10 flex-1 rounded-md text-[13px] font-semibold cursor-pointer disabled:opacity-50"
+                              className="h-12 flex-1 rounded-md text-[13px] font-semibold cursor-pointer disabled:opacity-50"
                               style={{
                                 backgroundColor: "hsl(var(--destructive))",
                                 color: "hsl(var(--primary-foreground))",
@@ -530,7 +530,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                   className="border-t pt-3"
                   style={{ borderColor: "hsl(var(--border))" }}
                 >
-                  <div className="mb-2 flex items-center justify-between">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2">
                     <span
                       className="font-mono text-[10.5px] uppercase tracking-[0.08em]"
                       style={{ color: "hsl(var(--muted-foreground))" }}
@@ -539,14 +539,16 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                     </span>
                     <button
                       onClick={saldarTodo}
-                      className="text-[11.5px] font-semibold cursor-pointer hover:underline"
+                      className="inline-flex min-h-[48px] items-center text-[11.5px] font-semibold cursor-pointer hover:underline"
                       style={{ color: "hsl(var(--primary))" }}
                     >
                       Saldar todo ({formatCOP(saldo)})
                     </button>
                   </div>
 
-                  <div className="flex items-end gap-2">
+                  {/* En celular (390px) monto y método no caben en un renglón:
+                      se apilan, y los métodos bajan de línea si hace falta. */}
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                     <label className="flex flex-col gap-1">
                       <span
                         className="text-[11px]"
@@ -560,29 +562,28 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                         value={monto}
                         onChange={(e) => setMonto(e.target.value)}
                         placeholder="0"
-                        className="h-11 rounded-[10px] border bg-transparent px-3 text-right text-[14px] font-semibold outline-none"
+                        className="h-12 w-full rounded-[10px] border bg-transparent px-3 text-right text-[14px] font-semibold outline-none sm:w-[130px]"
                         style={{
-                          width: 130,
                           borderColor: "hsl(var(--border))",
                           color: "hsl(var(--foreground))",
                         }}
                       />
                     </label>
-                    <div className="flex flex-1 flex-col gap-1">
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
                       <span
                         className="text-[11px]"
                         style={{ color: "hsl(var(--muted-foreground))" }}
                       >
                         Método
                       </span>
-                      <div className="flex gap-1.5">
+                      <div className="flex flex-wrap gap-1.5">
                         {METODOS_PAGO_CUENTA.map((m) => {
                           const active = metodo === m;
                           return (
                             <button
                               key={m}
                               onClick={() => elegirMetodo(m)}
-                              className="h-11 flex-1 rounded-[10px] border px-2 text-[12px] font-medium transition-colors cursor-pointer"
+                              className="h-12 min-w-[96px] flex-1 rounded-[10px] border px-2 text-[12px] font-medium transition-colors cursor-pointer"
                               style={{
                                 backgroundColor: active
                                   ? "hsl(var(--primary))"
@@ -614,7 +615,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                       <select
                         value={cuentaBancaria}
                         onChange={(e) => setCuentaBancaria(e.target.value)}
-                        className="h-11 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] outline-none"
+                        className="h-12 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] outline-none"
                         style={{
                           borderColor: cuentaBancaria
                             ? "hsl(var(--border))"
@@ -640,7 +641,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                     value={obs}
                     onChange={(e) => setObs(e.target.value)}
                     placeholder="Nota / referencia (opcional)"
-                    className="mt-2 h-11 w-full rounded-[10px] border bg-transparent px-3 text-[13px] outline-none"
+                    className="mt-2 h-12 w-full rounded-[10px] border bg-transparent px-3 text-[13px] outline-none"
                     style={{
                       borderColor: "hsl(var(--border))",
                       color: "hsl(var(--foreground))",
@@ -703,7 +704,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
 
 function Resumen({ label, value, token }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p
         className="font-mono text-[10px] uppercase tracking-[0.06em]"
         style={{ color: "hsl(var(--muted-foreground))" }}
@@ -711,7 +712,7 @@ function Resumen({ label, value, token }) {
         {label}
       </p>
       <p
-        className="mt-0.5 font-mono text-[14px] font-bold tabular-nums"
+        className="mt-0.5 font-mono text-[13px] font-bold tabular-nums [overflow-wrap:anywhere] sm:text-[14px]"
         style={{
           color: token ? `hsl(var(${token}))` : "hsl(var(--foreground))",
         }}
