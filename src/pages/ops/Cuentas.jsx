@@ -529,7 +529,7 @@ export default function Cuentas() {
                   const sede = esCobrar ? r.sede_id : r.sede_destino_id;
                   return (
                     <tr
-                      key={id}
+                      key={id ?? `n-${r.numero}`}
                       className="border-t"
                       style={{ borderColor: "hsl(var(--border) / 0.6)" }}
                     >
@@ -645,7 +645,7 @@ export default function Cuentas() {
               const sede = esCobrar ? r.sede_id : r.sede_destino_id;
               return (
                 <li
-                  key={id}
+                  key={id ?? `n-${r.numero}`}
                   className="px-4 py-3.5"
                   style={{ borderColor: "hsl(var(--border))" }}
                 >

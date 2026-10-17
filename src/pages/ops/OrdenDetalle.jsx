@@ -711,6 +711,8 @@ function Header({
     }
   };
 
+  // Abandonada o anulada: ese saldo ya no se le va a cobrar al cliente.
+  const sinCobro = ["abandonada", "cancelada"].includes(orden?.estado);
   const saldoCubierto = (montos.saldo ?? 0) <= 0;
 
   return (
@@ -797,17 +799,19 @@ function Header({
               className="text-xs font-semibold uppercase tracking-wide"
               style={{ color: "hsl(var(--muted-foreground))" }}
             >
-              {TX.saldo}
+              {sinCobro ? "Saldo" : TX.saldo}
             </div>
             <div
               className="text-lg font-bold tabular-nums"
               style={{
-                color: saldoCubierto
-                  ? "hsl(var(--success))"
-                  : "hsl(var(--foreground))",
+                color: sinCobro
+                  ? "hsl(var(--muted-foreground))"
+                  : saldoCubierto
+                    ? "hsl(var(--success))"
+                    : "hsl(var(--foreground))",
               }}
             >
-              {formatCOP(montos.saldo)}
+              {sinCobro ? "No se cobra" : formatCOP(montos.saldo)}
             </div>
           </div>
         </div>
@@ -1198,8 +1202,8 @@ function EquipoUbicacion({ orden, perfil, onRefresh }) {
         ) : (
           <button
             onClick={() => setAbierto(true)}
-            className="text-xs font-medium underline-offset-2 hover:underline"
-            style={{ color: "hsl(var(--primary))" }}
+            className="inline-flex items-center text-xs font-medium underline-offset-2 hover:underline"
+            style={{ color: "hsl(var(--primary))", minHeight: 44 }}
           >
             {enOtraSede
               ? "Mover o traer de vuelta"
