@@ -123,9 +123,11 @@ export default function CompraDetalle() {
     if (cancelando) return;
     const ok = await confirm({
       titulo: `¿Cancelar la compra #${compra.numero}?`,
-      mensaje: compra.recibida
-        ? `El stock que entró con esta compra sale del inventario.\n\nDespués revisa el costo del producto: el promedio no siempre se recalcula solo al cancelar, y puede quedar mal.\n\nEsto no se puede deshacer.`
-        : "Esta compra todavía no ha entrado al inventario, así que cancelarla no mueve stock.\n\nEsto no se puede deshacer.",
+      mensaje: compra.es_caja_menor
+        ? "Un gasto de caja menor no mueve inventario: cancelarlo solo anula el gasto.\n\nEsto no se puede deshacer."
+        : compra.recibida
+          ? `El stock que entró con esta compra sale del inventario.\n\nDespués revisa el costo del producto: el promedio no siempre se recalcula solo al cancelar, y puede quedar mal.\n\nEsto no se puede deshacer.`
+          : "Esta compra todavía no ha entrado al inventario, así que cancelarla no mueve stock.\n\nEsto no se puede deshacer.",
       confirmLabel: "Sí, cancelar la compra",
       cancelLabel: "No, dejarla como está",
       danger: true,
@@ -154,7 +156,11 @@ export default function CompraDetalle() {
     );
 
   const cancelada = compra.estado === "cancelada";
-  const puedeAbrirGarantia = compra.recibida === true && !cancelada;
+  // Caja menor es un gasto (sin productos): no hay nada que devolver al
+  // proveedor por garantía ni mercancía que recibir.
+  const esCajaMenor = compra.es_caja_menor === true;
+  const puedeAbrirGarantia =
+    compra.recibida === true && !cancelada && !esCajaMenor;
   const pendienteRecepcion = !compra.recibida && !cancelada;
   const pill = compraEstadoPill(compra);
   const timeline = construirTimelineCompra(compra, garantias, formatDate);
@@ -189,7 +195,18 @@ export default function CompraDetalle() {
             </div>
           )}
           <div className="ph-sub">
-            {compra.recibida && compra.fecha_recepcion ? (
+            {esCajaMenor ? (
+              <>
+                Gasto registrado el{" "}
+                <b
+                  className="font-mono font-medium"
+                  style={{ color: "var(--n-700)" }}
+                >
+                  {formatDate(compra.fecha)}
+                </b>{" "}
+                · pagado en {compra.metodo_pago ?? "Efectivo"}
+              </>
+            ) : compra.recibida && compra.fecha_recepcion ? (
               <>
                 Recibida el{" "}
                 <b
@@ -236,7 +253,7 @@ export default function CompraDetalle() {
           style={{ height: 48 }}
         >
           <Printer className="h-3.5 w-3.5" strokeWidth={2} />
-          Imprimir orden
+          {esCajaMenor ? "Imprimir comprobante" : "Imprimir orden"}
         </button>
         {esAdmin && !cancelada && (
           <button
@@ -306,7 +323,11 @@ export default function CompraDetalle() {
             <div className="grid grid-cols-1 gap-3 gap-x-3.5 sm:grid-cols-2">
               <Fact lk="Razón social" v={compra.proveedor} full />
               <Fact lk="Factura" v={compra.factura_proveedor ?? "—"} mono />
-              <Fact lk="Sede destino" v={compra.sede_destino_id ?? "—"} mono />
+              <Fact
+                lk={esCajaMenor ? "Sede" : "Sede destino"}
+                v={compra.sede_destino_id ?? "—"}
+                mono
+              />
             </div>
           </div>
 
@@ -317,13 +338,28 @@ export default function CompraDetalle() {
                 <Package className="h-3.5 w-3.5" strokeWidth={2} />
               </div>
               <div className="ib-title">
-                {compra.recibida ? "Items recibidos" : "Items ordenados"}
+                {esCajaMenor
+                  ? "Detalle del gasto"
+                  : compra.recibida
+                    ? "Items recibidos"
+                    : "Items ordenados"}
               </div>
-              <div className="ib-aux">
-                {items.length} item{items.length === 1 ? "" : "s"}
-                {compra.recibida ? " · 100% recibidos" : ""}
-              </div>
+              {!esCajaMenor && (
+                <div className="ib-aux">
+                  {items.length} item{items.length === 1 ? "" : "s"}
+                  {compra.recibida ? " · 100% recibidos" : ""}
+                </div>
+              )}
             </div>
+            {esCajaMenor && items.length === 0 && (
+              <p
+                className="mb-2 text-[12.5px] leading-[1.5]"
+                style={{ color: "var(--n-600)" }}
+              >
+                {compra.concepto || "Gasto de caja menor"} · no mueve
+                inventario.
+              </p>
+            )}
             <div className="overflow-x-auto">
               <table className="prod-tbl w-full">
                 <tbody>
@@ -481,16 +517,27 @@ export default function CompraDetalle() {
               <div className="ib-title">Fechas clave</div>
             </div>
             <div className="grid grid-cols-2 gap-2.5">
-              <FactBox lk="Orden registrada" v={formatDate(compra.fecha)} />
               <FactBox
-                lk="Recepción"
-                v={
-                  compra.fecha_recepcion
-                    ? formatDate(compra.fecha_recepcion)
-                    : "Pendiente"
-                }
-                tone={compra.fecha_recepcion ? "succ" : undefined}
+                lk={esCajaMenor ? "Gasto registrado" : "Orden registrada"}
+                v={formatDate(compra.fecha)}
               />
+              {esCajaMenor ? (
+                <FactBox
+                  lk="Pagado"
+                  v={compra.metodo_pago ?? "Efectivo"}
+                  tone="succ"
+                />
+              ) : (
+                <FactBox
+                  lk="Recepción"
+                  v={
+                    compra.fecha_recepcion
+                      ? formatDate(compra.fecha_recepcion)
+                      : "Pendiente"
+                  }
+                  tone={compra.fecha_recepcion ? "succ" : undefined}
+                />
+              )}
             </div>
           </div>
         </div>

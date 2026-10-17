@@ -48,10 +48,10 @@ export function compraTipoBadge(esCajaMenor) {
  * El estado real se deriva de dos campos:
  *   - `recibida` (bool): false → registrada, true → recibida
  *   - `estado` ('completada' | 'devolucion_garantia')
- * @param {{ recibida: boolean, estado?: string|null }} compra
+ * @param {{ recibida: boolean, estado?: string|null, es_caja_menor?: boolean }} compra
  * @returns {{ cls: string, label: string }}
  */
-export function compraEstadoPill({ recibida, estado }) {
+export function compraEstadoPill({ recibida, estado, es_caja_menor }) {
   if (estado === "cancelada") {
     // C-04: rojo de alto contraste (antes usaba el pill neutro s-entregada,
     // indistinguible de una compra normal).
@@ -59,6 +59,11 @@ export function compraEstadoPill({ recibida, estado }) {
   }
   if (estado === "devolucion_garantia") {
     return { cls: "s-pill s-conv", label: "Dev. garantía" };
+  }
+  // Caja menor es un gasto pagado en el acto (la RPC la crea ya "recibida" y
+  // solo admite Efectivo/Transferencia/Tarjeta): no hay mercancía que recibir.
+  if (es_caja_menor) {
+    return { cls: "s-pill s-apr", label: "Pagado" };
   }
   return recibida
     ? { cls: "s-pill s-apr", label: "Recibida" }
@@ -123,7 +128,17 @@ export function construirTimelineCompra(compra, garantias, fmtDate) {
     time: compra.fecha ? fmtDate(compra.fecha) : null,
   });
 
-  if (compra.recibida && compra.fecha_recepcion) {
+  if (compra.es_caja_menor) {
+    // Un gasto de caja menor no trae mercancía: se paga en el acto.
+    eventos.push({
+      tone: "succ",
+      act: "Gasto pagado",
+      meta: `${compra.metodo_pago ?? "Efectivo"}${
+        compra.cuenta_bancaria ? ` · ${compra.cuenta_bancaria}` : ""
+      }${compra.sede_destino_id ? ` · ${compra.sede_destino_id}` : ""}`,
+      time: compra.fecha ? fmtDate(compra.fecha) : null,
+    });
+  } else if (compra.recibida && compra.fecha_recepcion) {
     eventos.push({
       tone: "succ",
       act: "Mercancía recibida en bodega",
