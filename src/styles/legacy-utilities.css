@@ -64,6 +64,8 @@
 /* ── Module header ──────────────────────────────────────────────────────── */
 .module-header {
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   align-items: center;
   justify-content: space-between;
   padding-bottom: 1rem;
