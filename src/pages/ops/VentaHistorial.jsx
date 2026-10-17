@@ -25,7 +25,7 @@ const PAGE_SIZE = 20;
 // trabajo. Sin esa marca, la facturación de una OT se ve igual que una venta de
 // mostrador y parece que la plata se cobró dos veces: una como abono en la OT y
 // otra como venta aquí. Es el mismo dinero.
-const COLS = `id, numero, fecha, cliente_nombre, metodo_pago, total, anulada, sede_id, origen,
+const COLS = `id, numero, fecha, cliente_nombre, metodo_pago, total, anulada, sede_id, origen, retenciones_total,
    vendedor:vendedor_id(nombre),
    detalle_venta(producto:producto_id(nombre))`;
 
@@ -524,6 +524,9 @@ function VentaFila({ venta: v, onClick }) {
           {v.cliente_nombre || "Cliente mostrador"}
         </span>
         {v.origen === "ot" && <MarcaOT />}
+        {Number(v.retenciones_total ?? 0) > 0 && (
+          <MarcaRetencion valor={v.retenciones_total} />
+        )}
       </Td>
       <Td>
         <span
@@ -612,6 +615,9 @@ function VentaCard({ venta: v, esAdmin, onClick }) {
             {v.cliente_nombre || "Cliente mostrador"}
           </p>
           {v.origen === "ot" && <MarcaOT />}
+          {Number(v.retenciones_total ?? 0) > 0 && (
+            <MarcaRetencion valor={v.retenciones_total} />
+          )}
           {resumen && (
             <p
               className="mt-0.5 truncate text-[12px]"
@@ -704,6 +710,27 @@ function EmptyState({ filtrando, hayMas }) {
  * dinero: el abono es el cobro, la venta es la factura). La caja NO la cuenta
  * dos veces — el cierre excluye estas ventas a propósito.
  */
+/**
+ * Marca discreta de que el cliente nos retuvo algo en esta venta: el total de
+ * la fila es el facturado, y sin la marca parece que entró más plata de la que
+ * entró. El desglose está en el detalle.
+ */
+function MarcaRetencion({ valor }) {
+  return (
+    <span
+      className="ml-1.5 inline-flex items-center rounded px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide"
+      style={{
+        backgroundColor: "var(--n-50)",
+        color: "var(--n-700)",
+        border: "1px solid var(--n-150)",
+      }}
+      title={`Con retención de ${formatCOP(Number(valor))}: entra el neto. El desglose está en el detalle de la venta.`}
+    >
+      Ret.
+    </span>
+  );
+}
+
 function MarcaOT() {
   return (
     <span
