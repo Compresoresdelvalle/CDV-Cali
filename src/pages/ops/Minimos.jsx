@@ -646,14 +646,24 @@ export default function Minimos() {
                       >
                         {f.nombre}
                       </p>
+                      {/* Wrap en vez de truncate: "nunca ha estado aquí"
+                          se cortaba en el celular. */}
                       <p
-                        className="m-0 truncate font-mono text-[11px]"
+                        className="m-0 break-words font-mono text-[11px]"
                         style={{ color: "var(--n-500)" }}
                       >
                         {f.referencia} ·{" "}
                         {f.vendible ? f.cantidad : f.cantidad_insumo} uds
                         {!f.tiene_inventario ? " · nunca ha estado aquí" : ""}
                       </p>
+                      {min === 0 && (
+                        <p
+                          className="m-0 text-[11px]"
+                          style={{ color: "var(--n-500)" }}
+                        >
+                          No alerta en esta sede
+                        </p>
+                      )}
                     </div>
                     <ClaseABC clase={f.clase_abc} />
                     <StatusBadge status={f.estado_stock} />
