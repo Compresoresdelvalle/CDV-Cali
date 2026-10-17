@@ -76,6 +76,9 @@ export default function EnsambleNuevo() {
   const [convCant, setConvCant] = useState("1");
   const [convSaving, setConvSaving] = useState(false);
   const [convError, setConvError] = useState("");
+  // Bloque 2: el ensamble todavía no existe cuando se convierte. Se guardan los
+  // destino_id que devuelve el RPC para amarrarlos al ensamble al crearlo.
+  const convDestinoIdsRef = useRef([]);
 
   const [observaciones, setObservaciones] = useState("");
   const [creando, setCreando] = useState(false);
@@ -250,8 +253,18 @@ export default function EnsambleNuevo() {
         p_producto_id: convComp.id,
         p_sede_id: sede,
         p_cantidad: n,
+        p_destino: {
+          tipo: "ensamble",
+          nota: productoSel?.nombre?.trim() || "ensamble nuevo",
+        },
       });
       if (error) throw error;
+      if (data?.destino_id != null) {
+        convDestinoIdsRef.current = [
+          ...convDestinoIdsRef.current,
+          data.destino_id,
+        ];
+      }
       setComponentes((cs) =>
         cs.map((c) =>
           c.id === convComp.id
@@ -374,6 +387,26 @@ export default function EnsambleNuevo() {
       if (rpcErr) throw rpcErr;
       const nuevoId = data?.ensamble_id ?? data?.id;
       if (!nuevoId) throw new Error("Respuesta inesperada del servidor.");
+
+      // Amarra al ensamble recién creado las conversiones hechas en esta
+      // pantalla. Si falla no se bloquea nada: el ensamble ya existe y la
+      // conversión conserva su nota ("Ensamble nuevo · producto").
+      const destinoIds = convDestinoIdsRef.current;
+      if (destinoIds.length > 0) {
+        try {
+          const { error: vincErr } = await supabase.rpc(
+            "fn_vincular_conversiones_ensamble",
+            { p_ensamble_id: nuevoId, p_destino_ids: destinoIds },
+          );
+          if (vincErr) throw vincErr;
+          convDestinoIdsRef.current = [];
+        } catch (vincErr) {
+          console.warn(
+            "No se pudieron amarrar las conversiones al ensamble:",
+            vincErr,
+          );
+        }
+      }
 
       // El aviso salta como pop-up y sobrevive al cambio de pantalla (el Toaster
       // es global), así se ve aunque el botón "Crear" quede al fondo del
