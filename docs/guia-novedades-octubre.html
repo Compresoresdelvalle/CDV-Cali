@@ -1,0 +1,2246 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Novedades de octubre</title>
+<style>
+      :root {
+        --ground: #f3f6f9;
+        --card: #ffffff;
+        --card-2: #f8fbfd;
+        --ink: #15263b;
+        --muted: #556577;
+        --faint: #8291a2;
+        --border: #e2e9f1;
+        --border-2: #ced9e5;
+        --accent: #245a8c;
+        --accent-2: #2f6ea8;
+        --accent-soft: #e9f1f9;
+        --accent-ink: #183f62;
+        --good: #1f7a45;
+        --good-bg: #e7f4ec;
+        --good-bd: #bfe3cd;
+        --warn: #9a5409;
+        --warn-bg: #fbf0dd;
+        --warn-bd: #eed2a2;
+        --bad: #b02a22;
+        --bad-bg: #fbe9e8;
+        --bad-bd: #f0c3c0;
+        --shadow:
+          0 1px 2px rgba(16, 32, 54, 0.05),
+          0 10px 26px -16px rgba(16, 32, 54, 0.2);
+        --mono:
+          ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo,
+          Consolas, monospace;
+        --sans:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --ground: #0e1622;
+          --card: #151f2c;
+          --card-2: #111a25;
+          --ink: #e7eef6;
+          --muted: #a0b1c3;
+          --faint: #6e8095;
+          --border: #233141;
+          --border-2: #31445a;
+          --accent: #5f9fd8;
+          --accent-2: #7ab0e2;
+          --accent-soft: #16283a;
+          --accent-ink: #c3dbf1;
+          --good: #5dbe84;
+          --good-bg: #12291d;
+          --good-bd: #1f4230;
+          --warn: #e0a458;
+          --warn-bg: #2a2010;
+          --warn-bd: #493617;
+          --bad: #ec8b83;
+          --bad-bg: #2a1513;
+          --bad-bd: #4a2420;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 30px -18px rgba(0, 0, 0, 0.65);
+        }
+      }
+      :root[data-theme="dark"] {
+        --ground: #0e1622;
+        --card: #151f2c;
+        --card-2: #111a25;
+        --ink: #e7eef6;
+        --muted: #a0b1c3;
+        --faint: #6e8095;
+        --border: #233141;
+        --border-2: #31445a;
+        --accent: #5f9fd8;
+        --accent-2: #7ab0e2;
+        --accent-soft: #16283a;
+        --accent-ink: #c3dbf1;
+        --good: #5dbe84;
+        --good-bg: #12291d;
+        --good-bd: #1f4230;
+        --warn: #e0a458;
+        --warn-bg: #2a2010;
+        --warn-bd: #493617;
+        --bad: #ec8b83;
+        --bad-bg: #2a1513;
+        --bad-bd: #4a2420;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 30px -18px rgba(0, 0, 0, 0.65);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--ink);
+        font-family: var(--sans);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        font-size: 16px;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: clamp(18px, 3.5vw, 40px) clamp(16px, 4vw, 32px) 90px;
+      }
+
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 20px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        box-shadow: var(--shadow);
+      }
+      .head img {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex: none;
+        border: 1px solid var(--border-2);
+      }
+      .head .eyebrow {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .head h1 {
+        margin: 0.12em 0 0.1em;
+        font-size: clamp(22px, 4.4vw, 30px);
+        line-height: 1.05;
+        letter-spacing: -0.02em;
+        font-weight: 750;
+        text-wrap: balance;
+      }
+      .head .org {
+        font-size: 12.5px;
+        color: var(--faint);
+        font-family: var(--mono);
+      }
+
+      .lede {
+        font-size: 16.5px;
+        color: var(--muted);
+        margin: 22px 2px 0;
+        max-width: 64ch;
+      }
+      .toc {
+        margin: 20px 0 0;
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--card-2);
+      }
+      .toc p {
+        margin: 0 0 6px;
+        font-family: var(--mono);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: var(--faint);
+        font-weight: 700;
+      }
+      .toc ol {
+        margin: 0;
+        padding-left: 20px;
+        columns: 2;
+        column-gap: 26px;
+      }
+      .toc li {
+        margin: 3px 0;
+        font-size: 14px;
+      }
+      .toc a {
+        color: var(--accent-ink);
+        text-decoration: none;
+      }
+
+      .sec {
+        margin-top: clamp(30px, 5vw, 52px);
+      }
+      h2 {
+        font-size: clamp(19px, 3vw, 24px);
+        letter-spacing: -0.015em;
+        margin: 0 0 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-wrap: balance;
+        scroll-margin-top: 14px;
+      }
+      h2 .b {
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 700;
+        color: #fff;
+        background: var(--accent);
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        flex: none;
+      }
+      h3 {
+        font-size: 16.5px;
+        margin: 26px 0 8px;
+        letter-spacing: -0.01em;
+      }
+      p {
+        margin: 0.5em 0;
+      }
+      strong {
+        font-weight: 650;
+        color: var(--ink);
+      }
+      .lead-in {
+        color: var(--muted);
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 13px;
+        padding: 18px 20px;
+        box-shadow: var(--shadow);
+      }
+      .two {
+        display: grid;
+        gap: 14px;
+        margin-top: 8px;
+      }
+      @media (min-width: 680px) {
+        .two {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .two .card h3 {
+        margin: 0 0 6px;
+      }
+      .two .card .kk {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .callout {
+        border: 1px solid var(--border);
+        border-left-width: 3px;
+        border-radius: 10px;
+        padding: 13px 15px;
+        background: var(--card-2);
+        margin: 14px 0;
+      }
+      .callout.warn {
+        border-left-color: var(--warn);
+        background: var(--warn-bg);
+        border-color: var(--warn-bd);
+      }
+      .callout.good {
+        border-left-color: var(--good);
+        background: var(--good-bg);
+        border-color: var(--good-bd);
+      }
+      .callout.info {
+        border-left-color: var(--accent);
+        background: var(--accent-soft);
+        border-color: var(--border-2);
+      }
+      .callout .k {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 700;
+        display: block;
+        margin-bottom: 4px;
+      }
+      .warn .k {
+        color: var(--warn);
+      }
+      .good .k {
+        color: var(--good);
+      }
+      .info .k {
+        color: var(--accent);
+      }
+      .callout p {
+        margin: 0.15em 0;
+      }
+
+      .twrap {
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin: 8px 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 13px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      thead th {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 600;
+        background: var(--card-2);
+      }
+      tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 9px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+      .pill.g {
+        color: var(--good);
+        background: var(--good-bg);
+      }
+      .pill.w {
+        color: var(--warn);
+        background: var(--warn-bg);
+      }
+      .pill.a {
+        color: var(--accent-ink);
+        background: var(--accent-soft);
+      }
+      .pill.n {
+        color: var(--faint);
+        background: var(--card-2);
+      }
+      .pill.r {
+        color: var(--bad);
+        background: var(--bad-bg);
+      }
+
+      .stepr {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+        margin-top: 24px;
+      }
+      @media (min-width: 760px) {
+        .stepr {
+          grid-template-columns: 1fr 1fr;
+          gap: 24px;
+          align-items: center;
+        }
+        .stepr.rev .txt {
+          order: 2;
+        }
+      }
+      .stepr .txt h3 {
+        margin: 0 0 6px;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .stepr .txt h3 .n {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 750;
+        color: #fff;
+        background: var(--accent);
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        flex: none;
+      }
+      .stepr .txt p {
+        font-size: 14.5px;
+        color: var(--muted);
+        margin: 0.3em 0;
+      }
+      .stepr .txt .tip {
+        font-size: 13px;
+        color: var(--faint);
+      }
+      .cap {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--faint);
+        text-align: center;
+        margin-top: 8px;
+      }
+
+      /* Mockup: estilo claro, como la app real */
+      .shot {
+        --s-bg: #eef2f7;
+        --s-card: #ffffff;
+        --s-card2: #f1f5fa;
+        --s-line: #e3e9f1;
+        --s-ink: #17263c;
+        --s-mut: #5c6b7e;
+        --s-fnt: #9aa7b6;
+        --s-pri: #345bd6;
+        --s-good: #1a8a4d;
+        --s-goodbg: #e6f5ec;
+        --s-warn: #b0741d;
+        --s-warnbg: #fbf1da;
+        --s-bad: #cf3f3f;
+        --s-badbg: #fbe8e8;
+        --s-blue: #22409e;
+        --s-bluebg: #e9eefb;
+        --s-purple: #6b3fb0;
+        --s-purplebg: #efe8fa;
+        background: var(--s-bg);
+        border: 1px solid #dbe3ee;
+        border-radius: 14px;
+        padding: 14px;
+        color: var(--s-ink);
+        font-size: 13px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .shot .eb {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        color: var(--s-fnt);
+      }
+      .shot .h {
+        font-size: 16px;
+        font-weight: 700;
+        margin: 2px 0;
+        color: var(--s-ink);
+      }
+      .shot .lbl {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--s-mut);
+        margin: 12px 0 5px;
+      }
+      .shot .inp {
+        background: var(--s-card);
+        border: 1px solid var(--s-line);
+        border-radius: 9px;
+        padding: 9px 11px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .shot .radio {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
+        border: 1px solid var(--s-line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: var(--s-card);
+        margin-top: 7px;
+      }
+      .shot .radio.on {
+        border-color: var(--s-pri);
+        background: var(--s-bluebg);
+      }
+      .shot .radio .rd {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        border: 1.5px solid var(--s-fnt);
+        flex: none;
+        margin-top: 1px;
+      }
+      .shot .radio.on .rd {
+        border-color: var(--s-pri);
+        border-width: 4px;
+      }
+      .shot .radio b {
+        font-size: 12.5px;
+        display: block;
+      }
+      .shot .radio small {
+        font-size: 10.5px;
+        color: var(--s-mut);
+      }
+      .shot .chk {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12.5px;
+        padding: 6px 0;
+        color: var(--s-ink);
+      }
+      .shot .chk .bx {
+        width: 15px;
+        height: 15px;
+        border-radius: 4px;
+        border: 1.5px solid var(--s-line);
+        flex: none;
+      }
+      .shot .chk.on .bx {
+        background: var(--s-good);
+        border-color: var(--s-good);
+      }
+      .shot .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+      .shot .tag.g {
+        color: var(--s-good);
+        background: var(--s-goodbg);
+      }
+      .shot .tag.w {
+        color: var(--s-warn);
+        background: var(--s-warnbg);
+      }
+      .shot .tag.a {
+        color: var(--s-blue);
+        background: var(--s-bluebg);
+      }
+      .shot .tag.p {
+        color: var(--s-purple);
+        background: var(--s-purplebg);
+      }
+      .shot .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        display: inline-block;
+      }
+      .shot .note {
+        margin-top: 9px;
+        font-size: 11px;
+        color: var(--s-warn);
+        background: var(--s-warnbg);
+        border: 1px solid #eed7a6;
+        border-radius: 8px;
+        padding: 8px 10px;
+        display: flex;
+        gap: 7px;
+      }
+      .shot .btn {
+        margin-top: 12px;
+        background: var(--s-pri);
+        color: #fff;
+        border-radius: 10px;
+        padding: 10px;
+        text-align: center;
+        font-weight: 640;
+        font-size: 12.5px;
+      }
+      .shot .money {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Errores */
+      .err {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--card);
+        margin: 12px 0;
+        overflow: hidden;
+      }
+      .err .msg {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
+        padding: 11px 14px;
+        background: var(--bad-bg);
+        border-bottom: 1px solid var(--bad-bd);
+      }
+      .err .msg.wy {
+        background: var(--warn-bg);
+        border-color: var(--warn-bd);
+      }
+      .err .msg .ic {
+        color: var(--bad);
+        font-weight: 800;
+        font-family: var(--mono);
+        flex: none;
+      }
+      .err .msg.wy .ic {
+        color: var(--warn);
+      }
+      .err .msg code {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--ink);
+        background: transparent;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+      .err .body {
+        padding: 11px 14px;
+        font-size: 14px;
+      }
+      .err .body .qy {
+        color: var(--muted);
+      }
+      .err .body .do {
+        margin-top: 6px;
+      }
+      .err .body .do b {
+        color: var(--good);
+        font-weight: 650;
+      }
+      .grp {
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--faint);
+        font-weight: 700;
+        margin: 24px 0 2px;
+      }
+
+      ul.plain {
+        padding-left: 20px;
+      }
+      ul.plain li {
+        margin: 6px 0;
+      }
+      .foot {
+        margin-top: 56px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+        color: var(--faint);
+        font-size: 12.5px;
+        font-family: var(--mono);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        justify-content: space-between;
+      }
+
+      @media print {
+        @page {
+          size: A4;
+          margin: 12mm;
+        }
+        html,
+        body {
+          background: #fff;
+        }
+        * {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .toc,
+        .two {
+          break-inside: avoid;
+        }
+        .stepr {
+          grid-template-columns: 1fr !important;
+          break-inside: avoid;
+        }
+        .stepr.rev .txt {
+          order: 0 !important;
+        }
+        .card,
+        .callout,
+        .twrap,
+        .shot,
+        .err,
+        .head {
+          break-inside: avoid;
+        }
+        h2,
+        h3 {
+          break-after: avoid;
+        }
+      }
+
+      @media print {
+        .foot {
+          margin-top: 22px;
+          padding-top: 12px;
+          break-before: avoid;
+          page-break-before: avoid;
+        }
+        .sec {
+          margin-top: 26px;
+          break-inside: auto;
+        }
+        tr {
+          break-inside: avoid;
+        }
+        .stepr {
+          gap: 12px;
+          margin-top: 16px;
+        }
+        h3 {
+          margin-top: 18px;
+        }
+        /* Cada parte empieza en hoja nueva y no se separa de lo que sigue. */
+        .parte {
+          break-before: page;
+          break-after: avoid;
+          margin-top: 0 !important;
+        }
+        /* El título de sección no se queda solo al final de la hoja. */
+        h2,
+        h2 + p,
+        h2 + p + p {
+          break-after: avoid;
+          page-break-after: avoid;
+        }
+      }
+
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="head">
+    <img src="data:image/jpeg;base64,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" alt="Logo Compresores del Valle" />
+    <div>
+      <div class="eyebrow">Novedades · Octubre 2026</div>
+      <h1>Novedades de octubre</h1>
+      <div class="org">Compresores del Valle S.A.S. · Guía de novedades</div>
+    </div>
+  </header>
+
+  <p class="lede">
+    Esta guía cuenta lo que cambió en la app en octubre. Tiene tres partes.
+    Primero, <strong>lo nuevo</strong>. Después, <strong>lo que se arregló</strong>.
+    Al final, un <strong>repaso corto</strong> de lo que ya se podía hacer.
+    Cada sección dice arriba quién la usa. Los botones están escritos tal como
+    salen en la pantalla.
+  </p>
+
+  <nav class="toc" aria-label="Contenido">
+    <p>Parte 1 · Lo nuevo</p>
+    <ol>
+      <li><a href="#s1">Pagar una compra en partes o dejar un anticipo</a></li>
+      <li><a href="#s2">Gasto a crédito en caja menor</a></li>
+      <li><a href="#s3">Un pago o cobro con la fecha real</a></li>
+      <li><a href="#s4">Mercancía pendiente en Cuentas por pagar</a></li>
+      <li><a href="#s5">Comprar para otra sede</a></li>
+      <li><a href="#s6">Comprobante de caja menor</a></li>
+      <li><a href="#s7">Convertir a insumo: para qué es</a></li>
+      <li><a href="#s8">La campanita de las conversiones</a></li>
+      <li><a href="#s9">Auditoría más clara</a></li>
+      <li><a href="#s10">Equipos que el cliente no recoge</a></li>
+      <li><a href="#s11">Marcar una OT como abandonada</a></li>
+      <li><a href="#s12">Qué OT se pagaron un día</a></li>
+      <li><a href="#s13">El cierre de las vendedoras por día</a></li>
+      <li><a href="#s14">Retenciones a la vista</a></li>
+      <li><a href="#s15">La cotización impresa trae las notas</a></li>
+    </ol>
+    <p style="margin-top: 12px">Parte 2 · Lo que se arregló</p>
+    <ol start="16">
+      <li><a href="#s16">Arreglos de octubre</a></li>
+    </ol>
+    <p style="margin-top: 12px">Parte 3 · Repaso</p>
+    <ol start="17">
+      <li><a href="#s17">Que un producto no alarme en una sede</a></li>
+      <li><a href="#s18">Darle stock a un producto nuevo</a></li>
+      <li><a href="#s19">Pagarle por adelantado a un proveedor</a></li>
+      <li><a href="#s20">Caja menor o compra: cuál usar</a></li>
+      <li><a href="#s21">Pagar algo en dos formas</a></li>
+      <li><a href="#s22">Deshacer un cambio de producto</a></li>
+      <li><a href="#s23">Anular una devolución</a></li>
+      <li><a href="#s24">El descuento en compras</a></li>
+      <li><a href="#s25">Las retenciones, sin enredo</a></li>
+      <li><a href="#s26">Una venta registrada dos veces</a></li>
+    </ol>
+  </nav>
+
+  <!-- ═════════════════════ PARTE 1 ═════════════════════ -->
+  <div class="card parte" style="margin-top: clamp(30px, 5vw, 52px); border-left: 3px solid var(--accent)">
+    <div class="kk">Parte 1</div>
+    <h3>Lo nuevo</h3>
+    <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+      Quince cosas que la app no hacía antes. Lea solo las que le tocan: mire
+      las etiquetas de colores al inicio de cada una.
+    </p>
+  </div>
+
+  <!-- ══════════════════════════ 1 ══════════════════════════ -->
+  <section class="sec" id="s1">
+    <h2><span class="b">1</span> Pagar una compra en partes o dejar un anticipo</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora</span><span class="pill w">Bodega</span>
+    </p>
+    <p>
+      Ahora el pago se anota en la misma compra. Sirve para dos casos.
+      Uno: pagó una compra en dos formas, por ejemplo una parte en efectivo y
+      otra por transferencia. Dos: dejó un anticipo y el resto lo paga después.
+    </p>
+
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Forma de pago: Crédito</h3>
+        <p>
+          En <strong>Compras</strong>, toque <strong>Nueva compra</strong>.
+          Ponga el proveedor y los productos, como siempre.
+        </p>
+        <p>
+          En <strong>Pago de la compra</strong>, toque <strong>Crédito</strong>.
+        </p>
+        <p class="tip">Crédito quiere decir: lo que no pague hoy, queda debiendo.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Compras · Nueva compra</div>
+          <div class="lbl">Pago de la compra</div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap">
+            <span class="inp" style="padding: 6px 10px">Efectivo</span>
+            <span class="inp" style="padding: 6px 10px">Transferencia</span>
+            <span class="inp" style="padding: 6px 10px">Tarjeta</span>
+            <span class="inp" style="padding: 6px 10px; background: var(--s-pri); color: #fff; border-color: var(--s-pri)">Crédito</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stepr rev">
+      <div class="txt">
+        <h3><span class="n">2</span> ¿Le pagaste algo hoy?</h3>
+        <p>
+          Debajo aparece el recuadro <strong>¿Le pagaste algo hoy?</strong>
+        </p>
+        <p>Toque <strong>Sí, anotar un pago</strong>.</p>
+        <p class="tip">Si hoy no pagó nada, no toque nada. Toda la compra queda por pagar.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="font-weight: 700">¿Le pagaste algo hoy?</div>
+          <div style="font-size: 11px; color: var(--s-mut); margin-top: 3px">
+            Si pagaste la compra en dos formas (por ejemplo, una parte en
+            efectivo y otra por transferencia) o dejaste un anticipo, anota aquí
+            cada pago.
+          </div>
+          <div style="margin-top: 10px; border: 1.5px dashed var(--s-pri); color: var(--s-pri); background: var(--s-card); border-radius: 10px; padding: 10px; text-align: center; font-weight: 600">
+            + Sí, anotar un pago
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">3</span> Forma y monto</h3>
+        <p>
+          Toque <strong>Efectivo</strong>, <strong>Transferencia</strong> o
+          <strong>Tarjeta</strong>.
+        </p>
+        <p>
+          Si es Transferencia o Tarjeta, escoja la cuenta en
+          <strong>¿De qué cuenta salió?</strong>
+        </p>
+        <p>Escriba el monto.</p>
+        <p class="tip">Si se equivocó, toque la X de ese pago para quitarlo.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="background: var(--s-card); border: 1px solid var(--s-line); border-radius: 10px; padding: 10px">
+            <div style="display: flex; justify-content: space-between">
+              <span class="eb">Pago 1</span><span style="color: var(--s-fnt)">✕</span>
+            </div>
+            <div style="display: flex; gap: 5px; margin-top: 6px">
+              <span class="inp" style="flex: 1; justify-content: center; padding: 6px">Efectivo</span>
+              <span class="inp" style="flex: 1; justify-content: center; padding: 6px; background: var(--s-pri); color: #fff; border-color: var(--s-pri)">Transferencia</span>
+              <span class="inp" style="flex: 1; justify-content: center; padding: 6px">Tarjeta</span>
+            </div>
+            <div class="inp" style="margin-top: 6px"><span>¿De qué cuenta salió?</span><span>▾</span></div>
+            <div class="inp money" style="margin-top: 6px"><span>$ 59.000</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stepr rev">
+      <div class="txt">
+        <h3><span class="n">4</span> Si pagó en dos formas</h3>
+        <p>Toque <strong>Agregar otro pago</strong> y repita el paso 3.</p>
+        <p>Un renglón por cada forma de pago.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="inp" style="justify-content: space-between"><span>Pago 1 · Efectivo</span><b class="money">$ 60.000</b></div>
+          <div class="inp" style="justify-content: space-between; margin-top: 6px"><span>Pago 2 · Transferencia</span><b class="money">$ 59.000</b></div>
+          <div style="margin-top: 8px; border: 1.5px dashed var(--s-pri); color: var(--s-pri); background: var(--s-card); border-radius: 10px; padding: 9px; text-align: center; font-weight: 600">
+            + Agregar otro pago
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">5</span> Mire el resumen y registre</h3>
+        <p>Abajo salen tres números:</p>
+        <p>
+          <strong>Neto a pagar</strong>: lo que vale la compra.
+          <strong>Pagado hoy</strong>: lo que anotó.
+          <strong>Queda debiendo</strong>: lo que falta.
+        </p>
+        <p>Toque <strong>Registrar compra</strong> como siempre.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="background: var(--s-goodbg); border: 1px solid #bfe3cd; border-radius: 10px; padding: 10px 12px">
+            <div style="display: flex; justify-content: space-between"><span>Neto a pagar</span><b class="money">$ 119.000</b></div>
+            <div style="display: flex; justify-content: space-between"><span>Pagado hoy</span><b class="money">$ 119.000</b></div>
+            <div style="display: flex; justify-content: space-between"><span>Queda debiendo</span><b class="money">$ 0</b></div>
+            <div style="margin-top: 5px; font-weight: 700; color: var(--s-good)">Queda pagada completa, en 2 partes.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Ejemplo 1: una compra pagada en dos formas</h3>
+    <div class="twrap">
+      <table>
+        <thead>
+          <tr><th>Qué</th><th>Monto</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>La compra vale</td><td class="money">$ 119.000</td></tr>
+          <tr><td>Pago 1: <strong>Efectivo</strong></td><td class="money">$ 60.000</td></tr>
+          <tr><td>Pago 2: <strong>Transferencia</strong>, con su cuenta</td><td class="money">$ 59.000</td></tr>
+          <tr><td><strong>Queda debiendo</strong></td><td class="money"><strong>$ 0</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout good">
+      <span class="k">En el cierre del día</span>
+      <p>
+        Los $ 60.000 salen del efectivo. Los $ 59.000 salen de la cuenta. Cada
+        peso donde fue.
+      </p>
+    </div>
+
+    <h3>Ejemplo 2: un anticipo</h3>
+    <div class="two">
+      <div class="card">
+        <div class="kk">Hoy</div>
+        <h3>Pagó $ 40.000</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          La compra vale $ 100.000. Anota un pago de $ 40.000. La app dice:
+          <strong>"Queda debiendo $ 60.000 al proveedor."</strong>
+        </p>
+      </div>
+      <div class="card">
+        <div class="kk">Después</div>
+        <h3>Paga los $ 60.000</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Los $ 60.000 quedan en <strong>Cuentas por pagar</strong>. Desde ahí
+          se pagan cuando toque.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <span class="k">Quién paga lo que queda debiendo</span>
+      <p>
+        El Admin. Si la compra es de BODEGA, también Bodega. La vendedora no
+        paga en Cuentas por pagar: le avisa a Maritza el número de la compra.
+      </p>
+    </div>
+
+    <div class="err">
+      <div class="msg">
+        <span class="ic">!</span>
+        <code>El pago 2 es por Transferencia: elige la cuenta bancaria de donde salió la plata.</code>
+      </div>
+      <div class="body">
+        <p class="qy">Sale si un pago por Transferencia o Tarjeta no tiene cuenta.</p>
+        <p class="do"><b>Qué hacer:</b> escoger la cuenta en ese renglón.</p>
+      </div>
+    </div>
+    <div class="err">
+      <div class="msg wy">
+        <span class="ic">!</span>
+        <code>Los pagos se pasan del neto por $ 11.000. Baja algún monto.</code>
+      </div>
+      <div class="body">
+        <p class="qy">Los pagos suman más de lo que vale la compra.</p>
+        <p class="do"><b>Qué hacer:</b> revisar los montos. Lo que se pagó de más no es de esta compra.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 2 ══════════════════════════ -->
+  <section class="sec" id="s2">
+    <h2><span class="b">2</span> Gasto a crédito en caja menor</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora</span><span class="pill w">Bodega</span>
+    </p>
+    <p>
+      Hay gastos que se pagan después. Ejemplo: el taller arregló la camioneta
+      y se le paga a fin de mes. Ahora la caja menor también acepta
+      <strong>Crédito</strong>.
+    </p>
+
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Caja menor</h3>
+        <p>
+          En <strong>Compras</strong>, toque <strong>Nueva compra</strong>.
+          Arriba, toque <strong>Caja menor</strong>.
+        </p>
+        <p>
+          Llene <strong>Concepto</strong>, <strong>Monto</strong> y
+          <strong>Categoría</strong>.
+        </p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="display: flex; gap: 6px">
+            <span class="inp" style="padding: 6px 10px">Compra normal</span>
+            <span class="inp" style="padding: 6px 10px; background: var(--s-pri); color: #fff; border-color: var(--s-pri)">Caja menor</span>
+          </div>
+          <div class="lbl">Concepto *</div>
+          <div class="inp"><span>Arreglo de la camioneta</span></div>
+          <div class="lbl">Monto *</div>
+          <div class="inp money"><span>$ 350.000</span></div>
+          <div class="lbl">Categoría *</div>
+          <div class="inp"><span>Mantenimiento</span><span>▾</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stepr rev">
+      <div class="txt">
+        <h3><span class="n">2</span> ¿Cómo se pagó? Crédito</h3>
+        <p>En <strong>¿Cómo se pagó?</strong> toque <strong>Crédito</strong>.</p>
+        <p>Toque <strong>Registrar caja menor</strong>.</p>
+        <p class="tip">Hoy no sale plata del cierre. Sale el día en que se pague.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="lbl" style="margin-top: 0">¿Cómo se pagó?</div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap">
+            <span class="inp" style="padding: 6px 10px">Efectivo</span>
+            <span class="inp" style="padding: 6px 10px">Transferencia</span>
+            <span class="inp" style="padding: 6px 10px">Tarjeta</span>
+            <span class="inp" style="padding: 6px 10px; background: var(--s-pri); color: #fff; border-color: var(--s-pri)">Crédito</span>
+          </div>
+          <div style="margin-top: 7px; font-size: 11px; color: var(--s-warn)">
+            Queda en Cuentas por pagar; hoy no sale plata. Se paga después
+            desde Cuentas por pagar.
+          </div>
+          <div class="btn">Registrar caja menor</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Qué dice el gasto</h3>
+    <div class="two">
+      <div class="card">
+        <div class="kk">Mientras se debe</div>
+        <h3><span class="pill w">Por pagar</span></h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          En el detalle sale <strong>Por pagar</strong> con lo que se debe.
+          Está en Cuentas por pagar.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kk">Cuando ya se pagó</div>
+        <h3><span class="pill g">Pagado</span></h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Cuando se registra el pago en Cuentas por pagar, cambia a
+          <strong>Pagado</strong>.
+        </p>
+      </div>
+    </div>
+    <div class="callout info">
+      <span class="k">Quién lo paga después</span>
+      <p>
+        El Admin, o Bodega si el gasto es de BODEGA. Si lo anotó una vendedora,
+        la app le recuerda: "lo registra bodega o el administrador".
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 3 ══════════════════════════ -->
+  <section class="sec" id="s3">
+    <h2><span class="b">3</span> Un pago o un cobro con la fecha real</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill w">Bodega: pagos</span><span class="pill g">Vendedora: cobros</span>
+    </p>
+    <div class="two">
+      <div class="card">
+        <div class="kk">Antes</div>
+        <h3>Quedaba con la fecha de hoy</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Si el pago fue el martes y se anotó el jueves, quedaba del jueves.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kk">Ahora</div>
+        <h3>Se pone el día en que pasó</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Hasta 30 días atrás. Nunca un día que no ha llegado.
+        </p>
+      </div>
+    </div>
+
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Cambiar la fecha</h3>
+        <p>
+          En <strong>Cuentas</strong>, toque <strong>Pagar</strong> o
+          <strong>Cobrar</strong> (en el celular: <strong>Registrar pago</strong>
+          o <strong>Registrar cobro</strong>). Escriba el monto y escoja el método.
+        </p>
+        <p>
+          En <strong>Fecha del pago</strong> (o <strong>Fecha del cobro</strong>)
+          ponga el día real.
+        </p>
+        <p>
+          Toque <strong>Registrar pago</strong> (o
+          <strong>Registrar cobro</strong>).
+        </p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="lbl" style="margin-top: 0">Fecha del pago</div>
+          <div class="inp money"><span>14/10/2026</span><span style="color: var(--s-fnt)">▾</span></div>
+          <div style="margin-top: 5px; font-size: 11px; color: var(--s-mut)">
+            Queda registrado con fecha 14/10/2026.
+          </div>
+          <div class="btn">Registrar pago</div>
+        </div>
+        <div class="cap">Si deja el día de hoy, debajo dice: "Hoy. Si le pagaste otro día, cámbiala (hasta 30 días atrás)."</div>
+      </div>
+    </div>
+
+    <h3>Si ese día ya tenía cierre</h3>
+    <p>
+      El cierre guardado no cambia. Por eso la app avisa. Ahora la vendedora
+      también ve el aviso.
+    </p>
+    <div class="err">
+      <div class="msg wy">
+        <span class="ic">!</span>
+        <code>El pago se registra igual, pero el 14/10/2026 ya tenía guardado el cierre #312, y ese cierre no cambia. Para que esta plata quede contada, ve a Panel Admin, Cierres, pon ese día en Desde y Hasta, toca Previsualizar y luego Generar cierre complementario.</code>
+      </div>
+      <div class="body">
+        <p class="qy">
+          Así lo ve el Admin. La vendedora ve lo mismo, pero dice "avísale al
+          administrador: en Panel Admin, Cierres…". El número de cierre cambia.
+        </p>
+        <p class="do"><b>Qué hacer:</b> registrar el pago y seguir estos pasos.</p>
+      </div>
+    </div>
+    <div class="twrap">
+      <table>
+        <thead>
+          <tr><th>Paso</th><th>Qué tocar <span class="pill a">Admin</span></th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td><strong>Panel Admin</strong>, luego <strong>Cierres</strong>.</td></tr>
+          <tr><td>2</td><td>En <strong>Desde</strong> y en <strong>Hasta</strong>, el mismo día del aviso.</td></tr>
+          <tr><td>3</td><td>Toque <strong>Previsualizar</strong>.</td></tr>
+          <tr><td>4</td><td>Toque <strong>Generar cierre complementario</strong>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="err">
+      <div class="msg">
+        <span class="ic">!</span>
+        <code>La fecha del pago no puede ser futura. Si la plata todavía no ha salido, regístralo el día que pase.</code>
+      </div>
+      <div class="body">
+        <p class="do"><b>Qué hacer:</b> esperar al día del pago para anotarlo.</p>
+      </div>
+    </div>
+    <div class="err">
+      <div class="msg">
+        <span class="ic">!</span>
+        <code>Solo se pueden registrar pagos de hasta 30 días atrás (desde el 17/09/2026). Para algo más viejo habla con el administrador.</code>
+      </div>
+      <div class="body">
+        <p class="qy">La fecha de ejemplo es la de hoy, 17 de octubre, menos 30 días.</p>
+        <p class="do"><b>Qué hacer:</b> hablar con Maritza.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 4 ══════════════════════════ -->
+  <section class="sec" id="s4">
+    <h2><span class="b">4</span> Mercancía pendiente en Cuentas por pagar</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill w">Bodega</span>
+    </p>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> La píldora y el botón</h3>
+        <p>
+          Hay compras a crédito cuya mercancía no ha llegado. En
+          <strong>Cuentas por pagar</strong> ahora tienen la píldora
+          <strong>Mercancía pendiente</strong>.
+        </p>
+        <p>
+          Al lado sale el botón <strong>Recibir</strong>. En el celular dice
+          <strong>Recibir la mercancía</strong>. Lleva a la compra para contarla.
+        </p>
+        <p class="tip">Así no se queda una compra pagada sin entrar al inventario.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Cuentas · Por pagar</div>
+          <div style="margin-top: 8px; background: var(--s-card); border: 1px solid var(--s-line); border-radius: 10px; padding: 10px 12px">
+            <div style="display: flex; justify-content: space-between; gap: 8px">
+              <div>
+                <div style="font-weight: 600">Compra #1240 · Proveedor ejemplo</div>
+                <span class="tag w" style="margin-top: 4px">Mercancía pendiente</span>
+              </div>
+              <b class="money" style="color: var(--s-warn)">$ 60.000</b>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 9px">
+              <span class="inp" style="flex: 1; justify-content: center; padding: 7px">Recibir</span>
+              <span class="inp" style="flex: 1; justify-content: center; padding: 7px; background: var(--s-pri); color: #fff; border-color: var(--s-pri)">Pagar</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 5 ══════════════════════════ -->
+  <section class="sec" id="s5">
+    <h2><span class="b">5</span> Comprar para otra sede</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Solo Admin</span>
+    </p>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Escoger la sede</h3>
+        <p>
+          En <strong>Nueva compra</strong>, arriba, hay un selector
+          <strong>Sede</strong>. Es igual al de Nueva venta.
+        </p>
+        <p>
+          Escoja la sede. Debajo dice dónde queda:
+          <strong>"La compra se registrará en Almacén CV"</strong>. En caja
+          menor dice "El gasto se registrará en…".
+        </p>
+        <p class="tip">Vendedora y Bodega no ven el selector: compran para su sede.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="h">Nueva compra</div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px">
+            <span class="inp" style="padding: 8px 11px"><span style="color: var(--s-mut)">Sede</span><b>Almacén CV</b><span>▾</span></span>
+            <span style="font-size: 11px; color: var(--s-mut)">La compra se registrará en Almacén CV</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="err">
+      <div class="msg wy">
+        <span class="ic">?</span>
+        <code>Cambiar de sede vaciará los 3 producto(s) que ya agregaste a esta compra. ¿Continuar?</code>
+      </div>
+      <div class="body">
+        <p class="qy">Sale si cambia la sede con productos ya puestos. Una compra es de una sola sede.</p>
+        <p class="do"><b>Qué hacer:</b> si de verdad es otra sede, acepte y vuelva a poner los productos. Si no, cancele y todo queda igual.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 6 ══════════════════════════ -->
+  <section class="sec" id="s6">
+    <h2><span class="b">6</span> Comprobante de caja menor en media hoja</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora</span><span class="pill w">Bodega</span>
+    </p>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Imprimir comprobante</h3>
+        <p>
+          En <strong>Compras</strong>, abra la caja menor. Toque
+          <strong>Imprimir comprobante</strong>.
+        </p>
+        <p>
+          Sale una <strong>media carta</strong>. Trae el monto en número y en
+          letras, y dos firmas: <strong>Entregado por</strong> y
+          <strong>Recibido por</strong>.
+        </p>
+        <p class="tip">Antes salía la pantalla entera de la app.</p>
+      </div>
+      <div>
+        <div class="shot" style="background: #fff">
+          <div style="background: #245a8c; color: #fff; border-radius: 8px 8px 0 0; padding: 9px 12px; display: flex; justify-content: space-between">
+            <b>Comprobante de egreso</b><span class="money" style="font-size: 11px">#1301</span>
+          </div>
+          <div style="border: 1px solid var(--s-line); border-top: none; border-radius: 0 0 8px 8px; padding: 10px 12px">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px">
+              <div><div class="eb">Pagado a</div>Taller ejemplo</div>
+              <div><div class="eb">Forma de pago</div>Efectivo</div>
+              <div><div class="eb">Concepto</div>Arreglo de la camioneta</div>
+              <div><div class="eb">Categoría de gasto</div>Mantenimiento</div>
+            </div>
+            <div style="margin-top: 9px; border: 1px solid #245a8c; background: #f4f9fd; border-radius: 8px; padding: 7px 9px">
+              <div style="display: flex; justify-content: space-between"><span class="eb">Valor pagado</span><b class="money" style="color: #245a8c; font-size: 15px">$ 647.185</b></div>
+              <div style="font-style: italic; font-size: 11px">Seiscientos cuarenta y siete mil ciento ochenta y cinco pesos</div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; font-size: 10.5px">
+              <div style="border-top: 1.3px solid #2a3742; padding-top: 3px"><b>Entregado por</b><br /><span style="color: var(--s-fnt)">Nombre, cédula y firma</span></div>
+              <div style="border-top: 1.3px solid #2a3742; padding-top: 3px"><b>Recibido por</b><br /><span style="color: var(--s-fnt)">Nombre, cédula y firma</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="callout info">
+      <span class="k">Si el gasto es a crédito</span>
+      <p>
+        El título dice <strong>Cuenta por pagar</strong> y el monto dice
+        <strong>Valor adeudado</strong>. Debajo salen los
+        <strong>Pagos hechos</strong> y lo que falta.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 7 ══════════════════════════ -->
+  <section class="sec" id="s7">
+    <h2><span class="b">7</span> Convertir a insumo: ahora se dice para qué</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill g">Vendedora: obligatorio</span><span class="pill w">Bodega: obligatorio</span><span class="pill a">Admin: puede escoger "Sin destino"</span>
+    </p>
+    <p>
+      Cuando un producto de venta pasa a insumo, ahora queda anotado
+      <strong>para qué</strong>. Así Maritza sabe en qué se usó.
+    </p>
+    <div class="two">
+      <div class="card">
+        <div class="kk">Desde una OT o un ensamble</div>
+        <h3>No pregunta nada</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Se anota solo: queda que fue para esa OT o ese ensamble.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kk">Desde la ficha del producto</div>
+        <h3>Pregunta "¿Para qué es?"</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Hay que escoger antes de confirmar. Son los pasos de abajo.
+        </p>
+      </div>
+    </div>
+
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> El botón → a insumo</h3>
+        <p>
+          Abra la ficha del producto. En la sede, toque
+          <strong>→ a insumo</strong>.
+        </p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Producto · Stock por sede</div>
+          <div style="margin-top: 8px; background: var(--s-card); border: 1px solid var(--s-line); border-radius: 10px; padding: 10px 12px">
+            <div style="display: flex; justify-content: space-between"><b>Almacén CV</b><span class="tag g">8 uds</span></div>
+            <div style="font-size: 11px; color: var(--s-mut)">Insumo: 0</div>
+            <div style="display: flex; gap: 6px; margin-top: 8px">
+              <span class="inp" style="flex: 1; justify-content: center; padding: 7px">Configurar mín/máx</span>
+              <span class="inp" style="flex: 1; justify-content: center; padding: 7px; border-color: var(--s-pri); color: var(--s-pri)">→ a insumo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stepr rev">
+      <div class="txt">
+        <h3><span class="n">2</span> ¿Para qué es?</h3>
+        <p>Escriba la cantidad. Después toque una opción:</p>
+        <p>
+          <strong>OT</strong>, <strong>Ensamble</strong>,
+          <strong>Préstamo de herramienta</strong> u <strong>Otro</strong>.
+        </p>
+        <p>
+          Escoja cuál en la lista. Con <strong>Otro</strong>, escriba una nota
+          corta.
+        </p>
+        <p>Toque <strong>Confirmar</strong>.</p>
+        <p class="tip">Confirmar no se activa hasta escoger.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="font-weight: 700">Convertir venta → insumo</div>
+          <div class="lbl">Cantidad a convertir (máx. 8)</div>
+          <div class="inp money"><span>2</span></div>
+          <div class="lbl">¿Para qué es?</div>
+          <div style="display: flex; gap: 5px; flex-wrap: wrap">
+            <span class="inp" style="padding: 5px 9px; background: var(--s-pri); color: #fff; border-color: var(--s-pri)">OT</span>
+            <span class="inp" style="padding: 5px 9px">Ensamble</span>
+            <span class="inp" style="padding: 5px 9px">Préstamo de herramienta</span>
+            <span class="inp" style="padding: 5px 9px">Otro</span>
+          </div>
+          <div class="lbl">OT abierta de esta sede</div>
+          <div class="inp"><span>OT #285 · Cliente ejemplo</span><span>▾</span></div>
+          <div class="btn">Confirmar</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="twrap">
+      <table>
+        <thead>
+          <tr><th>Si escoge</th><th>Qué pide</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>OT</strong></td><td>Una OT abierta de esa sede.</td></tr>
+          <tr><td><strong>Ensamble</strong></td><td>Un ensamble abierto, o <strong>Ensamble que voy a crear</strong> y escribir cuál.</td></tr>
+          <tr><td><strong>Préstamo de herramienta</strong></td><td>Un préstamo activo, o <strong>Préstamo nuevo</strong> y escribir para quién.</td></tr>
+          <tr><td><strong>Otro</strong></td><td>Una nota corta de para qué es.</td></tr>
+          <tr><td><strong>Sin destino</strong> <span class="pill a">Solo Admin</span></td><td>Nada. Solo lo ve Maritza.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="err">
+      <div class="msg wy">
+        <span class="ic">!</span>
+        <code>No hay OT abiertas en esta sede. Si el insumo es para una OT, créala primero; si no, escoge otra opción.</code>
+      </div>
+      <div class="body">
+        <p class="do"><b>Qué hacer:</b> crear la OT primero, o escoger otra opción.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 8 ══════════════════════════ -->
+  <section class="sec" id="s8">
+    <h2><span class="b">8</span> La campanita dice quién convirtió qué y para qué</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span>
+    </p>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Toque la campanita</h3>
+        <p>
+          La de arriba, <strong>Notificaciones</strong>. Ahí sale
+          <strong>Conversiones a insumo</strong> del día.
+        </p>
+        <p>
+          Cada conversión trae la hora, quién fue, la cantidad y el producto.
+          Debajo dice <strong>Para:</strong> y la OT, el ensamble o la nota.
+        </p>
+        <p>Toque el <strong>Para:</strong> y se abre esa OT o ese ensamble.</p>
+        <p class="tip">
+          Muestra 5. Si hay más, toque "Ver las … restantes".
+        </p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Notificaciones</div>
+          <div style="margin-top: 8px; background: var(--s-bluebg); border: 1px solid var(--s-line); border-radius: 10px; padding: 10px 12px">
+            <div style="font-weight: 700">Conversiones a insumo</div>
+            <div style="font-size: 11px; color: var(--s-mut)">Hoy en CV: 2 conversiones a insumo (3 ud). Última: …</div>
+            <div style="margin-top: 8px; border-top: 1px solid var(--s-line); padding-top: 6px; font-size: 11.5px">
+              09:15 · Deyanira · 2 × Filtro de aire 1/2<br />
+              <span style="color: var(--s-pri); text-decoration: underline">Para: OT #285 · Cliente ejemplo</span>
+            </div>
+            <div style="margin-top: 6px; border-top: 1px solid var(--s-line); padding-top: 6px; font-size: 11.5px">
+              11:40 · Edna · 1 × Manguera 3/8<br />
+              <span style="color: var(--s-mut)">Para: Otro · limpieza del taller</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 9 ══════════════════════════ -->
+  <section class="sec" id="s9">
+    <h2><span class="b">9</span> Auditoría más clara</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span>
+    </p>
+    <div class="twrap">
+      <table>
+        <thead>
+          <tr><th>Qué</th><th>Antes</th><th>Ahora</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Origen</td><td>Un código del sistema</td><td><strong>OT #285 · Cliente ejemplo</strong>, <strong>Venta #2724</strong>, <strong>Compra #1229</strong></td></tr>
+          <tr><td>Valor</td><td>No salía</td><td class="money">2 uds × $ 45.000 = $ 90.000</td></tr>
+          <tr><td>Módulo</td><td><span class="pill n">Sistema</span></td><td><strong>Insumos</strong> o <strong>Garantías</strong></td></tr>
+          <tr><td>Conversión a insumo</td><td>No decía para qué</td><td>Dice <strong>Para qué</strong>, y se toca para abrirlo</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Repuestos de OT: a costo o a precio cobrado</h3>
+        <p>
+          Arriba hay un selector <strong>Repuestos de OT:</strong> con dos
+          opciones.
+        </p>
+        <p>
+          <strong>A costo</strong>: lo que le costó a la empresa.
+          <strong>A precio cobrado</strong>: lo que se le cobró al cliente.
+        </p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+            <span style="font-size: 11.5px; color: var(--s-mut)">Repuestos de OT:</span>
+            <span class="inp" style="padding: 5px 10px; background: var(--s-pri); color: #fff; border-color: var(--s-pri)">A costo</span>
+            <span class="inp" style="padding: 5px 10px">A precio cobrado</span>
+          </div>
+          <div style="margin-top: 10px; background: var(--s-card); border: 1px solid var(--s-line); border-radius: 10px; padding: 10px 12px; font-size: 11.5px">
+            <div style="display: flex; justify-content: space-between"><span style="color: var(--s-mut)">Módulo</span><b>Insumos</b></div>
+            <div style="display: flex; justify-content: space-between"><span style="color: var(--s-mut)">Para qué</span><span><u>OT #285 · Cliente ejemplo</u> <span class="tag w">estimado</span></span></div>
+            <div style="display: flex; justify-content: space-between"><span style="color: var(--s-mut)">Valor (a costo)</span><b class="money">2 uds × $ 45.000 = $ 90.000</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="callout info">
+      <span class="k">¿Qué es "estimado"?</span>
+      <p>
+        Las conversiones viejas no decían para qué eran. La app se lo calculó
+        después, por la hora en que se usó el insumo. Por eso llevan la
+        píldora <strong>estimado</strong>: es lo más probable, no lo que anotó
+        la persona.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 10 ══════════════════════════ -->
+  <section class="sec" id="s10">
+    <h2><span class="b">10</span> Equipos que el cliente no recoge</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span>
+    </p>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Alertas, Equipos sin recoger</h3>
+        <p>
+          Toque <strong>Panel Admin</strong>, luego <strong>Alertas</strong>.
+          Toque la pestaña <strong>Equipos sin recoger</strong>.
+        </p>
+        <p>
+          Salen los equipos con más de 30 días sin movimiento. Cada uno dice:
+          la OT, el cliente, por qué está ahí, dónde está el equipo, lo abonado
+          y los días.
+        </p>
+        <p>
+          Toque el teléfono para llamar. O toque <strong>Abrir OT</strong> o
+          <strong>Marcar abandonada</strong>.
+        </p>
+        <p class="tip">Con más de 45 días la alerta se pone roja.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="eb">Alertas · Equipos sin recoger</div>
+          <div style="margin-top: 8px; background: var(--s-card); border: 1px solid var(--s-line); border-left: 3px solid var(--s-bad); border-radius: 10px; padding: 10px 12px">
+            <div style="display: flex; justify-content: space-between; gap: 8px">
+              <div>
+                <b class="money">#285</b> <b>Cliente ejemplo</b>
+                <div style="font-size: 11px; color: var(--s-mut)">Compresor 2 HP</div>
+                <div style="font-size: 10.5px; color: var(--s-mut)">Listo y sin recoger · equipo en Almacén CV · abonado $ 50.000</div>
+              </div>
+              <span class="tag w" style="height: fit-content">52 días</span>
+            </div>
+            <div style="display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap">
+              <span class="inp" style="padding: 6px 9px">300 000 0000</span>
+              <span class="inp" style="padding: 6px 9px; color: var(--s-pri)">Abrir OT</span>
+              <span class="inp" style="padding: 6px 9px; color: var(--s-warn)">Marcar abandonada</span>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Datos de ejemplo.</div>
+      </div>
+    </div>
+    <div class="callout info">
+      <span class="k">Dos motivos</span>
+      <p>
+        <strong>Listo y sin recoger</strong>: el equipo está terminado.
+        <strong>No autorizado, sin recoger</strong>: el cliente no autorizó la
+        reparación y tampoco vino por el equipo.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 11 ══════════════════════════ -->
+  <section class="sec" id="s11">
+    <h2><span class="b">11</span> Marcar una OT como abandonada</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Solo Admin</span>
+    </p>
+    <p>
+      Es para el equipo que el cliente nunca vino a recoger. La OT se cierra
+      sin cobrar, pero lo que el cliente abonó se queda en la caja.
+    </p>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Marcar abandonada</h3>
+        <p>
+          En la OT, toque <strong>Marcar abandonada</strong>. También está en
+          Alertas, en Equipos sin recoger.
+        </p>
+        <p>
+          Escriba el <strong>Motivo (obligatorio)</strong>. Escoja
+          <strong>¿Dónde queda el equipo?</strong>
+        </p>
+        <p>Toque <strong>Marcar abandonada</strong>.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="font-weight: 700">Marcar OT-285 como abandonada</div>
+          <div style="margin-top: 7px; font-size: 11px; background: var(--s-warnbg); border: 1px solid #eed7a6; border-radius: 8px; padding: 8px 10px">
+            La OT queda cerrada como abandonada y ya no se puede seguir
+            trabajando ni facturar. Los abonos que dejó el cliente
+            (<b>$ 50.000</b>) siguen contando en la caja: esa plata sí entró.
+          </div>
+          <div class="lbl">Motivo (obligatorio)</div>
+          <div class="inp" style="color: var(--s-mut)"><span>El cliente no contesta hace 3 meses.</span></div>
+          <div class="lbl">¿Dónde queda el equipo?</div>
+          <div class="inp"><span>Almacén CV (donde está ahora)</span><span>▾</span></div>
+          <div class="btn" style="background: var(--s-warn)">Marcar abandonada</div>
+        </div>
+      </div>
+    </div>
+    <div class="stepr rev">
+      <div class="txt">
+        <h3><span class="n">2</span> Cómo queda la OT</h3>
+        <p>Dice <strong>Abandonada</strong>. En el saldo dice <strong>No se cobra</strong>.</p>
+        <p>
+          Ya no se trabaja ni se factura. El equipo sí se puede seguir moviendo
+          de sede.
+        </p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="display: flex; justify-content: space-between; align-items: center">
+            <b>OT #285</b><span class="tag w">Abandonada</span>
+          </div>
+          <div style="margin-top: 8px; display: flex; justify-content: space-between"><span style="color: var(--s-mut)">Saldo</span><b style="color: var(--s-mut)">No se cobra</b></div>
+          <div style="margin-top: 6px; font-size: 11px; color: var(--s-mut)">
+            OT cerrada como abandonada: el cliente no recogió el equipo.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="two">
+      <div class="card">
+        <div class="kk">Marcar abandonada</div>
+        <h3>Los abonos se quedan</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Esa plata sí entró. Sigue contando en la caja.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kk">Anular OT</div>
+        <h3>No deja si hay abonos</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Primero hay que devolverle la plata al cliente. Anular es para una OT
+          que no debió existir.
+        </p>
+      </div>
+    </div>
+    <div class="callout info">
+      <span class="k">Si lo que falta es un repuesto</span>
+      <p>
+        No la marque abandonada. En el paso de descarga de repuestos toque
+        <strong>Pausar: esperando repuesto</strong>. La OT sale en Alertas, en
+        <strong>OT esperando repuesto</strong>. Cuando llegue, toque
+        <strong>Reanudar trabajo</strong>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 12 ══════════════════════════ -->
+  <section class="sec" id="s12">
+    <h2><span class="b">12</span> Ver qué OT se pagaron un día</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora</span>
+    </p>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Pagadas el día…</h3>
+        <p>
+          En <strong>Órdenes</strong>, busque <strong>Pagadas el día…</strong>
+          y escoja el día.
+        </p>
+        <p>
+          Salen las OT que recibieron plata ese día. Con cuánto, el método y
+          quién lo registró.
+        </p>
+        <p class="tip">
+          Cuenta el día del pago, no el día de la orden. Para salir, toque
+          <strong>Quitar</strong>.
+        </p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+            <span style="font-size: 11.5px; font-weight: 600">Pagadas el día…</span>
+            <span class="inp money" style="padding: 6px 9px">14/10/2026</span>
+            <span class="inp" style="padding: 6px 9px">Hoy</span>
+            <span class="inp" style="padding: 6px 9px">Quitar</span>
+          </div>
+          <div style="margin-top: 9px; background: var(--s-card); border: 1px solid var(--s-line); border-radius: 10px; font-size: 11px">
+            <div style="display: grid; grid-template-columns: 0.8fr 0.7fr 1.1fr 0.9fr 1fr; gap: 4px; padding: 6px 9px; color: var(--s-mut); font-family: var(--mono); font-size: 9.5px; text-transform: uppercase">
+              <span>OT</span><span>Hora</span><span>Método</span><span>Registró</span><span style="text-align: right">Monto</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 0.8fr 0.7fr 1.1fr 0.9fr 1fr; gap: 4px; padding: 6px 9px; border-top: 1px solid var(--s-line)">
+              <b>#285</b><span>10:20</span><span>Efectivo</span><span>Deyanira</span><b class="money" style="text-align: right">$ 50.000</b>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 13 ══════════════════════════ -->
+  <section class="sec" id="s13">
+    <h2><span class="b">13</span> El cierre de las vendedoras, día por día</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill g">Vendedora</span>
+    </p>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Escoger un día</h3>
+        <p>
+          En <strong>Cierre</strong>, además de <strong>Hoy</strong>,
+          <strong>Esta semana</strong>, <strong>Este mes</strong> y
+          <strong>Mes pasado</strong>, ahora hay <strong>Día</strong>.
+        </p>
+        <p>
+          Escoja el día. Debajo dice <strong>Mostrando:</strong> y el día que
+          está viendo.
+        </p>
+        <p class="tip">En el celular las tablas ahora son tarjetas. Ya no se cortan.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="display: flex; gap: 5px; flex-wrap: wrap">
+            <span class="inp" style="padding: 6px 9px">Hoy</span>
+            <span class="inp" style="padding: 6px 9px">Esta semana</span>
+            <span class="inp" style="padding: 6px 9px">Este mes</span>
+            <span class="inp" style="padding: 6px 9px">Mes pasado</span>
+            <span class="inp" style="padding: 6px 9px; border-color: var(--s-pri)">Día <b class="money">14/10/2026</b></span>
+          </div>
+          <div style="margin-top: 7px; font-size: 11.5px; color: var(--s-mut)">Mostrando: <b style="color: var(--s-ink)">14 de octubre de 2026</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="stepr rev">
+      <div class="txt">
+        <h3><span class="n">2</span> Dos partes nuevas</h3>
+        <p>
+          <strong>Abonos de OT del día</strong>: la plata que dejaron los
+          clientes en las OT.
+        </p>
+        <p>
+          <strong>Retenciones del periodo</strong>: cuánto se vendió, cuánto
+          retuvieron y cuánto entró de verdad.
+        </p>
+        <p class="tip">Son para mirar. El cierre lo sella la Administración.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="lbl" style="margin-top: 0">Abonos de OT del día</div>
+          <div class="inp" style="justify-content: space-between"><span>#285 · Efectivo</span><b class="money">$ 50.000</b></div>
+          <div class="lbl">Retenciones del periodo</div>
+          <div style="background: var(--s-card); border: 1px solid var(--s-line); border-radius: 9px; padding: 8px 10px; font-size: 11.5px">
+            <div style="color: var(--s-mut)">Ventas y OT con retención (1)</div>
+            Vendido <b class="money">$ 1.190.000</b> − retenciones <b class="money">$ 25.000</b> = entró <b class="money">$ 1.165.000</b>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 14 ══════════════════════════ -->
+  <section class="sec" id="s14">
+    <h2><span class="b">14</span> Retenciones a la vista</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora: en su cierre</span>
+    </p>
+    <div class="callout good">
+      <span class="k">En una frase</span>
+      <p>
+        La retención no es plata perdida: es un adelanto de impuestos que se
+        descuenta cuando la empresa declara.
+      </p>
+    </div>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> En el detalle de la venta</h3>
+        <p>
+          Abra la venta. Debajo del <strong>Total</strong> sale cada retención
+          con su porcentaje. Y al final, <strong>Neto a recibir</strong>: lo
+          que de verdad entra.
+        </p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="font-size: 12px">
+            <div style="display: flex; justify-content: space-between"><b>Total</b><b class="money">$ 1.190.000</b></div>
+            <div style="display: flex; justify-content: space-between; color: var(--s-mut)"><span>Retefuente 2,5%</span><span class="money">− $ 25.000</span></div>
+            <div style="display: flex; justify-content: space-between; margin-top: 4px; color: var(--s-good)"><b>Neto a recibir</b><b class="money">$ 1.165.000</b></div>
+          </div>
+          <div style="margin-top: 7px; font-size: 10.5px; color: var(--s-mut)">
+            El cliente nos retuvo $ 25.000 y los consigna a la DIAN a nombre de
+            la empresa: no es plata perdida, se descuenta en la declaración. A
+            caja entra el neto.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="stepr rev">
+      <div class="txt">
+        <h3><span class="n">2</span> El informe de Retenciones</h3>
+        <p>
+          Toque <strong>Panel Admin</strong>. En <strong>Análisis y
+          reportes</strong>, toque <strong>Retenciones</strong>.
+        </p>
+        <p>
+          Escoja el mes. Salen dos lados: <strong>Nos retuvieron</strong>
+          (ventas y OT) y <strong>Retuvimos</strong> (compras). Cada uno por
+          tipo y por cliente o proveedor.
+        </p>
+        <p>Toque <strong>Descargar Excel</strong> para el contador.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="display: flex; justify-content: space-between; align-items: center">
+            <div class="h">Retenciones del mes</div>
+            <span class="inp" style="padding: 6px 9px">Descargar Excel</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; font-size: 11px">
+            <div style="background: var(--s-card); border: 1px solid var(--s-line); border-radius: 9px; padding: 8px">
+              <div class="eb">Nos retuvieron (ventas y OT)</div>
+              <div style="display: flex; justify-content: space-between"><span>Retefuente</span><span class="money">$ 25.000</span></div>
+              <div style="display: flex; justify-content: space-between"><b>Total retenido</b><b class="money">$ 25.000</b></div>
+            </div>
+            <div style="background: var(--s-card); border: 1px solid var(--s-line); border-radius: 9px; padding: 8px">
+              <div class="eb">Retuvimos (compras)</div>
+              <div style="display: flex; justify-content: space-between"><span>Retefuente</span><span class="money">$ 10.000</span></div>
+              <div style="display: flex; justify-content: space-between"><b>Total retenido</b><b class="money">$ 10.000</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="callout info">
+      <span class="k">OT con retención todavía sin entregar · no suman</span>
+      <p>
+        El informe las lista aparte. Su retención cuenta en el mes en que se
+        entregue la OT. Mientras tanto se ven, pero no suman.
+      </p>
+    </div>
+    <p>
+      En los cierres, Admin y vendedoras ven la línea
+      <strong>Vendido $ X − retenciones $ Y = entró $ Z</strong>. Es para
+      mirar: los totales del cierre no cambian.
+    </p>
+  </section>
+
+  <!-- ══════════════════════════ 15 ══════════════════════════ -->
+  <section class="sec" id="s15">
+    <h2><span class="b">15</span> La cotización impresa trae las notas</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora</span>
+    </p>
+    <div class="two">
+      <div class="card">
+        <div class="kk">Antes</div>
+        <h3>Las notas no salían</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Lo escrito en Notas adicionales se quedaba en la app.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kk">Ahora</div>
+        <h3>Salen en el PDF</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          El PDF imprime <strong>Notas adicionales</strong> y el contacto con su
+          cargo.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════════════════ PARTE 2 ═════════════════════ -->
+  <div class="card parte" style="margin-top: clamp(30px, 5vw, 52px); border-left: 3px solid var(--accent)">
+    <div class="kk">Parte 2</div>
+    <h3>Lo que se arregló</h3>
+    <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+      Cosas que ya existían y no andaban bien. Una línea por cada una.
+    </p>
+  </div>
+
+  <section class="sec" id="s16">
+    <h2><span class="b">16</span> Arreglos de octubre</h2>
+    <div class="twrap">
+      <table>
+        <thead>
+          <tr><th>Dónde</th><th>Antes</th><th>Ahora</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Ficha del producto</strong>, en el celular</td><td>La tabla se cortaba. El botón de mínimo y máximo no se veía.</td><td>Una tarjeta por sede, con <strong>Configurar mín/máx</strong> a la vista.</td></tr>
+          <tr><td><strong>Mínimos</strong>, en el celular</td><td>El texto se cortaba.</td><td>Con mínimo 0 dice <strong>No alerta en esta sede</strong>.</td></tr>
+          <tr><td><strong>Detalle de caja menor</strong></td><td>Parecía mercancía. Ofrecía Devolver por garantía.</td><td>Dice <strong>Pagado</strong> o <strong>Gasto pagado</strong>. Trae <strong>Imprimir comprobante</strong>.</td></tr>
+          <tr><td><strong>Caja menor y ventana de pago</strong></td><td>Botones y casillas pequeños.</td><td>De 48 px, buenos para el dedo. El monto se ve con puntos: $ 647.185.</td></tr>
+          <tr><td><strong>Ventana de pago</strong>, en el celular</td><td>No cabía.</td><td>Cabe completa.</td></tr>
+          <tr><td><strong>Venta con retención</strong></td><td>El saldo a crédito salía más alto que en Cuentas por cobrar.</td><td>Los dos dicen lo mismo.</td></tr>
+          <tr><td><strong>OT anulada</strong></td><td>Ofrecía cobrar y convertir a venta.</td><td>Dice que está anulada. No ofrece cobrar.</td></tr>
+          <tr><td><strong>Historial de compras</strong></td><td>La caja menor no decía si se pagó.</td><td>Dice <span class="pill g">Pagado</span> o <span class="pill w">Por pagar</span>.</td></tr>
+          <tr><td><strong>Alertas de OT</strong></td><td>Siempre daban 0.</td><td>Ahora avisan. Es la pestaña <strong>Equipos sin recoger</strong>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout good">
+      <span class="k">Lo que limpiamos</span>
+      <p>
+        Se cancelaron OT de prueba. Seis equipos quedaron marcados como
+        abandonados, con lo que dijo cada sede. Y se anuló una caja menor de
+        $ 100.000 que estaba registrada de más.
+      </p>
+    </div>
+  </section>
+
+  <!-- ═════════════════════ PARTE 3 ═════════════════════ -->
+  <div class="card parte" style="margin-top: clamp(30px, 5vw, 52px); border-left: 3px solid var(--accent)">
+    <div class="kk">Parte 3</div>
+    <h3>Lo que ya se podía hacer</h3>
+    <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+      Un repaso corto de la guía "Lo que ya puedes hacer". Donde algo cambió,
+      dice <span class="pill a">Cambió</span>.
+    </p>
+  </div>
+
+  <!-- ══════════════════════════ 17 ══════════════════════════ -->
+  <section class="sec" id="s17">
+    <h2><span class="b">17</span> Que un producto no alarme en una sede</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora</span><span class="pill w">Bodega</span><span class="pill a">Cambió</span>
+    </p>
+    <p>
+      Si una sede no maneja un producto, póngale <strong>mínimo 0</strong> en
+      esa sede. Ya no sale en Alertas, Dashboard, Reorden ni en Reponer.
+    </p>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Dos caminos</h3>
+        <p>
+          <strong>Inventario</strong>, botón <strong>Mínimos</strong>. Busque el
+          producto, ponga 0 en <strong>Mínimo</strong> y toque
+          <strong>Guardar cambios</strong>.
+        </p>
+        <p>
+          <strong>Nuevo:</strong> desde la ficha del producto, también en el
+          celular, con <strong>Configurar mín/máx</strong>.
+        </p>
+        <p class="tip">Vendedora y Bodega, solo en su sede. El Admin, en todas.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="background: var(--s-card); border: 1px solid var(--s-line); border-radius: 10px; padding: 10px 12px">
+            <div style="display: flex; justify-content: space-between"><b>Almacén L3</b><span class="tag a">0 uds</span></div>
+            <div style="font-size: 11px; color: var(--s-mut)">No alerta en esta sede</div>
+            <div class="inp" style="justify-content: center; margin-top: 8px">Configurar mín/máx</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 18 ══════════════════════════ -->
+  <section class="sec" id="s18">
+    <h2><span class="b">18</span> Darle stock a un producto nuevo</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Solo Admin abre y aplica el conteo</span>
+    </p>
+    <p>
+      El stock no se escribe a mano. Entra por una <strong>compra</strong>, un
+      <strong>traslado</strong> o un <strong>conteo</strong>. Si el producto
+      ya está en la sede y la app no lo sabe, se cuenta.
+    </p>
+    <div class="twrap">
+      <table>
+        <thead>
+          <tr><th>Paso</th><th>Qué tocar</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td><strong>Panel Admin</strong>, <strong>Conteo cíclico</strong>, <strong>Nuevo conteo</strong>.</td></tr>
+          <tr><td>2</td><td><strong>Sede a contar</strong>, el producto, y en <strong>Stock físico contado</strong> lo que contó. Toque <strong>Registrar conteo</strong>.</td></tr>
+          <tr><td>3</td><td>En la lista, <strong>Aplicar</strong> y luego <strong>Aplicar ajuste</strong>. Ahí entra el stock.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lead-in">
+      Bodega y vendedoras: cuenten y pásenle a Maritza la referencia, la sede y
+      la cantidad.
+    </p>
+  </section>
+
+  <!-- ══════════════════════════ 19 ══════════════════════════ -->
+  <section class="sec" id="s19">
+    <h2><span class="b">19</span> Pagarle por adelantado a un proveedor</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora</span><span class="pill w">Bodega</span><span class="pill a">Cambió</span>
+    </p>
+    <div class="two">
+      <div class="card">
+        <div class="kk">Ahora, lo más fácil</div>
+        <h3>El anticipo va en la compra</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Registre la compra a <strong>Crédito</strong>, sin recibirla. En
+          <strong>¿Le pagaste algo hoy?</strong> anote el anticipo. Es la
+          sección 1.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kk">El resto</div>
+        <h3>Por Cuentas por pagar</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Lo que queda se paga ahí con <strong>Pagar</strong>. Lo hace el Admin,
+          o Bodega si es de BODEGA.
+        </p>
+      </div>
+    </div>
+    <p>
+      Cuando llegue la mercancía, abra la compra y toque
+      <strong>Contar y recibir</strong> (la vendedora ve
+      <strong>Confirmar recepción</strong>). Ahora también se llega con
+      <strong>Recibir</strong> desde Cuentas por pagar.
+    </p>
+  </section>
+
+  <!-- ══════════════════════════ 20 ══════════════════════════ -->
+  <section class="sec" id="s20">
+    <h2><span class="b">20</span> Caja menor o compra: cuál usar</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora</span><span class="pill w">Bodega</span>
+    </p>
+    <p>Una sola pregunta: <strong>¿es mercancía?</strong></p>
+    <div class="two">
+      <div class="card">
+        <div class="kk">No es mercancía</div>
+        <h3>Caja menor</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Un flete, la nómina, un arreglo. No suma al inventario. Ahora también
+          puede quedar a Crédito.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kk">Sí es mercancía</div>
+        <h3>Compra normal</h3>
+        <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+          Lo que entra a vender o a usar en el taller. Suma al inventario
+          cuando se recibe.
+        </p>
+      </div>
+    </div>
+    <div class="callout warn">
+      <span class="k">Abono a un proveedor</span>
+      <p>
+        Si en caja menor le abona a un proveedor, use la categoría
+        <strong>Abono a proveedor</strong>, no <strong>Otros gastos</strong>.
+        Ese pago no es un gasto.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 21 ══════════════════════════ -->
+  <section class="sec" id="s21">
+    <h2><span class="b">21</span> Pagar algo en dos formas</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora</span><span class="pill w">Bodega</span><span class="pill a">Cambió</span>
+    </p>
+    <div class="twrap">
+      <table>
+        <thead>
+          <tr><th>Qué se paga</th><th>Cómo se anota</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Una compra</strong></td><td>A Crédito, con un pago por cada forma en <strong>¿Le pagaste algo hoy?</strong> Es la sección 1. <span class="pill a">Cambió</span></td></tr>
+          <tr><td><strong>Un gasto de caja menor</strong></td><td>Igual que antes: un registro por cada forma, con el mismo concepto. Ejemplo: la nómina pagada por Bancolombia, Occidente y Nequi son tres registros. Así el cierre sabe cuánto salió de cada cuenta.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 22 ══════════════════════════ -->
+  <section class="sec" id="s22">
+    <h2><span class="b">22</span> Deshacer un cambio de producto</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Solo Admin</span>
+    </p>
+    <div class="stepr">
+      <div class="txt">
+        <h3><span class="n">1</span> Desde la venta</h3>
+        <p>
+          Abra la devolución del cambio. Toque el enlace
+          <strong>la venta #…</strong> del aviso.
+        </p>
+        <p>
+          En la venta toque <strong>Anular cambio</strong> y luego
+          <strong>Sí, anular el cambio</strong>. Las dos partes se deshacen
+          juntas.
+        </p>
+        <p class="tip">Vendedora: pásele a Maritza el número de la devolución.</p>
+      </div>
+      <div>
+        <div class="shot">
+          <div style="font-weight: 700">¿Anular el cambio completo? Esto pasa:</div>
+          <div style="font-size: 11px; color: var(--s-mut); margin-top: 5px">
+            · Vuelven al stock lo que se llevó el cliente.<br />· Sale del stock lo que había devuelto.<br />· Quedan anuladas la venta y la devolución.
+          </div>
+          <div class="btn" style="background: var(--s-bad)">Sí, anular el cambio</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 23 ══════════════════════════ -->
+  <section class="sec" id="s23">
+    <h2><span class="b">23</span> Anular una devolución normal</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Solo Admin</span>
+    </p>
+    <p>
+      En <strong>Devoluciones</strong>, abra la devolución y toque
+      <strong>Anular devolución</strong>. Confirme con <strong>Sí, anular</strong>.
+      Saca del inventario lo que había entrado y revierte el reembolso.
+    </p>
+    <p class="lead-in">
+      Si la devolución es parte de un cambio, el botón no sale: se deshace
+      desde la venta (sección 22).
+    </p>
+  </section>
+
+  <!-- ══════════════════════════ 24 ══════════════════════════ -->
+  <section class="sec" id="s24">
+    <h2><span class="b">24</span> El descuento en compras</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora</span><span class="pill w">Bodega</span>
+    </p>
+    <p>
+      El descuento se resta <strong>antes</strong> del IVA. Se escribe en pesos
+      en <strong>Descuento $</strong>, dentro de Pago de la compra. Ejemplo
+      real, la compra #1229. Si el proveedor da 10%, saque la cuenta: el 10%
+      de $ 287.500 es $ 28.750.
+    </p>
+    <div class="twrap">
+      <table>
+        <tbody>
+          <tr><td>Subtotal</td><td class="money" style="text-align: right">$ 287.500</td></tr>
+          <tr><td>Menos descuento ($ 28.750)</td><td class="money" style="text-align: right">$ 258.750</td></tr>
+          <tr><td>IVA 19% de $ 258.750</td><td class="money" style="text-align: right">$ 49.163</td></tr>
+          <tr><td><strong>Total</strong></td><td class="money" style="text-align: right; color: var(--good)"><strong>$ 307.913</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════ 25 ══════════════════════════ -->
+  <section class="sec" id="s25">
+    <h2><span class="b">25</span> Las retenciones, sin enredo</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Admin</span><span class="pill g">Vendedora</span>
+    </p>
+    <div class="two">
+      <div class="card">
+        <div class="kk">La factura dice</div>
+        <p style="font-size: 24px; font-weight: 750; margin: 0.2em 0" class="money">$ 1.190.000</p>
+        <p style="color: var(--muted); font-size: 14px; margin: 0">$ 1.000.000 de mercancía más $ 190.000 de IVA.</p>
+      </div>
+      <div class="card">
+        <div class="kk">Al banco entra</div>
+        <p style="font-size: 24px; font-weight: 750; margin: 0.2em 0; color: var(--warn)" class="money">$ 1.165.000</p>
+        <p style="color: var(--muted); font-size: 14px; margin: 0">El cliente retuvo $ 25.000 y se los pagó a la DIAN por la empresa.</p>
+      </div>
+    </div>
+    <p>
+      Se pone en la franja <strong>Retenciones</strong> de Nueva venta, la OT o
+      al convertir una cotización: "¿El cliente retiene? Tocar para aplicar".
+      En compras dice "¿Le retenemos al proveedor? Tocar para aplicar".
+      Ahora también se ve en el detalle de la venta y en el informe (sección
+      14).
+    </p>
+  </section>
+
+  <!-- ══════════════════════════ 26 ══════════════════════════ -->
+  <section class="sec" id="s26">
+    <h2><span class="b">26</span> Corregir una venta registrada dos veces</h2>
+    <p style="display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px">
+      <span class="pill a">Solo Admin</span>
+    </p>
+    <p>
+      En <strong>Ventas</strong>, abra la copia y toque
+      <strong>Anular venta</strong>. Escriba el motivo y toque
+      <strong>Sí, anular</strong>. El producto vuelve al inventario y la plata
+      sale del cierre de ese día.
+    </p>
+    <p class="lead-in">
+      Vendedora: pásele a Maritza el número de la venta repetida. Si la venta
+      salió de un cambio, el botón es <strong>Anular cambio</strong>.
+    </p>
+  </section>
+
+  <div class="foot">
+    <span>Compresores del Valle S.A.S. · Guía interna</span>
+    <span>Novedades de octubre · Octubre 2026</span>
+  </div>
+</div>
+</body>
+</html>
