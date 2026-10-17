@@ -582,11 +582,13 @@ export default function Cuentas() {
                       <td className="px-3 py-3">
                         <EstadoBadge est={est} />
                       </td>
-                      <td className="px-3 py-3 text-right">
+                      <td className="whitespace-nowrap px-3 py-2 text-right">
+                        {/* 48px de alto: se usan con guantes, también en
+                            escritorio (antes h-9 = 36px). */}
                         {!esCobrar && sinRecibir.has(id) && (
                           <button
                             onClick={() => navigate(`/ops/compras/${id}`)}
-                            className="mr-1.5 inline-flex h-9 items-center gap-1 rounded-md border px-3 text-[12px] font-semibold cursor-pointer transition-colors"
+                            className="mr-1.5 inline-flex h-12 items-center gap-1 rounded-md border px-3.5 text-[12.5px] font-semibold cursor-pointer transition-colors"
                             style={{
                               borderColor: "hsl(var(--warning) / 0.5)",
                               color: "hsl(var(--warning))",
@@ -608,11 +610,18 @@ export default function Cuentas() {
                         )}
                         <button
                           onClick={() => abrirModal(r)}
-                          className="inline-flex h-9 items-center gap-1 rounded-md border px-3 text-[12px] font-semibold cursor-pointer transition-colors"
+                          className="inline-flex h-12 items-center gap-1 rounded-md border px-3.5 text-[12.5px] font-semibold cursor-pointer transition-colors"
                           style={{
                             borderColor: "hsl(var(--primary) / 0.4)",
                             color: "hsl(var(--primary))",
                           }}
+                          onMouseEnter={(e) =>
+                            (e.currentTarget.style.backgroundColor =
+                              "hsl(var(--primary) / 0.08)")
+                          }
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.backgroundColor = "")
+                          }
                         >
                           {esCobrar ? "Cobrar" : "Pagar"}
                         </button>
