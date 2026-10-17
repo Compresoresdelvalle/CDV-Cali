@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Check,
   Info,
+  MapPin,
   Search,
   ScanLine,
   Trash2,
@@ -14,6 +15,8 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch } from "../../lib/utils";
 import { carritoDesdeReorden, sedesDeSugerencias } from "../../lib/compras-ui";
+import { SEDES } from "../../lib/constants";
+import { SEDE_LABELS, sedeLabel } from "../../lib/traspasos-ui";
 import { avisarOk, avisarError } from "../../lib/notify";
 import { useDebouncedCallback } from "../../hooks/useDebouncedCallback";
 import UbicacionChip from "../../components/ui/UbicacionChip";
@@ -36,6 +39,15 @@ export default function CompraNueva() {
   // Al Vendedor nunca se le muestra/precarga el costo histórico del producto:
   // lo digita manualmente (arranca en 0).
   const esVendedor = perfil?.rol === "Vendedor";
+  // Solo el Admin compra para cualquier sede (el servidor lo permite: las RPC
+  // rechazan otra sede a quien no es Admin). Mismo patrón que Nueva Venta.
+  // `null` = todavía no ha elegido → la sede de su perfil (que puede llegar
+  // tarde, por eso no se fija en el useState).
+  const esAdmin = perfil?.rol === "Admin";
+  const [sedeElegida, setSedeElegida] = useState(null);
+  const sedeCompra = esAdmin
+    ? (sedeElegida ?? perfil?.sede_id)
+    : perfil?.sede_id;
 
   const [modo, setModo] = useState("normal"); // #31: 'normal' | 'caja_menor'
   const [proveedor, setProveedor] = useState("");
@@ -176,11 +188,11 @@ export default function CompraNueva() {
         // Ubicación física en la sede que recibe la compra (solo referencia
         // visual; no afecta la lógica de recepción).
         let ubicMap = {};
-        if (data?.length && perfil?.sede_id) {
+        if (data?.length && sedeCompra) {
           const { data: inv } = await supabase
             .from("inventario")
             .select("producto_id, ubicacion_id")
-            .eq("sede_id", perfil.sede_id)
+            .eq("sede_id", sedeCompra)
             .in(
               "producto_id",
               data.map((p) => p.id),
@@ -202,7 +214,7 @@ export default function CompraNueva() {
         if (myReq === busquedaReqRef.current) setBuscando(false);
       }
     },
-    [perfil?.sede_id, esVendedor],
+    [sedeCompra, esVendedor],
   );
 
   const buscarDebounced = useDebouncedCallback(buscarProductos, 400);
@@ -327,6 +339,21 @@ export default function CompraNueva() {
     setCarrito((prev) => prev.filter((i) => i.producto_id !== productoId));
   };
 
+  // Admin: cambiar la sede de la compra. Igual que en Nueva Venta, si ya hay
+  // productos se confirma antes de vaciarlos (la compra es de una sola sede).
+  const onChangeSede = (nuevaSede) => {
+    if (carrito.length > 0) {
+      const ok = window.confirm(
+        `Cambiar de sede vaciará los ${carrito.length} producto(s) que ya agregaste a esta compra. ¿Continuar?`,
+      );
+      if (!ok) return; // el <select> vuelve solo a la sede anterior (controlado)
+    }
+    setSedeElegida(nuevaSede);
+    setBusqueda("");
+    setResultados([]);
+    setCarrito([]);
+  };
+
   const subtotal = carrito.reduce(
     (s, i) => s + i.cantidad * i.costo_unitario,
     0,
@@ -398,7 +425,7 @@ export default function CompraNueva() {
       const { data: creada, error: rpcErr } = await supabase.rpc(
         "fn_registrar_compra",
         {
-          p_sede_id: perfil?.sede_id,
+          p_sede_id: sedeCompra,
           p_proveedor: proveedor.trim(),
           p_factura_proveedor: facturaProveedor.trim() || null,
           p_observaciones: observaciones.trim() || null,
@@ -478,7 +505,7 @@ export default function CompraNueva() {
     setGuardando(true);
     try {
       const { error: rpcErr } = await supabase.rpc("fn_registrar_caja_menor", {
-        p_sede_id: perfil?.sede_id,
+        p_sede_id: sedeCompra,
         p_concepto: concepto.trim(),
         p_monto: m,
         p_proveedor: proveedor.trim() || null,
@@ -523,7 +550,7 @@ export default function CompraNueva() {
           <div className="mt-1 text-[13px]" style={{ color: "var(--n-500)" }}>
             Sede destino{" "}
             <b className="font-medium" style={{ color: "var(--n-700)" }}>
-              {perfil?.sede_id ?? "—"}
+              {sedeCompra ?? "—"}
             </b>{" "}
             · IVA {ivaPct}%{ivaPct === 0 ? " (exento)" : ""}
           </div>
@@ -537,12 +564,57 @@ export default function CompraNueva() {
         </button>
       </div>
 
+      {/* ── Sede de la compra (solo Admin) ──────────────────────────────
+          Vendedor y Bodeguero compran siempre para su sede: no ven esto. */}
+      {esAdmin && (
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div
+            className="inline-flex h-12 items-center gap-2 rounded-[10px] border px-3"
+            style={{
+              borderColor: "var(--n-200)",
+              backgroundColor: "var(--n-0)",
+            }}
+          >
+            <MapPin
+              className="h-4 w-4 shrink-0"
+              strokeWidth={1.6}
+              style={{ color: "var(--n-500)" }}
+            />
+            <label
+              htmlFor="sede-compra"
+              className="text-[12px]"
+              style={{ color: "var(--n-500)" }}
+            >
+              Sede
+            </label>
+            <select
+              id="sede-compra"
+              value={sedeCompra ?? ""}
+              onChange={(e) => onChangeSede(e.target.value)}
+              className="h-full cursor-pointer border-none bg-transparent text-[13px] font-medium outline-none"
+              style={{ color: "var(--n-950)" }}
+            >
+              {Object.values(SEDES).map((sd) => (
+                <option key={sd} value={sd}>
+                  {SEDE_LABELS[sd] ?? sd}
+                </option>
+              ))}
+            </select>
+          </div>
+          <span className="text-[11.5px]" style={{ color: "var(--n-500)" }}>
+            {modo === "caja_menor"
+              ? `El gasto se registrará en ${sedeLabel(sedeCompra)}`
+              : `La compra se registrará en ${sedeLabel(sedeCompra)}`}
+          </span>
+        </div>
+      )}
+
       {/* ── Aviso de sede al venir desde Reorden ─────────────────────────
           La compra se registra SIEMPRE en la sede del usuario (fn_registrar_compra
           recibe una sola sede). Si las sugerencias venían de otras sedes, la
           mercancía va a quedar aquí y hay que traspasarla: mejor decirlo ahora
           que dejar que la busquen donde no está. */}
-      {sedesOrigen.some((s) => s !== perfil?.sede_id) && (
+      {sedesOrigen.some((s) => s !== sedeCompra) && (
         <div
           className="flex items-start gap-2.5 rounded-[10px] border px-4 py-3"
           style={{
@@ -558,10 +630,12 @@ export default function CompraNueva() {
           />
           <p className="m-0 text-sm" style={{ color: "var(--info-700)" }}>
             Esta compra se registrará en{" "}
-            <b className="font-semibold">{perfil?.sede_id ?? "—"}</b>. Las
+            <b className="font-semibold">{sedeCompra ?? "—"}</b>. Las
             sugerencias venían de{" "}
             <b className="font-semibold">{sedesOrigen.join(", ")}</b>: cuando
             llegue la mercancía habrá que traspasarla.
+            {esAdmin &&
+              " Si debe quedar allá, cambia la sede arriba (cambiarla vacía la lista de productos)."}
           </p>
         </div>
       )}
