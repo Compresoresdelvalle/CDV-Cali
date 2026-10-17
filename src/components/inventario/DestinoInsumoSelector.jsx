@@ -58,13 +58,14 @@ export default function DestinoInsumoSelector({
       try {
         let q;
         if (tipo === "orden") {
-          // 'abandonada' se filtra en el navegador: el filtro por enum falla
-          // en el servidor si ese estado todavía no existe en la BD.
+          // Las cerradas (entregada, cancelada, abandonada) se filtran en el
+          // servidor: el enum ya tiene 'abandonada', y así el límite de 150
+          // no se gasta en OTs que no se pueden escoger.
           q = supabase
             .from("ordenes_servicio")
             .select("id, numero, cliente_nombre, equipo_descripcion, estado")
             .eq("sede_id", sedeId)
-            .not("estado", "in", "(entregada,cancelada)")
+            .not("estado", "in", `(${OT_ESTADOS_CERRADOS.join(",")})`)
             .order("numero", { ascending: false })
             .limit(150);
         } else if (tipo === "ensamble") {
@@ -88,10 +89,7 @@ export default function DestinoInsumoSelector({
         const { data, error } = await q;
         if (error) throw error;
         if (cancelado) return;
-        const filas = (data ?? []).filter(
-          (r) => tipo !== "orden" || !OT_ESTADOS_CERRADOS.includes(r.estado),
-        );
-        setDocs({ tipo, filas });
+        setDocs({ tipo, filas: data ?? [] });
       } catch (err) {
         if (!cancelado) {
           setDocs({ tipo, filas: [] });

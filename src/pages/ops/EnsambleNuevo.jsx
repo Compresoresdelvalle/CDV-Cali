@@ -15,6 +15,11 @@ import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
 import { formatCOP, sanitizeSearch, safeError } from "../../lib/utils";
 import { avisarOk, avisarError, avisarInfo } from "../../lib/notify";
+import {
+  agregarDestinoConversion,
+  idsDestinoConversion,
+  quitarDestinosProducto,
+} from "../../lib/insumo-destino";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import QRScanner from "../../components/forms/QRScanner";
 
@@ -77,8 +82,10 @@ export default function EnsambleNuevo() {
   const [convSaving, setConvSaving] = useState(false);
   const [convError, setConvError] = useState("");
   // Bloque 2: el ensamble todavía no existe cuando se convierte. Se guardan los
-  // destino_id que devuelve el RPC para amarrarlos al ensamble al crearlo.
-  const convDestinoIdsRef = useRef([]);
+  // destino_id que devuelve el RPC, por producto ({ [productoId]: [ids] }),
+  // para amarrarlos al ensamble al crearlo. Quitar un componente suelta los
+  // suyos; cambiar el producto a ensamblar los suelta todos.
+  const convDestinoIdsRef = useRef({});
 
   const [observaciones, setObservaciones] = useState("");
   const [creando, setCreando] = useState(false);
@@ -225,8 +232,13 @@ export default function EnsambleNuevo() {
       cs.map((c) => (c.id === id ? { ...c, cantidad: n } : c)),
     );
   };
-  const quitarComponente = (id) =>
+  const quitarComponente = (id) => {
+    convDestinoIdsRef.current = quitarDestinosProducto(
+      convDestinoIdsRef.current,
+      id,
+    );
     setComponentes((cs) => cs.filter((c) => c.id !== id));
+  };
 
   const abrirConversion = (c) => {
     const deficit = Math.max(1, c.cantidad - (c.insumo ?? 0));
@@ -259,12 +271,11 @@ export default function EnsambleNuevo() {
         },
       });
       if (error) throw error;
-      if (data?.destino_id != null) {
-        convDestinoIdsRef.current = [
-          ...convDestinoIdsRef.current,
-          data.destino_id,
-        ];
-      }
+      convDestinoIdsRef.current = agregarDestinoConversion(
+        convDestinoIdsRef.current,
+        convComp.id,
+        data?.destino_id,
+      );
       setComponentes((cs) =>
         cs.map((c) =>
           c.id === convComp.id
@@ -307,6 +318,9 @@ export default function EnsambleNuevo() {
   // receta era del producto anterior y dejarla puesta induce a ensamblar el
   // producto nuevo con los componentes del viejo.
   const cambiarProducto = () => {
+    // Las conversiones hechas eran para la receta del producto anterior: no
+    // se amarran al ensamble del nuevo (siguen con su nota de "ensamble nuevo").
+    convDestinoIdsRef.current = {};
     setProductoSel(null);
     setComponentes([]);
     setCompSearch("");
@@ -391,7 +405,7 @@ export default function EnsambleNuevo() {
       // Amarra al ensamble recién creado las conversiones hechas en esta
       // pantalla. Si falla no se bloquea nada: el ensamble ya existe y la
       // conversión conserva su nota ("Ensamble nuevo · producto").
-      const destinoIds = convDestinoIdsRef.current;
+      const destinoIds = idsDestinoConversion(convDestinoIdsRef.current);
       if (destinoIds.length > 0) {
         try {
           const { error: vincErr } = await supabase.rpc(
@@ -399,7 +413,7 @@ export default function EnsambleNuevo() {
             { p_ensamble_id: nuevoId, p_destino_ids: destinoIds },
           );
           if (vincErr) throw vincErr;
-          convDestinoIdsRef.current = [];
+          convDestinoIdsRef.current = {};
         } catch (vincErr) {
           console.warn(
             "No se pudieron amarrar las conversiones al ensamble:",

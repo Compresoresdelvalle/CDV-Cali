@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  agregarDestinoConversion,
+  avisoDetalleRecortado,
+  idsDestinoConversion,
+  quitarDestinosProducto,
+  puedeConvertirAInsumo,
   etiquetaEnsamble,
   etiquetaOT,
   etiquetaPrestamo,
@@ -142,5 +147,70 @@ describe("textoConversionDestino", () => {
       "Otro · Muestra",
     );
     expect(textoConversionDestino(null)).toBe("Sin destino");
+  });
+});
+
+describe("destinos de conversión por producto (Nuevo ensamble)", () => {
+  it("se guardan por producto y se juntan para vincular", () => {
+    let m = {};
+    m = agregarDestinoConversion(m, "p1", 10);
+    m = agregarDestinoConversion(m, "p1", 11);
+    m = agregarDestinoConversion(m, "p2", 20);
+    expect(idsDestinoConversion(m).sort()).toEqual([10, 11, 20]);
+  });
+
+  it("quitar un componente suelta solo sus destinos", () => {
+    const m = quitarDestinosProducto({ p1: [10, 11], p2: [20] }, "p1");
+    expect(idsDestinoConversion(m)).toEqual([20]);
+  });
+
+  it("sin destino_id no agrega nada y no muta el original", () => {
+    const orig = { p1: [10] };
+    const m = agregarDestinoConversion(orig, "p1", null);
+    expect(m).toEqual({ p1: [10] });
+    expect(m).not.toBe(orig);
+    expect(idsDestinoConversion(null)).toEqual([]);
+  });
+});
+
+describe("puedeConvertirAInsumo (misma regla que fn_convertir_a_insumo)", () => {
+  it("Admin y Técnico en cualquier sede", () => {
+    expect(
+      puedeConvertirAInsumo({ rol: "Admin", sede_id: "BODEGA" }, "CV"),
+    ).toBe(true);
+    expect(
+      puedeConvertirAInsumo({ rol: "Tecnico", sede_id: "BODEGA" }, "L3"),
+    ).toBe(true);
+  });
+
+  it("Vendedor y Bodeguero solo en su sede", () => {
+    const vend = { rol: "Vendedor", sede_id: "CV" };
+    expect(puedeConvertirAInsumo(vend, "CV")).toBe(true);
+    expect(puedeConvertirAInsumo(vend, "BODEGA")).toBe(false);
+    const bod = { rol: "Bodeguero", sede_id: "BODEGA" };
+    expect(puedeConvertirAInsumo(bod, "BODEGA")).toBe(true);
+    expect(puedeConvertirAInsumo(bod, "CHV")).toBe(false);
+  });
+
+  it("otro rol o sin perfil: no", () => {
+    expect(puedeConvertirAInsumo({ rol: "Otro", sede_id: "CV" }, "CV")).toBe(
+      false,
+    );
+    expect(puedeConvertirAInsumo(null, "CV")).toBe(false);
+  });
+});
+
+describe("avisoDetalleRecortado (campana de conversiones)", () => {
+  const det = (k) =>
+    Array.from({ length: k }, (_, i) => ({ producto: `p${i}` }));
+  it("si hubo más eventos que detalle guardado, lo dice", () => {
+    expect(avisoDetalleRecortado({ eventos: 57, detalle: det(40) })).toBe(
+      "Mostrando las últimas 40 de 57",
+    );
+  });
+  it("si están todos, no hay aviso", () => {
+    expect(avisoDetalleRecortado({ eventos: 12, detalle: det(12) })).toBe("");
+    expect(avisoDetalleRecortado({ detalle: det(3) })).toBe("");
+    expect(avisoDetalleRecortado(null)).toBe("");
   });
 });

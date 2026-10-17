@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
 import { formatDate } from "../../lib/utils";
-import { lineasDetalleConversion } from "../../lib/insumo-destino";
+import {
+  avisoDetalleRecortado,
+  lineasDetalleConversion,
+} from "../../lib/insumo-destino";
 
 // Líneas de detalle que se ven de entrada en una conversión a insumo.
 const DETALLE_VISIBLE = 5;
@@ -212,6 +215,9 @@ export default function NotificacionesBell({
                     : [];
                 if (lineas.length > 0) {
                   const abierto = expandidas.has(n.id);
+                  // El detalle guarda solo las últimas 40: si hubo más, se
+                  // dice, para que "Ver las N restantes" no parezca el total.
+                  const recortado = avisoDetalleRecortado(n.data);
                   const visibles = abierto
                     ? lineas
                     : lineas.slice(0, DETALLE_VISIBLE);
@@ -268,6 +274,15 @@ export default function NotificacionesBell({
                           </li>
                         ))}
                       </ul>
+                      {recortado &&
+                        (abierto || lineas.length <= DETALLE_VISIBLE) && (
+                          <p
+                            className="px-3 pb-2 text-[11px]"
+                            style={{ color: "var(--n-500)" }}
+                          >
+                            {recortado}.
+                          </p>
+                        )}
                       {lineas.length > DETALLE_VISIBLE && (
                         <button
                           onClick={() => alternarExpandida(n.id)}
@@ -276,7 +291,9 @@ export default function NotificacionesBell({
                         >
                           {abierto
                             ? "Ver menos"
-                            : `Ver las ${lineas.length - DETALLE_VISIBLE} restantes`}
+                            : recortado
+                              ? `Ver más (${recortado.toLowerCase()})`
+                              : `Ver las ${lineas.length - DETALLE_VISIBLE} restantes`}
                         </button>
                       )}
                     </div>

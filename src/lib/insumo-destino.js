@@ -4,7 +4,7 @@
  *
  * Funciones puras (sin Supabase) para la pantalla que pide el destino, la
  * campana y Auditoría. El contrato del servidor está en
- * `supabase/migrations/20261017200000_conversion_destino.sql`
+ * `supabase/migrations/20261017190047_conversion_destino.sql`
  * (`fn_convertir_a_insumo(..., p_destino jsonb)`).
  */
 
@@ -171,4 +171,57 @@ export function lineasDetalleConversion(data) {
     destino: d?.destino || "Sin destino",
     ruta: rutaDestino(d?.destino_tipo, d?.destino_id),
   }));
+}
+
+/**
+ * La notificación guarda solo las 40 conversiones más recientes en `detalle`,
+ * pero `eventos` cuenta todas las del día. Si hay más eventos que detalle, se
+ * dice cuántas se están mostrando de cuántas; si no, "" (no hace falta aviso).
+ */
+export function avisoDetalleRecortado(data) {
+  const n = Array.isArray(data?.detalle) ? data.detalle.length : 0;
+  const total = Number(data?.eventos) || 0;
+  if (n === 0 || total <= n) return "";
+  return `Mostrando las últimas ${n} de ${total}`;
+}
+
+/* ── Conversiones hechas antes de que exista el ensamble ───────────────────
+ * En "Nuevo ensamble" se convierte a insumo antes de crear el ensamble; los
+ * `destino_id` que devuelve el RPC se guardan POR PRODUCTO para amarrarlos al
+ * ensamble al crearlo. Así, si se quita un componente, se sueltan solo los
+ * suyos, y si se cambia el producto a ensamblar se sueltan todos (la receta
+ * era del producto anterior). Las tres funciones devuelven un objeto nuevo.
+ */
+
+/** Agrega el destino de una conversión del componente `productoId`. */
+export function agregarDestinoConversion(mapa, productoId, destinoId) {
+  if (destinoId == null || productoId == null) return { ...(mapa ?? {}) };
+  const previos = mapa?.[productoId] ?? [];
+  return { ...(mapa ?? {}), [productoId]: [...previos, destinoId] };
+}
+
+/** Suelta los destinos del componente que se quitó de la receta. */
+export function quitarDestinosProducto(mapa, productoId) {
+  const copia = { ...(mapa ?? {}) };
+  delete copia[productoId];
+  return copia;
+}
+
+/** Todos los destino_id pendientes, para fn_vincular_conversiones_ensamble. */
+export function idsDestinoConversion(mapa) {
+  return Object.values(mapa ?? {}).flat();
+}
+
+/**
+ * ¿Puede este usuario convertir a insumo el stock de `sedeId`? Espeja
+ * fn_convertir_a_insumo: lo usan Admin, Bodeguero, Técnico y Vendedor, pero
+ * solo Admin y Técnico (que descarga en ensambles de otras sedes) pueden
+ * hacerlo fuera de su sede. Si no puede, la pantalla no ofrece el botón.
+ */
+export function puedeConvertirAInsumo(perfil, sedeId) {
+  const rol = perfil?.rol;
+  if (!["Admin", "Bodeguero", "Tecnico", "Vendedor"].includes(rol))
+    return false;
+  if (rol === "Admin" || rol === "Tecnico") return true;
+  return Boolean(sedeId) && sedeId === perfil?.sede_id;
 }

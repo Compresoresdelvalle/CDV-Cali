@@ -23,7 +23,10 @@ import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { avisarOk, avisarError } from "../../lib/notify";
 import { ubicacionLabel } from "../../lib/inventario-ui";
 import { usuarioDisplayName } from "../../lib/user-display";
-import { validarDestinoInsumo } from "../../lib/insumo-destino";
+import {
+  validarDestinoInsumo,
+  puedeConvertirAInsumo,
+} from "../../lib/insumo-destino";
 
 export default function ProductoDetalle() {
   const { productoId } = useParams();
@@ -51,6 +54,9 @@ export default function ProductoDetalle() {
     "Tecnico",
     "Vendedor",
   ].includes(perfil?.rol);
+  // …pero fuera de su sede solo Admin y Técnico (el servidor rechaza al resto):
+  // a los demás no se les ofrece el botón en las otras sedes.
+  const puedeConvertirEn = (sedeId) => puedeConvertirAInsumo(perfil, sedeId);
 
   const [producto, setProducto] = useState(null);
   const [inventario, setInventario] = useState([]);
@@ -474,7 +480,7 @@ export default function ProductoDetalle() {
           value={inv.ubicacion_id ?? ""}
           onChange={(e) => asignarUbicacion(inv, e.target.value)}
           disabled={guardandoUbicacionId === inv.id}
-          className="h-8 rounded-md border bg-transparent px-1.5 text-[11.5px] outline-none disabled:opacity-60"
+          className="h-12 md:h-8 rounded-md border bg-transparent px-1.5 text-sm md:text-[11.5px] outline-none disabled:opacity-60"
           style={{ borderColor: "var(--n-200)" }}
           aria-label={`Ubicación en ${inv.sede?.nombre ?? "sede"}`}
         >
@@ -684,14 +690,18 @@ export default function ProductoDetalle() {
                         {puedeConvertirInsumo && (
                           <td style={{ width: 110 }}>
                             <div className="flex flex-col gap-1">
-                              <button
-                                onClick={() => abrirConversion(inv, "a_insumo")}
-                                disabled={inv.cantidad <= 0}
-                                className="cursor-pointer text-left text-xs font-medium disabled:cursor-default disabled:opacity-40"
-                                style={{ color: "var(--p-700)" }}
-                              >
-                                → a insumo
-                              </button>
+                              {puedeConvertirEn(inv.sede_id) && (
+                                <button
+                                  onClick={() =>
+                                    abrirConversion(inv, "a_insumo")
+                                  }
+                                  disabled={inv.cantidad <= 0}
+                                  className="cursor-pointer text-left text-xs font-medium disabled:cursor-default disabled:opacity-40"
+                                  style={{ color: "var(--p-700)" }}
+                                >
+                                  → a insumo
+                                </button>
+                              )}
                               {/* Revertir insumo → venta es solo Admin (S4-04). */}
                               {esAdmin && (
                                 <button
@@ -744,7 +754,8 @@ export default function ProductoDetalle() {
                       <div>{renderMinMax(inv)}</div>
                     </div>
                     {(puedeConfigurarMinMax(inv.sede_id) ||
-                      puedeConvertirInsumo) && (
+                      puedeConvertirEn(inv.sede_id) ||
+                      esAdmin) && (
                       <div className="mt-2.5 flex flex-wrap gap-2">
                         {puedeConfigurarMinMax(inv.sede_id) && (
                           <button
@@ -758,7 +769,7 @@ export default function ProductoDetalle() {
                             Configurar mín/máx
                           </button>
                         )}
-                        {puedeConvertirInsumo && (
+                        {puedeConvertirEn(inv.sede_id) && (
                           <button
                             onClick={() => abrirConversion(inv, "a_insumo")}
                             disabled={inv.cantidad <= 0}

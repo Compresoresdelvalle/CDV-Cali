@@ -112,6 +112,9 @@ test.describe("Bloque 2 — smoke (Admin)", () => {
     const modal = page.locator('input[type="number"]').last();
     await modal.waitFor({ state: "visible", timeout: 10_000 });
     await modal.fill("1");
+    // Desde el Bloque 2 la conversión pide "¿Para qué es?": sin escoger,
+    // "Confirmar" no deja seguir. El Admin puede dejarla sin destino.
+    await page.getByRole("button", { name: /^sin destino$/i }).click();
     await page.getByRole("button", { name: /confirmar/i }).click();
     await expect(page.getByText(/Insumo:\s*1/i).first()).toBeVisible({
       timeout: 15_000,
