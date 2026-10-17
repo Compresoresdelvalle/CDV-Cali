@@ -2838,6 +2838,8 @@ function PasoEntrega({
   // Abandonada: cerrada sin venta. No se ofrece cobrar ni facturar: el
   // servidor lo rechazaría (estado final) y sería un botón condenado a fallar.
   const abandonada = orden.estado === "abandonada";
+  // Cancelada: anulada, igual de final. Tampoco se cobra ni se factura.
+  const cancelada = orden.estado === "cancelada";
 
   // La regla vive en ot-flujo.js junto a puedeManipular/puedeAnular, para que
   // sea la misma en un solo sitio y se pueda probar sin montar la pantalla.
@@ -2977,7 +2979,7 @@ function PasoEntrega({
       </div>
 
       {/* Pago del saldo */}
-      {!saldoCubierto && !entregada && !abandonada && (
+      {!saldoCubierto && !entregada && !abandonada && !cancelada && (
         <div className="rounded-xl border overflow-hidden" style={card}>
           <div
             className="px-4 py-3 border-b"
@@ -3049,7 +3051,24 @@ function PasoEntrega({
         </div>
       )}
 
-      {abandonada ? (
+      {cancelada ? (
+        <div
+          className="rounded-lg px-4 py-3 text-sm"
+          style={{
+            backgroundColor: "hsl(var(--destructive) / 0.08)",
+            color: "hsl(var(--foreground))",
+          }}
+        >
+          <p className="font-semibold">Sin entrega: la OT está anulada.</p>
+          <p
+            className="mt-0.5 text-[12.5px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            Una orden cancelada no se cobra ni se convierte a venta. Si el
+            cliente sí va a hacer el trabajo, abre una OT nueva.
+          </p>
+        </div>
+      ) : abandonada ? (
         <div
           className="rounded-lg px-4 py-3 text-sm"
           style={{
