@@ -229,6 +229,8 @@ export default function EnsambleDetalle() {
         p_producto_id: convProd.id,
         p_sede_id: sede,
         p_cantidad: n,
+        // Bloque 2: la conversión queda amarrada a este ensamble.
+        p_destino: { tipo: "ensamble", id: ensambleId },
       });
       if (error) throw error;
       const prod = convProd;

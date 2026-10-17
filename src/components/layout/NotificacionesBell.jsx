@@ -2,6 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
 import { formatDate } from "../../lib/utils";
+import { lineasDetalleConversion } from "../../lib/insumo-destino";
+
+// Líneas de detalle que se ven de entrada en una conversión a insumo.
+const DETALLE_VISIBLE = 5;
 
 /**
  * Campana de notificaciones. Presentacional: el estado vive en
@@ -78,6 +82,22 @@ export default function NotificacionesBell({
       navigate(destino);
     }
   };
+
+  // Clic en el destino de una conversión: abre la OT / ensamble / Herramientas.
+  const irADetalle = (n, ruta) => {
+    if (!n.leida) onMarcarUna(n.id);
+    setOpen(false);
+    navigate(ruta);
+  };
+
+  const [expandidas, setExpandidas] = useState(() => new Set());
+  const alternarExpandida = (id) =>
+    setExpandidas((prev) => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id);
+      else s.add(id);
+      return s;
+    });
 
   const size = mobile ? "h-10 w-10" : "h-9 w-9";
   const icon = mobile ? "h-[18px] w-[18px]" : "h-4 w-4";
@@ -182,6 +202,86 @@ export default function NotificacionesBell({
                     ? "var(--n-0)"
                     : "var(--info-50, #eff6ff)",
                 };
+                // Bloque 2: las conversiones a insumo traen el detalle de cada
+                // una (quién, qué y para qué). La tarjeta deja de ser un solo
+                // botón: el encabezado lleva a Auditoría y cada destino abre
+                // su documento (no se anidan botones).
+                const lineas =
+                  n.tipo === "conversion_insumo"
+                    ? lineasDetalleConversion(n.data)
+                    : [];
+                if (lineas.length > 0) {
+                  const abierto = expandidas.has(n.id);
+                  const visibles = abierto
+                    ? lineas
+                    : lineas.slice(0, DETALLE_VISIBLE);
+                  return (
+                    <div
+                      key={n.id}
+                      className="border-b last:border-b-0"
+                      style={estilo}
+                    >
+                      {destino ? (
+                        <button
+                          onClick={() => alHacerClic(n)}
+                          className="block w-full px-3 pt-2.5 pb-1 text-left"
+                        >
+                          {contenido}
+                        </button>
+                      ) : (
+                        <div
+                          onClick={() => !n.leida && onMarcarUna(n.id)}
+                          className="px-3 pt-2.5 pb-1"
+                        >
+                          {contenido}
+                        </div>
+                      )}
+                      <ul className="px-3 pb-2" role="list">
+                        {visibles.map((l) => (
+                          <li
+                            key={l.key}
+                            className="border-t py-1"
+                            style={{ borderColor: "var(--n-100)" }}
+                          >
+                            <p
+                              className="text-[11px]"
+                              style={{ color: "var(--n-500)" }}
+                            >
+                              {l.quien} · {l.que}
+                            </p>
+                            {l.ruta ? (
+                              <button
+                                onClick={() => irADetalle(n, l.ruta)}
+                                className="-mx-1 flex min-h-[48px] w-[calc(100%+0.5rem)] items-center rounded px-1 text-left text-xs font-medium underline-offset-2 hover:underline"
+                                style={{ color: "var(--p-700)" }}
+                              >
+                                Para: {l.destino}
+                              </button>
+                            ) : (
+                              <p
+                                className="text-xs"
+                                style={{ color: "var(--n-700)" }}
+                              >
+                                Para: {l.destino}
+                              </p>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      {lineas.length > DETALLE_VISIBLE && (
+                        <button
+                          onClick={() => alternarExpandida(n.id)}
+                          className="mx-3 mb-2 min-h-[48px] text-xs font-medium"
+                          style={{ color: "var(--p-700)" }}
+                        >
+                          {abierto
+                            ? "Ver menos"
+                            : `Ver las ${lineas.length - DETALLE_VISIBLE} restantes`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
                 // Sin destino no se pinta como botón: un botón que no lleva a
                 // ninguna parte se lee como roto.
                 return destino ? (

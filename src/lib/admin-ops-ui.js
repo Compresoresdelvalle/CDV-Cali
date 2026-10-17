@@ -139,3 +139,154 @@ export function clasePillStyle(clase) {
   }
   return pillStyle(token);
 }
+
+/* ── Auditoría: origen en palabras y valor en pesos ─────────────────────── */
+
+/**
+ * De dónde sale el documento de cada `referencia_tipo` de `movimientos`.
+ * `tabla`/`select` se usan para resolver en lote (un `.in()` por tipo y por
+ * página). Los tipos sin tabla (conteo, conversion) no se consultan.
+ */
+export const ORIGEN_FUENTES = {
+  orden_servicio: {
+    tabla: "ordenes_servicio",
+    select: "id, numero, cliente_nombre",
+  },
+  venta: { tabla: "ventas", select: "id, numero" },
+  compra: { tabla: "compras", select: "id, numero" },
+  ensamble: { tabla: "ensambles", select: "id, numero" },
+  traspaso: { tabla: "traspasos", select: "id, numero" },
+  devolucion: { tabla: "devoluciones", select: "id, numero" },
+  garantia_compra: { tabla: "garantias_compra", select: "id, numero" },
+  garantia_venta: { tabla: "garantias_venta", select: "id, numero" },
+  herramienta: {
+    tabla: "herramientas_prestamo",
+    select: "id, herramienta_nombre",
+  },
+};
+
+/**
+ * Documento de origen en palabras: "OT #285 · cliente", "Venta #12"...
+ * `doc` es la fila ya resuelta (o null si no se encontró).
+ * @returns {string}
+ */
+export function etiquetaOrigen(referenciaTipo, doc) {
+  const n = doc?.numero != null ? ` #${doc.numero}` : "";
+  switch (referenciaTipo) {
+    case "orden_servicio": {
+      const cliente = doc?.cliente_nombre?.trim();
+      return `OT${n}${cliente ? ` · ${cliente}` : ""}`;
+    }
+    case "venta":
+      return `Venta${n}`;
+    case "compra":
+      return `Compra${n}`;
+    case "ensamble":
+      return `Ensamble${n}`;
+    case "traspaso":
+      return `Traslado${n}`;
+    case "devolucion":
+      return `Devolución${n}`;
+    case "garantia_compra":
+      return `Garantía de compra${n}`;
+    case "garantia_venta":
+      return `Garantía de venta${n}`;
+    case "herramienta": {
+      const nombre = doc?.herramienta_nombre?.trim();
+      return `Herramienta${nombre ? ` · ${nombre}` : ""}`;
+    }
+    case "conteo":
+      return "Conteo cíclico";
+    case "conversion":
+      return "Conversión venta ↔ insumo";
+    default:
+      return referenciaTipo ? referenciaTipo.replace(/_/g, " ") : "—";
+  }
+}
+
+/**
+ * Ruta de la app para abrir el documento de origen; null si no tiene pantalla.
+ * Solo se arma con id (salvo los tipos que abren un listado).
+ */
+export function rutaOrigen(referenciaTipo, id) {
+  switch (referenciaTipo) {
+    case "orden_servicio":
+      return id ? `/ops/ordenes/${id}` : null;
+    case "venta":
+      return id ? `/ops/ventas/${id}` : null;
+    case "compra":
+      return id ? `/ops/compras/${id}` : null;
+    case "ensamble":
+      return id ? `/ops/ensambles/${id}` : null;
+    case "traspaso":
+      return id ? `/ops/traspasos/${id}` : null;
+    case "devolucion":
+      return id ? `/ops/devoluciones/${id}` : null;
+    case "garantia_compra":
+      return id ? `/ops/garantias/compra/${id}` : null;
+    case "garantia_venta":
+      return id ? `/ops/garantias/venta/${id}` : null;
+    // Sin pantalla de detalle por id: se abre el listado.
+    case "herramienta":
+      return "/ops/herramientas";
+    case "conteo":
+      return "/admin/conteo";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Precio unitario de un producto dentro de un documento (venta o compra) a
+ * partir de sus líneas. Si el producto aparece en varias líneas con precios
+ * distintos no se puede saber cuál movió este stock: devuelve null (no se
+ * inventa un promedio).
+ * @param {Array<{precio: number|string|null}>} lineas
+ * @returns {number|null}
+ */
+export function precioUnicoDeLineas(lineas) {
+  const precios = [
+    ...new Set(
+      (lineas ?? [])
+        .map((l) => (l?.precio == null ? null : Number(l.precio)))
+        .filter((p) => p != null && Number.isFinite(p)),
+    ),
+  ];
+  return precios.length === 1 ? precios[0] : null;
+}
+
+/**
+ * Valor en pesos de un movimiento: unidades × precio.
+ * - `precio` null/no numérico → null (se muestra "—").
+ * - `aCosto` = el precio es el costo promedio del producto, no el del documento.
+ *   Un costo ≤ 0 se trata como desconocido (costo sin cargar), no como $0.
+ * @returns {{unidades:number, precio:number, total:number, aCosto:boolean}|null}
+ */
+export function valorMovimiento(cantidad, precio, { aCosto = false } = {}) {
+  const unidades = Math.abs(Number(cantidad));
+  const p = precio == null ? NaN : Number(precio);
+  if (!Number.isFinite(unidades) || unidades === 0 || !Number.isFinite(p)) {
+    return null;
+  }
+  if (aCosto && p <= 0) return null;
+  return { unidades, precio: p, total: unidades * p, aCosto };
+}
+
+const fmtPesos = new Intl.NumberFormat("es-CO", {
+  style: "currency",
+  currency: "COP",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+/** Pesos COP sin decimales ("$ 45.000"). */
+export function formatPesos(n) {
+  return fmtPesos.format(Math.round(Number(n) || 0));
+}
+
+/** "2 uds × $ 45.000 = $ 90.000" o "—" si no se pudo determinar. */
+export function textoValorMovimiento(v) {
+  if (!v) return "—";
+  const uds = `${v.unidades} ${v.unidades === 1 ? "ud" : "uds"}`;
+  return `${uds} × ${formatPesos(v.precio)} = ${formatPesos(v.total)}`;
+}
