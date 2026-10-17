@@ -587,7 +587,7 @@ export default function CompraNueva() {
               }}
               className="rounded-lg border px-3.5 text-[13px] font-medium transition-colors"
               style={{
-                minHeight: 40,
+                minHeight: 48,
                 borderColor: on ? "var(--p-500)" : "var(--n-200)",
                 backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
                 color: on ? "#fff" : "var(--n-700)",
@@ -646,6 +646,7 @@ export default function CompraNueva() {
                       : "Opcional (caja menor)"
                   }
                   className="finput sans"
+                  style={{ height: 48 }}
                 />
               </Field>
               <Field label="N° factura del proveedor">
@@ -655,6 +656,7 @@ export default function CompraNueva() {
                   onChange={(e) => setFacturaProveedor(e.target.value)}
                   placeholder="Opcional"
                   className="finput sans"
+                  style={{ height: 48 }}
                 />
               </Field>
             </div>
@@ -1104,7 +1106,7 @@ export default function CompraNueva() {
                         }}
                         className="rounded-md border px-3 text-[13px] font-medium transition-colors"
                         style={{
-                          minHeight: 40,
+                          minHeight: 48,
                           borderColor: on ? "var(--p-400)" : "var(--n-200)",
                           backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
                           color: on ? "#fff" : "var(--n-700)",
@@ -1136,7 +1138,7 @@ export default function CompraNueva() {
                     id="compra-cuenta"
                     value={cuentaBancaria}
                     onChange={(e) => setCuentaBancaria(e.target.value)}
-                    className="h-10 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+                    className="h-12 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
                     style={{
                       borderColor: "var(--n-200)",
                       color: "var(--n-950)",
@@ -1220,6 +1222,7 @@ export default function CompraNueva() {
                     onChange={(e) => setConcepto(e.target.value)}
                     placeholder="Ej: transporte, papelería, refrigerio…"
                     className="finput sans"
+                    style={{ height: 48 }}
                   />
                 </Field>
                 <Field label="Monto" req>
@@ -1231,6 +1234,7 @@ export default function CompraNueva() {
                     onChange={(e) => setMonto(e.target.value)}
                     placeholder="0"
                     className="finput"
+                    style={{ height: 48 }}
                   />
                 </Field>
                 <Field label="Categoría" req>
@@ -1238,6 +1242,7 @@ export default function CompraNueva() {
                     value={categoriaGasto}
                     onChange={(e) => setCategoriaGasto(e.target.value)}
                     className="finput sans"
+                    style={{ height: 48 }}
                   >
                     <option value="">Elige una…</option>
                     {catsGasto
@@ -1284,7 +1289,7 @@ export default function CompraNueva() {
                         }}
                         className="rounded-md border px-3 text-[13px] font-medium transition-colors"
                         style={{
-                          minHeight: 40,
+                          minHeight: 48,
                           borderColor: on ? "var(--p-400)" : "var(--n-200)",
                           backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
                           color: on
@@ -1312,7 +1317,7 @@ export default function CompraNueva() {
                       id="cm-cuenta"
                       value={cuentaBancaria}
                       onChange={(e) => setCuentaBancaria(e.target.value)}
-                      className="h-10 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+                      className="h-12 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
                       style={{
                         borderColor: "var(--n-200)",
                         color: "var(--n-950)",
