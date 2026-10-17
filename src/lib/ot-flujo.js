@@ -465,6 +465,24 @@ export function puedeMarcarAbandonada(perfil, orden) {
   return perfil?.rol === "Admin" && !!orden && !otCerrada(orden);
 }
 
+/** Mismo mínimo que exige fn_marcar_ot_abandonada (motivo con ≥ 5 caracteres). */
+export const MOTIVO_ABANDONADA_MIN = 5;
+
+/** Sede donde está HOY el equipo del cliente (custodia), o null. */
+export function sedeEquipoActual(orden) {
+  return orden?.sede_equipo_id ?? orden?.sede_id ?? null;
+}
+
+/**
+ * Sede que se manda a fn_marcar_ot_abandonada como `p_sede_equipo`. `null` =
+ * el equipo se queda donde está y el servidor no lo mueve; cualquier otra sede
+ * lo mueve con fn_mover_equipo_orden antes de cerrar la OT.
+ */
+export function sedeParaAbandonar(orden, destino) {
+  if (!destino || destino === sedeEquipoActual(orden)) return null;
+  return destino;
+}
+
 /* ──────────────────────── Grupos del tablero / filtro ─────────────────────── */
 // Columnas del flujo normal, en orden. El valor coincide con el `key` del paso.
 export const GRUPOS_FLUJO = [

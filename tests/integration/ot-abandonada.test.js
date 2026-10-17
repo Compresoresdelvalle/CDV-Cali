@@ -10,6 +10,9 @@ import {
   estadoEstiloOT,
   pasoActual,
   ESTADO_LABEL,
+  sedeEquipoActual,
+  sedeParaAbandonar,
+  MOTIVO_ABANDONADA_MIN,
 } from "../../src/lib/ot-flujo";
 import {
   ordenEstadoPill,
@@ -112,5 +115,31 @@ describe("helpers de ordenes-ui", () => {
       (d) => d,
     );
     expect(ev.at(-1).act).toBe("Cerrada como abandonada");
+  });
+});
+
+describe("dónde queda el equipo al abandonar", () => {
+  const enSuSede = { sede_id: "CV", sede_equipo_id: null };
+  const enBodega = { sede_id: "CV", sede_equipo_id: "BODEGA" };
+
+  it("la sede actual es la de custodia si existe, si no la de la OT", () => {
+    expect(sedeEquipoActual(enSuSede)).toBe("CV");
+    expect(sedeEquipoActual(enBodega)).toBe("BODEGA");
+    expect(sedeEquipoActual(null)).toBeNull();
+  });
+
+  it("si no cambia la sede se manda null (el servidor no lo mueve)", () => {
+    expect(sedeParaAbandonar(enSuSede, "CV")).toBeNull();
+    expect(sedeParaAbandonar(enBodega, "BODEGA")).toBeNull();
+    expect(sedeParaAbandonar(enBodega, "")).toBeNull();
+  });
+
+  it("si cambia, se manda la sede destino (también para devolverlo a su sede)", () => {
+    expect(sedeParaAbandonar(enSuSede, "BODEGA")).toBe("BODEGA");
+    expect(sedeParaAbandonar(enBodega, "CV")).toBe("CV");
+  });
+
+  it("el mínimo del motivo es el mismo del servidor", () => {
+    expect(MOTIVO_ABANDONADA_MIN).toBe(5);
   });
 });
