@@ -561,6 +561,34 @@ function RecepcionCell({ compra: c }) {
       </span>
     );
   }
+  // Caja menor no trae mercancía: la RPC la crea ya "recibida" y aquí decía
+  // "Completa" siempre, aunque el gasto siguiera a crédito sin pagar. Lo que
+  // importa de un gasto es si se pagó; se usa la misma etiqueta del badge.
+  if (c.es_caja_menor) {
+    const { label } = compraEstadoPill(c);
+    const pagado = label === "Pagado";
+    const color = pagado
+      ? "var(--n-700)"
+      : label === "Cancelada"
+        ? "var(--dang-700)"
+        : "var(--warn-700)";
+    return (
+      <div className="font-mono text-[11.5px]" style={{ color }}>
+        <div className={pagado ? "mb-1" : undefined}>{label}</div>
+        {pagado && (
+          <div
+            className="h-1 overflow-hidden rounded-full"
+            style={{ backgroundColor: "var(--n-100)" }}
+          >
+            <div
+              className="h-full rounded-full"
+              style={{ width: "100%", backgroundColor: "var(--succ-500)" }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
   if (!c.recibida) {
     return (
       <span
