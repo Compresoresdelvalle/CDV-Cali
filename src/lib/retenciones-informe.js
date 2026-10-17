@@ -71,6 +71,17 @@ export function baseCompra(c) {
  * @param {object} row
  * @param {"venta"|"ot"|"compra"} tipoDoc
  */
+/**
+ * Ventas cuya retención explica la caja del CIERRE. Una venta a Crédito no
+ * entra como plata el día que se vende (el cierre no la cuenta como entrada;
+ * entra después, con los cobros de Cuentas por cobrar), así que su retención
+ * no explica nada de ese cierre. El informe mensual sí las incluye todas.
+ * @param {Array<{ metodo_pago?: string|null }>} rows filas de `ventas`
+ */
+export function ventasQueEntranAlCierre(rows = []) {
+  return (rows ?? []).filter((r) => r?.metodo_pago !== "Crédito");
+}
+
 export function normalizarDoc(row, tipoDoc) {
   const base =
     tipoDoc === "venta"

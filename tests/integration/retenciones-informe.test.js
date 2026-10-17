@@ -7,6 +7,7 @@ import {
   baseCompra,
   normalizarDoc,
   resumirRetenciones,
+  ventasQueEntranAlCierre,
   agruparPorTercero,
   filasCSV,
   rangoMesBogota,
@@ -234,5 +235,18 @@ describe("rango del mes en Bogotá", () => {
     expect(rangoMesBogota("2026-13")).toBeNull();
     expect(rangoMesBogota("")).toBeNull();
     expect(etiquetaMes("2026-10")).toMatch(/octubre.*2026/);
+  });
+});
+
+describe("ventasQueEntranAlCierre", () => {
+  it("deja por fuera las ventas a Crédito (el cierre no las cuenta como entrada)", () => {
+    const filas = [
+      { id: 1, metodo_pago: "Efectivo" },
+      { id: 2, metodo_pago: "Crédito" },
+      { id: 3, metodo_pago: "Mixto" },
+      { id: 4, metodo_pago: null },
+    ];
+    expect(ventasQueEntranAlCierre(filas).map((r) => r.id)).toEqual([1, 3, 4]);
+    expect(ventasQueEntranAlCierre(null)).toEqual([]);
   });
 });

@@ -8,8 +8,10 @@ import { useRetencionesPeriodo } from "../../hooks/useRetencionesPeriodo";
  * ninguno. Sirve para que la cuenta "vendí X pero entró menos" no parezca un
  * faltante de caja.
  *
- * Cuenta solo documentos CON retención del periodo (ventas directas, OT
- * entregadas y compras), con los mismos filtros del cierre.
+ * Cuenta solo documentos CON retención del periodo (ventas directas que no
+ * son a Crédito, OT entregadas y compras), con los mismos filtros del cierre.
+ * Las ventas a Crédito se dejan por fuera: el cierre no las cuenta como
+ * entrada. La plata de una OT entró con sus abonos, no el día de la entrega.
  *
  * @param {object} p
  * @param {string} p.desdeDia  'YYYY-MM-DD'
@@ -30,6 +32,7 @@ export default function RetencionesCierre({
     hastaDia,
     sedeId,
     refresco,
+    excluirCredito: true,
   });
 
   if (error) {
@@ -56,10 +59,13 @@ export default function RetencionesCierre({
     );
   }
 
-  const v = resumirRetenciones(nosRetuvieron);
+  const v = resumirRetenciones(
+    nosRetuvieron.filter((d) => d.tipoDoc === "venta"),
+  );
+  const o = resumirRetenciones(nosRetuvieron.filter((d) => d.tipoDoc === "ot"));
   const c = resumirRetenciones(retuvimos);
 
-  if (v.n === 0 && c.n === 0) {
+  if (v.n === 0 && o.n === 0 && c.n === 0) {
     return (
       <p className="text-sm" style={{ color: "hsl(var(--muted-foreground))" }}>
         Sin retenciones en este periodo{alcance ? ` (${alcance})` : ""}.
@@ -71,11 +77,21 @@ export default function RetencionesCierre({
     <div className="space-y-2.5">
       {v.n > 0 && (
         <Linea
-          titulo={`Ventas y OT con retención (${v.n})`}
+          titulo={`Ventas con retención (${v.n})`}
           partes={[
             ["Vendido", v.facturado],
             ["retenciones", v.retenido],
             ["entró", v.neto],
+          ]}
+        />
+      )}
+      {o.n > 0 && (
+        <Linea
+          titulo={`Retención de OT entregadas (${o.n}) · su plata entró con los abonos`}
+          partes={[
+            ["Facturado", o.facturado],
+            ["retenciones", o.retenido],
+            ["neto", o.neto],
           ]}
         />
       )}

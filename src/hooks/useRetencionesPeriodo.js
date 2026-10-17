@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { safeError } from "../lib/utils";
 import { rangoBogota } from "../lib/filtros";
-import { normalizarDoc } from "../lib/retenciones-informe";
+import {
+  normalizarDoc,
+  ventasQueEntranAlCierre,
+} from "../lib/retenciones-informe";
 
 const RET_COLS =
   "retefuente_pct, reteica_pct, reteiva_pct, retefuente_valor, reteica_valor, reteiva_valor, retenciones_total";
@@ -16,6 +19,10 @@ const RET_COLS =
  * El cierre (`fn_preview_cierre`) no devuelve las retenciones, por eso se
  * consultan aparte: esto SOLO se muestra, no cambia ningún total.
  *
+ * `excluirCredito`: para la línea del CIERRE se dejan por fuera las ventas a
+ * Crédito (el cierre no las cuenta como entrada). El informe mensual no lo
+ * pasa y ve todas.
+ *
  * @returns {{cargando:boolean, error:string, nosRetuvieron:object[]|null, retuvimos:object[]|null}}
  */
 export function useRetencionesPeriodo({
@@ -23,11 +30,12 @@ export function useRetencionesPeriodo({
   hastaDia,
   sedeId = null,
   refresco = 0,
+  excluirCredito = false,
 }) {
   // Mismo patrón que useAbonosOT: el resultado lleva la clave de su consulta.
   const clave =
     desdeDia && hastaDia
-      ? `${desdeDia}|${hastaDia}|${sedeId ?? ""}|${refresco}`
+      ? `${desdeDia}|${hastaDia}|${sedeId ?? ""}|${refresco}|${excluirCredito ? 1 : 0}`
       : "";
   const [estado, setEstado] = useState({
     clave: "",
@@ -45,7 +53,7 @@ export function useRetencionesPeriodo({
       let qVentas = supabase
         .from("ventas")
         .select(
-          `id, numero, fecha, cliente_nombre, sede_id, total, subtotal, descuento_valor, descuento_pct, iva_pct, ${RET_COLS}`,
+          `id, numero, fecha, cliente_nombre, sede_id, metodo_pago, total, subtotal, descuento_valor, descuento_pct, iva_pct, ${RET_COLS}`,
         )
         .eq("anulada", false)
         .eq("origen", "directa")
@@ -92,11 +100,14 @@ export function useRetencionesPeriodo({
         return;
       }
       const porFecha = (a, b) => String(a.fecha).localeCompare(String(b.fecha));
+      const ventas = excluirCredito
+        ? ventasQueEntranAlCierre(v.data)
+        : (v.data ?? []);
       setEstado({
         clave,
         error: "",
         nosRetuvieron: [
-          ...(v.data ?? []).map((x) => normalizarDoc(x, "venta")),
+          ...ventas.map((x) => normalizarDoc(x, "venta")),
           ...(o.data ?? []).map((x) => normalizarDoc(x, "ot")),
         ].sort(porFecha),
         retuvimos: (c.data ?? [])
@@ -107,7 +118,7 @@ export function useRetencionesPeriodo({
     return () => {
       activo = false;
     };
-  }, [clave, desdeDia, hastaDia, sedeId]);
+  }, [clave, desdeDia, hastaDia, sedeId, excluirCredito]);
 
   const vigente = clave && estado.clave === clave;
   return {
