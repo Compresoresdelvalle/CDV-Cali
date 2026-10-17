@@ -22,6 +22,7 @@ import {
   Check,
   AlertTriangle,
   Lock,
+  PackageX,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -40,6 +41,7 @@ import ClientePicker from "../../components/forms/ClientePicker";
 import UbicacionChip from "../../components/ui/UbicacionChip";
 import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
 import OrdenStepper from "../../components/ot/OrdenStepper";
+import MarcarAbandonadaModal from "../../components/ot/MarcarAbandonadaModal";
 import ModalAbrirGarantiaVenta from "../../components/garantias/ModalAbrirGarantiaVenta";
 import { garantiaVentaEstadoLabel } from "../../lib/ventas-ui";
 import { generarOrdenPDF } from "../../lib/pdf/ordenPDF";
@@ -62,6 +64,8 @@ import {
   METODO_PAGO,
   puedeManipular,
   puedeAnular,
+  puedeMarcarAbandonada,
+  otAbandonada,
   puedeReclamarGarantia,
   TX,
 } from "../../lib/ot-flujo";
@@ -315,7 +319,11 @@ export default function OrdenDetalle() {
   }, [orden, activo, pasoAbierto]);
 
   /* ── Derivados ──────────────────────────────────────────────────────── */
-  const ro = !puedeManipular(perfil, orden);
+  // Una OT abandonada es final: se ve en solo lectura como una entregada. Lo
+  // único que sigue vivo es mover el equipo de sede (EquipoUbicacion hace su
+  // propia comprobación de permisos y no depende de `ro`).
+  const abandonada = otAbandonada(orden);
+  const ro = !puedeManipular(perfil, orden) || abandonada;
   const cerrada = otCerrada(orden);
 
   // En cotización el total se calcula con el draft (líneas no descargadas);
@@ -526,8 +534,11 @@ export default function OrdenDetalle() {
         onRefresh={cargar}
       />
 
+      {/* Banner de OT abandonada (cerrada sin venta) */}
+      {abandonada && <AvisoAbandonada orden={orden} montos={montos} />}
+
       {/* Banner solo lectura */}
-      {ro && (
+      {ro && !abandonada && (
         <div
           role="status"
           className="flex items-start gap-2 rounded-xl border px-4 py-3 text-sm"
@@ -660,7 +671,9 @@ function Header({
   onRefresh,
 }) {
   const [anulando, setAnulando] = useState(false);
+  const [modalAbandonada, setModalAbandonada] = useState(false);
   const puede = puedeAnular(perfil, orden);
+  const puedeAbandonar = puedeMarcarAbandonada(perfil, orden);
   const tieneAnticipos = montos.anticipos > 0;
 
   const anular = async () => {
@@ -818,6 +831,72 @@ function Header({
             {anulando ? "Anulando…" : TX.anularOT}
           </OutlineButton>
         )}
+        {/* Para el equipo que el cliente nunca vino a recoger. A diferencia de
+            anular, los abonos siguen en la caja. Va al final de la barra para
+            no estorbar el flujo normal. */}
+        {puedeAbandonar && (
+          <OutlineButton
+            tone="warning"
+            disabled={anulando}
+            onClick={() => setModalAbandonada(true)}
+          >
+            <PackageX className="h-4 w-4" />
+            {TX.marcarAbandonada}
+          </OutlineButton>
+        )}
+      </div>
+
+      {modalAbandonada && (
+        <MarcarAbandonadaModal
+          orden={orden}
+          abonado={montos.anticipos}
+          onClose={() => setModalAbandonada(false)}
+          onDone={async () => {
+            setModalAbandonada(false);
+            await onRefresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* Banner de una OT cerrada como abandonada. El motivo y la fecha los escribe
+   fn_marcar_ot_abandonada al final de `observaciones` ("[fecha] Equipo
+   abandonado: …"); se muestra esa línea para no tener que buscarla. */
+function AvisoAbandonada({ orden, montos }) {
+  const nota = (orden.observaciones ?? "")
+    .split("\n")
+    .reverse()
+    .find((l) => l.includes("Equipo abandonado:"));
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-2 rounded-xl border px-4 py-3 text-sm"
+      style={{
+        backgroundColor: "hsl(var(--warning) / 0.1)",
+        borderColor: "hsl(var(--warning) / 0.35)",
+        color: "hsl(var(--foreground))",
+      }}
+    >
+      <PackageX
+        className="mt-0.5 h-4 w-4 shrink-0"
+        style={{ color: "hsl(var(--warning))" }}
+      />
+      <div className="space-y-1">
+        <p className="font-semibold">
+          OT cerrada como abandonada: el cliente no recogió el equipo.
+        </p>
+        {nota && (
+          <p style={{ color: "hsl(var(--muted-foreground))" }}>{nota.trim()}</p>
+        )}
+        <p style={{ color: "hsl(var(--muted-foreground))" }}>
+          {(montos.anticipos ?? 0) > 0
+            ? `Los abonos (${formatCOP(montos.anticipos)}) siguen contando en la caja. `
+            : ""}
+          Ya no se puede trabajar ni facturar; el equipo sí se puede seguir
+          moviendo de sede desde el encabezado.
+        </p>
       </div>
     </div>
   );
@@ -2754,6 +2833,9 @@ function PasoEntrega({
 
   const saldoCubierto = (montos.saldo ?? 0) <= 0;
   const entregada = orden.estado === "entregada";
+  // Abandonada: cerrada sin venta. No se ofrece cobrar ni facturar: el
+  // servidor lo rechazaría (estado final) y sería un botón condenado a fallar.
+  const abandonada = orden.estado === "abandonada";
 
   // La regla vive en ot-flujo.js junto a puedeManipular/puedeAnular, para que
   // sea la misma en un solo sitio y se pueda probar sin montar la pantalla.
@@ -2893,7 +2975,7 @@ function PasoEntrega({
       </div>
 
       {/* Pago del saldo */}
-      {!saldoCubierto && !entregada && (
+      {!saldoCubierto && !entregada && !abandonada && (
         <div className="rounded-xl border overflow-hidden" style={card}>
           <div
             className="px-4 py-3 border-b"
@@ -2965,7 +3047,26 @@ function PasoEntrega({
         </div>
       )}
 
-      {!entregada ? (
+      {abandonada ? (
+        <div
+          className="rounded-lg px-4 py-3 text-sm"
+          style={{
+            backgroundColor: "hsl(var(--warning) / 0.1)",
+            color: "hsl(var(--foreground))",
+          }}
+        >
+          <p className="font-semibold">
+            Sin entrega: la OT se cerró como abandonada.
+          </p>
+          <p
+            className="mt-0.5 text-[12.5px]"
+            style={{ color: "hsl(var(--muted-foreground))" }}
+          >
+            No genera venta. Los abonos que se ven arriba ya entraron a la caja
+            y siguen contando en el cierre.
+          </p>
+        </div>
+      ) : !entregada ? (
         <div className="space-y-2">
           {/* Aviso EN PANTALLA (no solo en el pop-up de confirmación): el dinero
               de esta OT ya está en caja como abonos. Sin esto, al ver la factura
