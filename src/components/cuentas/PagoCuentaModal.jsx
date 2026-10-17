@@ -18,7 +18,6 @@ import {
   rangoFechaPago,
   validarFechaPago,
   fechaParaPayload,
-  cierreQueCubre,
   diaLegible,
 } from "../../lib/cuentas-ui";
 import { generarVentaPOS } from "../../lib/pdf/ventaPOS";
@@ -107,20 +106,20 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
 
   // ¿Ese día ya tiene un cierre guardado? El pago se registra igual, pero el
   // cierre es inmutable y no lo va a contar: hay que avisar cómo corregirlo.
-  // La RLS solo deja leer cierres a Admin y Bodega; para los demás llega vacío
-  // y el aviso simplemente no sale.
+  // fn_dia_tiene_cierre responde solo número y tipo (nunca montos), así que
+  // también le sirve a la vendedora: los cierres diarios son globales y la RLS
+  // no le deja leerlos directamente.
   useEffect(() => {
     let vivo = true;
     setCierreDia(null);
     if (validarFechaPago(fecha, hoy, esCobro)) return;
     supabase
-      .from("cierres")
-      .select("id, numero, tipo, fecha_desde, fecha_hasta, sede_id")
-      .lte("fecha_desde", fecha)
-      .gte("fecha_hasta", fecha)
-      .order("numero", { ascending: false })
+      .rpc("fn_dia_tiene_cierre", {
+        p_fecha: fecha,
+        p_sede: cuenta.sede ?? null,
+      })
       .then(({ data }) => {
-        if (vivo) setCierreDia(cierreQueCubre(data ?? [], fecha, cuenta.sede));
+        if (vivo) setCierreDia(data ?? null);
       });
     return () => {
       vivo = false;
