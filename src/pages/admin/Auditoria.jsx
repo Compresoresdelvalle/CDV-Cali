@@ -108,6 +108,7 @@ async function enriquecerMovimientos(items) {
   });
   let lineasVenta = [];
   let lineasCompra = [];
+  let lineasOrden = [];
   let costos = new Map();
   if (ventaIds.length > 0) {
     consultas.push(
@@ -128,6 +129,20 @@ async function enriquecerMovimientos(items) {
         .in("compra_id", compraIds)
         .then(({ data, error }) => {
           if (!error) lineasCompra = data ?? [];
+        }),
+    );
+  }
+  // Repuestos de OT: además del costo, el precio al que se le cobró al
+  // cliente (detalle_orden.precio_unitario), para que el Admin elija cómo verlo.
+  const ordenIds = [...(ids.orden_servicio ?? [])];
+  if (ordenIds.length > 0) {
+    consultas.push(
+      supabase
+        .from("detalle_orden")
+        .select("orden_id, producto_id, precio_unitario")
+        .in("orden_id", ordenIds)
+        .then(({ data, error }) => {
+          if (!error) lineasOrden = data ?? [];
         }),
     );
   }
@@ -213,7 +228,23 @@ async function enriquecerMovimientos(items) {
       });
     }
 
-    out.set(m.id, { origen, destino, valor });
+    let valorPrecio = null;
+    if (ref === "orden_servicio") {
+      valorPrecio = valorMovimiento(
+        m.cantidad,
+        precioUnicoDeLineas(
+          lineasOrden
+            .filter(
+              (l) =>
+                l.orden_id === m.referencia_id &&
+                l.producto_id === m.producto_id,
+            )
+            .map((l) => ({ precio: l.precio_unitario })),
+        ),
+      );
+    }
+
+    out.set(m.id, { origen, destino, valor, valorPrecio });
   }
   return out;
 }
@@ -248,6 +279,29 @@ export default function Auditoria() {
   const [movimientos, setMovimientos] = useState([]);
   // movimiento_id → { origen, destino, valor } (ver enriquecerMovimientos).
   const [extras, setExtras] = useState(() => new Map());
+  // Repuestos de OT: "costo" (costo promedio) o "precio" (lo que se le cobró
+  // al cliente). Se recuerda en este navegador.
+  const [modoOT, setModoOT] = useState(() => {
+    try {
+      return localStorage.getItem("auditoria.modoOT") === "precio"
+        ? "precio"
+        : "costo";
+    } catch {
+      return "costo";
+    }
+  });
+  const elegirModoOT = (m) => {
+    setModoOT(m);
+    try {
+      localStorage.setItem("auditoria.modoOT", m);
+    } catch {
+      /* sin almacenamiento: solo dura esta visita */
+    }
+  };
+  const valorDe = (extra) =>
+    modoOT === "precio" && extra?.valorPrecio
+      ? extra.valorPrecio
+      : extra?.valor;
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -489,6 +543,47 @@ export default function Auditoria() {
           <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={1.5} />
           Filtros avanzados
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className="text-[12.5px]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Repuestos de OT:
+        </span>
+        <div
+          role="group"
+          aria-label="Cómo valorar los repuestos de OT"
+          className="inline-flex overflow-hidden rounded-md border"
+          style={{ borderColor: "hsl(var(--border))" }}
+        >
+          {[
+            ["costo", "A costo"],
+            ["precio", "A precio cobrado"],
+          ].map(([v, label]) => {
+            const activo = modoOT === v;
+            return (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={activo}
+                onClick={() => elegirModoOT(v)}
+                className="h-12 px-4 text-[12.5px] font-medium cursor-pointer"
+                style={{
+                  backgroundColor: activo
+                    ? "hsl(var(--primary))"
+                    : "hsl(var(--card))",
+                  color: activo
+                    ? "hsl(var(--primary-foreground))"
+                    : "hsl(var(--muted-foreground))",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {errorMsg && (
@@ -759,7 +854,7 @@ export default function Auditoria() {
                         {m.cantidad}
                       </td>
                       <td className="px-3 py-3 text-right">
-                        <ValorCorto valor={extras.get(m.id)?.valor} />
+                        <ValorCorto valor={valorDe(extras.get(m.id))} />
                       </td>
                       <td
                         className="px-3 py-3 text-[12px]"
@@ -870,7 +965,7 @@ export default function Auditoria() {
                         style={{ color: "hsl(var(--foreground))" }}
                       >
                         {extras.get(m.id).origen?.texto ?? "—"} ·{" "}
-                        <ValorCorto valor={extras.get(m.id).valor} />
+                        <ValorCorto valor={valorDe(extras.get(m.id))} />
                       </p>
                     )}
                   </button>
@@ -919,6 +1014,7 @@ export default function Auditoria() {
         <DetallePanel
           mov={seleccionado}
           extra={seleccionado ? extras.get(seleccionado.id) : null}
+          valor={seleccionado ? valorDe(extras.get(seleccionado.id)) : null}
         />
       </div>
 
@@ -944,7 +1040,7 @@ export default function Auditoria() {
 }
 
 /* ── Panel de detalle (master-detail Lovable, datos reales) ───────────── */
-function DetallePanel({ mov, extra }) {
+function DetallePanel({ mov, extra, valor }) {
   if (!mov) {
     return (
       <aside
@@ -1021,8 +1117,8 @@ function DetallePanel({ mov, extra }) {
         ]
       : []),
     {
-      label: extra?.valor?.aCosto ? "Valor (a costo)" : "Valor",
-      value: textoValorMovimiento(extra?.valor),
+      label: valor?.aCosto ? "Valor (a costo)" : "Valor",
+      value: textoValorMovimiento(valor),
       mono: true,
     },
     {
