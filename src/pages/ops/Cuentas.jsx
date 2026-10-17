@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Wallet,
   HandCoins,
   Receipt,
   FileText,
   CircleDollarSign,
+  PackageCheck,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../stores/authStore";
@@ -83,6 +85,7 @@ function aplicarEstadoCuenta(q, estado, esCobrar) {
 }
 
 export default function Cuentas() {
+  const navigate = useNavigate();
   const perfil = useAuthStore((s) => s.perfil);
   const esAdmin = perfil?.rol === "Admin";
   const esBodeguero = perfil?.rol === "Bodeguero";
@@ -107,6 +110,10 @@ export default function Cuentas() {
   const [errorMsg, setErrorMsg] = useState("");
   const [estadoCta, setEstadoCta] = useState("conSaldo");
   const [modalCuenta, setModalCuenta] = useState(null);
+  // Compras de la página con la mercancía aún sin recibir (ids). La vista
+  // v_cuentas_por_pagar no trae `recibida` ni `es_caja_menor`, y no se toca:
+  // se pregunta en lote a `compras` por los ids de la página.
+  const [sinRecibir, setSinRecibir] = useState(() => new Set());
   const [page, setPage] = useState(0);
 
   const esCobrar = tab === "cobrar";
@@ -223,7 +230,26 @@ export default function Cuentas() {
       const { data, error, count } = await q;
       if (error) throw error;
       if (!f.esReqVigente(reqId)) return;
+
+      // Por pagar: ¿cuáles compras normales siguen con la mercancía pendiente?
+      // Si la consulta falla no se marca nada (mejor sin píldora que una falsa).
+      let pendientes = new Set();
+      if (!esCobrar && (data ?? []).length > 0) {
+        const { data: cs } = await supabase
+          .from("compras")
+          .select("id")
+          .in(
+            "id",
+            data.map((r) => r.compra_id),
+          )
+          .eq("es_caja_menor", false)
+          .eq("recibida", false);
+        if (!f.esReqVigente(reqId)) return;
+        pendientes = new Set((cs ?? []).map((c) => c.id));
+      }
+
       setRows(data ?? []);
+      setSinRecibir(pendientes);
       setTotal(count ?? 0);
 
       // KPIs sobre el universo del filtro (solo saldo/total, ligero).
@@ -273,6 +299,10 @@ export default function Cuentas() {
       total: Number(r.total ?? 0),
       abonosCotizacion: esCobrar ? Number(r.abonos_cotizacion ?? 0) : 0,
       retenciones: Number(r.retenciones_total ?? 0),
+      // Para la fecha del pago: el aviso de cierre ya guardado mira la sede, y
+      // un cobro no puede ser de antes de la venta.
+      sede: esCobrar ? r.sede_id : r.sede_destino_id,
+      fecha: r.fecha,
     });
   };
 
@@ -516,6 +546,9 @@ export default function Cuentas() {
                         >
                           {(esCobrar ? r.cliente_nombre : r.proveedor) || "—"}
                         </p>
+                        {!esCobrar && sinRecibir.has(id) && (
+                          <PildoraMercancia />
+                        )}
                       </td>
                       <td
                         className="px-3 py-3 text-[12px]"
@@ -550,6 +583,29 @@ export default function Cuentas() {
                         <EstadoBadge est={est} />
                       </td>
                       <td className="px-3 py-3 text-right">
+                        {!esCobrar && sinRecibir.has(id) && (
+                          <button
+                            onClick={() => navigate(`/ops/compras/${id}`)}
+                            className="mr-1.5 inline-flex h-9 items-center gap-1 rounded-md border px-3 text-[12px] font-semibold cursor-pointer transition-colors"
+                            style={{
+                              borderColor: "hsl(var(--warning) / 0.5)",
+                              color: "hsl(var(--warning))",
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.backgroundColor =
+                                "hsl(var(--warning) / 0.1)")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.backgroundColor = "")
+                            }
+                          >
+                            <PackageCheck
+                              className="h-3.5 w-3.5"
+                              strokeWidth={2}
+                            />
+                            Recibir
+                          </button>
+                        )}
                         <button
                           onClick={() => abrirModal(r)}
                           className="inline-flex h-9 items-center gap-1 rounded-md border px-3 text-[12px] font-semibold cursor-pointer transition-colors"
@@ -571,7 +627,11 @@ export default function Cuentas() {
           {/* Mobile cards */}
           <ul className="divide-y md:hidden" role="list">
             {rows.map((r) => {
-              const est = estadoCuenta(r.saldo, r.total);
+              // Igual que en la tabla: contra lo cobrable, no lo facturado.
+              const est = estadoCuenta(
+                r.saldo,
+                Number(r.total ?? 0) - Number(r.retenciones_total ?? 0),
+              );
               const id = esCobrar ? r.venta_id : r.compra_id;
               const sede = esCobrar ? r.sede_id : r.sede_destino_id;
               return (
@@ -603,6 +663,7 @@ export default function Cuentas() {
                       >
                         {sedeLabelCuenta(sede)} · {formatDate(r.fecha)}
                       </p>
+                      {!esCobrar && sinRecibir.has(id) && <PildoraMercancia />}
                     </div>
                     <div className="shrink-0 text-right">
                       <p
@@ -619,9 +680,23 @@ export default function Cuentas() {
                       </p>
                     </div>
                   </div>
+                  {!esCobrar && sinRecibir.has(id) && (
+                    <button
+                      onClick={() => navigate(`/ops/compras/${id}`)}
+                      className="mt-2.5 flex h-12 w-full items-center justify-center gap-1.5 rounded-lg border text-[13px] font-semibold cursor-pointer"
+                      style={{
+                        borderColor: "hsl(var(--warning) / 0.5)",
+                        color: "hsl(var(--warning))",
+                        backgroundColor: "hsl(var(--card))",
+                      }}
+                    >
+                      <PackageCheck className="h-4 w-4" strokeWidth={2} />
+                      Recibir la mercancía
+                    </button>
+                  )}
                   <button
                     onClick={() => abrirModal(r)}
-                    className="mt-2.5 flex h-11 w-full items-center justify-center gap-1.5 rounded-lg text-[13px] font-semibold cursor-pointer"
+                    className="mt-2.5 flex h-12 w-full items-center justify-center gap-1.5 rounded-lg text-[13px] font-semibold cursor-pointer"
                     style={{
                       backgroundColor: "hsl(var(--primary))",
                       color: "hsl(var(--primary-foreground))",
@@ -716,6 +791,22 @@ function PagerBtn({ onClick, disabled, children }) {
     >
       {children}
     </button>
+  );
+}
+
+/** La compra se debe pero la mercancía todavía no ha entrado al inventario. */
+function PildoraMercancia() {
+  return (
+    <span
+      className="mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+      style={{
+        backgroundColor: "hsl(var(--warning) / 0.12)",
+        color: "hsl(var(--warning))",
+      }}
+      title="La compra está registrada pero la mercancía no se ha recibido en el inventario."
+    >
+      Mercancía pendiente
+    </span>
   );
 }
 
