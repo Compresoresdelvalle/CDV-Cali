@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../../../stores/authStore";
 import { supabase } from "../../../lib/supabase";
-import { formatDate, safeError } from "../../../lib/utils";
+import { formatCOP, formatDate, safeError } from "../../../lib/utils";
 import { avisarInfo, avisarOk, avisarError } from "../../../lib/notify";
 import PageHeader from "../../../components/layout/PageHeader";
 import QRScanner from "../../../components/forms/QRScanner";
@@ -71,6 +71,14 @@ function haceTiempo(ts) {
   return horas <= 1 ? "hace 1 hora" : `hace ${horas} horas`;
 }
 
+/**
+ * Aviso de que ajustar un faltante con la compra ya pagada puede dejarla
+ * pagada de más (fn_recibir_compra lo rechaza con ese mismo criterio).
+ */
+function avisoPagosAjuste(pagado) {
+  return `\n\nEsta compra ya tiene pagos por ${formatCOP(pagado)}. Si ya se pagó completa, el faltante no se ajusta: márcalo para reclamar al proveedor (que lo mande o devuelva la plata). Si con el ajuste queda pagada de más, el sistema no deja recibirla.`;
+}
+
 export default function PickingCompra() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -81,6 +89,8 @@ export default function PickingCompra() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lineas, setLineas] = useState([]);
+  // Suma de pagos vigentes de la compra (para avisar antes de ajustar).
+  const [pagado, setPagado] = useState(0);
   // Borrador recuperado de localStorage, pendiente de que el operario decida
   // si lo retoma o empieza de nuevo. Mientras no haya tocado nada no se
   // persiste, para que "Retomar" no compita contra una escritura a mitad de
@@ -127,6 +137,22 @@ export default function PickingCompra() {
         if (cancelado) return;
 
         setCompra(data);
+        // Lo ya pagado a esta compra (no anulado). Si ya se pagó, ajustar un
+        // faltante puede dejarla pagada de más: fn_recibir_compra lo rechaza
+        // y aquí se avisa antes de elegir. Si la consulta falla, no se avisa
+        // (el servidor igual frena y su mensaje se muestra tal cual).
+        supabase
+          .from("pagos_cuenta")
+          .select("monto")
+          .eq("compra_id", id)
+          .eq("tipo", "pago")
+          .eq("anulado", false)
+          .then(({ data: ps, error: ePagos }) => {
+            if (cancelado || ePagos) return;
+            setPagado(
+              (ps ?? []).reduce((acc, x) => acc + Number(x.monto ?? 0), 0),
+            );
+          });
         const lineasCompra = data?.detalle_compra ?? [];
         setLineas(lineasCompra.map(lineaNueva));
         setIndex(0);
@@ -287,7 +313,8 @@ export default function PickingCompra() {
       const ok = await confirm({
         titulo: "¿No llegó nada de este producto?",
         mensaje:
-          "Esa línea se borra de la factura: no queda nada que ajustar ni reclamar por separado, porque no llegó ni una unidad.",
+          "Esa línea se borra de la factura: no queda nada que ajustar ni reclamar por separado, porque no llegó ni una unidad." +
+          (pagado > 0 ? avisoPagosAjuste(pagado) : ""),
         confirmLabel: "Sí, no llegó nada",
         cancelLabel: "Cancelar",
         danger: true,
@@ -309,16 +336,31 @@ export default function PickingCompra() {
         ),
       );
     },
-    [confirm],
+    [confirm, pagado],
   );
 
-  const elegirFaltante = useCallback((detalleId, accion) => {
-    setLineas((prev) =>
-      prev.map((l) =>
-        l.detalle_id === detalleId ? { ...l, faltante_accion: accion } : l,
-      ),
-    );
-  }, []);
+  const elegirFaltante = useCallback(
+    async (detalleId, accion) => {
+      // Ajustar baja lo que vale la compra. Si ya tiene pagos, puede quedar
+      // pagada de más, y el servidor rechaza recibirla así: se avisa ANTES de
+      // elegir, para que no se descubra al final del conteo.
+      if (accion === "ajustar" && pagado > 0) {
+        const ok = await confirm({
+          titulo: "Esta compra ya tiene pagos",
+          mensaje: avisoPagosAjuste(pagado).trim(),
+          confirmLabel: "Ajustar de todos modos",
+          cancelLabel: "Mejor no",
+        });
+        if (!ok) return;
+      }
+      setLineas((prev) =>
+        prev.map((l) =>
+          l.detalle_id === detalleId ? { ...l, faltante_accion: accion } : l,
+        ),
+      );
+    },
+    [confirm, pagado],
+  );
 
   const elegirSobrante = useCallback((detalleId, accion) => {
     setLineas((prev) =>
@@ -529,7 +571,7 @@ export default function PickingCompra() {
             : compra.proveedor
         }
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ModoSwitch modo={modo} onChange={cambiarModo} />
             <Link
               to={`/ops/compras/${id}`}
