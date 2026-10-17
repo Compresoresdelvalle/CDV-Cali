@@ -7,6 +7,7 @@ import {
   ArrowDownCircle,
   Info,
   Wrench,
+  Percent,
   CalendarDays,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
@@ -17,6 +18,7 @@ import { SEDE_LABEL } from "../../lib/ot-flujo";
 import { etiquetaRango } from "../../lib/panel-rango";
 import { useAbonosOT } from "../../hooks/useAbonosOT";
 import AbonosOTLista from "../../components/ot/AbonosOTLista";
+import RetencionesCierre from "../../components/cierres/RetencionesCierre";
 
 /**
  * Cierre de caja para VENDEDORAS — solo lectura, solo SU sede.
@@ -338,6 +340,16 @@ export default function CierreCajaVendedor() {
                 error={abonos.error}
                 mostrarRegistrador
                 vacio="No entraron abonos de OT en este periodo."
+              />
+            </Section>
+
+            {/* ── Retenciones (informativo) ───────────────────────────── */}
+            <Section icon={Percent} titulo="Retenciones del periodo">
+              <RetencionesCierre
+                desdeDia={rango.desde}
+                hastaDia={rango.hasta}
+                sedeId={perfil?.sede_id ?? null}
+                refresco={refresco}
               />
             </Section>
 

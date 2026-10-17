@@ -18,7 +18,9 @@ import { useAuthStore } from "../../stores/authStore";
 import { useFiltros } from "../../hooks/useFiltros";
 import BarraFiltros from "../../components/filtros/BarraFiltros";
 import AbonosOTLista from "../../components/ot/AbonosOTLista";
+import RetencionesCierre from "../../components/cierres/RetencionesCierre";
 import { useAbonosOT } from "../../hooks/useAbonosOT";
+import { SEDE_LABEL } from "../../lib/ot-flujo";
 
 // Los tres valores REALES de `cierres.tipo` (CHECK: diario|periodo|complementario).
 // Los complementarios existían en la base pero no había forma de aislarlos en el
@@ -625,7 +627,10 @@ export default function Cierres() {
               )}
 
               <div className="mt-4">
-                <InformativoCierre preview={preview} />
+                <InformativoCierre
+                  preview={preview}
+                  sedeRetenciones={readOnly ? (perfil?.sede_id ?? null) : null}
+                />
               </div>
 
               {preview.detalle?.arqueo_esperado?.length > 0 && (
@@ -1096,10 +1101,14 @@ function Kpi({ label, value, sub, token, last, icon: Icon }) {
 
 /**
  * Bloques de solo lectura bajo la vista previa: los abonos de OT que el cierre
- * cuenta en "Servicios". Usan el MISMO periodo del preview y no cambian
- * ningún total.
+ * cuenta en "Servicios" y la línea de retenciones. Usan el MISMO periodo del
+ * preview y no cambian ningún total.
+ *
+ * Retenciones: ventas y compras tienen RLS por sede para quien no es Admin, así
+ * que a Bodega se le muestra solo su sede y se le dice; sumar "todas" con lo
+ * que la RLS deja ver sería un número a medias sin aviso.
  */
-function InformativoCierre({ preview }) {
+function InformativoCierre({ preview, sedeRetenciones }) {
   const desdeDia = String(preview.fecha_desde).slice(0, 10);
   const hastaDia = String(preview.fecha_hasta).slice(0, 10);
   const sedePreview = preview.sede_id ?? null;
@@ -1110,6 +1119,7 @@ function InformativoCierre({ preview }) {
     sedeId: sedePreview,
     refresco,
   });
+  const sedeRet = sedePreview ?? sedeRetenciones;
   const unDia = desdeDia === hastaDia;
   return (
     <div className="space-y-4">
@@ -1122,6 +1132,19 @@ function InformativoCierre({ preview }) {
           error={abonos.error}
           mostrarSede={!sedePreview}
           vacio="No entraron abonos de OT en este periodo."
+        />
+      </MiniBloque>
+      <MiniBloque titulo="Retenciones del periodo">
+        <RetencionesCierre
+          desdeDia={desdeDia}
+          hastaDia={hastaDia}
+          sedeId={sedeRet}
+          refresco={refresco}
+          alcance={
+            sedeRet && !sedePreview
+              ? `Solo ${SEDE_LABEL[sedeRet] ?? sedeRet}: tu usuario no ve las ventas y compras de otras sedes`
+              : undefined
+          }
         />
       </MiniBloque>
     </div>
