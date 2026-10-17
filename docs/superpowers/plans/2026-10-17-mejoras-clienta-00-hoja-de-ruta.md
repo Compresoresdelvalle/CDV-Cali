@@ -123,7 +123,7 @@ Chrome**. Las fuentes HTML se guardan en `docs/` para poder corregirla después.
    - Conteo: Admin → **Conteo** → **Nuevo conteo** → sede → buscar o escanear el
      producto → cantidad física. Sirve aunque el producto nunca haya tenido inventario
      en esa sede: cuenta desde 0.
-   - Lo **registra** Admin o Bodega, pero solo **Admin lo aplica**. Hasta que se
+   - En pantalla **solo el Admin** lo registra y lo aplica: la ruta `/admin` es solo de Admin y Bodega no tiene Conteo en su menú (la función de base de datos sí dejaría a Bodega registrar, pero no hay pantalla que llegue). Hasta que se
      aplica, el stock no cambia.
 
 3. **Pagarle por adelantado a un proveedor (R6).**
@@ -473,22 +473,41 @@ comprar para otra sede y equipos abandonados.
 | 3   | OT sin plata                | Contestaron CV y CHV, OT por OT (detalle en `requerimientos-clienta.md`, Parte 3)                     | Bloque D y 5 |
 | 2   | OT 23, 32, 185              | 23: cancelar (decisión de David). 32: hecha a mano, falta el valor. 185: el equipo está en el almacén | Bloque D     |
 
+**Segunda tanda de respuestas (17 oct, mediodía), ya aplicada:**
+
+- **OT 10, 11, 14 y 15:** fueron práctica. **Canceladas** con `fn_cancelar_orden`.
+  La 10 devolvió 1 silicona SILIAT al stock de insumo de BODEGA (0/7 → 0/8), que
+  es lo correcto porque nunca se usó.
+- **Polisombra:** _"se deben anular 100.000 que registraron de más, en
+  transferencia"_. La única de $ 100.000 por transferencia es la **caja menor #1210**
+  (CRISTIAN G, Nequi, 8 oct), y quedó **cancelada** con `fn_cancelar_compra`. Los
+  egresos de BODEGA del 8 de octubre bajan de $ 3.022.249 a $ 2.922.249. La #1211
+  (RUBIELA, $ 291.400) se queda: se da por polisombra.
+- **L3 (Sofía):** las OT **78** y **181** entraron como chatarra; la **83** y la
+  **108** se mandaron a bodega porque el cliente no volvió. Las cuatro esperan el
+  estado **`abandonada`** del Bloque 5, junto con la 144 y la 170.
+- **OT 79 (HAROLL, motor 2HP, L3):** Faiber entregó el motor y _"el cliente cancela
+  380.000"_, pero no se le dio salida. **No se encontró ningún registro de esos
+  $ 380.000**: ni abono en la OT, ni venta a HAROLL por ese valor. La única venta de
+  L3 por $ 380.000 (#547, 30 jun) es de un cabezote. Si esa plata no se registró, falta
+  en algún cierre. **Pregunta para Sofía:** ¿qué día pagó, cómo pagó, y si quedó en
+  alguna venta? Según la respuesta: se entrega la OT con "Convertir a venta y
+  entregar" por $ 380.000 (entra al cierre del día en que se haga), o se amarra a la
+  venta donde haya quedado.
+
 **Sin respuesta todavía:**
 
 1. **Deyanira:** ¿la venta #2284 (aceite AM501/4, $ 35.000, 15 sep) fue un segundo
    aceite o el mismo pago registrado dos veces? Respondieron que FURGONES "todavía
    debe $ 35.000", pero eso no aclara la #2284.
-2. **Sofía (L3):** OT 39 (abono de $ 288.000), 78, 79, 83, 108 y 181.
+2. **Sofía (L3):** OT 39 (abono de $ 288.000) y el pago de $ 380.000 de la OT 79.
 3. **BODEGA:** OT 68.
 4. **OT 32:** el valor final del trabajo.
-5. **OT 10, 11, 14 y 15** del 3 de junio: ¿fueron de práctica?
-6. **Caja menor #1211** (RUBIELA, $ 291.400, "ABONO A FACTURA"): ¿también es la
-   polisombra?
 
 **Decisiones de David, no de ella:**
 
-- **3.0:** cómo resolver que las vendedoras paguen compras en partes. Recomendada la A.
-- **5.0:** cómo se cierra un equipo abandonado. Recomendada la A.
+- **3.0:** **aprobada la A** (pagar en partes dentro de Nueva Compra).
+- **5.0:** **aprobada la A** (estado nuevo `abandonada`).
 - **30 días** hacia atrás para registrar pagos: ya decidido.
 
 **Resueltas con datos, no se le preguntaron:**

@@ -1,0 +1,2121 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Lo que ya puedes hacer</title>
+    <style>
+      :root {
+        --ground: #f3f6f9;
+        --card: #ffffff;
+        --card-2: #f8fbfd;
+        --ink: #15263b;
+        --muted: #556577;
+        --faint: #8291a2;
+        --border: #e2e9f1;
+        --border-2: #ced9e5;
+        --accent: #245a8c;
+        --accent-2: #2f6ea8;
+        --accent-soft: #e9f1f9;
+        --accent-ink: #183f62;
+        --good: #1f7a45;
+        --good-bg: #e7f4ec;
+        --good-bd: #bfe3cd;
+        --warn: #9a5409;
+        --warn-bg: #fbf0dd;
+        --warn-bd: #eed2a2;
+        --bad: #b02a22;
+        --bad-bg: #fbe9e8;
+        --bad-bd: #f0c3c0;
+        --shadow:
+          0 1px 2px rgba(16, 32, 54, 0.05),
+          0 10px 26px -16px rgba(16, 32, 54, 0.2);
+        --mono:
+          ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo,
+          Consolas, monospace;
+        --sans:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --ground: #0e1622;
+          --card: #151f2c;
+          --card-2: #111a25;
+          --ink: #e7eef6;
+          --muted: #a0b1c3;
+          --faint: #6e8095;
+          --border: #233141;
+          --border-2: #31445a;
+          --accent: #5f9fd8;
+          --accent-2: #7ab0e2;
+          --accent-soft: #16283a;
+          --accent-ink: #c3dbf1;
+          --good: #5dbe84;
+          --good-bg: #12291d;
+          --good-bd: #1f4230;
+          --warn: #e0a458;
+          --warn-bg: #2a2010;
+          --warn-bd: #493617;
+          --bad: #ec8b83;
+          --bad-bg: #2a1513;
+          --bad-bd: #4a2420;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 30px -18px rgba(0, 0, 0, 0.65);
+        }
+      }
+      :root[data-theme="dark"] {
+        --ground: #0e1622;
+        --card: #151f2c;
+        --card-2: #111a25;
+        --ink: #e7eef6;
+        --muted: #a0b1c3;
+        --faint: #6e8095;
+        --border: #233141;
+        --border-2: #31445a;
+        --accent: #5f9fd8;
+        --accent-2: #7ab0e2;
+        --accent-soft: #16283a;
+        --accent-ink: #c3dbf1;
+        --good: #5dbe84;
+        --good-bg: #12291d;
+        --good-bd: #1f4230;
+        --warn: #e0a458;
+        --warn-bg: #2a2010;
+        --warn-bd: #493617;
+        --bad: #ec8b83;
+        --bad-bg: #2a1513;
+        --bad-bd: #4a2420;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 30px -18px rgba(0, 0, 0, 0.65);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--ink);
+        font-family: var(--sans);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        font-size: 16px;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: clamp(18px, 3.5vw, 40px) clamp(16px, 4vw, 32px) 90px;
+      }
+
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 20px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        box-shadow: var(--shadow);
+      }
+      .head img {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex: none;
+        border: 1px solid var(--border-2);
+      }
+      .head .eyebrow {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .head h1 {
+        margin: 0.12em 0 0.1em;
+        font-size: clamp(22px, 4.4vw, 30px);
+        line-height: 1.05;
+        letter-spacing: -0.02em;
+        font-weight: 750;
+        text-wrap: balance;
+      }
+      .head .org {
+        font-size: 12.5px;
+        color: var(--faint);
+        font-family: var(--mono);
+      }
+
+      .lede {
+        font-size: 16.5px;
+        color: var(--muted);
+        margin: 22px 2px 0;
+        max-width: 64ch;
+      }
+      .toc {
+        margin: 20px 0 0;
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--card-2);
+      }
+      .toc p {
+        margin: 0 0 6px;
+        font-family: var(--mono);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: var(--faint);
+        font-weight: 700;
+      }
+      .toc ol {
+        margin: 0;
+        padding-left: 20px;
+        columns: 2;
+        column-gap: 26px;
+      }
+      .toc li {
+        margin: 3px 0;
+        font-size: 14px;
+      }
+      .toc a {
+        color: var(--accent-ink);
+        text-decoration: none;
+      }
+
+      .sec {
+        margin-top: clamp(30px, 5vw, 52px);
+      }
+      h2 {
+        font-size: clamp(19px, 3vw, 24px);
+        letter-spacing: -0.015em;
+        margin: 0 0 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-wrap: balance;
+        scroll-margin-top: 14px;
+      }
+      h2 .b {
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 700;
+        color: #fff;
+        background: var(--accent);
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        flex: none;
+      }
+      h3 {
+        font-size: 16.5px;
+        margin: 26px 0 8px;
+        letter-spacing: -0.01em;
+      }
+      p {
+        margin: 0.5em 0;
+      }
+      strong {
+        font-weight: 650;
+        color: var(--ink);
+      }
+      .lead-in {
+        color: var(--muted);
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 13px;
+        padding: 18px 20px;
+        box-shadow: var(--shadow);
+      }
+      .two {
+        display: grid;
+        gap: 14px;
+        margin-top: 8px;
+      }
+      @media (min-width: 680px) {
+        .two {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .two .card h3 {
+        margin: 0 0 6px;
+      }
+      .two .card .kk {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .callout {
+        border: 1px solid var(--border);
+        border-left-width: 3px;
+        border-radius: 10px;
+        padding: 13px 15px;
+        background: var(--card-2);
+        margin: 14px 0;
+      }
+      .callout.warn {
+        border-left-color: var(--warn);
+        background: var(--warn-bg);
+        border-color: var(--warn-bd);
+      }
+      .callout.good {
+        border-left-color: var(--good);
+        background: var(--good-bg);
+        border-color: var(--good-bd);
+      }
+      .callout.info {
+        border-left-color: var(--accent);
+        background: var(--accent-soft);
+        border-color: var(--border-2);
+      }
+      .callout .k {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 700;
+        display: block;
+        margin-bottom: 4px;
+      }
+      .warn .k {
+        color: var(--warn);
+      }
+      .good .k {
+        color: var(--good);
+      }
+      .info .k {
+        color: var(--accent);
+      }
+      .callout p {
+        margin: 0.15em 0;
+      }
+
+      .twrap {
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin: 8px 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 13px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      thead th {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 600;
+        background: var(--card-2);
+      }
+      tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 9px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+      .pill.g {
+        color: var(--good);
+        background: var(--good-bg);
+      }
+      .pill.w {
+        color: var(--warn);
+        background: var(--warn-bg);
+      }
+      .pill.a {
+        color: var(--accent-ink);
+        background: var(--accent-soft);
+      }
+      .pill.n {
+        color: var(--faint);
+        background: var(--card-2);
+      }
+      .pill.r {
+        color: var(--bad);
+        background: var(--bad-bg);
+      }
+
+      .stepr {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+        margin-top: 24px;
+      }
+      @media (min-width: 760px) {
+        .stepr {
+          grid-template-columns: 1fr 1fr;
+          gap: 24px;
+          align-items: center;
+        }
+        .stepr.rev .txt {
+          order: 2;
+        }
+      }
+      .stepr .txt h3 {
+        margin: 0 0 6px;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .stepr .txt h3 .n {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 750;
+        color: #fff;
+        background: var(--accent);
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        flex: none;
+      }
+      .stepr .txt p {
+        font-size: 14.5px;
+        color: var(--muted);
+        margin: 0.3em 0;
+      }
+      .stepr .txt .tip {
+        font-size: 13px;
+        color: var(--faint);
+      }
+      .cap {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--faint);
+        text-align: center;
+        margin-top: 8px;
+      }
+
+      /* Mockup: estilo claro, como la app real */
+      .shot {
+        --s-bg: #eef2f7;
+        --s-card: #ffffff;
+        --s-card2: #f1f5fa;
+        --s-line: #e3e9f1;
+        --s-ink: #17263c;
+        --s-mut: #5c6b7e;
+        --s-fnt: #9aa7b6;
+        --s-pri: #345bd6;
+        --s-good: #1a8a4d;
+        --s-goodbg: #e6f5ec;
+        --s-warn: #b0741d;
+        --s-warnbg: #fbf1da;
+        --s-bad: #cf3f3f;
+        --s-badbg: #fbe8e8;
+        --s-blue: #22409e;
+        --s-bluebg: #e9eefb;
+        --s-purple: #6b3fb0;
+        --s-purplebg: #efe8fa;
+        background: var(--s-bg);
+        border: 1px solid #dbe3ee;
+        border-radius: 14px;
+        padding: 14px;
+        color: var(--s-ink);
+        font-size: 13px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .shot .eb {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        color: var(--s-fnt);
+      }
+      .shot .h {
+        font-size: 16px;
+        font-weight: 700;
+        margin: 2px 0;
+        color: var(--s-ink);
+      }
+      .shot .lbl {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--s-mut);
+        margin: 12px 0 5px;
+      }
+      .shot .inp {
+        background: var(--s-card);
+        border: 1px solid var(--s-line);
+        border-radius: 9px;
+        padding: 9px 11px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .shot .radio {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
+        border: 1px solid var(--s-line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: var(--s-card);
+        margin-top: 7px;
+      }
+      .shot .radio.on {
+        border-color: var(--s-pri);
+        background: var(--s-bluebg);
+      }
+      .shot .radio .rd {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        border: 1.5px solid var(--s-fnt);
+        flex: none;
+        margin-top: 1px;
+      }
+      .shot .radio.on .rd {
+        border-color: var(--s-pri);
+        border-width: 4px;
+      }
+      .shot .radio b {
+        font-size: 12.5px;
+        display: block;
+      }
+      .shot .radio small {
+        font-size: 10.5px;
+        color: var(--s-mut);
+      }
+      .shot .chk {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12.5px;
+        padding: 6px 0;
+        color: var(--s-ink);
+      }
+      .shot .chk .bx {
+        width: 15px;
+        height: 15px;
+        border-radius: 4px;
+        border: 1.5px solid var(--s-line);
+        flex: none;
+      }
+      .shot .chk.on .bx {
+        background: var(--s-good);
+        border-color: var(--s-good);
+      }
+      .shot .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+      .shot .tag.g {
+        color: var(--s-good);
+        background: var(--s-goodbg);
+      }
+      .shot .tag.w {
+        color: var(--s-warn);
+        background: var(--s-warnbg);
+      }
+      .shot .tag.a {
+        color: var(--s-blue);
+        background: var(--s-bluebg);
+      }
+      .shot .tag.p {
+        color: var(--s-purple);
+        background: var(--s-purplebg);
+      }
+      .shot .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        display: inline-block;
+      }
+      .shot .note {
+        margin-top: 9px;
+        font-size: 11px;
+        color: var(--s-warn);
+        background: var(--s-warnbg);
+        border: 1px solid #eed7a6;
+        border-radius: 8px;
+        padding: 8px 10px;
+        display: flex;
+        gap: 7px;
+      }
+      .shot .btn {
+        margin-top: 12px;
+        background: var(--s-pri);
+        color: #fff;
+        border-radius: 10px;
+        padding: 10px;
+        text-align: center;
+        font-weight: 640;
+        font-size: 12.5px;
+      }
+      .shot .money {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Errores */
+      .err {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--card);
+        margin: 12px 0;
+        overflow: hidden;
+      }
+      .err .msg {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
+        padding: 11px 14px;
+        background: var(--bad-bg);
+        border-bottom: 1px solid var(--bad-bd);
+      }
+      .err .msg.wy {
+        background: var(--warn-bg);
+        border-color: var(--warn-bd);
+      }
+      .err .msg .ic {
+        color: var(--bad);
+        font-weight: 800;
+        font-family: var(--mono);
+        flex: none;
+      }
+      .err .msg.wy .ic {
+        color: var(--warn);
+      }
+      .err .msg code {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--ink);
+        background: transparent;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+      .err .body {
+        padding: 11px 14px;
+        font-size: 14px;
+      }
+      .err .body .qy {
+        color: var(--muted);
+      }
+      .err .body .do {
+        margin-top: 6px;
+      }
+      .err .body .do b {
+        color: var(--good);
+        font-weight: 650;
+      }
+      .grp {
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--faint);
+        font-weight: 700;
+        margin: 24px 0 2px;
+      }
+
+      ul.plain {
+        padding-left: 20px;
+      }
+      ul.plain li {
+        margin: 6px 0;
+      }
+      .foot {
+        margin-top: 56px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+        color: var(--faint);
+        font-size: 12.5px;
+        font-family: var(--mono);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        justify-content: space-between;
+      }
+
+      @media print {
+        @page {
+          size: A4;
+          margin: 12mm;
+        }
+        html,
+        body {
+          background: #fff;
+        }
+        * {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .toc,
+        .two {
+          break-inside: avoid;
+        }
+        .stepr {
+          grid-template-columns: 1fr !important;
+          break-inside: avoid;
+        }
+        .stepr.rev .txt {
+          order: 0 !important;
+        }
+        .card,
+        .callout,
+        .twrap,
+        .shot,
+        .err,
+        .head {
+          break-inside: avoid;
+        }
+        h2,
+        h3 {
+          break-after: avoid;
+        }
+      }
+
+      @media print {
+        /* El pie se iba solo a una hoja al final. */
+        .foot {
+          margin-top: 22px;
+          padding-top: 12px;
+          break-before: avoid;
+          page-break-before: avoid;
+        }
+        .sec {
+          margin-top: 26px;
+          break-inside: auto;
+        }
+        /* Tablas largas: pueden partirse entre filas para no dejar media hoja en blanco. */
+        #s1 .twrap,
+        #s5 .twrap {
+          break-inside: auto;
+        }
+        tr {
+          break-inside: avoid;
+        }
+        #s10 .callout {
+          break-inside: avoid;
+        }
+        .stepr {
+          gap: 12px;
+          margin-top: 16px;
+        }
+        h3 {
+          margin-top: 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="head">
+        <img
+          src="data:image/jpeg;base64,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"
+          alt="Logo Compresores del Valle"
+        />
+        <div>
+          <div class="eyebrow">Guía · Octubre 2026</div>
+          <h1>Lo que ya puedes hacer</h1>
+          <div class="org">Compresores del Valle S.A.S. · Guía de uso</div>
+        </div>
+      </header>
+
+      <p class="lede">
+        Esta guía junta las preguntas que más se han hecho en octubre. Ninguna
+        necesita nada nuevo: todo esto <strong>la app ya lo hace</strong>, solo
+        había que saber por dónde. Cada sección dice qué tocar, con el nombre
+        del botón tal como sale en la pantalla, y quién lo puede hacer.
+      </p>
+
+      <nav class="toc" aria-label="Contenido">
+        <p>En esta guía</p>
+        <ol>
+          <li><a href="#s1">Que un producto no alarme en una sede</a></li>
+          <li><a href="#s2">Darle stock a un producto nuevo</a></li>
+          <li><a href="#s3">Pagarle por adelantado a un proveedor</a></li>
+          <li><a href="#s4">Caja menor o compra: cuál usar</a></li>
+          <li><a href="#s5">Pagar algo en dos formas</a></li>
+          <li><a href="#s6">Deshacer un cambio de producto</a></li>
+          <li><a href="#s7">Anular una devolución</a></li>
+          <li><a href="#s8">El descuento en compras</a></li>
+          <li><a href="#s9">Las retenciones, sin enredo</a></li>
+          <li><a href="#s10">Corregir una venta registrada dos veces</a></li>
+        </ol>
+      </nav>
+
+      <!-- ══════════════════════════ 1 ══════════════════════════ -->
+      <section class="sec" id="s1">
+        <h2><span class="b">1</span> Que un producto no alarme en una sede</h2>
+        <p>
+          Hay productos que una sede no maneja. Si quedan en cero, no hay que
+          reponerlos, pero la app igual avisa. La forma de decirle "aquí este no
+          se maneja" es ponerle <strong>mínimo 0</strong> en esa sede.
+        </p>
+
+        <div class="stepr">
+          <div class="txt">
+            <h3><span class="n">1</span> Inventario, botón Mínimos</h3>
+            <p>
+              En <strong>Inventario</strong>, arriba a la derecha, toque
+              <strong>Mínimos</strong>. Se abre la pantalla
+              <strong>Mínimos y máximos</strong>.
+            </p>
+            <p class="tip">
+              Lo pueden abrir el Admin, Bodega y las vendedoras.
+            </p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="eb">Inventario</div>
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 10px;
+                  margin-top: 4px;
+                "
+              >
+                <div class="h">Inventario</div>
+                <div style="display: flex; gap: 6px">
+                  <span
+                    style="
+                      border: 1px solid var(--s-pri);
+                      color: var(--s-pri);
+                      background: var(--s-card);
+                      border-radius: 9px;
+                      padding: 7px 11px;
+                      font-weight: 640;
+                      font-size: 12px;
+                    "
+                    >Mínimos</span
+                  >
+                  <span
+                    style="
+                      background: var(--s-pri);
+                      color: #fff;
+                      border-radius: 9px;
+                      padding: 7px 11px;
+                      font-weight: 640;
+                      font-size: 12px;
+                    "
+                    >+ Nuevo producto</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stepr rev">
+          <div class="txt">
+            <h3><span class="n">2</span> Escoger la sede</h3>
+            <p>
+              El Admin escoge la sede en la lista de arriba. Una vendedora o
+              Bodega no tiene esa lista: la pantalla abre directo en su sede y
+              dice
+              <strong
+                >"Configuras la sede CV. Para otra sede, pídeselo a
+                Maritza."</strong
+              >
+            </p>
+            <p class="tip">
+              Si el producto es de otra sede, pídale a Maritza que lo haga.
+            </p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="eb">Inventario · Mínimos</div>
+              <div class="h">Mínimos y máximos</div>
+              <div style="color: var(--s-mut); font-size: 11.5px">
+                Puedes configurar cualquier sede.
+              </div>
+              <div class="inp" style="margin-top: 9px">
+                <span>CV</span><span style="color: var(--s-fnt)">▾</span>
+              </div>
+              <div
+                style="
+                  margin-top: 9px;
+                  font-size: 11px;
+                  color: var(--s-blue);
+                  background: var(--s-bluebg);
+                  border-radius: 8px;
+                  padding: 8px 10px;
+                "
+              >
+                <b>Mínimo 0</b> = esta sede no maneja el producto: no genera
+                alerta ni aunque quede en cero. <b>Máximo 0</b> = sin techo.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stepr">
+          <div class="txt">
+            <h3><span class="n">3</span> Buscar el producto y poner 0</h3>
+            <p>
+              En <strong>Buscar por referencia o nombre</strong> escriba el
+              producto. En la casilla <strong>Mínimo</strong> ponga
+              <strong>0</strong>.
+            </p>
+            <p class="tip">
+              El máximo puede quedar como está. Si lo pone en 0, queda "sin
+              techo".
+            </p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="eb">Inventario · Mínimos</div>
+              <div class="inp" style="margin-top: 8px; color: var(--s-fnt)">
+                <span>Buscar por referencia o nombre</span>
+              </div>
+              <div
+                style="
+                  margin-top: 9px;
+                  background: var(--s-card);
+                  border: 1px solid var(--s-line);
+                  border-radius: 10px;
+                  padding: 10px 12px;
+                "
+              >
+                <div style="font-weight: 600">Racor recto 1/4 x 1/4</div>
+                <div
+                  style="
+                    font-family: var(--mono);
+                    font-size: 10.5px;
+                    color: var(--s-mut);
+                  "
+                >
+                  RR-1414 · 0 uds
+                </div>
+                <div
+                  style="
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 8px;
+                    margin-top: 8px;
+                  "
+                >
+                  <div>
+                    <div style="font-size: 10.5px; color: var(--s-mut)">
+                      Mínimo
+                    </div>
+                    <div class="inp money" style="border-color: var(--s-pri)">
+                      <span></span><span>0</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-size: 10.5px; color: var(--s-mut)">
+                      Máximo
+                    </div>
+                    <div class="inp money"><span></span><span>0</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stepr rev">
+          <div class="txt">
+            <h3><span class="n">4</span> Guardar cambios</h3>
+            <p>
+              Abajo aparece una barra que dice cuántos cambios hay sin guardar.
+              Toque <strong>Guardar cambios</strong>.
+            </p>
+            <p class="tip">Si se arrepiente, toque Descartar.</p>
+          </div>
+          <div>
+            <div class="shot">
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 10px;
+                "
+              >
+                <span style="color: var(--s-mut)">1 cambio(s) sin guardar</span>
+                <span style="display: flex; gap: 6px">
+                  <span
+                    style="
+                      border: 1px solid var(--s-line);
+                      background: var(--s-card);
+                      border-radius: 9px;
+                      padding: 7px 10px;
+                      font-size: 12px;
+                    "
+                    >Descartar</span
+                  >
+                  <span
+                    style="
+                      background: var(--s-pri);
+                      color: #fff;
+                      border-radius: 9px;
+                      padding: 7px 10px;
+                      font-weight: 640;
+                      font-size: 12px;
+                    "
+                    >Guardar cambios</span
+                  >
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h3>Qué cambia y qué no</h3>
+        <div class="twrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Dónde</th>
+                <th>Con mínimo 0 en esa sede</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Alertas</strong></td>
+                <td><span class="pill g">Ya no aparece</span></td>
+              </tr>
+              <tr>
+                <td><strong>Dashboard</strong> del Panel Admin</td>
+                <td><span class="pill g">Ya no aparece</span></td>
+              </tr>
+              <tr>
+                <td>
+                  Botón de <strong>Reposición</strong> (la cajita de arriba),
+                  pestaña Reponer
+                </td>
+                <td><span class="pill g">Ya no aparece</span></td>
+              </tr>
+              <tr>
+                <td><strong>Reorden</strong></td>
+                <td><span class="pill g">Ya no aparece</span></td>
+              </tr>
+              <tr>
+                <td><strong>Inventario</strong>, si tiene 0 unidades</td>
+                <td>
+                  <span class="pill n">Sigue saliendo "Agotado"</span><br />Es
+                  normal: dice lo que hay, no si hay que comprar.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Botón de <strong>Reposición</strong>, pestaña
+                  <strong>Se vende y no hay</strong>
+                </td>
+                <td>
+                  <span class="pill n">Puede seguir saliendo</span><br />Solo si
+                  se vendió en esa sede en los últimos 90 días. Es un aviso de
+                  que los clientes lo piden.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <span class="k">En el celular</span>
+          <p>
+            La ficha del producto también tiene un enlace
+            <strong>Configurar</strong> para esto, pero hoy en el celular queda
+            escondido. Por eso conviene ir siempre por <strong>Mínimos</strong>,
+            que funciona igual en el celular y en el computador.
+          </p>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════ 2 ══════════════════════════ -->
+      <section class="sec" id="s2">
+        <h2><span class="b">2</span> Darle stock a un producto nuevo</h2>
+        <p>
+          El stock no se escribe a mano en ninguna parte. Así nadie puede
+          "inventarse" unidades. Entra por uno de estos tres caminos:
+        </p>
+        <div class="twrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Camino</th>
+                <th>Cuándo sirve</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Una compra</strong></td>
+                <td>Cuando la mercancía llega de un proveedor.</td>
+              </tr>
+              <tr>
+                <td><strong>Un traslado</strong></td>
+                <td>
+                  Cuando otra sede lo tiene. Solo funciona si la sede de origen
+                  sí tiene unidades.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Un conteo</strong></td>
+                <td>
+                  Cuando el producto ya está físicamente en la sede y la app no
+                  lo sabe. Sirve aunque esa sede nunca lo haya tenido: cuenta
+                  desde 0.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Con un conteo, paso a paso</h3>
+        <div class="callout info">
+          <span class="k">Quién lo hace</span>
+          <p>
+            La pantalla de Conteo está dentro del <strong>Panel Admin</strong>,
+            así que hoy la abre solo el Admin. Si usted es de Bodega o
+            vendedora, cuente las unidades y pásele a Maritza la referencia, la
+            sede y la cantidad.
+          </p>
+        </div>
+
+        <div class="stepr">
+          <div class="txt">
+            <h3><span class="n">1</span> Abrir Conteo cíclico</h3>
+            <p>
+              Toque <strong>Panel Admin</strong> y luego
+              <strong>Conteo cíclico</strong>. En el celular está en la barra de
+              abajo como <strong>Conteo</strong>.
+            </p>
+            <p>Arriba a la derecha, toque <strong>Nuevo conteo</strong>.</p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="eb">Admin · Auditoría de inventario</div>
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 10px;
+                "
+              >
+                <div class="h">Conteo cíclico</div>
+                <span
+                  style="
+                    background: var(--s-pri);
+                    color: #fff;
+                    border-radius: 9px;
+                    padding: 7px 11px;
+                    font-weight: 640;
+                    font-size: 12px;
+                  "
+                  >+ Nuevo conteo</span
+                >
+              </div>
+              <div
+                style="
+                  display: flex;
+                  gap: 14px;
+                  margin-top: 10px;
+                  font-size: 12px;
+                "
+              >
+                <span
+                  style="
+                    border-bottom: 2px solid var(--s-pri);
+                    padding-bottom: 4px;
+                    font-weight: 600;
+                  "
+                  >Registros</span
+                >
+                <span style="color: var(--s-mut)">Plan</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stepr rev">
+          <div class="txt">
+            <h3><span class="n">2</span> Sede, producto y cantidad</h3>
+            <p>
+              En <strong>Sede a contar</strong> escoja la sede. Busque el
+              producto por nombre o referencia (mínimo 2 letras) o toque el
+              botón del QR para escanearlo.
+            </p>
+            <p>
+              En <strong>Stock físico contado</strong> escriba lo que contó y
+              toque <strong>Registrar conteo</strong>.
+            </p>
+            <p class="tip">
+              Si la sede nunca tuvo el producto, la app avisa que lo empieza en
+              0. Es lo esperado.
+            </p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="h">Nuevo conteo cíclico</div>
+              <div class="lbl">Sede a contar</div>
+              <div class="inp"><span>Almacén CV</span><span>▾</span></div>
+              <div class="lbl">Producto</div>
+              <div class="inp">
+                <span style="color: var(--s-fnt)"
+                  >Buscar producto por nombre o referencia (mín 2 letras)…</span
+                ><span style="color: var(--s-pri)">QR</span>
+              </div>
+              <div class="note">
+                <span>!</span
+                ><span
+                  >Esta sede aún no tenía este producto. Se inicializará en
+                  <b>0</b> y se contará con el físico que registres.</span
+                >
+              </div>
+              <div class="lbl">Stock físico contado *</div>
+              <div class="inp money"><span>6</span></div>
+              <div class="btn">Registrar conteo</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stepr">
+          <div class="txt">
+            <h3><span class="n">3</span> Aplicar el ajuste</h3>
+            <p>
+              El conteo queda <strong>Pendiente</strong>. Hasta ese momento el
+              stock <strong>no cambia</strong>.
+            </p>
+            <p>
+              En la lista, toque <strong>Aplicar</strong> en esa fila y confirme
+              con <strong>Aplicar ajuste</strong>. Ahí sí entran las unidades.
+            </p>
+            <p class="tip">Solo el Admin ve el botón Aplicar.</p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="eb">Conteo cíclico · Pendientes</div>
+              <div
+                style="
+                  margin-top: 8px;
+                  background: var(--s-card);
+                  border: 1px solid var(--s-line);
+                  border-radius: 10px;
+                  padding: 10px 12px;
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 10px;
+                "
+              >
+                <div>
+                  <div style="font-weight: 600">Racor recto 1/4 x 1/4</div>
+                  <div style="font-size: 11px; color: var(--s-mut)">
+                    Sistema 0 · Físico 6 ·
+                    <b style="color: var(--s-good)">+6</b>
+                  </div>
+                </div>
+                <span style="display: flex; align-items: center; gap: 6px">
+                  <span class="tag w">Pendiente</span>
+                  <span
+                    style="
+                      background: var(--s-pri);
+                      color: #fff;
+                      border-radius: 8px;
+                      padding: 5px 10px;
+                      font-weight: 640;
+                      font-size: 11.5px;
+                    "
+                    >Aplicar</span
+                  >
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════ 3 ══════════════════════════ -->
+      <section class="sec" id="s3">
+        <h2><span class="b">3</span> Pagarle por adelantado a un proveedor</h2>
+        <p>
+          Pasa seguido: el proveedor pide la plata antes de mandar la mercancía.
+          La app lo maneja así: se registra la compra a
+          <strong>Crédito</strong>, sin recibirla, y el pago se anota en
+          <strong>Cuentas por pagar</strong>. Cuando llega la mercancía, se
+          recibe.
+        </p>
+
+        <div class="stepr">
+          <div class="txt">
+            <h3><span class="n">1</span> Nueva compra a Crédito</h3>
+            <p>
+              En <strong>Compras</strong>, toque <strong>Nueva compra</strong>.
+              Deje <strong>Compra normal</strong>, ponga el proveedor y los
+              productos.
+            </p>
+            <p>
+              En <strong>Pago de la compra</strong>, toque
+              <strong>Crédito</strong>.
+            </p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="eb">Compras · Nueva compra</div>
+              <div class="lbl">Pago de la compra</div>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                <span class="inp" style="padding: 6px 10px">Efectivo</span>
+                <span class="inp" style="padding: 6px 10px">Transferencia</span>
+                <span class="inp" style="padding: 6px 10px">Tarjeta</span>
+                <span
+                  class="inp"
+                  style="
+                    padding: 6px 10px;
+                    background: var(--s-pri);
+                    color: #fff;
+                    border-color: var(--s-pri);
+                  "
+                  >Crédito</span
+                >
+              </div>
+              <div
+                style="margin-top: 8px; font-size: 11.5px; color: var(--s-mut)"
+              >
+                Compra a crédito: queda como pendiente de pago al proveedor.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stepr rev">
+          <div class="txt">
+            <h3><span class="n">2</span> Guardar sin recibir</h3>
+            <p>
+              <strong>Vendedora:</strong> deje sin marcar
+              <strong>Marcar como recibida ahora</strong> y toque
+              <strong>Registrar compra</strong>.
+            </p>
+            <p>
+              <strong>Admin o Bodega:</strong> deje sin marcar
+              <strong>Recibir sin contar</strong> y toque
+              <strong>Registrar y contar</strong>. La app abre "Contar compra";
+              como la mercancía no ha llegado, toque <strong>Volver</strong> sin
+              confirmar nada.
+            </p>
+            <p class="tip">
+              En los dos casos la compra queda pendiente de recibir.
+            </p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="eb">Compras · Nueva compra</div>
+              <div class="chk" style="margin-top: 6px">
+                <span class="bx"></span>Marcar como recibida ahora
+              </div>
+              <div style="font-size: 11px; color: var(--s-mut)">
+                Sin marcar: la compra queda pendiente.
+              </div>
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  margin-top: 10px;
+                  color: var(--s-mut);
+                "
+              >
+                <span>Pago: Crédito (pendiente)</span>
+              </div>
+              <div class="btn">Registrar compra</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stepr">
+          <div class="txt">
+            <h3><span class="n">3</span> Registrar el pago</h3>
+            <p>
+              <strong>Admin:</strong> Panel Admin,
+              <strong>Cuentas cobrar/pagar</strong>, pestaña
+              <strong>Por pagar</strong>. <strong>Bodega:</strong> menú
+              <strong>Cuentas</strong>.
+            </p>
+            <p>
+              Busque la compra y toque <strong>Pagar</strong> (en el celular
+              dice <strong>Registrar pago</strong>). Escriba el monto, escoja el
+              método y, si fue transferencia, la cuenta. Toque
+              <strong>Registrar pago</strong>.
+            </p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="eb">Pago · Compra #1240</div>
+              <div
+                style="
+                  display: grid;
+                  grid-template-columns: 1fr 1fr 1fr;
+                  gap: 6px;
+                  margin-top: 8px;
+                  font-size: 11px;
+                "
+              >
+                <div>
+                  <div style="color: var(--s-mut)">Total</div>
+                  <b class="money">$ 500.000</b>
+                </div>
+                <div>
+                  <div style="color: var(--s-mut)">Pagado</div>
+                  <b class="money">$ 0</b>
+                </div>
+                <div>
+                  <div style="color: var(--s-mut)">Saldo</div>
+                  <b class="money" style="color: var(--s-warn)">$ 500.000</b>
+                </div>
+              </div>
+              <div class="lbl">Registrar pago</div>
+              <div style="display: flex; gap: 8px; align-items: center">
+                <span style="font-size: 11px; color: var(--s-mut)"
+                  >Monto $</span
+                >
+                <span class="inp money" style="flex: 1">500.000</span>
+              </div>
+              <div style="display: flex; gap: 6px; margin-top: 8px">
+                <span class="inp" style="padding: 5px 9px">Efectivo</span>
+                <span
+                  class="inp"
+                  style="
+                    padding: 5px 9px;
+                    background: var(--s-pri);
+                    color: #fff;
+                    border-color: var(--s-pri);
+                  "
+                  >Transferencia</span
+                >
+                <span class="inp" style="padding: 5px 9px">Tarjeta</span>
+              </div>
+              <div class="btn">Registrar pago</div>
+            </div>
+          </div>
+        </div>
+
+        <h3>Quién puede registrar el pago</h3>
+        <div class="twrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rol</th>
+                <th>Puede pagar</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="pill a">Admin</span></td>
+                <td>Compras de cualquier sede.</td>
+              </tr>
+              <tr>
+                <td><span class="pill a">Bodega</span></td>
+                <td>Solo compras de la sede BODEGA.</td>
+              </tr>
+              <tr>
+                <td><span class="pill n">Vendedora</span></td>
+                <td>
+                  No registra pagos a proveedores. Las compras de CV, CHV y L3
+                  las paga el Admin: avísele a Maritza el número de la compra.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="err">
+          <div class="msg">
+            <span class="ic">!</span>
+            <code
+              >Solo puedes registrar pagos de compras de tu propia sede</code
+            >
+          </div>
+          <div class="body">
+            <p class="qy">
+              Le sale a Bodega si intenta pagar una compra de CV, CHV o L3.
+            </p>
+            <p class="do">
+              <b>Qué hacer:</b> pasarle el pago a Maritza, que puede pagar
+              compras de todas las sedes.
+            </p>
+          </div>
+        </div>
+
+        <div class="stepr rev">
+          <div class="txt">
+            <h3><span class="n">4</span> Cuando llega la mercancía</h3>
+            <p>
+              Abra la compra. En el recuadro
+              <strong>Recepción de mercancía</strong>, Admin y Bodega ven
+              <strong>Contar y recibir</strong> (y debajo, como enlace,
+              <strong>Recibir sin contar</strong>). La vendedora ve
+              <strong>Confirmar recepción</strong>.
+            </p>
+            <p class="tip">
+              Si sale del conteo sin confirmar, la compra sigue pendiente y lo
+              contado queda guardado en ese mismo celular o computador. Al
+              volver, la app pregunta si lo retoma: toque
+              <strong>Retomar</strong>.
+            </p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="eb">Compras · Compra #1240</div>
+              <div style="font-weight: 700; margin-top: 6px">
+                Recepción de mercancía
+              </div>
+              <div style="font-size: 11px; color: var(--s-mut)">
+                Verifica los 3 items contra la orden y confirma la recepción. El
+                stock se sumará al inventario.
+              </div>
+              <div class="btn">Contar y recibir</div>
+              <div
+                style="
+                  text-align: center;
+                  margin-top: 8px;
+                  font-size: 12px;
+                  text-decoration: underline;
+                  color: var(--s-mut);
+                "
+              >
+                Recibir sin contar
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout warn">
+          <span class="k">¿Y por qué no por caja menor?</span>
+          <p>
+            La caja menor es un <strong>gasto</strong>: la plata sale y ya. No
+            deja anotado que el proveedor nos debe mercancía, ni que esa
+            mercancía está por llegar. Con la compra a Crédito queda todo: lo
+            que se pagó, lo que falta y lo que tiene que entrar al inventario.
+          </p>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════ 4 ══════════════════════════ -->
+      <section class="sec" id="s4">
+        <h2><span class="b">4</span> Caja menor o compra: cuál usar</h2>
+        <p>La pregunta es una sola: <strong>¿es mercancía?</strong></p>
+        <div class="two">
+          <div class="card">
+            <div class="kk">Caja menor</div>
+            <h3>Gastos que se pagan ya</h3>
+            <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+              Cosas que no son mercancía y se pagan en el momento: un flete, la
+              nómina, un arreglo del local. No suma nada al inventario.
+            </p>
+          </div>
+          <div class="card">
+            <div class="kk">Compra normal</div>
+            <h3>Mercancía, aunque se pague después</h3>
+            <p style="color: var(--muted); font-size: 14.5px; margin: 0">
+              Todo lo que entra a vender o a usar en el taller. Si se paga
+              después, va a <strong>Crédito</strong>. Suma al inventario cuando
+              se recibe.
+            </p>
+          </div>
+        </div>
+
+        <div class="twrap" style="margin-top: 14px">
+          <table>
+            <thead>
+              <tr>
+                <th>Qué se paga</th>
+                <th>Dónde va</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>El flete de un envío</td>
+                <td>Caja menor, categoría <strong>Transporte</strong></td>
+              </tr>
+              <tr>
+                <td>La nómina</td>
+                <td>Caja menor, categoría <strong>Nómina</strong></td>
+              </tr>
+              <tr>
+                <td>Arreglar una puerta del local</td>
+                <td>Caja menor, categoría <strong>Mantenimiento</strong></td>
+              </tr>
+              <tr>
+                <td>Repuestos para vender, pagados hoy</td>
+                <td>Compra normal, con la forma de pago real</td>
+              </tr>
+              <tr>
+                <td>Repuestos que se pagan en 30 días</td>
+                <td>Compra normal a <strong>Crédito</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <span class="k">No use "Otros gastos" para pagar mercancía</span>
+          <p>
+            En caja menor existe la categoría
+            <strong>Abono a proveedor</strong>, en el grupo "No son gasto del
+            periodo". Es la que va cuando se le abona a un proveedor por fuera
+            de una compra registrada. Si ese pago se pone como
+            <strong>Otros gastos</strong>, el mes se ve con más gastos de los
+            que tuvo: ese pago no es un gasto, es la deuda de una mercancía.
+          </p>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════ 5 ══════════════════════════ -->
+      <section class="sec" id="s5">
+        <h2><span class="b">5</span> Pagar algo en dos formas</h2>
+        <p>
+          A veces una cuenta se paga una parte en efectivo y otra por
+          transferencia, o desde dos bancos. Lo que importa es
+          <strong>de dónde sale cada peso</strong>, porque eso es lo que el
+          cierre del día cuadra. Entonces:
+          <strong>un registro por cada forma de pago</strong>.
+        </p>
+
+        <h3>En caja menor</h3>
+        <p>
+          Un registro por cada forma, todos con el mismo concepto. Caso real: la
+          nómina del 5 de octubre se pagó una parte por Bancolombia, otra por
+          Occidente y "el resto en Nequi", y quedó como un solo pago. El cierre
+          no podía saber cuánto salió de cada cuenta. Debieron ser tres:
+        </p>
+        <div class="twrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Registro</th>
+                <th>Concepto</th>
+                <th>¿Cómo se pagó?</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td>Nómina 5 de octubre</td>
+                <td>Transferencia, cuenta Bancolombia</td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td>Nómina 5 de octubre</td>
+                <td>Transferencia, cuenta Occidente</td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>Nómina 5 de octubre</td>
+                <td>Transferencia, cuenta Nequi</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>En una compra de mercancía</h3>
+        <p>
+          La compra se registra a <strong>Crédito</strong> y después, en Cuentas
+          por pagar, se registra <strong>un pago por cada forma</strong>. Así se
+          probó:
+        </p>
+        <div class="twrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Paso</th>
+                <th>Monto</th>
+                <th>Saldo de la compra</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Compra registrada a Crédito</td>
+                <td class="money">$ 119.000</td>
+                <td class="money">$ 119.000</td>
+              </tr>
+              <tr>
+                <td>Pago 1: <strong>Efectivo</strong></td>
+                <td class="money">$ 60.000</td>
+                <td class="money">$ 59.000</td>
+              </tr>
+              <tr>
+                <td>Pago 2: <strong>Transferencia</strong>, con su cuenta</td>
+                <td class="money">$ 59.000</td>
+                <td class="money"><strong>$ 0</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout good">
+          <span class="k">Lo que se ve en el cierre</span>
+          <p>
+            Los <strong>$ 60.000</strong> salen del efectivo y los
+            <strong>$ 59.000</strong> salen de la cuenta. Cada uno donde fue.
+          </p>
+        </div>
+        <div class="callout warn">
+          <span class="k">Quién registra los pagos</span>
+          <p>
+            El Admin, o Bodega si la compra es de BODEGA. Si la compra la
+            registra una vendedora, la deja a Crédito y el Admin hace los pagos.
+          </p>
+        </div>
+        <div class="callout info">
+          <span class="k">Pronto</span>
+          <p>
+            Pagar en partes desde la misma compra, sin tener que pasar por
+            Cuentas por pagar.
+          </p>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════ 6 ══════════════════════════ -->
+      <section class="sec" id="s6">
+        <h2>
+          <span class="b">6</span> Deshacer un cambio de producto mal hecho
+        </h2>
+        <p>
+          Casi todas las devoluciones son cambios: de las últimas 25, 24 fueron
+          cambios. Un cambio son dos registros que van juntos, la devolución y
+          la venta de la diferencia. Por eso se deshacen juntos, desde la venta.
+        </p>
+        <div class="callout info">
+          <span class="k">Quién puede</span>
+          <p>
+            Solo el Admin. Si usted es vendedora, pásele a Maritza el número de
+            la devolución.
+          </p>
+        </div>
+
+        <div class="stepr">
+          <div class="txt">
+            <h3><span class="n">1</span> Abrir la devolución</h3>
+            <p>
+              En <strong>Devoluciones</strong>, abra la del cambio. Arriba sale
+              un aviso que dice que es "una de las dos patas de un cambio de
+              producto".
+            </p>
+            <p>
+              Toque el enlace <strong>la venta #…</strong> que trae ese aviso.
+            </p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="eb">Devoluciones · Devolución #25</div>
+              <div
+                style="
+                  margin-top: 8px;
+                  font-size: 11.5px;
+                  color: var(--s-blue);
+                  background: var(--s-bluebg);
+                  border-radius: 8px;
+                  padding: 9px 11px;
+                "
+              >
+                Esta devolución es una de las dos patas de un
+                <b>cambio de producto</b>. No se anula sola. El cambio se
+                revierte completo desde
+                <span style="text-decoration: underline; font-weight: 600"
+                  >la venta #4512</span
+                >, con el botón <b>“Anular cambio”</b> (solo Administración).
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stepr rev">
+          <div class="txt">
+            <h3><span class="n">2</span> Anular cambio</h3>
+            <p>
+              En la venta toque <strong>Anular cambio</strong>. La app muestra
+              qué va a pasar con el inventario antes de mover nada.
+            </p>
+            <p>
+              Si está de acuerdo, toque <strong>Sí, anular el cambio</strong>.
+              Las dos partes se deshacen en una sola operación y el stock vuelve
+              a como estaba.
+            </p>
+          </div>
+          <div>
+            <div class="shot">
+              <div style="font-weight: 700">
+                ¿Anular el cambio completo? Esto pasa:
+              </div>
+              <div
+                style="font-size: 11.5px; color: var(--s-mut); margin-top: 6px"
+              >
+                · Vuelven al stock de CV <b>1</b> u. de Filtro de aire 1/2 (lo
+                que se llevó el cliente).<br />· Salen del stock de CV
+                <b>1</b> u. de Filtro de aire 3/8: es lo que el cliente había
+                devuelto y se lo vuelve a llevar.<br />· Quedan anuladas esta
+                venta #4512 y la devolución #25.
+              </div>
+              <div class="btn" style="background: var(--s-bad)">
+                Sí, anular el cambio
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="err">
+          <div class="msg">
+            <span class="ic">!</span>
+            <code
+              >No se puede anular el cambio: en CV quedan 0 unidad(es) de las 1
+              que había devuelto el cliente, el resto ya se vendió o se movió.
+              Repón el stock primero.</code
+            >
+          </div>
+          <div class="body">
+            <p class="qy">
+              El producto que el cliente devolvió ya se le vendió a otra
+              persona. Deshacer el cambio dejaría el inventario en negativo.
+            </p>
+            <p class="do">
+              <b>Qué hacer:</b> si de verdad hay que deshacerlo, primero tiene
+              que volver a haber esa unidad en la sede (por ejemplo, con un
+              traslado).
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════ 7 ══════════════════════════ -->
+      <section class="sec" id="s7">
+        <h2><span class="b">7</span> Anular una devolución normal</h2>
+        <p>
+          Una devolución normal es la que no es un cambio: el cliente devolvió
+          algo y se le reembolsó la plata, o el producto entró como chatarra.
+        </p>
+        <div class="stepr">
+          <div class="txt">
+            <h3><span class="n">1</span> Anular devolución</h3>
+            <p>
+              En <strong>Devoluciones</strong>, abra la devolución y toque
+              <strong>Anular devolución</strong>. La app explica qué va a pasar
+              y se confirma con <strong>Sí, anular</strong>.
+            </p>
+            <p>
+              Saca del inventario lo que había vuelto a entrar y revierte el
+              reembolso: esa plata deja de contar en la caja.
+            </p>
+            <p class="tip">Solo el Admin ve este botón.</p>
+          </div>
+          <div>
+            <div class="shot">
+              <div style="font-weight: 700">Anular devolución #18</div>
+              <div
+                style="font-size: 11.5px; color: var(--s-mut); margin-top: 6px"
+              >
+                Se quitarán del stock de CV las 1 unidad(es) de "Manómetro 0-160
+                psi" que habían vuelto. También se revertirá el reembolso de $
+                45.000 (dejará de contar en la caja). Queda registrado y no se
+                puede deshacer.
+              </div>
+              <div class="btn" style="background: var(--s-bad)">Sí, anular</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="err">
+          <div class="msg">
+            <span class="ic">!</span>
+            <code
+              >No se puede anular: el stock disponible (0) es menor a las 1
+              unidades que reingresó la devolución (parte ya se movió o
+              vendió).</code
+            >
+          </div>
+          <div class="body">
+            <p class="qy">Lo que había vuelto a entrar ya se vendió.</p>
+            <p class="do">
+              <b>Qué hacer:</b> igual que con un cambio, primero tiene que
+              volver a haber la unidad en la sede.
+            </p>
+          </div>
+        </div>
+        <div class="callout info">
+          <span class="k">Un cambio no se anula aquí</span>
+          <p>
+            Si la devolución es parte de un cambio, el botón no aparece. Se
+            deshace desde la venta, como dice la sección 6.
+          </p>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════ 8 ══════════════════════════ -->
+      <section class="sec" id="s8">
+        <h2><span class="b">8</span> El descuento en compras</h2>
+        <p>
+          El descuento se resta <strong>antes</strong> del IVA. Así lo hacen las
+          facturas de los proveedores y así lo hace la app. Ejemplo real, la
+          compra #1229:
+        </p>
+        <div class="two">
+          <div class="card">
+            <div class="kk">Lo que dice la factura</div>
+            <table style="font-size: 14px">
+              <tbody>
+                <tr>
+                  <td>Subtotal</td>
+                  <td class="money" style="text-align: right">$ 287.500</td>
+                </tr>
+                <tr>
+                  <td>Descuento</td>
+                  <td class="money" style="text-align: right">− $ 28.750</td>
+                </tr>
+                <tr>
+                  <td>IVA 19%</td>
+                  <td class="money" style="text-align: right">$ 49.163</td>
+                </tr>
+                <tr>
+                  <td><strong>Total</strong></td>
+                  <td class="money" style="text-align: right">
+                    <strong>$ 307.913</strong>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <div class="kk">Lo que calcula la app</div>
+            <table style="font-size: 14px">
+              <tbody>
+                <tr>
+                  <td>Subtotal</td>
+                  <td class="money" style="text-align: right">$ 287.500</td>
+                </tr>
+                <tr>
+                  <td>Menos descuento</td>
+                  <td class="money" style="text-align: right">$ 258.750</td>
+                </tr>
+                <tr>
+                  <td>IVA 19% de $ 258.750</td>
+                  <td class="money" style="text-align: right">$ 49.163</td>
+                </tr>
+                <tr>
+                  <td><strong>Total estimado</strong></td>
+                  <td
+                    class="money"
+                    style="text-align: right; color: var(--good)"
+                  >
+                    <strong>$ 307.913</strong>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <h3>Dónde se escribe</h3>
+        <p>
+          En <strong>Nueva compra</strong>, dentro de
+          <strong>Pago de la compra</strong>, en la casilla
+          <strong>Descuento $</strong>. Debajo dice "Se resta del subtotal antes
+          del IVA." Se escribe en pesos, nunca en porcentaje.
+        </p>
+        <div class="callout info">
+          <span class="k">Si el proveedor da el descuento en porcentaje</span>
+          <p>
+            Se saca la cuenta y se escribe en pesos. El 10% de $ 287.500 es
+            <strong>$ 28.750</strong>: eso es lo que va en la casilla.
+          </p>
+        </div>
+        <div class="callout warn">
+          <span class="k">Si llega solo una parte</span>
+          <p>
+            Al recibir, la app vuelve a calcular el IVA con lo que llegó, pero
+            el descuento se queda completo en pesos. Si de esa compra llegara la
+            mitad ($ 143.750), quedaría: $ 143.750 menos $ 28.750 = $ 115.000,
+            más IVA $ 21.850, total $ 136.850. Si el proveedor también rebaja el
+            descuento, hay que revisarlo con él.
+          </p>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════ 9 ══════════════════════════ -->
+      <section class="sec" id="s9">
+        <h2><span class="b">9</span> Las retenciones, sin enredo</h2>
+        <p>
+          Algunos clientes no pagan toda la factura. Se quedan con un pedacito y
+          ese pedacito lo pagan ellos a la DIAN
+          <strong>a nombre de la empresa</strong>, como un adelanto de
+          impuestos. Por eso al banco entra menos de lo que dice la factura.
+        </p>
+        <div class="two">
+          <div class="card">
+            <div class="kk">La factura dice</div>
+            <p
+              style="font-size: 26px; font-weight: 750; margin: 0.2em 0"
+              class="money"
+            >
+              $ 1.190.000
+            </p>
+            <p style="color: var(--muted); font-size: 14px; margin: 0">
+              $ 1.000.000 de mercancía más $ 190.000 de IVA.
+            </p>
+          </div>
+          <div class="card">
+            <div class="kk">Al banco entra</div>
+            <p
+              style="
+                font-size: 26px;
+                font-weight: 750;
+                margin: 0.2em 0;
+                color: var(--warn);
+              "
+              class="money"
+            >
+              $ 1.165.000
+            </p>
+            <p style="color: var(--muted); font-size: 14px; margin: 0">
+              El cliente retuvo el 2,5% de $ 1.000.000, o sea
+              <strong>$ 25.000</strong>, y se los pagó a la DIAN.
+            </p>
+          </div>
+        </div>
+        <div class="callout good">
+          <span class="k">No es plata perdida</span>
+          <p>
+            Esos $ 25.000 ya quedaron pagados a la DIAN por la empresa. Cuando
+            la empresa declara impuestos, se descuentan de lo que hay que pagar.
+          </p>
+        </div>
+
+        <h3>Dónde se pone</h3>
+        <p>
+          En <strong>Nueva venta</strong>, en la
+          <strong>orden de trabajo</strong> y al
+          <strong>convertir una cotización</strong> hay una franja
+          <strong>Retenciones</strong> que dice "¿El cliente retiene? Tocar para
+          aplicar". Se toca, se ponen los porcentajes que dice el cliente y se
+          mira el <strong>Neto a recibir</strong>: ese es el número que el
+          cliente va a consignar. Si nadie la toca, la venta queda sin
+          retención.
+        </p>
+
+        <h3>En compras es al revés</h3>
+        <p>
+          Con algunos proveedores la que retiene es la empresa: se le paga menos
+          al proveedor y la diferencia se le paga a la DIAN por él. En
+          <strong>Nueva compra</strong> la franja dice "¿Le retenemos al
+          proveedor? Tocar para aplicar" y el número que importa es el
+          <strong>Neto a pagar</strong>. Con el mismo ejemplo, al proveedor se
+          le pagarían $ 1.165.000 de una factura de $ 1.190.000.
+        </p>
+      </section>
+
+      <!-- ══════════════════════════ 10 ══════════════════════════ -->
+      <section class="sec" id="s10">
+        <h2>
+          <span class="b">10</span> Corregir una venta registrada dos veces
+        </h2>
+        <p>
+          Si una venta quedó guardada dos veces, la copia se anula. Al anularla,
+          el producto vuelve al inventario y la plata sale del cierre del día en
+          que se hizo.
+        </p>
+        <div class="stepr">
+          <div class="txt">
+            <h3><span class="n">1</span> Anular venta</h3>
+            <p>
+              En <strong>Ventas</strong>, abra la venta repetida y toque
+              <strong>Anular venta</strong>. La app pregunta "¿Confirmar
+              anulación? El stock será devuelto automáticamente." Puede escribir
+              el motivo y tocar <strong>Sí, anular</strong>.
+            </p>
+            <p class="tip">
+              Solo el Admin. Si usted es vendedora, pásele a Maritza el número
+              de la venta repetida.
+            </p>
+          </div>
+          <div>
+            <div class="shot">
+              <div class="eb">Ventas · Venta #4630</div>
+              <div style="font-weight: 700; margin-top: 6px">
+                ¿Confirmar anulación? El stock será devuelto automáticamente.
+              </div>
+              <div class="inp" style="margin-top: 8px; color: var(--s-fnt)">
+                <span
+                  >Motivo de la anulación (opcional, queda en la
+                  auditoría)</span
+                >
+              </div>
+              <div class="btn" style="background: var(--s-bad)">Sí, anular</div>
+            </div>
+          </div>
+        </div>
+        <div class="callout good">
+          <span class="k">Así se probó</span>
+          <p>
+            Se anuló una venta de <strong>$ 8.000</strong>: volvió 1 unidad al
+            inventario y los ingresos de ese día bajaron de $ 158.000 a
+            <strong>$ 150.000</strong>.
+          </p>
+        </div>
+        <div class="err">
+          <div class="msg wy">
+            <span class="ic">!</span>
+            <code
+              >Esta venta ya tiene un reembolso registrado; anularla descontaría
+              la plata dos veces. Anula primero el reembolso (la devolución o la
+              garantía) si necesitas revertir.</code
+            >
+          </div>
+          <div class="body">
+            <p class="qy">
+              La venta ya tuvo una devolución con plata o una garantía.
+            </p>
+            <p class="do">
+              <b>Qué hacer:</b> anular primero esa devolución o garantía, y
+              después la venta.
+            </p>
+          </div>
+        </div>
+        <div class="callout info">
+          <span class="k">Si el botón no aparece</span>
+          <p>
+            Las ventas que salieron de un cambio de producto no tienen
+            <strong>Anular venta</strong>: tienen
+            <strong>Anular cambio</strong>, que deshace el cambio completo.
+          </p>
+        </div>
+      </section>
+
+      <div class="foot">
+        <span>Compresores del Valle S.A.S. · Guía interna</span>
+        <span>Lo que ya puedes hacer · Octubre 2026</span>
+      </div>
+    </div>
+  </body>
+</html>
