@@ -112,6 +112,15 @@ export default function CierreCajaVendedor() {
   const porMetodo = d.por_metodo_pago ?? [];
   const egresos = d.egresos_detalle ?? [];
   const productos = d.por_producto ?? [];
+  // Cierres ya guardados que cubren el periodo (fn_preview_cierre los trae en
+  // `ya_cubierto`/`solapamiento`). Solo si la respuesta es del rango que se ve.
+  const cierresGuardados =
+    data?.ya_cubierto &&
+    data?.fecha_desde === rango.desde &&
+    data?.fecha_hasta === rango.hasta &&
+    Array.isArray(data?.solapamiento)
+      ? data.solapamiento
+      : [];
 
   const num = (v) => Number(v || 0);
 
@@ -225,6 +234,16 @@ export default function CierreCajaVendedor() {
         </b>
         {rango.hasta === hoy ? " (en vivo, puede seguir cambiando)" : ""}
       </p>
+      {/* Si el periodo ya tiene cierre guardado, se dice: lo que se registre
+          ahora con fecha de esos días no lo cambia. */}
+      {cierresGuardados.length > 0 && (
+        <p className="mt-1 text-[12.5px]" style={{ color: "var(--warn-700)" }}>
+          Este periodo ya tiene cierre guardado (
+          {cierresGuardados.map((n) => `#${n}`).join(", ")}). Lo que se registre
+          ahora con fecha de esos días no lo cambia: si pasa, avísale al
+          administrador para que haga un cierre complementario.
+        </p>
+      )}
 
       {errorMsg && (
         <div
@@ -362,11 +381,13 @@ export default function CierreCajaVendedor() {
                 <Vacio>Sin egresos en el periodo.</Vacio>
               ) : (
                 <Tabla
-                  cols={["Fecha", "Proveedor / concepto", "Método", "Total"]}
+                  // "Proveedor / concepto" primero: en el celular es el título
+                  // de la tarjeta (antes lo era la fecha).
+                  cols={["Proveedor / concepto", "Fecha", "Método", "Total"]}
                   right={[false, false, false, true]}
                   filas={egresos.map((e) => [
-                    fmtFecha(e.fecha),
                     e.proveedor || e.concepto || "—",
+                    fmtFecha(e.fecha),
                     (METODO_LABEL[e.metodo] ?? e.metodo ?? "—") +
                       (e.es_caja_menor ? " · caja menor" : ""),
                     formatCOP(num(e.total)),
@@ -448,8 +469,10 @@ function Section({ icon: Icon, titulo, children }) {
 
 function Tabla({ cols, right = [], filas }) {
   // Celular: una tarjeta por fila (la tabla no cabía y cortaba los valores).
-  // La primera columna de valor (alineada a la derecha) va arriba en grande;
-  // el resto, como "etiqueta: valor".
+  // La ÚLTIMA columna de valor (alineada a la derecha; casi siempre el monto)
+  // va arriba a la derecha en grande; la primera columna (o la segunda, si la
+  // primera es ese valor) es el título de la tarjeta; el resto, como
+  // "etiqueta: valor".
   const iValor = right.lastIndexOf(true);
   const tarjetas = (
     <ul className="md:hidden space-y-2" role="list">
