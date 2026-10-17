@@ -43,6 +43,8 @@ export function ordenEstadoPill(estado) {
       return { cls: "s-pill s-entregada", label: "Entregada" };
     case "cancelada":
       return { cls: "s-pill s-entregada", label: "Cancelada" };
+    case "abandonada":
+      return { cls: "s-pill s-esperando", label: "Abandonada" };
     default:
       return { cls: "s-pill s-abierta", label: estado ?? "—" };
   }
@@ -141,7 +143,11 @@ function diasDesde(desde) {
  * @returns {{ dias: number|null, label: string, tone: "warn"|"dang"|null, vencida: boolean }}
  */
 export function diasEnEstado(orden) {
-  if (!orden || orden.estado === "entregada") {
+  // Las cerradas (entregada, anulada, abandonada) ya no cuentan días.
+  if (
+    !orden ||
+    ["entregada", "cancelada", "abandonada"].includes(orden.estado)
+  ) {
     return { dias: null, label: "—", tone: null, vencida: false };
   }
   const esRecogida = orden.estado === "pendiente_recogida";
@@ -239,6 +245,16 @@ export function construirHistorialOT(orden, fmt) {
       time: fmt(orden.fecha_entrega),
     });
   }
+  // La fecha y el motivo quedan escritos en `observaciones` por
+  // fn_marcar_ot_abandonada; aquí solo se marca el hito, sin inventar fecha.
+  if (orden.estado === "abandonada") {
+    ev.push({
+      tone: "neut",
+      act: "Cerrada como abandonada",
+      meta: "El cliente no recogió el equipo",
+      time: "",
+    });
+  }
   return ev;
 }
 
@@ -316,4 +332,5 @@ export const OT_ESTADO_LABELS = {
   pendiente_recogida: "Pendiente de recogida",
   entregada: "Entregada",
   cancelada: "Cancelada",
+  abandonada: "Abandonada",
 };

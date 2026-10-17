@@ -30,6 +30,7 @@ const ESTADO_LABEL = {
   pendiente_recogida: "Pendiente de recogida",
   entregada: "Entregada",
   cancelada: "Cancelada",
+  abandonada: "Abandonada",
   // Flujo legacy (compatibilidad)
   abierta: "Abierta",
   en_proceso: "En proceso",

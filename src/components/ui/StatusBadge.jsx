@@ -53,6 +53,8 @@ const MODIFIER = {
   en_proceso: "status-warning",
   esperando_repuesto: "status-warning",
   entregada: "status-neutral",
+  // Equipo que el cliente nunca recogió: advertencia, no error.
+  abandonada: "status-warning",
 };
 
 const DEFAULT_LABEL = {
@@ -80,6 +82,7 @@ const DEFAULT_LABEL = {
   en_proceso: "En proceso",
   esperando_repuesto: "Esperando repuesto",
   entregada: "Entregada",
+  abandonada: "Abandonada",
   // Herramienta
   disponible: "Disponible",
   prestada: "Prestada",

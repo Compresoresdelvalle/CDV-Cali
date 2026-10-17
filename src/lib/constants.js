@@ -181,4 +181,5 @@ export const ESTADOS_OT_LABELS = {
   completada: "Completada",
   pendiente_recogida: "Pendiente de recogida",
   entregada: "Entregada",
+  abandonada: "Abandonada",
 };

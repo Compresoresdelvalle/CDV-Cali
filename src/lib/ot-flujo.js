@@ -24,6 +24,7 @@ export const TX = {
   imprimirConstancia: "Imprimir constancia",
   imprimirFactura: "Imprimir factura",
   anularOT: "Anular OT",
+  marcarAbandonada: "Marcar abandonada",
   continuar: "Continuar",
   marcarTerminado: "Marcar como terminado",
   convertirVenta: "Convertir a venta y entregar",
@@ -132,6 +133,7 @@ const ESTADO_A_PASO = {
   terminada: 5,
   entregada: 6,
   cancelada: 6,
+  abandonada: 6,
 };
 
 // Al pulsar "Continuar" en el paso i, la OT pasa a este estado.
@@ -151,9 +153,22 @@ export function pasoActual(orden) {
   return p == null ? 0 : p;
 }
 
-/** ¿La OT está cerrada (entregada o anulada)? */
+/**
+ * Estados FINALES de la OT: el servidor (trg_orden_validar_transicion) ya no
+ * deja cambiarles el estado. `abandonada` es el equipo que el cliente nunca
+ * recogió: se cierra como una entregada, pero sin venta, y sus abonos SIGUEN
+ * contando en el cierre (a diferencia de `cancelada`).
+ */
+export const OT_ESTADOS_CERRADOS = ["entregada", "cancelada", "abandonada"];
+
+/** ¿La OT está cerrada (entregada, anulada o abandonada)? */
 export function otCerrada(orden) {
-  return orden?.estado === "entregada" || orden?.estado === "cancelada";
+  return OT_ESTADOS_CERRADOS.includes(orden?.estado);
+}
+
+/** ¿La OT quedó cerrada como equipo abandonado? */
+export function otAbandonada(orden) {
+  return orden?.estado === "abandonada";
 }
 
 /* ─────────────────────────────── Montos ───────────────────────────────────── */
@@ -339,6 +354,9 @@ const ESTADO_TONO = {
   terminada: "success",
   entregada: "muted-foreground",
   cancelada: "destructive",
+  // Advertencia, no error: el equipo se quedó sin dueño, pero la plata que
+  // dejó el cliente sí entró. El rojo se reserva para las anuladas.
+  abandonada: "warning",
 };
 
 export const ESTADO_LABEL = {
@@ -358,6 +376,7 @@ export const ESTADO_LABEL = {
   terminada: "Lista p/ recoger",
   entregada: "Entregada",
   cancelada: "Anulada",
+  abandonada: "Abandonada",
 };
 
 /** Estilos de píldora de estado, derivados de tokens (objeto de strings CSS). */
@@ -436,6 +455,40 @@ export function puedeManipular(perfil, orden) {
 /** ¿Puede anular? Solo Admin, OT no cerrada. */
 export function puedeAnular(perfil, orden) {
   return perfil?.rol === "Admin" && !otCerrada(orden);
+}
+
+/**
+ * ¿Puede marcar la OT como abandonada? Misma regla que fn_marcar_ot_abandonada:
+ * solo Admin (de cualquier sede) y solo si la OT no está cerrada.
+ */
+export function puedeMarcarAbandonada(perfil, orden) {
+  return perfil?.rol === "Admin" && !!orden && !otCerrada(orden);
+}
+
+/* ──────────────────────── Grupos del tablero / filtro ─────────────────────── */
+// Columnas del flujo normal, en orden. El valor coincide con el `key` del paso.
+export const GRUPOS_FLUJO = [
+  "recepcion",
+  "diagnostico",
+  "cotizada",
+  "autorizada",
+  "en_proceso",
+  "terminada",
+  "entregada",
+];
+
+// Cerradas que NO son entregas. Comparten el paso 6 con `entregada`, pero
+// mezclarlas hacía que una anulada o un equipo abandonado se leyera como
+// entregado en el filtro y en la columna "Entrega" del tablero. Cada una lleva
+// su propio grupo, después del flujo normal.
+export const GRUPOS_CERRADAS_APARTE = ["abandonada", "cancelada"];
+
+export const GRUPOS_TABLERO = [...GRUPOS_FLUJO, ...GRUPOS_CERRADAS_APARTE];
+
+/** Estado real (incl. legacy) → grupo del tablero/filtro de OT. */
+export function grupoTableroOT(estado) {
+  if (GRUPOS_CERRADAS_APARTE.includes(estado)) return estado;
+  return GRUPOS_FLUJO[pasoActual({ estado })] ?? "recepcion";
 }
 
 /** Milisegundos de un día, para la ventana de garantía. */

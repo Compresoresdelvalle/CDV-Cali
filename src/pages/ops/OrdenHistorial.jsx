@@ -22,47 +22,22 @@ import {
   estadoEstilo,
   estadoEstiloOT,
   ESTADO_LABEL,
-  pasoActual,
   otCerrada,
+  GRUPOS_FLUJO,
+  GRUPOS_TABLERO,
+  GRUPOS_CERRADAS_APARTE,
+  grupoTableroOT,
   calcularMontos,
   OT_DIAS_VENCIDA,
   SEDE_LABEL,
   puedeManipular,
 } from "../../lib/ot-flujo";
 
-// Columnas del tablero / opciones del filtro — estados del nuevo flujo.
-// El valor coincide con el `key`/estado real al que mapean (vía pasoActual).
-const ESTADOS_FLUJO = [
-  "recepcion",
-  "diagnostico",
-  "cotizada",
-  "autorizada",
-  "en_proceso",
-  "terminada",
-  "entregada",
-];
-
-// `cancelada` comparte el paso 6 con `entregada`, pero NO es lo mismo: son OT
-// anuladas. Mezclarlas hacía que las anuladas (11 en producción) se leyeran
-// como entregadas en el filtro y en la columna "Entrega" del tablero.
-const GRUPO_ANULADA = "cancelada";
-const GRUPOS_TABLERO = [...ESTADOS_FLUJO, GRUPO_ANULADA];
-
-// Estado real (incl. legacy) → grupo del flujo, usando el índice de paso.
-const PASO_A_GRUPO = [
-  "recepcion", // 0
-  "diagnostico", // 1
-  "cotizada", // 2
-  "autorizada", // 3
-  "en_proceso", // 4
-  "terminada", // 5
-  "entregada", // 6
-];
-
-function grupoDeEstado(estado) {
-  if (estado === "cancelada") return GRUPO_ANULADA;
-  return PASO_A_GRUPO[pasoActual({ estado })] ?? "recepcion";
-}
+// Columnas del tablero / opciones del filtro: viven en ot-flujo.js
+// (GRUPOS_FLUJO, GRUPOS_TABLERO, grupoTableroOT) para poder probarlas sin
+// montar la pantalla. Las cerradas que no son entregas (abandonada, anulada)
+// llevan columna y opción propias: mezcladas con "Entrega" se leían como
+// entregadas.
 
 // Opciones de los filtros — valores REALES (enum estado_orden / sede_id).
 const ESTADO_OPCIONES = GRUPOS_TABLERO.map((v) => ({
@@ -207,10 +182,11 @@ export default function OrdenHistorial() {
     return ordenes.map((o) => {
       const { total, saldo } = calcularMontos(o, null, abonosPorOt[o.id] ?? []);
       const dias = diasEnTaller(o.fecha);
-      const grupo = grupoDeEstado(o.estado);
-      // Cerrada = entregada O anulada. Antes bastaba con `grupo === "entregada"`
-      // porque las anuladas caían en ese grupo; ahora que van aparte hay que
-      // preguntarlo explícito o una OT anulada se marcaría como "Vencida".
+      const grupo = grupoTableroOT(o.estado);
+      // Cerrada = entregada, anulada o abandonada. Antes bastaba con
+      // `grupo === "entregada"` porque las anuladas caían en ese grupo; ahora
+      // que van aparte hay que preguntarlo explícito o una OT anulada o
+      // abandonada se marcaría como "Vencida".
       const cerrada = otCerrada(o);
       const propia = puedeManipular(perfil, o);
       return {
@@ -684,14 +660,15 @@ function OrdenCard({ orden: o, onClick }) {
 /* ─────────────────────────── Vista kanban ─────────────────────────────── */
 
 function KanbanView({ rows, onOpen }) {
-  // Las anuladas no son parte del flujo de trabajo, así que su columna solo
-  // aparece cuando hay alguna que mostrar. Sin esto, filtrar por "Anulada"
-  // pintaba el tablero ENTERO vacío ("Sin OT" en las 7 columnas) mientras el
-  // contador decía 11: el filtro existía pero el tablero no tenía dónde
-  // ponerlas.
-  const columnas = rows.some((r) => r._grupo === GRUPO_ANULADA)
-    ? GRUPOS_TABLERO
-    : ESTADOS_FLUJO;
+  // Las anuladas y las abandonadas no son parte del flujo de trabajo, así que
+  // su columna solo aparece cuando hay alguna que mostrar. Sin esto, filtrar
+  // por "Anulada" pintaba el tablero ENTERO vacío ("Sin OT" en las 7 columnas)
+  // mientras el contador decía 11: el filtro existía pero el tablero no tenía
+  // dónde ponerlas. Cada una aparece por su cuenta.
+  const columnas = [
+    ...GRUPOS_FLUJO,
+    ...GRUPOS_CERRADAS_APARTE.filter((g) => rows.some((r) => r._grupo === g)),
+  ];
   return (
     <div className="flex gap-3.5 overflow-x-auto pb-2">
       {columnas.map((grupo) => {
