@@ -111,9 +111,9 @@ BEGIN
     IF v_doc IS NULL THEN RAISE EXCEPTION 'Escoge la OT para la que es el insumo.'; END IF;
     SELECT sede_id, 'OT #' || numero || coalesce(' · ' || nullif(trim(cliente_nombre),''), '')
       INTO v_doc_sede, v_label
-      FROM ordenes_servicio WHERE id = v_doc AND estado NOT IN ('entregada','cancelada');
+      FROM ordenes_servicio WHERE id = v_doc AND estado NOT IN ('entregada','cancelada','abandonada');
     IF NOT FOUND THEN
-      RAISE EXCEPTION 'Esa OT no existe o ya está cerrada (entregada o cancelada). Escoge una OT abierta.';
+      RAISE EXCEPTION 'Esa OT no existe o ya está cerrada (entregada, cancelada o abandonada). Escoge una OT abierta.';
     END IF;
   ELSIF v_tipo = 'ensamble' THEN
     IF v_doc IS NOT NULL THEN
