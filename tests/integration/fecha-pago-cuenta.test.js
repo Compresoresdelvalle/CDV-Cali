@@ -5,7 +5,8 @@ import {
   rangoFechaPago,
   validarFechaPago,
   fechaParaPayload,
-  cierreQueCubre,
+  periodoCierre,
+  sedeCajaPago,
   diaLegible,
 } from "../../src/lib/cuentas-ui";
 
@@ -59,34 +60,50 @@ describe("fechaParaPayload", () => {
   });
 });
 
-describe("cierreQueCubre", () => {
-  const cierres = [
-    {
-      numero: 10,
-      fecha_desde: "2026-10-01",
-      fecha_hasta: "2026-10-05",
-      sede_id: "CV",
-    },
-    {
-      numero: 11,
-      fecha_desde: "2026-10-08",
-      fecha_hasta: "2026-10-08",
-      sede_id: null,
-    },
-  ];
+describe("periodoCierre", () => {
+  it("cierre diario: un solo día", () => {
+    expect(
+      periodoCierre(
+        { fecha_desde: "2026-10-08", fecha_hasta: "2026-10-08" },
+        "2026-10-08",
+      ),
+    ).toEqual({ varios: false, desde: "2026-10-08", hasta: "2026-10-08" });
+  });
+  it("cierre de varios días: devuelve ese rango para el complementario", () => {
+    expect(
+      periodoCierre(
+        { fecha_desde: "2026-10-01", fecha_hasta: "2026-10-05" },
+        "2026-10-03",
+      ),
+    ).toEqual({ varios: true, desde: "2026-10-01", hasta: "2026-10-05" });
+  });
+  it("sin rango (respuesta vieja): usa el día", () => {
+    expect(periodoCierre({ numero: 4 }, "2026-10-03")).toEqual({
+      varios: false,
+      desde: "2026-10-03",
+      hasta: "2026-10-03",
+    });
+  });
+});
 
-  it("encuentra el cierre de la misma sede", () => {
-    expect(cierreQueCubre(cierres, "2026-10-03", "CV")?.numero).toBe(10);
+describe("sedeCajaPago (misma regla que fn_registrar_pago_cuenta)", () => {
+  it("Admin: la que escoge, o la de la compra por defecto", () => {
+    expect(
+      sedeCajaPago({ esAdmin: true, elegida: "CV", sedeCompra: "BODEGA" }),
+    ).toBe("CV");
+    expect(
+      sedeCajaPago({ esAdmin: true, elegida: "", sedeCompra: "BODEGA" }),
+    ).toBe("BODEGA");
   });
-  it("ignora el cierre de otra sede", () => {
-    expect(cierreQueCubre(cierres, "2026-10-03", "BODEGA")).toBeNull();
-  });
-  it("un cierre sin sede vale para todas", () => {
-    expect(cierreQueCubre(cierres, "2026-10-08", "L3")?.numero).toBe(11);
-  });
-  it("fuera de rango no hay cierre", () => {
-    expect(cierreQueCubre(cierres, "2026-10-06", "CV")).toBeNull();
-    expect(cierreQueCubre(null, "2026-10-06", "CV")).toBeNull();
+  it("otro rol: siempre su sede, aunque mande otra", () => {
+    expect(
+      sedeCajaPago({
+        esAdmin: false,
+        elegida: "CV",
+        sedeCompra: "CV",
+        sedeUsuario: "BODEGA",
+      }),
+    ).toBe("BODEGA");
   });
 });
 

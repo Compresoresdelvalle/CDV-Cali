@@ -10,8 +10,13 @@ import {
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../stores/authStore";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
+import MonedaInput from "../forms/MonedaInput";
 import {
   METODOS_PAGO_CUENTA,
+  SEDE_LABELS_CUENTAS,
+  sedeLabelCuenta,
+  sedeCajaPago,
+  periodoCierre,
   METODOS_ELECTRONICOS,
   cuentaBancariaLabel,
   hoyBogota,
@@ -54,8 +59,22 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
   const [obs, setObs] = useState("");
   // Bloque 3.3: el día en que de verdad salió o entró la plata. Por defecto
   // hoy (Colombia); el servidor acepta hasta 30 días atrás y nunca a futuro.
-  const [hoy] = useState(() => hoyBogota());
-  const [fecha, setFecha] = useState(hoy);
+  // "Hoy" se recalcula en cada render: con el modal abierto pasada la
+  // medianoche, congelarlo dejaba el calendario y la validación en el día viejo.
+  const hoy = hoyBogota();
+  const [fecha, setFecha] = useState(() => hoyBogota());
+  // Pago a proveedor: de qué caja sale la plata. Solo el Admin la escoge (por
+  // defecto la sede de la compra); Bodega paga siempre de la suya.
+  const puedeElegirCaja = !esCobro && esAdmin;
+  const [sedeCajaElegida, setSedeCajaElegida] = useState(cuenta.sede ?? "");
+  const sedeCaja = esCobro
+    ? (cuenta.sede ?? null)
+    : sedeCajaPago({
+        esAdmin,
+        elegida: sedeCajaElegida,
+        sedeCompra: cuenta.sede,
+        sedeUsuario: perfil?.sede_id,
+      });
   const [cierreDia, setCierreDia] = useState(null); // cierre que ya cubre `fecha`
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState("");
@@ -106,9 +125,10 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
 
   // ¿Ese día ya tiene un cierre guardado? El pago se registra igual, pero el
   // cierre es inmutable y no lo va a contar: hay que avisar cómo corregirlo.
-  // fn_dia_tiene_cierre responde solo número y tipo (nunca montos), así que
-  // también le sirve a la vendedora: los cierres diarios son globales y la RLS
-  // no le deja leerlos directamente.
+  // fn_dia_tiene_cierre responde número, tipo y periodo (nunca montos), así
+  // que también le sirve a la vendedora: los cierres diarios son globales y la
+  // RLS no le deja leerlos directamente. En un pago se mira la caja de la que
+  // sale la plata, que es donde el cierre lo descuenta.
   useEffect(() => {
     let vivo = true;
     setCierreDia(null);
@@ -116,7 +136,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
     supabase
       .rpc("fn_dia_tiene_cierre", {
         p_fecha: fecha,
-        p_sede: cuenta.sede ?? null,
+        p_sede: sedeCaja,
       })
       .then(({ data }) => {
         if (vivo) setCierreDia(data ?? null);
@@ -124,7 +144,9 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
     return () => {
       vivo = false;
     };
-  }, [fecha, hoy, esCobro, cuenta.sede]);
+  }, [fecha, hoy, esCobro, sedeCaja]);
+
+  const periodo = periodoCierre(cierreDia, fecha);
 
   const abonosCotiz = Number(cuenta.abonosCotizacion ?? 0);
   const pagado = pagos.reduce((s, p) => s + Number(p.monto ?? 0), 0);
@@ -148,7 +170,8 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
   };
 
   const registrar = async () => {
-    const n = Number(String(monto).replace(/[^\d]/g, ""));
+    // MonedaInput entrega solo dígitos (pesos enteros).
+    const n = Number(monto);
     if (!n || n <= 0) {
       setErr("Ingresa un monto válido mayor a 0.");
       return;
@@ -180,6 +203,8 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
           metodo_pago: metodo,
           cuenta_bancaria: cuentaBancaria || null,
           observaciones: obs || null,
+          // Solo cuenta para el Admin; el servidor lo ignora para Bodega.
+          ...(puedeElegirCaja && sedeCaja ? { sede_caja: sedeCaja } : {}),
           // Solo si no es hoy: sin fecha el servidor usa "ahora".
           ...(fechaPayload ? { fecha: fechaPayload } : {}),
         },
@@ -188,7 +213,7 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
       setMonto("");
       setObs("");
       // Vuelve a hoy: que el siguiente pago no herede sin querer un día viejo.
-      setFecha(hoy);
+      setFecha(hoyBogota());
       await cargar();
       onChanged?.();
     } catch (e) {
@@ -620,12 +645,13 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                       >
                         Monto $
                       </span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
+                      <MonedaInput
                         value={monto}
-                        onChange={(e) => setMonto(e.target.value)}
-                        placeholder="0"
+                        onChange={(v) => {
+                          setMonto(v);
+                          if (err) setErr("");
+                        }}
+                        placeholder="$ 0"
                         className="h-12 w-full rounded-[10px] border bg-transparent px-3 text-right text-[14px] font-semibold outline-none sm:w-[130px]"
                         style={{
                           borderColor: "hsl(var(--border))",
@@ -700,6 +726,43 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                     </label>
                   )}
 
+                  {puedeElegirCaja && (
+                    <label className="mt-2 flex flex-col gap-1">
+                      <span
+                        className="text-[11px]"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        ¿De qué caja sale la plata?
+                      </span>
+                      <select
+                        value={sedeCajaElegida}
+                        onChange={(e) => {
+                          setSedeCajaElegida(e.target.value);
+                          setErr("");
+                        }}
+                        className="h-12 cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] outline-none"
+                        style={{
+                          borderColor: "hsl(var(--border))",
+                          color: "hsl(var(--foreground))",
+                        }}
+                      >
+                        {Object.keys(SEDE_LABELS_CUENTAS).map((id) => (
+                          <option key={id} value={id}>
+                            {sedeLabelCuenta(id)}
+                            {id === cuenta.sede ? " (sede de la compra)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <span
+                        className="text-[11px]"
+                        style={{ color: "hsl(var(--muted-foreground))" }}
+                      >
+                        El cierre de caja le descuenta este pago a{" "}
+                        {sedeLabelCuenta(sedeCaja)}.
+                      </span>
+                    </label>
+                  )}
+
                   <label className="mt-2 flex flex-col gap-1">
                     <span
                       className="text-[11px]"
@@ -751,13 +814,21 @@ export default function PagoCuentaModal({ cuenta, onClose, onChanged }) {
                       <p className="m-0">
                         El {esCobro ? "cobro" : "pago"} se registra igual, pero
                         el {diaLegible(fecha)} ya tenía guardado el cierre #
-                        {cierreDia.numero}, y ese cierre no cambia. Para que
-                        esta plata quede contada,{" "}
+                        {cierreDia.numero}
+                        {periodo.varios
+                          ? ` (del ${diaLegible(periodo.desde)} al ${diaLegible(periodo.hasta)})`
+                          : ""}
+                        , y ese cierre no cambia. Para que esta plata quede
+                        contada,{" "}
                         {esAdmin
                           ? "ve a Panel Admin, Cierres"
                           : "avísale al administrador: en Panel Admin, Cierres"}
-                        , pon ese día en Desde y Hasta, toca Previsualizar y
-                        luego Generar cierre complementario.
+                        ,{" "}
+                        {periodo.varios
+                          ? `pon ese mismo periodo: Desde ${diaLegible(periodo.desde)} y Hasta ${diaLegible(periodo.hasta)} (no solo el día del pago)`
+                          : "pon ese día en Desde y Hasta"}
+                        , toca Previsualizar y luego Generar cierre
+                        complementario.
                       </p>
                     </div>
                   )}

@@ -103,18 +103,23 @@ export function fechaParaPayload(dia, hoy) {
 }
 
 /**
- * Primer cierre guardado que ya cubre ese día para esa sede. Un cierre sin
- * sede vale para todas.
- * @param {Array<{fecha_desde:string, fecha_hasta:string, sede_id?:string|null}>} cierres
+ * Periodo del cierre que ya cubre el día del pago (fn_dia_tiene_cierre trae
+ * `fecha_desde` y `fecha_hasta`). El complementario se genera con ESE mismo
+ * rango: si el cierre era de varios días, poner solo el día no sirve.
+ * @returns {{ varios: boolean, desde: string, hasta: string }}
  */
-export function cierreQueCubre(cierres, dia, sede) {
-  if (!Array.isArray(cierres) || !dia) return null;
-  return (
-    cierres.find(
-      (c) =>
-        c.fecha_desde <= dia &&
-        dia <= c.fecha_hasta &&
-        (c.sede_id == null || c.sede_id === sede),
-    ) ?? null
-  );
+export function periodoCierre(cierre, dia) {
+  const desde = cierre?.fecha_desde || dia;
+  const hasta = cierre?.fecha_hasta || dia;
+  return { varios: desde !== hasta, desde, hasta };
+}
+
+/**
+ * ¿De qué caja sale el pago a proveedor? Espeja fn_registrar_pago_cuenta: el
+ * Admin la escoge (por defecto la sede de la compra); cualquier otro rol paga
+ * de su propia sede.
+ */
+export function sedeCajaPago({ esAdmin, elegida, sedeCompra, sedeUsuario }) {
+  if (esAdmin) return elegida || sedeCompra || null;
+  return sedeUsuario || null;
 }
