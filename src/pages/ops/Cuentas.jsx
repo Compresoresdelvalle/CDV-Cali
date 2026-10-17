@@ -114,6 +114,9 @@ export default function Cuentas() {
   // v_cuentas_por_pagar no trae `recibida` ni `es_caja_menor`, y no se toca:
   // se pregunta en lote a `compras` por los ids de la página.
   const [sinRecibir, setSinRecibir] = useState(() => new Set());
+  // Cajas menores a crédito de la página: id → concepto. En la misma consulta
+  // en lote: sin esto se veían como una compra más, solo con el proveedor.
+  const [gastos, setGastos] = useState(() => new Map());
   const [page, setPage] = useState(0);
 
   const esCobrar = tab === "cobrar";
@@ -233,23 +236,33 @@ export default function Cuentas() {
 
       // Por pagar: ¿cuáles compras normales siguen con la mercancía pendiente?
       // Si la consulta falla no se marca nada (mejor sin píldora que una falsa).
+      // En la misma consulta: cuáles son caja menor (gasto) y su concepto.
       let pendientes = new Set();
+      let cajasMenores = new Map();
       if (!esCobrar && (data ?? []).length > 0) {
         const { data: cs } = await supabase
           .from("compras")
-          .select("id")
+          .select("id, recibida, es_caja_menor, concepto")
           .in(
             "id",
             data.map((r) => r.compra_id),
-          )
-          .eq("es_caja_menor", false)
-          .eq("recibida", false);
+          );
         if (!f.esReqVigente(reqId)) return;
-        pendientes = new Set((cs ?? []).map((c) => c.id));
+        pendientes = new Set(
+          (cs ?? [])
+            .filter((c) => c.es_caja_menor === false && c.recibida === false)
+            .map((c) => c.id),
+        );
+        cajasMenores = new Map(
+          (cs ?? [])
+            .filter((c) => c.es_caja_menor === true)
+            .map((c) => [c.id, (c.concepto ?? "").trim()]),
+        );
       }
 
       setRows(data ?? []);
       setSinRecibir(pendientes);
+      setGastos(cajasMenores);
       setTotal(count ?? 0);
 
       // KPIs sobre el universo del filtro (solo saldo/total, ligero).
@@ -546,6 +559,9 @@ export default function Cuentas() {
                         >
                           {(esCobrar ? r.cliente_nombre : r.proveedor) || "—"}
                         </p>
+                        {!esCobrar && gastos.has(id) && (
+                          <ConceptoGasto concepto={gastos.get(id)} />
+                        )}
                         {!esCobrar && sinRecibir.has(id) && (
                           <PildoraMercancia />
                         )}
@@ -672,6 +688,9 @@ export default function Cuentas() {
                       >
                         {sedeLabelCuenta(sede)} · {formatDate(r.fecha)}
                       </p>
+                      {!esCobrar && gastos.has(id) && (
+                        <ConceptoGasto concepto={gastos.get(id)} />
+                      )}
                       {!esCobrar && sinRecibir.has(id) && <PildoraMercancia />}
                     </div>
                     <div className="shrink-0 text-right">
@@ -804,6 +823,32 @@ function PagerBtn({ onClick, disabled, children }) {
 }
 
 /** La compra se debe pero la mercancía todavía no ha entrado al inventario. */
+/** Caja menor a crédito: píldora "Gasto" y el concepto del gasto. */
+function ConceptoGasto({ concepto }) {
+  return (
+    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+      <span
+        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+        style={{
+          backgroundColor: "hsl(var(--info) / 0.12)",
+          color: "hsl(var(--info))",
+        }}
+        title="Gasto de caja menor a crédito: no trae mercancía."
+      >
+        Gasto
+      </span>
+      {concepto && (
+        <span
+          className="min-w-0 text-[12px] [overflow-wrap:anywhere]"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          {concepto}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function PildoraMercancia() {
   return (
     <span
