@@ -18,10 +18,12 @@ import QRPrintLabel from "../../components/qr/QRPrintLabel";
 import TipoProductoBadge from "../../components/inventario/TipoProductoBadge";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 import UbicacionChip from "../../components/ui/UbicacionChip";
+import DestinoInsumoSelector from "../../components/inventario/DestinoInsumoSelector";
 import { formatCOP, formatDate, safeError } from "../../lib/utils";
 import { avisarOk, avisarError } from "../../lib/notify";
 import { ubicacionLabel } from "../../lib/inventario-ui";
 import { usuarioDisplayName } from "../../lib/user-display";
+import { validarDestinoInsumo } from "../../lib/insumo-destino";
 
 export default function ProductoDetalle() {
   const { productoId } = useParams();
@@ -90,6 +92,13 @@ export default function ProductoDetalle() {
   const [guardandoConv, setGuardandoConv] = useState(false);
   const [errorConv, setErrorConv] = useState("");
   const guardandoConvRef = useRef(false);
+  // Bloque 2: para qué es el insumo (obligatorio salvo para el Admin).
+  const [convDestino, setConvDestino] = useState({
+    tipo: "",
+    id: "",
+    nota: "",
+  });
+  const destinoConv = validarDestinoInsumo(convDestino, { esAdmin });
 
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -340,6 +349,7 @@ export default function ProductoDetalle() {
     setConvDir(dir);
     setConvCantidad("");
     setErrorConv("");
+    setConvDestino({ tipo: "", id: "", nota: "" });
   };
 
   const guardarConversion = async () => {
@@ -358,6 +368,10 @@ export default function ProductoDetalle() {
       setErrorConv(`Máximo disponible: ${max}`);
       return;
     }
+    if (convDir === "a_insumo" && !destinoConv.ok) {
+      setErrorConv(destinoConv.motivo);
+      return;
+    }
     if (guardandoConvRef.current) return;
     guardandoConvRef.current = true;
     setGuardandoConv(true);
@@ -370,6 +384,7 @@ export default function ProductoDetalle() {
         p_producto_id: producto.id,
         p_sede_id: convInv.sede?.id,
         p_cantidad: cant,
+        ...(convDir === "a_insumo" ? { p_destino: destinoConv.payload } : {}),
       });
       if (rpcErr) throw rpcErr;
       setInventario((rows) =>
@@ -1260,7 +1275,7 @@ export default function ProductoDetalle() {
           onClick={() => !guardandoConv && setConvInv(null)}
         >
           <div
-            className="w-full max-w-md space-y-3 rounded-xl border p-5"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-md space-y-3 overflow-y-auto rounded-xl border p-4 sm:p-5"
             style={{
               backgroundColor: "var(--n-0)",
               borderColor: "var(--n-200)",
@@ -1309,7 +1324,7 @@ export default function ProductoDetalle() {
                 onChange={(e) => setConvCantidad(e.target.value)}
                 disabled={guardandoConv}
                 autoFocus
-                className="mt-1 min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm"
+                className="mt-1 min-h-[48px] w-full rounded-lg border px-3 py-2 text-sm"
                 style={{
                   backgroundColor: "var(--n-0)",
                   borderColor: "var(--n-200)",
@@ -1317,19 +1332,38 @@ export default function ProductoDetalle() {
                 }}
               />
             </div>
+            {convDir === "a_insumo" && (
+              <DestinoInsumoSelector
+                sedeId={convInv.sede?.id}
+                esAdmin={esAdmin}
+                value={convDestino}
+                onChange={(d) => {
+                  setConvDestino(d);
+                  setErrorConv("");
+                }}
+                disabled={guardandoConv}
+              />
+            )}
+            {convDir === "a_insumo" && !destinoConv.ok && (
+              <p className="text-xs" style={{ color: "var(--n-500)" }}>
+                {destinoConv.motivo}
+              </p>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setConvInv(null)}
                 disabled={guardandoConv}
-                className="min-h-[44px] rounded-lg border px-4 py-2 text-sm disabled:opacity-50"
+                className="min-h-[48px] rounded-lg border px-4 py-2 text-sm disabled:opacity-50"
                 style={{ borderColor: "var(--n-200)", color: "var(--n-500)" }}
               >
                 Cancelar
               </button>
               <button
                 onClick={guardarConversion}
-                disabled={guardandoConv}
-                className="min-h-[44px] rounded-lg px-5 py-2 text-sm font-medium disabled:opacity-50"
+                disabled={
+                  guardandoConv || (convDir === "a_insumo" && !destinoConv.ok)
+                }
+                className="min-h-[48px] rounded-lg px-5 py-2 text-sm font-medium disabled:opacity-50"
                 style={{ backgroundColor: "var(--p-700)", color: "#fff" }}
               >
                 {guardandoConv ? "Guardando..." : "Confirmar"}
