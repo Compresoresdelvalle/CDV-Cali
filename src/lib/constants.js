@@ -162,6 +162,7 @@ export const MODULE_ROUTES = {
 export const ADMIN_MODULES = [
   { nombre: "Dashboard", icon: "📊", ruta: "/admin" },
   { nombre: "Cierres", icon: "🧮", ruta: "/admin/cierres" },
+  { nombre: "Retenciones", icon: "🧾", ruta: "/admin/retenciones" },
   { nombre: "Alertas", icon: "🔔", ruta: "/admin/alertas" },
   { nombre: "Conteo", icon: "🔢", ruta: "/admin/conteo" },
   { nombre: "Análisis ABC", icon: "📈", ruta: "/admin/abc" },

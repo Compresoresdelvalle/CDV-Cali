@@ -21,6 +21,7 @@ import {
   CreditCard,
   HandCoins,
   Map,
+  Percent,
 } from "lucide-react";
 
 /**
@@ -81,6 +82,12 @@ export const SECCIONES_ADMIN = [
         label: "Cierres",
         href: "/admin/cierres",
         icon: FileBarChart,
+      },
+      {
+        id: "retenciones",
+        label: "Retenciones",
+        href: "/admin/retenciones",
+        icon: Percent,
       },
     ],
   },

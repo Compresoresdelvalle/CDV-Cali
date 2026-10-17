@@ -72,6 +72,9 @@ const Auditoria = lazy(() => import("./pages/admin/Auditoria"));
 const Usuarios = lazy(() => import("./pages/admin/Usuarios"));
 const Conteo = lazy(() => import("./pages/admin/Conteo"));
 const NotasCredito = lazy(() => import("./pages/admin/NotasCredito"));
+const InformeRetenciones = lazy(
+  () => import("./pages/admin/InformeRetenciones"),
+);
 import Cuentas from "./pages/ops/Cuentas";
 import EtiquetasImprimir from "./pages/ops/EtiquetasImprimir";
 
@@ -533,6 +536,7 @@ export default function App() {
           <Route path="panel" element={<Panel />} />
           <Route path="egresos" element={<ClasificarEgresos />} />
           <Route path="cierres" element={<Cierres />} />
+          <Route path="retenciones" element={<InformeRetenciones />} />
           <Route path="alertas" element={<Alertas />} />
           <Route path="conteo" element={<Conteo />} />
           <Route path="abc" element={<AnalisisABC />} />
