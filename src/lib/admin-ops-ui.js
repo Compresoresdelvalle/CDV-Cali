@@ -26,6 +26,7 @@ export function movimientoToken(tipo) {
     "traspaso_entrada",
     "devolucion",
     "ensamble_produccion",
+    "garantia_entrada",
   ];
   if (salidas.includes(tipo)) return "--destructive";
   if (entradas.includes(tipo)) return "--success";
@@ -109,6 +110,13 @@ export function movimientoModulo(tipo) {
     ensamble_produccion: "Ensambles",
     devolucion: "Devoluciones",
     orden_consumo: "Órdenes de trabajo",
+    // Pasar unidades entre stock de venta y stock de insumo (ProductoDetalle,
+    // descarga de OT). Antes caían en "Sistema".
+    conversion_a_insumo: "Insumos",
+    conversion_a_venta: "Insumos",
+    // Salida/reingreso de piezas por garantía de venta o de compra.
+    garantia_salida: "Garantías",
+    garantia_entrada: "Garantías",
   };
   return map[tipo] ?? "Sistema";
 }

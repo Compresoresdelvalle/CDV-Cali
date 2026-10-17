@@ -45,6 +45,7 @@ const TIPOS = [
   "conversion_a_venta",
   "devolucion",
   "garantia_salida",
+  "garantia_entrada",
 ];
 const PAGE_SIZE = 50;
 
