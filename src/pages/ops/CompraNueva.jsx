@@ -6,10 +6,12 @@ import {
   Check,
   Info,
   MapPin,
+  Plus,
   Search,
   ScanLine,
   Trash2,
   Truck,
+  X,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -28,6 +30,15 @@ import {
   calcularRetenciones,
   CLAVES_TARIFA_RETENCION,
 } from "../../lib/retenciones";
+import {
+  METODOS_PAGO_PARTE,
+  fraseResultadoPagos,
+  netoAPagarCompra,
+  nuevoPagoParte,
+  pagosParaRpc,
+  resumenPagosCompra,
+  validarPagosCompra,
+} from "../../lib/pagos-compra";
 
 const IVA_DEFAULT = 19;
 const IVA_PRESETS = [0, 19];
@@ -60,6 +71,10 @@ export default function CompraNueva() {
   const [cuentaBancaria, setCuentaBancaria] = useState("");
   const [descuentoValor, setDescuentoValor] = useState(0);
   const [cuentasBanco, setCuentasBanco] = useState([]);
+  // Pagos hechos hoy sobre una compra a Crédito (pago en dos formas o
+  // anticipo). Solo se mandan si la forma de pago es Crédito.
+  const [pagosHoy, setPagosHoy] = useState([]);
+  const pagoKeyRef = useRef(0);
   useEffect(() => {
     supabase
       .from("cuentas_bancarias")
@@ -376,6 +391,42 @@ export default function CompraNueva() {
   });
   const totalItems = carrito.reduce((s, i) => s + i.cantidad, 0);
 
+  // Lo que se le debe al proveedor con el redondeo EXACTO del servidor: la
+  // suma de los pagos de hoy se compara contra este número allá.
+  const netoServidor = netoAPagarCompra({
+    subtotal,
+    descuento,
+    ivaPct,
+    retefuentePct: retenciones.retefuentePct,
+    reteicaPct: retenciones.reteicaPct,
+    reteivaPct: retenciones.reteivaPct,
+  }).neto;
+  const esCredito = metodoPago === "Crédito";
+  const resumenPagos = resumenPagosCompra({
+    neto: netoServidor,
+    pagos: esCredito ? pagosHoy : [],
+  });
+
+  const agregarPagoHoy = () => {
+    pagoKeyRef.current += 1;
+    // El primer renglón se precarga con lo que se debe: el caso más común es
+    // "pagué todo, pero en dos formas", y así solo hay que bajar el monto.
+    const restante = Math.max(0, Math.round(resumenPagos.saldo));
+    setPagosHoy((prev) => [
+      ...prev,
+      {
+        ...nuevoPagoParte(pagoKeyRef.current),
+        monto: restante > 0 ? String(restante) : "",
+      },
+    ]);
+  };
+  const cambiarPagoHoy = (key, cambios) =>
+    setPagosHoy((prev) =>
+      prev.map((p) => (p.key === key ? { ...p, ...cambios } : p)),
+    );
+  const quitarPagoHoy = (key) =>
+    setPagosHoy((prev) => prev.filter((p) => p.key !== key));
+
   // Quién puede contar la recepción: los mismos dos roles que acepta
   // fn_procesar_picking_compra. La vendedora sigue registrando y recibiendo
   // como siempre — sus compras son casi todas caja menor sin productos, y
@@ -414,6 +465,17 @@ export default function CompraNueva() {
       );
       return;
     }
+    // Pagos de hoy sobre la compra a crédito: mismas reglas que el servidor.
+    if (esCredito) {
+      const errPagos = validarPagosCompra({
+        neto: netoServidor,
+        pagos: pagosHoy,
+      });
+      if (errPagos) {
+        setError(errPagos);
+        return;
+      }
+    }
     // Guard síncrono: el `disabled` de React no evita el doble-clic veloz.
     if (guardandoRef.current) return;
     guardandoRef.current = true;
@@ -443,9 +505,18 @@ export default function CompraNueva() {
           p_retefuente_pct: retenciones.retefuentePct,
           p_reteica_pct: retenciones.reteicaPct,
           p_reteiva_pct: retenciones.reteivaPct,
+          p_pagos: esCredito ? pagosParaRpc(pagosHoy) : null,
         },
       );
       if (rpcErr) throw new Error(rpcErr.message);
+
+      // Lo que dice el servidor, no lo que calculó la pantalla.
+      const huboPagos = esCredito && Number(creada?.pagado ?? 0) > 0;
+      const sufijoPagos = huboPagos
+        ? Number(creada?.saldo ?? 0) <= 0.01
+          ? " Quedó pagada completa."
+          : ` Pagado hoy ${formatCOP(Number(creada.pagado))}, queda debiendo ${formatCOP(Number(creada.saldo))}.`
+        : "";
 
       // La mercancía ya está en el mostrador cuando digitan la factura: de 737
       // compras no hay ninguna pendiente, y 713 de 729 se registran y reciben
@@ -458,14 +529,16 @@ export default function CompraNueva() {
       // vendedora no se le mete fricción por algo que no le toca.
       if (!recibirAhora && puedeContar && carrito.length > 0) {
         avisarOk(
-          `Compra #${creada?.numero} registrada. Ahora cuenta lo que llegó.`,
+          `Compra #${creada?.numero} registrada.${sufijoPagos} Ahora cuenta lo que llegó.`,
         );
         navigate(`/ops/compras/${creada?.compra_id}/picking`);
         return;
       }
 
       avisarOk(
-        recibirAhora ? "Compra registrada y recibida." : "Compra registrada.",
+        (recibirAhora
+          ? "Compra registrada y recibida."
+          : "Compra registrada.") + sufijoPagos,
       );
       navigate("/ops/compras");
     } catch (e) {
@@ -515,7 +588,11 @@ export default function CompraNueva() {
         p_categoria_gasto_id: Number(categoriaGasto),
       });
       if (rpcErr) throw new Error(rpcErr.message);
-      avisarOk("Gasto de caja menor registrado.");
+      avisarOk(
+        metodoPago === "Crédito"
+          ? "Gasto registrado a crédito: queda en Cuentas por pagar."
+          : "Gasto de caja menor registrado.",
+      );
       navigate("/ops/compras");
     } catch (e) {
       avisarError(e, "Error al registrar la caja menor");
@@ -651,15 +728,10 @@ export default function CompraNueva() {
             <button
               key={m.v}
               type="button"
-              onClick={() => {
-                setModo(m.v);
-                // Caja menor no admite 'Crédito' (se paga en el acto): si venía
-                // seleccionado de la compra normal, cae a Efectivo.
-                if (m.v === "caja_menor" && metodoPago === "Crédito") {
-                  setMetodoPago("Efectivo");
-                  setCuentaBancaria("");
-                }
-              }}
+              // Las dos formas aceptan Crédito (la caja menor desde el Bloque
+              // 3.2: gasto que se debe), así que la forma de pago se conserva.
+              // Los pagos de hoy solo viajan con la compra normal.
+              onClick={() => setModo(m.v)}
               className="rounded-lg border px-3.5 text-[13px] font-medium transition-colors"
               style={{
                 minHeight: 48,
@@ -1193,10 +1265,16 @@ export default function CompraNueva() {
                   },
                 )}
               </div>
-              {metodoPago === "Crédito" && (
-                <p className="text-xs" style={{ color: "var(--warn-700)" }}>
-                  Compra a crédito: queda como pendiente de pago al proveedor.
-                </p>
+              {esCredito && (
+                <PagosHoyCredito
+                  pagos={pagosHoy}
+                  resumen={resumenPagos}
+                  cuentasBanco={cuentasBanco}
+                  esVendedor={esVendedor}
+                  onAgregar={agregarPagoHoy}
+                  onCambiar={cambiarPagoHoy}
+                  onQuitar={quitarPagoHoy}
+                />
               )}
 
               {(metodoPago === "Transferencia" || metodoPago === "Tarjeta") && (
@@ -1352,30 +1430,33 @@ export default function CompraNueva() {
                   ¿Cómo se pagó?
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {["Efectivo", "Transferencia", "Tarjeta"].map((m) => {
-                    const on = metodoPago === m;
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => {
-                          setMetodoPago(m);
-                          if (m === "Efectivo") setCuentaBancaria("");
-                        }}
-                        className="rounded-md border px-3 text-[13px] font-medium transition-colors"
-                        style={{
-                          minHeight: 48,
-                          borderColor: on ? "var(--p-400)" : "var(--n-200)",
-                          backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
-                          color: on
-                            ? "var(--p-contrast, #fff)"
-                            : "var(--n-700)",
-                        }}
-                      >
-                        {m}
-                      </button>
-                    );
-                  })}
+                  {["Efectivo", "Transferencia", "Tarjeta", "Crédito"].map(
+                    (m) => {
+                      const on = metodoPago === m;
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => {
+                            setMetodoPago(m);
+                            if (m === "Efectivo" || m === "Crédito")
+                              setCuentaBancaria("");
+                          }}
+                          className="rounded-md border px-3 text-[13px] font-medium transition-colors"
+                          style={{
+                            minHeight: 48,
+                            borderColor: on ? "var(--p-400)" : "var(--n-200)",
+                            backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
+                            color: on
+                              ? "var(--p-contrast, #fff)"
+                              : "var(--n-700)",
+                          }}
+                        >
+                          {m}
+                        </button>
+                      );
+                    },
+                  )}
                 </div>
                 {(metodoPago === "Transferencia" ||
                   metodoPago === "Tarjeta") && (
@@ -1409,6 +1490,19 @@ export default function CompraNueva() {
                       })}
                     </select>
                   </div>
+                )}
+                {metodoPago === "Crédito" && (
+                  <p
+                    className="mt-2 text-xs"
+                    style={{ color: "var(--warn-700)" }}
+                  >
+                    Queda en Cuentas por pagar; hoy no sale plata. Se paga
+                    después desde Cuentas por pagar
+                    {esVendedor
+                      ? " (lo registra bodega o el administrador)"
+                      : ""}
+                    .
+                  </p>
                 )}
               </div>
 
@@ -1548,8 +1642,36 @@ export default function CompraNueva() {
               )}
               <div className="text-[11.5px]" style={{ color: "var(--n-500)" }}>
                 Pago: {metodoPago}
-                {metodoPago === "Crédito" ? " (pendiente)" : ""}
+                {esCredito && resumenPagos.nPagos === 0 ? " (pendiente)" : ""}
               </div>
+              {esCredito && resumenPagos.nPagos > 0 && (
+                <>
+                  <div className="cart-line">
+                    <span>Pagado hoy</span>
+                    <span className="v">{formatCOP(resumenPagos.pagado)}</span>
+                  </div>
+                  <div
+                    className="cart-line"
+                    style={{
+                      color: resumenPagos.completa
+                        ? "var(--succ-700)"
+                        : "var(--warn-700)",
+                    }}
+                  >
+                    <span>Queda debiendo</span>
+                    <span
+                      className="v"
+                      style={{
+                        color: resumenPagos.completa
+                          ? "var(--succ-700)"
+                          : "var(--warn-700)",
+                      }}
+                    >
+                      {formatCOP(resumenPagos.saldo)}
+                    </span>
+                  </div>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -1560,6 +1682,14 @@ export default function CompraNueva() {
                 <span>Total</span>
                 <span className="v">{formatCOP(Number(monto) || 0)}</span>
               </div>
+              {metodoPago === "Crédito" && (
+                <div
+                  className="text-[11.5px]"
+                  style={{ color: "var(--warn-700)" }}
+                >
+                  A crédito: hoy no sale plata.
+                </div>
+              )}
             </>
           )}
           <button
@@ -1688,6 +1818,217 @@ function DestinoToggle({ value, onChange }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * "¿Le pagaste algo hoy?" — pagos hechos el mismo día sobre una compra a
+ * Crédito. Así se paga una compra en dos formas (parte efectivo, parte
+ * transferencia) o se deja un anticipo; cada renglón queda como un pago a la
+ * compra en Cuentas por pagar y el cierre lo cuenta por su forma de pago.
+ * Pensado para el celular: cada renglón apila forma, cuenta y monto.
+ */
+function PagosHoyCredito({
+  pagos,
+  resumen,
+  cuentasBanco,
+  esVendedor,
+  onAgregar,
+  onCambiar,
+  onQuitar,
+}) {
+  const tono = resumen.excedido
+    ? "dang"
+    : resumen.completa
+      ? "succ"
+      : resumen.nPagos > 0
+        ? "warn"
+        : "n";
+  return (
+    <div
+      className="flex flex-col gap-3 rounded-[10px] border p-3"
+      style={{ borderColor: "var(--n-150)", backgroundColor: "var(--n-25)" }}
+    >
+      <div>
+        <p
+          className="m-0 text-[13.5px] font-semibold"
+          style={{ color: "var(--n-950)" }}
+        >
+          ¿Le pagaste algo hoy?
+        </p>
+        <p
+          className="m-0 mt-0.5 text-[12px] leading-[1.45]"
+          style={{ color: "var(--n-500)" }}
+        >
+          Si pagaste la compra en dos formas (por ejemplo, una parte en efectivo
+          y otra por transferencia) o dejaste un anticipo, anota aquí cada pago.
+          Lo que quede debiendo se paga después desde Cuentas por pagar
+          {esVendedor ? " (lo registra bodega o el administrador)" : ""}.
+        </p>
+      </div>
+
+      {pagos.map((p, i) => {
+        const electronico =
+          p.metodo_pago === "Transferencia" || p.metodo_pago === "Tarjeta";
+        return (
+          <div
+            key={p.key}
+            className="flex flex-col gap-2 rounded-[10px] border p-2.5"
+            style={{
+              borderColor: "var(--n-150)",
+              backgroundColor: "var(--n-0)",
+            }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span
+                className="font-mono text-[10.5px] font-medium uppercase tracking-[0.08em]"
+                style={{ color: "var(--n-500)" }}
+              >
+                Pago {i + 1}
+              </span>
+              <button
+                type="button"
+                onClick={() => onQuitar(p.key)}
+                aria-label={`Quitar el pago ${i + 1}`}
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-lg transition-colors"
+                style={{ color: "var(--n-500)" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.color = "var(--dang-600)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.color = "var(--n-500)")
+                }
+              >
+                <X className="h-4 w-4" strokeWidth={2} />
+              </button>
+            </div>
+            <div
+              className="flex gap-1.5"
+              role="group"
+              aria-label={`Forma del pago ${i + 1}`}
+            >
+              {METODOS_PAGO_PARTE.map((m) => {
+                const on = p.metodo_pago === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      onCambiar(p.key, {
+                        metodo_pago: m,
+                        ...(m === "Efectivo" ? { cuenta_bancaria: "" } : {}),
+                      })
+                    }
+                    className="min-w-0 flex-1 rounded-md border px-1 text-[12.5px] font-medium transition-colors"
+                    style={{
+                      minHeight: 48,
+                      borderColor: on ? "var(--p-400)" : "var(--n-200)",
+                      backgroundColor: on ? "var(--p-600)" : "var(--n-0)",
+                      color: on ? "var(--p-contrast, #fff)" : "var(--n-700)",
+                    }}
+                  >
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
+            {electronico && (
+              <select
+                value={p.cuenta_bancaria}
+                onChange={(e) =>
+                  onCambiar(p.key, { cuenta_bancaria: e.target.value })
+                }
+                aria-label={`Cuenta bancaria del pago ${i + 1}`}
+                className="h-12 w-full cursor-pointer rounded-[10px] border bg-transparent px-3 text-[13px] font-medium outline-none"
+                style={{
+                  borderColor: p.cuenta_bancaria
+                    ? "var(--n-200)"
+                    : "var(--dang-border)",
+                  color: "var(--n-950)",
+                }}
+              >
+                <option value="">
+                  {cuentasBanco.length === 0
+                    ? "No hay cuentas activas (el Admin las crea en Configuración)"
+                    : "¿De qué cuenta salió?"}
+                </option>
+                {cuentasBanco.map((c) => {
+                  const ref = `${c.banco} ${c.tipo} ${c.numero}${c.titular ? " · " + c.titular : ""}`;
+                  return (
+                    <option key={c.id} value={ref}>
+                      {ref}
+                    </option>
+                  );
+                })}
+              </select>
+            )}
+            <MonedaInput
+              value={p.monto}
+              onChange={(v) => onCambiar(p.key, { monto: v })}
+              placeholder="$ 0"
+              className="finput"
+              style={{ height: 48 }}
+              aria-label={`Monto del pago ${i + 1} en pesos`}
+            />
+          </div>
+        );
+      })}
+
+      <button
+        type="button"
+        onClick={onAgregar}
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-[10px] border border-dashed text-[13px] font-medium transition-colors"
+        style={{
+          minHeight: 48,
+          borderColor: "var(--p-400)",
+          color: "var(--p-700)",
+          backgroundColor: "var(--n-0)",
+        }}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.backgroundColor = "var(--p-50)")
+        }
+        onMouseLeave={(e) =>
+          (e.currentTarget.style.backgroundColor = "var(--n-0)")
+        }
+      >
+        <Plus className="h-4 w-4" strokeWidth={2} />
+        {pagos.length === 0 ? "Sí, anotar un pago" : "Agregar otro pago"}
+      </button>
+
+      <div
+        className="flex flex-col gap-1 rounded-[10px] border px-3 py-2.5 text-[13px]"
+        style={{
+          borderColor: tono === "n" ? "var(--n-150)" : `var(--${tono}-border)`,
+          backgroundColor: tono === "n" ? "var(--n-0)" : `var(--${tono}-50)`,
+        }}
+      >
+        <FilaMonto label="Neto a pagar" valor={resumen.neto} />
+        <FilaMonto label="Pagado hoy" valor={resumen.pagado} />
+        <FilaMonto label="Queda debiendo" valor={resumen.saldo} />
+        <p
+          className="m-0 mt-1 text-[12.5px] font-semibold"
+          style={{
+            color: tono === "n" ? "var(--n-700)" : `var(--${tono}-700)`,
+          }}
+        >
+          {resumen.excedido
+            ? `Los pagos se pasan del neto por ${formatCOP(resumen.pagado - resumen.neto)}. Baja algún monto.`
+            : fraseResultadoPagos(resumen)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function FilaMonto({ label, valor }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <span style={{ color: "var(--n-600)" }}>{label}</span>
+      <b className="font-mono tabular-nums" style={{ color: "var(--n-950)" }}>
+        {formatCOP(valor)}
+      </b>
     </div>
   );
 }
