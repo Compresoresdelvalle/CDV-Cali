@@ -41,6 +41,7 @@ import {
   OT_DIAS_VENCIDA,
   SEDE_LABEL,
   puedeManipular,
+  otSinCobro,
 } from "../../lib/ot-flujo";
 
 // Columnas del tablero / opciones del filtro: viven en ot-flujo.js
@@ -68,6 +69,13 @@ function EquipoGuardadoEn({ sedeEquipo }) {
 }
 
 /** ¿La fecha (timestamptz de la fila) cae dentro del rango de Bogotá? */
+// Color del saldo en tabla/kanban: gris si ya no se cobra (abandonada o
+// anulada), verde si está cubierto, normal si debe.
+function colorSaldo(o) {
+  if (otSinCobro(o)) return "hsl(var(--muted-foreground))";
+  return o._saldo > 0 ? "hsl(var(--foreground))" : "hsl(var(--success))";
+}
+
 function dentroDeRango(fecha, rango) {
   if (!rango) return true;
   const t = Date.parse(fecha);
@@ -702,12 +710,9 @@ function OrdenFila({ orden: o, onClick }) {
       <Td right>
         <span
           className="text-sm font-semibold tabular-nums"
-          style={{
-            color:
-              o._saldo > 0 ? "hsl(var(--foreground))" : "hsl(var(--success))",
-          }}
+          style={{ color: colorSaldo(o) }}
         >
-          {formatCOP(o._saldo)}
+          {otSinCobro(o) ? "No se cobra" : formatCOP(o._saldo)}
         </span>
       </Td>
     </tr>
@@ -787,12 +792,12 @@ function OrdenCard({ orden: o, onClick }) {
             className="mt-0.5 text-xs tabular-nums"
             style={{
               color:
-                o._saldo > 0
+                otSinCobro(o) || o._saldo > 0
                   ? "hsl(var(--muted-foreground))"
                   : "hsl(var(--success))",
             }}
           >
-            Saldo {formatCOP(o._saldo)}
+            {otSinCobro(o) ? "No se cobra" : `Saldo ${formatCOP(o._saldo)}`}
           </p>
         </div>
       </div>
@@ -932,12 +937,9 @@ function KanbanCard({ orden: o, onClick }) {
         </span>
         <span
           className="text-xs font-semibold tabular-nums"
-          style={{
-            color:
-              o._saldo > 0 ? "hsl(var(--foreground))" : "hsl(var(--success))",
-          }}
+          style={{ color: colorSaldo(o) }}
         >
-          {formatCOP(o._saldo)}
+          {otSinCobro(o) ? "No se cobra" : formatCOP(o._saldo)}
         </span>
       </div>
     </button>

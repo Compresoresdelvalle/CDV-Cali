@@ -25,6 +25,7 @@ export const TX = {
   imprimirFactura: "Imprimir factura",
   anularOT: "Anular OT",
   marcarAbandonada: "Marcar abandonada",
+  reabrirOT: "Reabrir OT",
   continuar: "Continuar",
   marcarTerminado: "Marcar como terminado",
   convertirVenta: "Convertir a venta y entregar",
@@ -169,6 +170,14 @@ export function otCerrada(orden) {
 /** ¿La OT quedó cerrada como equipo abandonado? */
 export function otAbandonada(orden) {
   return orden?.estado === "abandonada";
+}
+
+/**
+ * Abandonada o anulada: el saldo que quede ya no se le va a cobrar al
+ * cliente. Donde se muestre "Saldo $X" de una OT, en estas va "No se cobra".
+ */
+export function otSinCobro(orden) {
+  return orden?.estado === "abandonada" || orden?.estado === "cancelada";
 }
 
 /* ─────────────────────────────── Montos ───────────────────────────────────── */
@@ -467,6 +476,15 @@ export function puedeMarcarAbandonada(perfil, orden) {
 
 /** Mismo mínimo que exige fn_marcar_ot_abandonada (motivo con ≥ 5 caracteres). */
 export const MOTIVO_ABANDONADA_MIN = 5;
+
+/**
+ * ¿Puede reabrir una OT abandonada (el cliente volvió por el equipo)? Misma
+ * regla que fn_reabrir_ot_abandonada: solo Admin y solo si está abandonada.
+ * El motivo exige el mismo mínimo que al marcarla (MOTIVO_ABANDONADA_MIN).
+ */
+export function puedeReabrirAbandonada(perfil, orden) {
+  return perfil?.rol === "Admin" && otAbandonada(orden);
+}
 
 /** Sede donde está HOY el equipo del cliente (custodia), o null. */
 export function sedeEquipoActual(orden) {

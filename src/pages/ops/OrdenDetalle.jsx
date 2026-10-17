@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Lock,
   PackageX,
+  RotateCcw,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { supabase } from "../../lib/supabase";
@@ -42,6 +43,7 @@ import UbicacionChip from "../../components/ui/UbicacionChip";
 import ChecklistRecepcion from "../../components/ot/ChecklistRecepcion";
 import OrdenStepper from "../../components/ot/OrdenStepper";
 import MarcarAbandonadaModal from "../../components/ot/MarcarAbandonadaModal";
+import ReabrirOTModal from "../../components/ot/ReabrirOTModal";
 import ModalAbrirGarantiaVenta from "../../components/garantias/ModalAbrirGarantiaVenta";
 import { garantiaVentaEstadoLabel } from "../../lib/ventas-ui";
 import { generarOrdenPDF } from "../../lib/pdf/ordenPDF";
@@ -65,6 +67,8 @@ import {
   puedeManipular,
   puedeAnular,
   puedeMarcarAbandonada,
+  puedeReabrirAbandonada,
+  otSinCobro,
   otAbandonada,
   puedeReclamarGarantia,
   TX,
@@ -672,8 +676,10 @@ function Header({
 }) {
   const [anulando, setAnulando] = useState(false);
   const [modalAbandonada, setModalAbandonada] = useState(false);
+  const [modalReabrir, setModalReabrir] = useState(false);
   const puede = puedeAnular(perfil, orden);
   const puedeAbandonar = puedeMarcarAbandonada(perfil, orden);
+  const puedeReabrir = puedeReabrirAbandonada(perfil, orden);
   const tieneAnticipos = montos.anticipos > 0;
 
   const anular = async () => {
@@ -712,7 +718,7 @@ function Header({
   };
 
   // Abandonada o anulada: ese saldo ya no se le va a cobrar al cliente.
-  const sinCobro = ["abandonada", "cancelada"].includes(orden?.estado);
+  const sinCobro = otSinCobro(orden);
   const saldoCubierto = (montos.saldo ?? 0) <= 0;
 
   return (
@@ -848,6 +854,13 @@ function Header({
             {TX.marcarAbandonada}
           </OutlineButton>
         )}
+        {/* El cliente volvió por el equipo: la OT vuelve a como estaba. */}
+        {puedeReabrir && (
+          <OutlineButton tone="primary" onClick={() => setModalReabrir(true)}>
+            <RotateCcw className="h-4 w-4" />
+            {TX.reabrirOT}
+          </OutlineButton>
+        )}
       </div>
 
       {modalAbandonada && (
@@ -857,6 +870,17 @@ function Header({
           onClose={() => setModalAbandonada(false)}
           onDone={async () => {
             setModalAbandonada(false);
+            await onRefresh();
+          }}
+        />
+      )}
+
+      {modalReabrir && (
+        <ReabrirOTModal
+          orden={orden}
+          onClose={() => setModalReabrir(false)}
+          onDone={async () => {
+            setModalReabrir(false);
             await onRefresh();
           }}
         />
@@ -899,7 +923,8 @@ function AvisoAbandonada({ orden, montos }) {
             ? `Los abonos (${formatCOP(montos.anticipos)}) siguen contando en la caja. `
             : ""}
           Ya no se puede trabajar ni facturar; el equipo sí se puede seguir
-          moviendo de sede desde el encabezado.
+          moviendo de sede desde el encabezado. Si el cliente volvió por el
+          equipo, el administrador puede usar "Reabrir OT".
         </p>
       </div>
     </div>
@@ -2840,7 +2865,9 @@ function PasoEntrega({
   const saldoCubierto = (montos.saldo ?? 0) <= 0;
   const entregada = orden.estado === "entregada";
   // Abandonada: cerrada sin venta. No se ofrece cobrar ni facturar: el
-  // servidor lo rechazaría (estado final) y sería un botón condenado a fallar.
+  // servidor rechaza abonos en una OT abandonada (RLS de `abonos` y
+  // fn_registrar_recibo), así que sería un botón condenado a fallar. Si el
+  // cliente vuelve, el Admin usa "Reabrir OT" en el encabezado.
   const abandonada = orden.estado === "abandonada";
   // Cancelada: anulada, igual de final. Tampoco se cobra ni se factura.
   const cancelada = orden.estado === "cancelada";

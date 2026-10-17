@@ -19,6 +19,7 @@ import {
   SEDE_TELEFONO,
 } from "./pdfStyles";
 import { METODO_PAGO_LABELS } from "../ordenes-ui";
+import { otSinCobro } from "../ot-flujo";
 
 const ESTADO_LABEL = {
   // Flujo nuevo (opción A)
@@ -545,9 +546,17 @@ export function generarOrdenPDF({
       doc.setTextColor(...COLORES.primario);
       // El documento del cliente nunca muestra saldo negativo: un sobre-abono se
       // presenta como "Saldo a favor" (crédito del cliente), no como saldo < 0 (ORDENES-02).
-      const saldoAFavor = saldo < 0;
+      // Abandonada o anulada: ese saldo ya no se cobra (misma regla que el
+      // encabezado de la OT en pantalla).
+      const sinCobro = otSinCobro(orden);
+      const saldoAFavor = !sinCobro && saldo < 0;
       doc.text(saldoAFavor ? "Saldo a favor:" : "Saldo:", totalsX, y);
-      doc.text(formatCOP(Math.abs(saldo)), valuesX, y, { align: "right" });
+      doc.text(
+        sinCobro ? "No se cobra" : formatCOP(Math.abs(saldo)),
+        valuesX,
+        y,
+        { align: "right" },
+      );
       y += 6;
     }
     y += 4;

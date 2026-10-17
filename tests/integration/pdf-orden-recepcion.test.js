@@ -152,3 +152,43 @@ describe("un diagnóstico largo no se sale de la hoja", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("OT abandonada o anulada: el saldo ya no se cobra", () => {
+  const abonos = [
+    { fecha: "2026-09-01T12:00:00Z", metodo_pago: "efectivo", monto: 50000 },
+  ];
+  const conAbono = (estado) =>
+    streams(
+      generarOrdenPDF({
+        orden: {
+          numero: 77,
+          fecha: "2026-08-31T12:00:00Z",
+          cliente_nombre: "Cliente de prueba",
+          equipo_descripcion: "COMPRESOR 5HP",
+          estado,
+          sede_id: "CV",
+          total: 200000,
+        },
+        tecnico: "TecPrueba",
+        checklist: [],
+        abonos,
+        modo: "final",
+      }),
+    ).then(soloLetras);
+
+  it("abandonada: dice No se cobra en vez del saldo", async () => {
+    const plano = await conAbono("abandonada");
+    expect(plano).toContain(soloLetras("No se cobra"));
+    expect(plano).not.toContain(soloLetras("150.000"));
+  });
+
+  it("anulada: igual", async () => {
+    expect(await conAbono("cancelada")).toContain(soloLetras("No se cobra"));
+  });
+
+  it("una OT abierta sí muestra el saldo", async () => {
+    const plano = await conAbono("terminada");
+    expect(plano).not.toContain(soloLetras("No se cobra"));
+    expect(plano).toContain(soloLetras("150.000"));
+  });
+});

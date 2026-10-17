@@ -4,6 +4,8 @@ import {
   otAbandonada,
   puedeAnular,
   puedeMarcarAbandonada,
+  puedeReabrirAbandonada,
+  otSinCobro,
   grupoTableroOT,
   GRUPOS_TABLERO,
   estadoEstilo,
@@ -141,5 +143,27 @@ describe("dónde queda el equipo al abandonar", () => {
 
   it("el mínimo del motivo es el mismo del servidor", () => {
     expect(MOTIVO_ABANDONADA_MIN).toBe(5);
+  });
+});
+
+describe("reabrir una OT abandonada (el cliente volvió)", () => {
+  it("solo el Admin y solo si está abandonada", () => {
+    expect(puedeReabrirAbandonada(admin, { estado: "abandonada" })).toBe(true);
+    expect(puedeReabrirAbandonada(vendedora, { estado: "abandonada" })).toBe(
+      false,
+    );
+    expect(puedeReabrirAbandonada(admin, { estado: "terminada" })).toBe(false);
+    expect(puedeReabrirAbandonada(admin, { estado: "cancelada" })).toBe(false);
+    expect(puedeReabrirAbandonada(admin, null)).toBe(false);
+  });
+});
+
+describe("otSinCobro: abandonada o anulada ya no se cobra", () => {
+  it("abandonada y cancelada sí; el resto no", () => {
+    expect(otSinCobro({ estado: "abandonada" })).toBe(true);
+    expect(otSinCobro({ estado: "cancelada" })).toBe(true);
+    expect(otSinCobro({ estado: "entregada" })).toBe(false);
+    expect(otSinCobro({ estado: "terminada" })).toBe(false);
+    expect(otSinCobro(null)).toBe(false);
   });
 });
