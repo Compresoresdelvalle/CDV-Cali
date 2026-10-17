@@ -125,6 +125,15 @@ export function generarCotizacionPDF({
     doc.text(`NIT ${cotizacion.cliente_nit}`, L, cy);
     cy += 4;
   }
+  // Contacto y cargo viajan dentro de `observaciones` (no tienen columna
+  // propia); `descomponerObservaciones` los separa de las notas libres.
+  const persona = [extra?.contacto, extra?.cargo].filter(Boolean).join(" · ");
+  if (persona) {
+    // Ancho acotado para no pisar la columna de fecha/validez (x = 120).
+    const lineasPersona = doc.splitTextToSize(`Contacto: ${persona}`, 100);
+    doc.text(lineasPersona, L, cy);
+    cy += lineasPersona.length * 4;
+  }
   doc.text(extra?.direccion || "—", L, cy);
   cy += 4;
 
@@ -253,6 +262,22 @@ export function generarCotizacionPDF({
     doc.text(wrapped, L + lw + 1.5, yy);
     return yy + wrapped.length * 4.6 + 1.6;
   };
+
+  // Notas adicionales que el vendedor escribió en la cotización (lo que queda
+  // de `observaciones` tras separar contacto/cargo/dirección).
+  if (extra?.notas) {
+    y = sectionHeader("Notas adicionales", y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...DARK);
+    const notas = doc.splitTextToSize(extra.notas, W);
+    for (const linea of notas) {
+      y = pageBreak(y);
+      doc.text(linea, L, y);
+      y += 4.6;
+    }
+    y += 3;
+  }
 
   // Términos comerciales
   y = sectionHeader("Términos comerciales", y);
