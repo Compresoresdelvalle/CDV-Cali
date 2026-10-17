@@ -447,8 +447,61 @@ function Section({ icon: Icon, titulo, children }) {
 }
 
 function Tabla({ cols, right = [], filas }) {
+  // Celular: una tarjeta por fila (la tabla no cabía y cortaba los valores).
+  // La primera columna de valor (alineada a la derecha) va arriba en grande;
+  // el resto, como "etiqueta: valor".
+  const iValor = right.lastIndexOf(true);
+  const tarjetas = (
+    <ul className="md:hidden space-y-2" role="list">
+      {filas.map((f, ri) => (
+        <li
+          key={ri}
+          className="rounded-[10px] border px-3 py-2.5"
+          style={{ borderColor: "var(--n-150)" }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <span
+              className="min-w-0 text-[13px] font-medium"
+              style={{ color: "var(--n-900)" }}
+            >
+              {f[iValor === 0 ? 1 : 0]}
+            </span>
+            {iValor >= 0 && (
+              <span
+                className="shrink-0 font-mono text-[13px] font-semibold tabular-nums"
+                style={{ color: "var(--n-950)" }}
+              >
+                {f[iValor]}
+              </span>
+            )}
+          </div>
+          {f.map((celda, ci) =>
+            ci === iValor || ci === (iValor === 0 ? 1 : 0) ? null : (
+              <p
+                key={ci}
+                className="mt-0.5 text-[12px]"
+                style={{ color: "var(--n-600)" }}
+              >
+                <span style={{ color: "var(--n-500)" }}>{cols[ci]}:</span>{" "}
+                {celda}
+              </p>
+            ),
+          )}
+        </li>
+      ))}
+    </ul>
+  );
   return (
-    <div className="overflow-x-auto">
+    <>
+      {tarjetas}
+      <TablaEscritorio cols={cols} right={right} filas={filas} />
+    </>
+  );
+}
+
+function TablaEscritorio({ cols, right = [], filas }) {
+  return (
+    <div className="hidden md:block overflow-x-auto">
       <table className="w-full border-collapse text-[12.5px]">
         <thead>
           <tr>
