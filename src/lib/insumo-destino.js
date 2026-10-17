@@ -156,3 +156,19 @@ export function textoConversionDestino(fila, docs = {}) {
   if (tipo === "orden") return "OT";
   return "Sin destino";
 }
+
+/**
+ * Líneas de `data.detalle` de una notificación `conversion_insumo`, listas para
+ * pintar. Devuelve [] si la notificación es vieja (sin detalle).
+ * Cada línea: { key, quien: "08:15 · Sofía", que: "2 × FILTRO", destino, ruta }.
+ */
+export function lineasDetalleConversion(data) {
+  const det = Array.isArray(data?.detalle) ? data.detalle : [];
+  return det.map((d, i) => ({
+    key: `${i}-${d?.hora ?? ""}-${d?.producto ?? ""}`,
+    quien: [d?.hora, d?.usuario].filter(Boolean).join(" · "),
+    que: `${d?.cantidad ?? "?"} × ${d?.producto ?? "producto"}`,
+    destino: d?.destino || "Sin destino",
+    ruta: rutaDestino(d?.destino_tipo, d?.destino_id),
+  }));
+}

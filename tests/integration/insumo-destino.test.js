@@ -3,6 +3,7 @@ import {
   etiquetaEnsamble,
   etiquetaOT,
   etiquetaPrestamo,
+  lineasDetalleConversion,
   rutaDestino,
   textoConversionDestino,
   validarDestinoInsumo,
@@ -79,6 +80,36 @@ describe("etiquetas de documentos", () => {
         usuario: { nombre: "Luis" },
       }),
     ).toBe("Taladro · prestada a Luis");
+  });
+});
+
+describe("lineasDetalleConversion", () => {
+  it("arma las líneas con la ruta del destino", () => {
+    const l = lineasDetalleConversion({
+      detalle: [
+        {
+          hora: "08:15",
+          usuario: "Sofía",
+          producto: "FILTRO",
+          cantidad: 2,
+          destino: "OT #285 · Juan",
+          destino_tipo: "orden",
+          destino_id: "o1",
+        },
+        { hora: "07:00", usuario: "Edna", producto: "X", cantidad: 1 },
+      ],
+    });
+    expect(l[0]).toMatchObject({
+      quien: "08:15 · Sofía",
+      que: "2 × FILTRO",
+      destino: "OT #285 · Juan",
+      ruta: "/ops/ordenes/o1",
+    });
+    expect(l[1]).toMatchObject({ destino: "Sin destino", ruta: null });
+  });
+  it("notificación vieja sin detalle → []", () => {
+    expect(lineasDetalleConversion({ sede_id: "CV" })).toEqual([]);
+    expect(lineasDetalleConversion(undefined)).toEqual([]);
   });
 });
 
