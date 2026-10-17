@@ -26,6 +26,7 @@ import {
 } from "../../lib/compras-ui";
 import ModalAbrirGarantiaCompra from "../../components/garantias/ModalAbrirGarantiaCompra";
 import RecibirCompraModal from "../../components/compras/RecibirCompraModal";
+import ComprobanteEgreso from "../../components/compras/ComprobanteEgreso";
 import { useConfirm } from "../../components/ui/ConfirmDialog";
 
 /**
@@ -85,7 +86,8 @@ export default function CompraDetalle() {
              metodo_pago, cuenta_bancaria, descuento_valor, es_caja_menor, concepto,
              retefuente_pct, reteica_pct, reteiva_pct,
              retefuente_valor, reteica_valor, reteiva_valor, retenciones_total,
-             registrador:registrado_por(nombre)`,
+             registrador:registrado_por(nombre),
+             categoria:categoria_gasto_id(nombre)`,
           )
           .eq("id", id)
           .single(),
@@ -284,6 +286,13 @@ export default function CompraDetalle() {
           </div>
         </div>
       </div>
+
+      {/* Comprobante de egreso: oculto en pantalla, es lo único que sale al
+          imprimir una caja menor. Las órdenes de compra imprimen la pantalla
+          como siempre, por eso solo se monta para caja menor. */}
+      {esCajaMenor && (
+        <ComprobanteEgreso compra={compra} pagos={pagos} saldo={saldoCxP} />
+      )}
 
       {/* ── Barra de acciones ────────────────────────────────────────── */}
       <div className="action-bar">
