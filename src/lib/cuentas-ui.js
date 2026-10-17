@@ -42,3 +42,79 @@ export function estadoCuenta(saldo, total) {
   if (s < t - 0.01) return { label: "Parcial", token: "--warning" };
   return { label: "Pendiente", token: "--destructive" };
 }
+
+/* ── Fecha real del pago o cobro (Bloque 3.3) ─────────────────────────────
+ * fn_registrar_pago_cuenta acepta una `fecha` 'YYYY-MM-DD': no futura y como
+ * mucho 30 días atrás, contados en hora de Colombia. Sin fecha = ahora. Estas
+ * funciones espejan esa regla para que la pantalla no ofrezca un día que el
+ * servidor va a rechazar. */
+
+/** Días hacia atrás que acepta el servidor. */
+export const DIAS_ATRAS_PAGO = 30;
+
+/** Hoy en Colombia, 'YYYY-MM-DD' (en-CA da el formato ISO). */
+export function hoyBogota(ahora = new Date()) {
+  return ahora.toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+}
+
+/** Resta días a un 'YYYY-MM-DD' sin pasar por la zona horaria del equipo. */
+export function restarDias(dia, n) {
+  const [y, m, d] = String(dia).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d - n)).toISOString().slice(0, 10);
+}
+
+/** min/max del input date. */
+export function rangoFechaPago(hoy) {
+  return { min: restarDias(hoy, DIAS_ATRAS_PAGO), max: hoy };
+}
+
+/** 'YYYY-MM-DD' → 'DD/MM/YYYY', como lo dice el servidor en sus mensajes. */
+export function diaLegible(dia) {
+  const [y, m, d] = String(dia ?? "").split("-");
+  return y && m && d ? `${d}/${m}/${y}` : String(dia ?? "");
+}
+
+/**
+ * Valida la fecha elegida igual que el servidor.
+ * @returns {string|null} mensaje con la salida, o null si sirve.
+ */
+export function validarFechaPago(dia, hoy, esCobro = false) {
+  const que = esCobro ? "cobro" : "pago";
+  if (!dia || !/^\d{4}-\d{2}-\d{2}$/.test(dia)) {
+    return `Elige la fecha del ${que} en el calendario.`;
+  }
+  if (dia > hoy) {
+    return `La fecha del ${que} no puede ser futura. Si la plata todavía no ha ${
+      esCobro ? "entrado" : "salido"
+    }, regístralo el día que pase.`;
+  }
+  const { min } = rangoFechaPago(hoy);
+  if (dia < min) {
+    return `Solo se pueden registrar ${que}s de hasta ${DIAS_ATRAS_PAGO} días atrás (desde el ${diaLegible(
+      min,
+    )}). Para algo más viejo habla con el administrador.`;
+  }
+  return null;
+}
+
+/** La fecha va en el payload solo si no es hoy (sin fecha = ahora). */
+export function fechaParaPayload(dia, hoy) {
+  return dia && dia !== hoy ? dia : undefined;
+}
+
+/**
+ * Primer cierre guardado que ya cubre ese día para esa sede. Un cierre sin
+ * sede vale para todas.
+ * @param {Array<{fecha_desde:string, fecha_hasta:string, sede_id?:string|null}>} cierres
+ */
+export function cierreQueCubre(cierres, dia, sede) {
+  if (!Array.isArray(cierres) || !dia) return null;
+  return (
+    cierres.find(
+      (c) =>
+        c.fecha_desde <= dia &&
+        dia <= c.fecha_hasta &&
+        (c.sede_id == null || c.sede_id === sede),
+    ) ?? null
+  );
+}
