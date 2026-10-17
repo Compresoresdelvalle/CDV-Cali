@@ -68,6 +68,13 @@ export const safeError = (err, fallback = "Ocurrió un error inesperado") => {
   if (m.includes("stock insuficiente"))
     return "Stock insuficiente para este producto";
   if (m.includes("transición") || m.includes("transicion")) return err.message; // Mostrar mensaje exacto del trigger ("Transición ilegal de X a Y")
+  // #S3-06: los mensajes de regla de negocio vienen de RAISE EXCEPTION (SQLSTATE
+  // P0001) y están redactados en español para el usuario (Cierres, Cuentas, OT,
+  // etc.). Antes caían al genérico y se perdía el "por qué". Se muestran tal cual.
+  // Va ANTES de la regla de "entregada": si no, un mensaje del servidor que
+  // nombra la palabra (p. ej. "La OT vinculada ya está cerrada (entregada,
+  // anulada o abandonada)...") se convertía en un genérico que no explica nada.
+  if (code === "P0001" && err.message) return err.message;
   if (m.includes("entregada"))
     return "No se puede modificar una orden entregada";
   if (m.includes("anticipo")) return err.message; // "OT autorizada requiere..."
@@ -93,10 +100,6 @@ export const safeError = (err, fallback = "Ocurrió un error inesperado") => {
     return err.message;
   if (m.includes("network") || m.includes("fetch") || err.name === "AbortError")
     return "Sin conexión — revisa tu internet";
-  // #S3-06: los mensajes de regla de negocio vienen de RAISE EXCEPTION (SQLSTATE
-  // P0001) y están redactados en español para el usuario (Cierres, Cuentas, OT,
-  // etc.). Antes caían al genérico y se perdía el "por qué". Se muestran tal cual.
-  if (code === "P0001" && err.message) return err.message;
   return fallback;
 };
 
