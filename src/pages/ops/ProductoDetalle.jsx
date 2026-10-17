@@ -437,6 +437,60 @@ export default function ProductoDetalle() {
 
   const stockTotal = inventario.reduce((sum, i) => sum + i.cantidad, 0);
 
+  // Piezas de cada fila de "Stock por sede", compartidas por la tabla de
+  // escritorio y las tarjetas de celular (para no duplicar la lógica).
+  const renderUbicacion = (inv) => {
+    const opcionesSede = ubicacionesActivas.filter(
+      (u) => u.sede_id === inv.sede?.id,
+    );
+    if (!puedeAsignarUbicacion) {
+      return (
+        <UbicacionChip
+          codigo={inv.ubicacion_id}
+          className="mt-1.5"
+          conMapa
+          mostrarVacio
+        />
+      );
+    }
+    return (
+      <div className="mt-1.5 flex items-center gap-1.5">
+        <select
+          value={inv.ubicacion_id ?? ""}
+          onChange={(e) => asignarUbicacion(inv, e.target.value)}
+          disabled={guardandoUbicacionId === inv.id}
+          className="h-8 rounded-md border bg-transparent px-1.5 text-[11.5px] outline-none disabled:opacity-60"
+          style={{ borderColor: "var(--n-200)" }}
+          aria-label={`Ubicación en ${inv.sede?.nombre ?? "sede"}`}
+        >
+          <option value="">Sin ubicación</option>
+          {opcionesSede.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.id} — {u.descripcion}
+            </option>
+          ))}
+        </select>
+        {guardandoUbicacionId === inv.id && (
+          <span className="text-[10.5px]" style={{ color: "var(--n-500)" }}>
+            Guardando…
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const renderMinMax = (inv) => (
+    <>
+      <div>
+        Mín: <b>{inv.stock_minimo ?? 0}</b> · Máx:{" "}
+        <b>{inv.stock_maximo > 0 ? inv.stock_maximo : "sin techo"}</b>
+      </div>
+      {(inv.stock_minimo ?? 0) === 0 && (
+        <div style={{ color: "var(--n-500)" }}>No alerta en esta sede</div>
+      )}
+    </>
+  );
+
   return (
     <div className="mx-auto w-full max-w-[1100px] px-4 py-5 sm:px-7 sm:py-6 animate-fade-in">
       <button
@@ -568,14 +622,12 @@ export default function ProductoDetalle() {
               Sin registros de inventario
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="prod-tbl">
-                <tbody>
-                  {inventario.map((inv) => {
-                    const opcionesSede = ubicacionesActivas.filter(
-                      (u) => u.sede_id === inv.sede?.id,
-                    );
-                    return (
+            <>
+              {/* Desktop: tabla */}
+              <div className="hidden overflow-x-auto md:block">
+                <table className="prod-tbl">
+                  <tbody>
+                    {inventario.map((inv) => (
                       <tr key={inv.id}>
                         <td>
                           <div className="p-nm">{inv.sede?.nombre}</div>
@@ -584,42 +636,7 @@ export default function ProductoDetalle() {
                               ? ubicacionLabel(producto, "Sin ubicación")
                               : null}
                           </div>
-                          {puedeAsignarUbicacion ? (
-                            <div className="mt-1.5 flex items-center gap-1.5">
-                              <select
-                                value={inv.ubicacion_id ?? ""}
-                                onChange={(e) =>
-                                  asignarUbicacion(inv, e.target.value)
-                                }
-                                disabled={guardandoUbicacionId === inv.id}
-                                className="h-8 rounded-md border bg-transparent px-1.5 text-[11.5px] outline-none disabled:opacity-60"
-                                style={{ borderColor: "var(--n-200)" }}
-                                aria-label={`Ubicación en ${inv.sede?.nombre ?? "sede"}`}
-                              >
-                                <option value="">Sin ubicación</option>
-                                {opcionesSede.map((u) => (
-                                  <option key={u.id} value={u.id}>
-                                    {u.id} — {u.descripcion}
-                                  </option>
-                                ))}
-                              </select>
-                              {guardandoUbicacionId === inv.id && (
-                                <span
-                                  className="text-[10.5px]"
-                                  style={{ color: "var(--n-500)" }}
-                                >
-                                  Guardando…
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <UbicacionChip
-                              codigo={inv.ubicacion_id}
-                              className="mt-1.5"
-                              conMapa
-                              mostrarVacio
-                            />
-                          )}
+                          {renderUbicacion(inv)}
                         </td>
                         <td style={{ width: 120 }}>
                           <StatusBadge status={inv.estado_stock} />
@@ -631,24 +648,19 @@ export default function ProductoDetalle() {
                           </div>
                         </td>
                         <td className="p-sub" style={{ width: 132 }}>
-                          <div>
-                            Mín: <b>{inv.stock_minimo ?? 0}</b> · Máx:{" "}
-                            <b>
-                              {inv.stock_maximo > 0
-                                ? inv.stock_maximo
-                                : "sin techo"}
-                            </b>
-                          </div>
-                          {(inv.stock_minimo ?? 0) === 0 && (
-                            <div style={{ color: "var(--n-500)" }}>
-                              No alerta en esta sede
-                            </div>
-                          )}
+                          {renderMinMax(inv)}
                           {puedeConfigurarMinMax(inv.sede_id) && (
                             <button
                               onClick={() => setMinMaxFila(inv)}
-                              className="mt-1 cursor-pointer text-left text-xs font-medium"
+                              className="-ml-2 mt-1 inline-flex min-h-[36px] cursor-pointer items-center rounded-md px-2 text-left text-xs font-medium"
                               style={{ color: "var(--p-700)" }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.backgroundColor =
+                                  "var(--n-100)")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.backgroundColor = "")
+                              }
                             >
                               Configurar
                             </button>
@@ -682,11 +694,87 @@ export default function ProductoDetalle() {
                           </td>
                         )}
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: tarjetas (la tabla no cabe y escondía "Configurar") */}
+              <ul className="space-y-2 p-3 md:hidden" role="list">
+                {inventario.map((inv) => (
+                  <li
+                    key={inv.id}
+                    className="rounded-xl border px-3 py-3"
+                    style={{ borderColor: "var(--n-200)" }}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="p-nm">{inv.sede?.nombre}</div>
+                        {inv.sede?.id === "BODEGA" && (
+                          <div className="p-meta">
+                            {ubicacionLabel(producto, "Sin ubicación")}
+                          </div>
+                        )}
+                      </div>
+                      <StatusBadge status={inv.estado_stock} />
+                    </div>
+                    {renderUbicacion(inv)}
+                    <div className="p-sub mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <div>Venta: {inv.cantidad}</div>
+                        <div style={{ color: "var(--n-500)" }}>
+                          Insumo: {inv.cantidad_insumo ?? 0}
+                        </div>
+                      </div>
+                      <div>{renderMinMax(inv)}</div>
+                    </div>
+                    {(puedeConfigurarMinMax(inv.sede_id) ||
+                      puedeConvertirInsumo) && (
+                      <div className="mt-2.5 flex flex-wrap gap-2">
+                        {puedeConfigurarMinMax(inv.sede_id) && (
+                          <button
+                            onClick={() => setMinMaxFila(inv)}
+                            className="min-h-[48px] flex-1 cursor-pointer rounded-lg border px-3 text-sm font-medium"
+                            style={{
+                              color: "var(--p-700)",
+                              borderColor: "var(--n-200)",
+                            }}
+                          >
+                            Configurar mín/máx
+                          </button>
+                        )}
+                        {puedeConvertirInsumo && (
+                          <button
+                            onClick={() => abrirConversion(inv, "a_insumo")}
+                            disabled={inv.cantidad <= 0}
+                            className="min-h-[48px] flex-1 cursor-pointer rounded-lg border px-3 text-sm font-medium disabled:cursor-default disabled:opacity-40"
+                            style={{
+                              color: "var(--p-700)",
+                              borderColor: "var(--n-200)",
+                            }}
+                          >
+                            → a insumo
+                          </button>
+                        )}
+                        {puedeConvertirInsumo && esAdmin && (
+                          <button
+                            onClick={() => abrirConversion(inv, "a_venta")}
+                            disabled={(inv.cantidad_insumo ?? 0) <= 0}
+                            className="min-h-[48px] flex-1 cursor-pointer rounded-lg border px-3 text-sm font-medium disabled:cursor-default disabled:opacity-40"
+                            style={{
+                              color: "var(--n-500)",
+                              borderColor: "var(--n-200)",
+                            }}
+                          >
+                            → a venta
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
 
