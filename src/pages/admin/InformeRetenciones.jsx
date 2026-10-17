@@ -14,7 +14,7 @@
  * Sistema de diseño: tokens `hsl(var(--token))`, móvil tarjetas / escritorio
  * tabla, botones de 48px.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Download } from "lucide-react";
 import PageHeader from "../../components/layout/PageHeader";
@@ -33,6 +33,7 @@ import {
   fechaCorta,
 } from "../../lib/retenciones-informe";
 import { useRetencionesPeriodo } from "../../hooks/useRetencionesPeriodo";
+import { supabase } from "../../lib/supabase";
 
 const RUTA_DOC = {
   venta: (id) => `/ops/ventas/${id}`,
@@ -146,6 +147,107 @@ export default function InformeRetenciones() {
         etiquetaTercero="Proveedor"
         vacio="No le retuvimos a ningún proveedor en este mes."
       />
+      <OTPendientes />
+    </div>
+  );
+}
+
+/* ──────────────── OT con retención que todavía no se entregan ──────────── */
+
+/**
+ * La retención de una OT cuenta en el mes en que se entrega (es cuando se
+ * factura y cuando el cliente expide el certificado). Mientras tanto se lista
+ * aquí aparte, SIN sumar, para que no se pierda de vista.
+ */
+function OTPendientes() {
+  const navigate = useNavigate();
+  const [ots, setOts] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    supabase
+      .from("ordenes_servicio")
+      .select(
+        "id, numero, fecha, cliente_nombre, sede_id, estado, retenciones_total",
+      )
+      .gt("retenciones_total", 0)
+      .not("estado", "in", "(entregada,cancelada,abandonada)")
+      .order("fecha", { ascending: true })
+      .then(({ data, error }) => {
+        if (vivo) setOts(error ? [] : (data ?? []));
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  if (!ots || ots.length === 0) return null;
+  const total = ots.reduce((s, o) => s + Number(o.retenciones_total ?? 0), 0);
+
+  return (
+    <div
+      className="rounded-xl border overflow-hidden"
+      style={{
+        backgroundColor: "hsl(var(--card))",
+        borderColor: "hsl(var(--border))",
+      }}
+    >
+      <div
+        className="px-4 py-3 border-b"
+        style={{
+          borderColor: "hsl(var(--border))",
+          backgroundColor: "hsl(var(--muted) / 0.3)",
+        }}
+      >
+        <p
+          className="text-xs font-semibold uppercase tracking-wide"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          OT con retención todavía sin entregar · no suman
+        </p>
+      </div>
+      <div className="p-4 space-y-2">
+        <p
+          className="text-sm"
+          style={{ color: "hsl(var(--muted-foreground))" }}
+        >
+          Su retención ({formatCOP(total)} en total) va a contar en el mes en
+          que se entreguen.
+        </p>
+        <ul className="space-y-2" role="list">
+          {ots.map((o) => (
+            <li key={o.id}>
+              <button
+                type="button"
+                onClick={() => navigate(RUTA_DOC.ot(o.id))}
+                className="w-full text-left rounded-xl border px-4 flex items-center justify-between gap-3"
+                style={{
+                  minHeight: 48,
+                  backgroundColor: "hsl(var(--card))",
+                  borderColor: "hsl(var(--border))",
+                  color: "hsl(var(--foreground))",
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.backgroundColor =
+                    "hsl(var(--muted) / 0.5)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.backgroundColor = "hsl(var(--card))")
+                }
+              >
+                <span className="text-sm">
+                  <strong>OT #{o.numero}</strong> ·{" "}
+                  {o.cliente_nombre || "Sin nombre"} ·{" "}
+                  {SEDE_LABEL[o.sede_id] ?? o.sede_id}
+                </span>
+                <span className="font-mono text-sm tabular-nums">
+                  {formatCOP(o.retenciones_total)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
