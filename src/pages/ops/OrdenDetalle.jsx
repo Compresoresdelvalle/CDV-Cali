@@ -2472,6 +2472,8 @@ function PasoTrabajo({
         p_producto_id: conv.producto_id,
         p_sede_id: orden.sede_id,
         p_cantidad: conv.faltante,
+        // Bloque 2: la conversión queda amarrada a esta OT (sin preguntar).
+        p_destino: { tipo: "orden", id: orden.id },
       });
       if (error) throw error;
       setConv(null);
