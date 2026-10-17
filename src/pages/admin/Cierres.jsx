@@ -17,6 +17,8 @@ import { useConfirm } from "../../components/ui/ConfirmDialog";
 import { useAuthStore } from "../../stores/authStore";
 import { useFiltros } from "../../hooks/useFiltros";
 import BarraFiltros from "../../components/filtros/BarraFiltros";
+import AbonosOTLista from "../../components/ot/AbonosOTLista";
+import { useAbonosOT } from "../../hooks/useAbonosOT";
 
 // Los tres valores REALES de `cierres.tipo` (CHECK: diario|periodo|complementario).
 // Los complementarios existían en la base pero no había forma de aislarlos en el
@@ -622,6 +624,10 @@ export default function Cierres() {
                 </div>
               )}
 
+              <div className="mt-4">
+                <InformativoCierre preview={preview} />
+              </div>
+
               {preview.detalle?.arqueo_esperado?.length > 0 && (
                 <div className="mt-4">
                   <ArqueoCaptura
@@ -1084,6 +1090,61 @@ function Kpi({ label, value, sub, token, last, icon: Icon }) {
           {sub}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Bloques de solo lectura bajo la vista previa: los abonos de OT que el cierre
+ * cuenta en "Servicios". Usan el MISMO periodo del preview y no cambian
+ * ningún total.
+ */
+function InformativoCierre({ preview }) {
+  const desdeDia = String(preview.fecha_desde).slice(0, 10);
+  const hastaDia = String(preview.fecha_hasta).slice(0, 10);
+  const sedePreview = preview.sede_id ?? null;
+  const refresco = preview.detalle?.generado_en ?? "";
+  const abonos = useAbonosOT({
+    desdeDia,
+    hastaDia,
+    sedeId: sedePreview,
+    refresco,
+  });
+  const unDia = desdeDia === hastaDia;
+  return (
+    <div className="space-y-4">
+      <MiniBloque
+        titulo={unDia ? "Abonos de OT del día" : "Abonos de OT del periodo"}
+      >
+        <AbonosOTLista
+          resumen={abonos.resumen}
+          cargando={abonos.cargando}
+          error={abonos.error}
+          mostrarSede={!sedePreview}
+          vacio="No entraron abonos de OT en este periodo."
+        />
+      </MiniBloque>
+    </div>
+  );
+}
+
+function MiniBloque({ titulo, children }) {
+  return (
+    <div
+      className="rounded-lg border overflow-hidden"
+      style={{ borderColor: "hsl(var(--border))" }}
+    >
+      <p
+        className="px-3 py-2 border-b text-[11px] font-semibold uppercase tracking-wide"
+        style={{
+          borderColor: "hsl(var(--border))",
+          backgroundColor: "hsl(var(--muted) / 0.3)",
+          color: "hsl(var(--muted-foreground))",
+        }}
+      >
+        {titulo}
+      </p>
+      <div className="p-3">{children}</div>
     </div>
   );
 }

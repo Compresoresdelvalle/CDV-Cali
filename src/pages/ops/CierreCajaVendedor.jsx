@@ -6,6 +6,7 @@ import {
   Package,
   ArrowDownCircle,
   Info,
+  Wrench,
   CalendarDays,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
@@ -14,6 +15,8 @@ import { useAuthStore } from "../../stores/authStore";
 import { PRESETS_FECHA, hoyBogota } from "../../lib/filtros";
 import { SEDE_LABEL } from "../../lib/ot-flujo";
 import { etiquetaRango } from "../../lib/panel-rango";
+import { useAbonosOT } from "../../hooks/useAbonosOT";
+import AbonosOTLista from "../../components/ot/AbonosOTLista";
 
 /**
  * Cierre de caja para VENDEDORAS — solo lectura, solo SU sede.
@@ -65,6 +68,17 @@ export default function CierreCajaVendedor() {
     const { desdeDia, hastaDia } = PRESETS_FECHA[preset].calcular();
     return { desde: desdeDia, hasta: hastaDia };
   }, [preset, dia]);
+
+  // Abonos de OT del MISMO periodo y la misma sede que el cierre. La sede la
+  // fuerza el backend en el cierre; aquí se manda la del perfil para que la
+  // lista coincida con lo que el cierre cuenta en "Servicios (OT)".
+  const refresco = data?.detalle?.generado_en ?? "";
+  const abonos = useAbonosOT({
+    desdeDia: rango.desde,
+    hastaDia: rango.hasta,
+    sedeId: perfil?.sede_id ?? null,
+    refresco,
+  });
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -307,6 +321,24 @@ export default function CierreCajaVendedor() {
                   ])}
                 />
               )}
+            </Section>
+
+            {/* ── Abonos de OT del periodo (solo lectura) ─────────────── */}
+            <Section
+              icon={Wrench}
+              titulo={
+                rango.desde === rango.hasta
+                  ? "Abonos de OT del día"
+                  : "Abonos de OT del periodo"
+              }
+            >
+              <AbonosOTLista
+                resumen={abonos.resumen}
+                cargando={abonos.cargando}
+                error={abonos.error}
+                mostrarRegistrador
+                vacio="No entraron abonos de OT en este periodo."
+              />
             </Section>
 
             {/* ── Egresos ─────────────────────────────────────────────── */}
