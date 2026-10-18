@@ -702,15 +702,6 @@ function EmptyState({ filtrando, hayMas }) {
 }
 
 /**
- * Marca para las ventas que son la facturación de una orden de trabajo.
- *
- * Sin esta marca, en el listado de Ventas una OT facturada se ve exactamente
- * igual que una venta de mostrador. Como la plata de esa OT ya había entrado
- * como abonos, al verla también aquí parece cobrada dos veces (es el mismo
- * dinero: el abono es el cobro, la venta es la factura). La caja NO la cuenta
- * dos veces — el cierre excluye estas ventas a propósito.
- */
-/**
  * Marca discreta de que el cliente nos retuvo algo en esta venta: el total de
  * la fila es el facturado, y sin la marca parece que entró más plata de la que
  * entró. El desglose está en el detalle.
@@ -731,6 +722,15 @@ function MarcaRetencion({ valor }) {
   );
 }
 
+/**
+ * Marca para las ventas que son la facturación de una orden de trabajo.
+ *
+ * Sin esta marca, en el listado de Ventas una OT facturada se ve exactamente
+ * igual que una venta de mostrador. Como la plata de esa OT ya había entrado
+ * como abonos, al verla también aquí parece cobrada dos veces (es el mismo
+ * dinero: el abono es el cobro, la venta es la factura). La caja NO la cuenta
+ * dos veces — el cierre excluye estas ventas a propósito.
+ */
 function MarcaOT() {
   return (
     <span
