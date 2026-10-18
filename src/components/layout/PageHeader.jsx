@@ -19,7 +19,11 @@ export default function PageHeader({
 
   return (
     <div className={`module-header ${className}`}>
-      <div>
+      {/* min-w-0 + crecer: una descripción larga se parte en renglones en vez
+          de empujar las acciones a otra línea en escritorio. La base de 16rem
+          hace que en el celular las acciones sí bajen, en vez de aplastar el
+          título a unas pocas letras de ancho. */}
+      <div className="min-w-0 flex-[1_1_16rem]">
         <h1
           className="text-xl md:text-2xl font-bold leading-tight"
           style={{ color: "hsl(var(--foreground))" }}
