@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
+import { digitosDeMonto } from "../../lib/moneda";
 
 // "always": algunos motores no agrupan los números de 4 cifras en español
 // ("5000" en vez de "5.000").
@@ -51,14 +52,13 @@ export default function MonedaInput({
   });
 
   const handleChange = (e) => {
-    const raw = e.target.value;
+    // El campo nunca muestra comas: si aparece una, la escribió o la pegó la
+    // persona ("150.000,50") y lo que sigue son centavos, que en COP no se
+    // manejan. Sin este corte "150.000,50" se volvía 15.000.050.
+    const raw = e.target.value.split(",")[0];
     const cursor = e.target.selectionStart ?? raw.length;
     digitosDerechaRef.current = raw.slice(cursor).replace(/\D/g, "").length;
-    const nuevos = raw
-      .replace(/\D/g, "")
-      .replace(/^0+(?=\d)/, "")
-      .slice(0, maxDigits);
-    onChange(nuevos);
+    onChange(digitosDeMonto(raw, maxDigits));
   };
 
   return (
