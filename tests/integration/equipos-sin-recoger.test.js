@@ -1,17 +1,35 @@
 import { describe, it, expect } from "vitest";
 import {
   severidadSinRecoger,
+  sedeDelEquipo,
   telHref,
   ordenarSinRecoger,
   diasLabel,
 } from "../../src/lib/equipos-sin-recoger";
 
 describe("Alertas: equipos sin recoger", () => {
-  it("pasa a urgente después de 45 días sin movimiento", () => {
+  it("con el parámetro por defecto (30) pasa a urgente después de 45 días", () => {
     expect(severidadSinRecoger(31)).toBe("--warning");
     expect(severidadSinRecoger(45)).toBe("--warning");
     expect(severidadSinRecoger(46)).toBe("--destructive");
     expect(severidadSinRecoger(null)).toBe("--warning");
+  });
+
+  it("urgente es relativo al parámetro: parámetro + 15", () => {
+    expect(severidadSinRecoger(61, 60)).toBe("--warning");
+    expect(severidadSinRecoger(75, 60)).toBe("--warning");
+    expect(severidadSinRecoger(76, 60)).toBe("--destructive");
+    expect(severidadSinRecoger(26, 10)).toBe("--destructive");
+    // parámetro inválido: se usa el de por defecto
+    expect(severidadSinRecoger(46, 0)).toBe("--destructive");
+  });
+
+  it("la sede que cuenta es donde está el equipo", () => {
+    expect(sedeDelEquipo({ sede_id: "CV", sede_equipo: "BODEGA" })).toBe(
+      "BODEGA",
+    );
+    expect(sedeDelEquipo({ sede_id: "CV", sede_equipo: null })).toBe("CV");
+    expect(sedeDelEquipo(null)).toBeNull();
   });
 
   it("arma el enlace para llamar limpiando el número", () => {

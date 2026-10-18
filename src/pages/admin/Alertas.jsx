@@ -30,6 +30,7 @@ import { puedeMarcarAbandonada, SEDE_LABEL, TX } from "../../lib/ot-flujo";
 import {
   DIAS_ALERTA_OT_DEFAULT,
   severidadSinRecoger,
+  sedeDelEquipo,
   telHref,
   ordenarSinRecoger,
   diasLabel,
@@ -299,7 +300,8 @@ export default function Alertas() {
     };
     datos.herramientas.forEach((r) => add(r.sede_id, null));
     datos.ordenes.forEach((r) => add(r.sede_id, null));
-    datos.ot30dias.forEach((r) => add(r.sede_id, null));
+    // Equipos sin recoger: la sede donde está el equipo, no la de la OT.
+    datos.ot30dias.forEach((r) => add(sedeDelEquipo(r), null));
     [
       ...datos.sobre_stock,
       ...datos.mayor_rotacion,
@@ -333,8 +335,8 @@ export default function Alertas() {
         _sev: severidadDeFila("stock", r),
       }));
     }
-    return filtrarFilas(tab, datos, sede, prioridad);
-  }, [esStock, tab, datos, sede, prioridad]);
+    return filtrarFilas(tab, datos, sede, prioridad, diasAlertaOt);
+  }, [esStock, tab, datos, sede, prioridad, diasAlertaOt]);
   const urgentesVisibles = filasVisibles.filter(
     (f) => f._sev === "--destructive",
   ).length;
@@ -684,11 +686,13 @@ export default function Alertas() {
 /* ── Filtrado por sede + prioridad ────────────────────────────────────────
  * Cada fila se anota con `_sev` (token de severidad) para que el filtro de
  * prioridad y el conteo de urgentes sean consistentes con el render. */
-function filtrarFilas(tab, datos, sede, prioridad) {
-  const sedeId = (r) => r.sede_id ?? r.sede?.id;
+function filtrarFilas(tab, datos, sede, prioridad, diasAlertaOt) {
+  // Equipos sin recoger se filtran por dónde está el equipo.
+  const sedeId = (r) =>
+    tab === "ot30dias" ? sedeDelEquipo(r) : (r.sede_id ?? r.sede?.id);
   const base = (datos[tab] ?? []).map((r) => ({
     ...r,
-    _sev: severidadDeFila(tab, r),
+    _sev: severidadDeFila(tab, r, diasAlertaOt),
   }));
   return base.filter((r) => {
     const okSede = sede === TODAS_SEDES || sedeId(r) === sede;
@@ -699,7 +703,7 @@ function filtrarFilas(tab, datos, sede, prioridad) {
 }
 
 /* Token de severidad de cada fila según su pestaña (espejo del render). */
-function severidadDeFila(tab, r) {
+function severidadDeFila(tab, r, diasAlertaOt) {
   switch (tab) {
     case "stock":
       return severidadStock(r.estado_stock).token;
@@ -710,7 +714,7 @@ function severidadDeFila(tab, r) {
     case "ordenes":
       return "--warning";
     case "ot30dias":
-      return severidadSinRecoger(r.dias_sin_movimiento);
+      return severidadSinRecoger(r.dias_sin_movimiento, diasAlertaOt);
     case "sobre_stock":
       return "--info";
     case "mayor_rotacion":
@@ -896,7 +900,7 @@ function EquipoSinRecogerRow({ o, onAbrir, onAbandonar }) {
   const sev = o._sev ?? severidadSinRecoger(o.dias_sin_movimiento);
   const tel = telHref(o.cliente_telefono);
   const abonado = Number(o.total_abonado) || 0;
-  const sedeEquipo = o.sede_equipo ?? o.sede_id;
+  const sedeEquipo = sedeDelEquipo(o);
   return (
     <div
       className="flex flex-col gap-2.5 border-b px-[18px] py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-3"

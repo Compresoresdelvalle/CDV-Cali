@@ -8,14 +8,30 @@
 /** Días por defecto del parámetro dias_alerta_ot_abandonada (igual que la vista). */
 export const DIAS_ALERTA_OT_DEFAULT = 30;
 
-/** A partir de cuántos días sin movimiento la alerta pasa a urgente. */
-export const DIAS_URGENTE_SIN_RECOGER = 45;
+/**
+ * Días de más, sobre el parámetro, a partir de los cuales la alerta pasa a
+ * urgente. Relativo al parámetro: con un 45 fijo, si el Admin subía el
+ * parámetro a 60 TODAS las filas salían urgentes desde el primer día.
+ */
+export const MARGEN_URGENTE_SIN_RECOGER = 15;
 
-/** Token de severidad de la fila según los días sin movimiento. */
-export function severidadSinRecoger(dias) {
-  return (Number(dias) || 0) > DIAS_URGENTE_SIN_RECOGER
-    ? "--destructive"
-    : "--warning";
+/**
+ * Token de severidad de la fila según los días sin movimiento: urgente si
+ * pasa de `diasAlerta` (parámetro dias_alerta_ot_abandonada) + 15.
+ */
+export function severidadSinRecoger(dias, diasAlerta = DIAS_ALERTA_OT_DEFAULT) {
+  const umbral =
+    (Number(diasAlerta) > 0 ? Number(diasAlerta) : DIAS_ALERTA_OT_DEFAULT) +
+    MARGEN_URGENTE_SIN_RECOGER;
+  return (Number(dias) || 0) > umbral ? "--destructive" : "--warning";
+}
+
+/**
+ * Sede donde está HOY el equipo (la vista la trae en `sede_equipo`); si no,
+ * la sede de la OT. Es la que sirve para filtrar: se va a buscar el equipo.
+ */
+export function sedeDelEquipo(r) {
+  return r?.sede_equipo ?? r?.sede_id ?? null;
 }
 
 /**
