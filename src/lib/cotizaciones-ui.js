@@ -212,15 +212,23 @@ export function descomponerObservaciones(observaciones) {
       cargo = partes[1] || null;
     } else if (/^direcci[oó]n:/i.test(linea)) {
       direccion = linea.replace(/^direcci[oó]n:/i, "").trim() || null;
-    } else if (linea !== "") {
+    } else {
+      // Las líneas en blanco también se guardan: son los saltos de párrafo
+      // que escribió el vendedor (antes se perdían y todo salía pegado).
       notas.push(raw);
     }
   }
+  // Sin blancos al principio ni al final, y como mucho un renglón vacío
+  // entre párrafos.
+  const texto = notas
+    .join("\n")
+    .replace(/\n[ \t]*(\n[ \t]*)+/g, "\n\n")
+    .trim();
   return {
     contacto,
     cargo,
     direccion,
-    notas: notas.length > 0 ? notas.join("\n").trim() : null,
+    notas: texto !== "" ? texto : null,
   };
 }
 

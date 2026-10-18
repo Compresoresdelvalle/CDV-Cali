@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from "vitest";
 import zlib from "node:zlib";
+import { Buffer } from "node:buffer";
 import { generarCotizacionPDF } from "../../src/lib/pdf/cotizacionPDF";
 import { TEXTO_ENTREGA_COTIZACION } from "../../src/lib/pdf/pdfStyles";
 
@@ -98,5 +99,72 @@ describe("PDF de cotización — contenido real", () => {
 
   it("ya no contiene el texto viejo que solo vivía en pantalla", () => {
     expect(texto).not.toContain("El cliente se compromete");
+  });
+});
+
+/** Streams descomprimidos del PDF, uno por elemento (jsPDF: uno por página). */
+function streamsDelPDF(observaciones, nItems) {
+  const items = Array.from({ length: nItems }, (_, k) => ({
+    producto: { referencia: `REF-${k}`, nombre: `Producto ${k}` },
+    cantidad: 1,
+    precio_unitario: 1000,
+    subtotal: 1000,
+  }));
+  const pdf = generarCotizacionPDF({
+    cotizacion: {
+      numero: "TEST-2",
+      fecha: "2026-08-20T12:00:00Z",
+      sede_id: "CV",
+      cliente_nombre: "Cliente de prueba",
+      subtotal: 1000 * nItems,
+      descuento_valor: 0,
+      iva_pct: 19,
+      domicilio: 0,
+      total: 1190 * nItems,
+      vigencia_dias: 15,
+      observaciones,
+    },
+    items,
+    cuentas: [],
+    vendedor: "Maritza",
+  });
+  const buf = Buffer.from(pdf.dataUri.split(",")[1], "base64");
+  const out = [];
+  let i = 0;
+  for (;;) {
+    const ini = buf.indexOf("stream", i);
+    if (ini === -1) break;
+    const fin = buf.indexOf("endstream", ini);
+    if (fin === -1) break;
+    let desde = ini + "stream".length;
+    while (buf[desde] === 0x0d || buf[desde] === 0x0a) desde++;
+    try {
+      out.push(zlib.inflateSync(buf.subarray(desde, fin)).toString("latin1"));
+    } catch {
+      // no inflable: se ignora
+    }
+    // Saltar "endstream" completo: con fin + 1 el siguiente "stream" que se
+    // encuentra es el de la propia palabra "endstream" y se pierde una página.
+    i = fin + "endstream".length;
+  }
+  return out;
+}
+
+describe("PDF de cotización — notas adicionales", () => {
+  it("conserva los dos párrafos de las notas", () => {
+    const todo = streamsDelPDF("PRIMERPARRAFO\n\nSEGUNDOPARRAFO", 1).join("\n");
+    expect(todo).toContain("PRIMERPARRAFO");
+    expect(todo).toContain("SEGUNDOPARRAFO");
+  });
+
+  it("el título 'Notas adicionales' nunca queda solo al pie de una hoja", () => {
+    // Con distinta cantidad de ítems el título cae en distintas alturas;
+    // en cada caso, la hoja que lo tiene debe tener también la primera nota.
+    for (let n = 1; n <= 45; n++) {
+      const paginas = streamsDelPDF("NOTAUNO", n);
+      const conTitulo = paginas.filter((p) => /NOTAS ADICIONALES/i.test(p));
+      expect(conTitulo.length).toBe(1);
+      expect(conTitulo[0]).toContain("NOTAUNO");
+    }
   });
 });

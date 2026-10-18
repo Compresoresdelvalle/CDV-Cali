@@ -266,16 +266,28 @@ export function generarCotizacionPDF({
   // Notas adicionales que el vendedor escribió en la cotización (lo que queda
   // de `observaciones` tras separar contacto/cargo/dirección).
   if (extra?.notas) {
+    // Que el título no quede huérfano al pie de la hoja: se reserva lo del
+    // encabezado (6) más una línea de texto (4.6) además del margen normal.
+    y = pageBreak(y, 30 + 6 + 4.6);
     y = sectionHeader("Notas adicionales", y);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(...DARK);
-    const notas = doc.splitTextToSize(extra.notas, W);
-    for (const linea of notas) {
-      y = pageBreak(y);
-      doc.text(linea, L, y);
-      y += 4.6;
-    }
+    // Párrafo por párrafo, para conservar los saltos que escribió el vendedor:
+    // un renglón vacío entre párrafos se imprime como medio renglón de aire.
+    String(extra.notas)
+      .split("\n")
+      .forEach((p) => {
+        if (p.trim() === "") {
+          y += 2.3;
+          return;
+        }
+        for (const linea of doc.splitTextToSize(p, W)) {
+          y = pageBreak(y);
+          doc.text(linea, L, y);
+          y += 4.6;
+        }
+      });
     y += 3;
   }
 
