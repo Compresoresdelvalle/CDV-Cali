@@ -10,11 +10,13 @@
 set -euo pipefail
 
 REMOTO=cdv-cali
+REPO="$(pwd)"
 TMP="$(mktemp -d)/despliegue"
 
 git fetch -q "$REMOTO" main
 git worktree add -q --detach "$TMP" "$REMOTO/main"
-trap 'git worktree remove --force "$TMP"' EXIT
+# Salir del worktree antes de borrarlo: en Windows no se puede borrar la carpeta actual.
+trap 'cd "$REPO" && git worktree remove --force "$TMP"' EXIT
 
 cd "$TMP"
 # Un conflicto solo puede venir de .claude (lo unico en que difieren); se
